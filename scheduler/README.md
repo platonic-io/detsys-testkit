@@ -12,3 +12,9 @@ Build and run uberjar:
 clj -Auberjar
 java -cp target/scheduler-0.0.0.jar clojure.main -m scheduler.core
 ```
+
+Check if any dependencies are outdated:
+
+```bash
+clj -Aoutdated
+```
