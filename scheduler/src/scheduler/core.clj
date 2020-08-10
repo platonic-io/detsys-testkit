@@ -11,7 +11,8 @@
   [port]
   (server/run-server (-> #'handler/app
                          (rmd/wrap-defaults rmd/api-defaults)
-                         rmr/wrap-reload) {:port port}))
+                         rmr/wrap-reload)
+                     {:port port}))
 
 (defn -main
   [& _args]

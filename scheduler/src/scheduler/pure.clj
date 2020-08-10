@@ -1,12 +1,29 @@
-(ns scheduler.pure)
+(ns scheduler.pure
+  (:require [clojure.spec.alpha :as s]
+            [ghostwheel.core :as g
+             :refer [>defn >defn- >fdef => | <- ?]]))
 
-(defn init-data
+(s/def ::total-executors     pos-int?)
+(s/def ::connected-executors pos-int?)
+(s/def ::components          (s/coll-of string?))
+(s/def ::state               #{:ready :started})
+
+(s/def ::data (s/keys :un-req [::total-executors
+                               ::connected-executors
+                               ::components
+                               ::state]))
+
+(>defn init-data
   []
-  {:total-executors     1
+  [=> ::data]
+  {:total-executors     "a"
    :connected-executors 0
    :components          {}
    :state               :started
    })
+
+;; (g/check)
+;; (init-data)
 
 (defn state-transition
   [data]
