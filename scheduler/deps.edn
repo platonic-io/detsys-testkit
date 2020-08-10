@@ -1,5 +1,6 @@
 {:paths ["src"]
  :deps {ring/ring-core                {:mvn/version "1.8.1"}
+        ring/ring-devel               {:mvn/version "1.8.1"}
         ring/ring-defaults            {:mvn/version "0.3.2"}
         http-kit                      {:mvn/version "2.4.0"}
         org.clojure/clojure           {:mvn/version "1.10.1"}

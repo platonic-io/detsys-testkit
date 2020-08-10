@@ -1,5 +1,6 @@
 (ns scheduler.core
   (:require [ring.middleware.defaults :as rmd]
+            [ring.middleware.reload :as rmr]
             [org.httpkit.server :as server]
             [scheduler.handler :as handler])
   (:gen-class))
@@ -8,7 +9,9 @@
 
 (defn run-server
   [port]
-  (server/run-server (rmd/wrap-defaults #'handler/app rmd/api-defaults) {:port port}))
+  (server/run-server (-> #'handler/app
+                         (rmd/wrap-defaults rmd/api-defaults)
+                         rmr/wrap-reload) {:port port}))
 
 (defn -main
   [& _args]
@@ -17,6 +20,6 @@
     (println (str "Running webserver at http:/127.0.0.1:" port "/"))))
 
 (comment
-(def server (run-server 3000))
+(defonce server (run-server 3000))
 (server)
 )
