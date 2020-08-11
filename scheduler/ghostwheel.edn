@@ -39,7 +39,7 @@
 ;; Spec-instrument functions on namespace reload using
 ;; orchestra, which spec-checks the output in addition to
 ;; the input. Use either this or `::instrument`, not both.
-:outstrument     false
+:outstrument     true
 
 ;; The following options can only be set in
 ;; the global Ghostwheel configuration layer

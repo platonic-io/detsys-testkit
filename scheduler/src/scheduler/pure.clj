@@ -8,7 +8,7 @@
 (s/def ::components          (s/coll-of string?))
 (s/def ::state               #{:ready :started})
 
-(s/def ::data (s/keys :un-req [::total-executors
+(s/def ::data (s/keys :req-un [::total-executors
                                ::connected-executors
                                ::components
                                ::state]))
@@ -16,14 +16,11 @@
 (>defn init-data
   []
   [=> ::data]
-  {:total-executors     "a"
+  {:total-executors     1
    :connected-executors 0
    :components          {}
    :state               :started
    })
-
-;; (g/check)
-;; (init-data)
 
 (defn state-transition
   [data]
