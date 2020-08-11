@@ -21,7 +21,7 @@
 
 (defn register-handler
   [req]
-  (let [{output :output, data' :data} (pure/register-executor @data (params req))]
+  (let [[output data'] (pure/register-executor @data (params req))]
     (reset! data data')
     ;; (log/debug (params req))
     (log/debug data')
@@ -49,8 +49,7 @@
      ["/status" {:get {:response {200 {:body ::data}}
                        :handler status-handler}}]
      ["/debug" {:get {:response {200 {:body ::data}}
-                      :handler debug-handler}}]
-     ])))
+                      :handler debug-handler}}]])))
     ;; {:data {:coercion reitit.coercion.spec/coercion
     ;;         :middleware [rrc/coerce-exceptions-middleware
     ;;                      rrc/coerce-request-middleware

@@ -23,7 +23,7 @@
            :clj-kondo {:main-opts ["-m" "clj-kondo.main" "--lint" "src" "test"]
                        :extra-deps {clj-kondo {:mvn/version "2020.05.09"}}
                        :jvm-opts ["-Dclojure.main.report=stderr"]}
-           :cljfmt {:main-opts ["-m" "cljfmt.main" "fix"]
+           :cljfmt {:main-opts ["-m" "cljfmt.main" "fix" "--indents" ".cljfmt.edn"]
                     :extra-deps {cljfmt {:mvn/version "0.6.8"}}}
            :uberjar {:extra-deps {uberdeps {:mvn/version "0.1.11"}}
                      :main-opts  ["-m" "uberdeps.uberjar"

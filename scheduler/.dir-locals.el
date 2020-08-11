@@ -2,3 +2,5 @@
 ;;; For more information see (info "(emacs) Directory Variables")
 
 ((clojure-mode . ((cider-clojure-cli-global-options . "-A:dev"))))
+((clojure-mode . ((eval . (define-clojure-indent
+                            (scheduler.spec/>defn 'defn))))))

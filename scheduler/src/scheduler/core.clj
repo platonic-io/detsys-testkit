@@ -10,11 +10,13 @@
 (defonce server (atom nil))
 
 (defn- start-server
-  [port]
-  (reset! server (server/run-server (-> #'handler/app
-                                        (rmd/wrap-defaults rmd/api-defaults)
-                                        rmr/wrap-reload)
-                                    {:port port})))
+  ([]
+   (start-server 3000))
+  ([port]
+   (reset! server (server/run-server (-> #'handler/app
+                                         (rmd/wrap-defaults rmd/api-defaults)
+                                         rmr/wrap-reload)
+                                     {:port port}))))
 
 (defn- stop-server
   []
@@ -33,5 +35,5 @@
     (println (str "Running webserver at http:/127.0.0.1:" port "/"))))
 
 (comment
-  (start-server 3000)
+  (start-server)
   (stop-server))
