@@ -2,7 +2,8 @@
  :deps {ring/ring-core                {:mvn/version "1.8.1"}
         ring/ring-devel               {:mvn/version "1.8.1"}
         ring/ring-defaults            {:mvn/version "0.3.2"}
-        http-kit                      {:mvn/version "2.4.0"}
+        ring/ring-jetty-adapter       {:mvn/version "1.8.1"}
+        clj-http                      {:mvn/version "3.10.2"}
         org.clojure/clojure           {:mvn/version "1.10.1"}
         org.clojure/data.priority-map {:mvn/version "1.0.0"}
         metosin/jsonista              {:mvn/version "0.2.6"}

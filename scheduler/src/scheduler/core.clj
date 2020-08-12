@@ -1,7 +1,7 @@
 (ns scheduler.core
   (:require [ring.middleware.defaults :as rmd]
             [ring.middleware.reload :as rmr]
-            [org.httpkit.server :as server]
+            [ring.adapter.jetty :as jetty]
             [scheduler.handler :as handler])
   (:gen-class))
 
@@ -13,14 +13,15 @@
   ([]
    (start-server 3000))
   ([port]
-   (reset! server (server/run-server (-> #'handler/app
-                                         (rmd/wrap-defaults rmd/api-defaults)
-                                         rmr/wrap-reload)
-                                     {:port port}))))
+   (reset! server (jetty/run-jetty (-> #'handler/app
+                                       (rmd/wrap-defaults rmd/api-defaults)
+                                       rmr/wrap-reload)
+                                   {:port port
+                                    :join? false}))))
 
 (defn- stop-server
   []
-  (when @server (@server))
+  (when @server (.stop @server))
   (reset! server nil))
 
 (defn- restart-server
