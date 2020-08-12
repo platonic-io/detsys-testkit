@@ -1,18 +1,10 @@
 (ns scheduler.handler
-  (:require [reitit.ring :as ring]
-            [reitit.ring.coercion :as rrc]
-            [reitit.coercion.spec]
-            [taoensso.timbre :as log]
-            [jsonista.core :as j]
+  (:require [clojure.tools.logging :as log]
+            [clojure.data.json :as json]
             [scheduler.pure :as pure]
             [clojure.spec.alpha :as s]))
 
 (def data (atom (pure/init-data)))
-
-(def mapper
-  (j/object-mapper
-   {:encode-key-fn keyword
-    :decode-key-fn true}))
 
 (s/def ::command string?)
 (s/def ::parameters map?)
@@ -23,27 +15,32 @@
   (log/debug :call f args)
   (apply (ns-resolve 'scheduler.pure (symbol f)) args))
 
+(defn error-state?
+  [state]
+  (some? (re-matches #"^error-.*$" (name state))))
+
 (defn handler
   [req]
   (let [edn (-> req
                 :body
-                (j/read-value mapper))]
+                (json/read-str :key-fn keyword))]
     (if (s/valid? command? edn)
       (let [parameters (:parameters edn)
             [data' output] (call (:command edn) (if (empty? parameters)
                                                   [@data]
                                                   [@data parameters]))]
-        (reset! data data')
-        {:status 200
-         :headers {"Content-Type" "application/json; charset=utf-8"}
-         :body (j/write-value-as-string output)})
+        (if (error-state? (:state data'))
+          {:status 400
+           :headers {"Content-Type" "application/json; charset=utf-8"}
+           :body (json/write-str {:error (:state data')})}
+          (do
+            (reset! data data')
+            {:status 200
+             :headers {"Content-Type" "application/json; charset=utf-8"}
+             :body (json/write-str output)})))
       {:status 400
        :headers {"Content-Type" "text/plain; charset=utf-8"}
        ;; :body (j/write-value-as-string {:error (s/explain-str command? edn)})})))
        :body (s/explain-str command? edn)})))
 
-(def app
-  (ring/ring-handler
-   (ring/router
-    ["/api"
-     ["/command" {:post {:handler handler}}]])))
+(def app handler)

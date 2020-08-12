@@ -12,7 +12,9 @@
 (s/def ::connected-executors nat?)
 (s/def ::topology            (s/map-of string? string?))
 (s/def ::agenda              agenda/agenda?)
-(s/def ::state               #{:ready :started :running})
+(s/def ::state               #{:ready :started :running
+                               :error-cannot-register-in-this-state
+                               :error-cannot-enqueue-in-this-state})
 
 (s/def ::data (s/keys :req-un [::total-executors
                                ::connected-executors
@@ -56,21 +58,22 @@
                                                                 executor-id)))))
       (update+ :state
                (fn [data' state]
-                 (let [state' (case (compare (:connected-executors data') (:total-executors data'))
+                 (let [state' (case (compare (:connected-executors data')
+                                             (:total-executors data'))
                                 -1 :waiting-for-executors
                                 0  :ready
                                 1  :error-too-many-executors)]
                    (case state
                      :started state'
                      :waiting-for-executors state'
-                     :error-can't-register-in-this-state))))
+                     :error-cannot-register-in-this-state))))
       (ap (fn [data']
-            {:remaining-executors (- (:total-executors data')
-                                     (:connected-executors data'))}))))
+            {:remaining-executors (max 0 (- (:total-executors data')
+                                            (:connected-executors data')))}))))
 
 (>defn enqueue-command
-  [data entry timestamp]
-  [::data agenda/entry? agenda/timestamp? => (s/tuple ::data #{:ok})]
+  [data {:keys [entry timestamp]}]
+  [::data (s/keys :req-un [::entry ::timestamp]) => (s/tuple ::data #{:ok})]
   (-> data
       (update :agenda #(agenda/enqueue % entry timestamp))
       (update :state (fn [state]
