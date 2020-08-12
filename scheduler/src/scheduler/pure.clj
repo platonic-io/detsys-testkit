@@ -1,7 +1,9 @@
 (ns scheduler.pure
   (:require [clojure.spec.alpha :as s]
+            [clj-http.client :as client]
             [scheduler.spec :refer [>defn => component-id?]]
-            [scheduler.agenda :as agenda]))
+            [scheduler.agenda :as agenda]
+            [scheduler.json :as json]))
 
 (defn nat?
   "Check if something is a natural number."
@@ -83,6 +85,21 @@
                          :error-cannot-enqueue-in-this-state)))
       (ap (constantly :ok))))
 
+(defn status
+  [data]
+  [data data])
+
+(defn execute!
+  [data]
+  (let [[agenda' [entry timestamp]] (agenda/dequeue (:agenda data))
+        data' (assoc data :agenda agenda')
+        executor-id (get (:topology data) (:component-id entry))]
+    (when entry
+      ;; TODO(stevan): retry with nonce?
+      (client/post (str executor-id "/api/command")
+                   {:body  (json/write (merge entry {:timestamp timestamp}))
+                    :debug true}))))
+
 (comment
   (-> (init-data)
       (register-executor {:executor-id "e" :components ["c"]})
@@ -90,8 +107,3 @@
       (enqueue-command {:command {:name "a", :parameters []}, :component-id "c"} 1)
       first
       (enqueue-command {:command {:name "b", :parameters []}, :component-id "c"} 0)))
-
-
-(defn status
-  [data]
-  [data data])

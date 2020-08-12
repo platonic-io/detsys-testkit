@@ -23,12 +23,19 @@
 
 (defn dequeue
   [agenda]
-  [agenda? => (s/tuple agenda? entry?)]
+  [agenda? => (s/tuple agenda? (s/nilable (s/tuple entry? timestamp?)))]
   [(rest agenda) (first agenda)])
 
 (comment
-  (-> (empty)
+  (-> (empty-agenda)
       (enqueue {:command {:name :a, :parameters []}, :component-id "a"} 3)
       (enqueue {:command {:name :b, :parameters []}, :component-id "b"} 1)
       (enqueue {:command {:name :c, :parameters []}, :component-id "c"} 2)
-      (dequeue)))
+      (dequeue)
+      first
+      (dequeue)
+      first
+      (dequeue)
+      first
+      (dequeue)
+      second))

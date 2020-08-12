@@ -1,8 +1,8 @@
 (ns scheduler.handler-test
   (:require [scheduler.handler :as sut]
             [scheduler.pure :as pure]
-            [clojure.test :as t]
-            [clojure.data.json :as json]))
+            [scheduler.json :as json]
+            [clojure.test :as t]))
 
 (defn fixture
   [f]
@@ -14,18 +14,18 @@
 (t/deftest route-test
   (t/is (= {:status 200
             :headers {"Content-Type" "application/json; charset=utf-8"}
-            :body (json/write-str (pure/init-data))}
+            :body (json/write (pure/init-data))}
            (sut/app {:request-method :post
                      :uri "/"
-                     :body (json/write-str
+                     :body (json/write
                             {:command "status"
-                             :parameters {}})})))
+                             :parameters {}})}) ))
   (t/is (= {:status 200
             :headers {"Content-Type" "application/json; charset=utf-8"}
-            :body (json/write-str {:remaining-executors 0})}
+            :body (json/write {:remaining-executors 0})}
            (sut/app {:request-method :post
                      :uri "/"
-                     :body (json/write-str
+                     :body (json/write
                             {:command "register-executor"
                              :parameters
                              {:executor-id "executor1"
