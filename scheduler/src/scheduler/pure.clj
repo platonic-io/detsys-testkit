@@ -12,7 +12,7 @@
 (s/def ::connected-executors nat?)
 (s/def ::topology            (s/map-of string? string?))
 (s/def ::agenda              agenda/agenda?)
-(s/def ::state               #{:ready :started})
+(s/def ::state               #{:ready :started :running})
 
 (s/def ::data (s/keys :req-un [::total-executors
                                ::connected-executors
@@ -32,21 +32,14 @@
    :agenda              (agenda/empty)
    :state               :started})
 
-(>defn state-transition
-  [data]
-  [::data => ::data]
-  (update data :state
-          (fn [state]
-            (case state
-              :started (if (= (:connected-executors data) (:total-executors data))
-                         :ready
-                         :waiting-for-executors)
-              state))))
-
 (defn ap
-  [data transition output]
-  [(transition data)
-   (output data)])
+  [data f]
+  [data (f data)])
+
+(defn update+
+  "Like `update`, but the function also has access to the original map."
+  [m k f]
+  (update m k #(f m %)))
 
 (>defn register-executor
   [data {:keys [executor-id components]}]
@@ -58,9 +51,36 @@
                                          (interleave components
                                                      (replicate (count components)
                                                                 executor-id)))))
-      (ap state-transition
-          (fn [data']
+      (update+ :state
+               (fn [data' state]
+                 (let [state' (case (compare (:connected-executors data') (:total-executors data'))
+                                -1 :waiting-for-executors
+                                0  :ready
+                                1  :error-too-many-executors)]
+                   (case state
+                     :started state'
+                     :waiting-for-executors state'
+                     :error-can't-register-in-this-state))))
+      (ap (fn [data']
             {:remaining-executors (- (:total-executors data')
                                      (:connected-executors data'))}))))
 
-;; (register-executor (init-data) {:executor-id "exec", :components ["a" "b"]})
+(>defn enqueue-command
+  [data entry timestamp]
+  [::data agenda/entry? agenda/timestamp? => (s/tuple ::data #{:ok})]
+  (-> data
+      (update :agenda #(agenda/enqueue % entry timestamp))
+      (update :state (fn [state]
+                       (case state
+                         :ready   :running
+                         :running :running
+                         :error-cannot-enqueue-in-this-state)))
+      (ap (constantly :ok))))
+
+(comment
+  (-> (init-data)
+      (register-executor {:executor-id "e" :components ["c"]})
+      first
+      (enqueue-command {:command {:name "a", :parameters []}, :component-id "c"} 1)
+      first
+      (enqueue-command {:command {:name "b", :parameters []}, :component-id "c"} 0)))
