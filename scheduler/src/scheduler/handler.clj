@@ -4,7 +4,8 @@
             [reitit.coercion.spec]
             [taoensso.timbre :as log]
             [jsonista.core :as j]
-            [scheduler.pure :as pure]))
+            [scheduler.pure :as pure]
+            [clojure.spec.alpha :as s]))
 
 (def data (atom (pure/init-data)))
 
@@ -13,44 +14,36 @@
    {:encode-key-fn keyword
     :decode-key-fn true}))
 
-(defn params
+(s/def ::command string?)
+(s/def ::parameters map?)
+
+(def command? (s/keys :req-un [::command ::parameters]))
+
+(defn call [f args]
+  (log/debug :call f args)
+  (apply (ns-resolve 'scheduler.pure (symbol f)) args))
+
+(defn handler
   [req]
-  (-> req
-      :body
-      (j/read-value mapper)))
-
-(defn register-handler
-  [req]
-  (let [[data' output] (pure/register-executor @data (params req))]
-    (reset! data data')
-    ;; (log/debug (params req))
-    (log/debug data')
-    {:status 200
-     :body (j/write-value-as-string output)}))
-
-(defn status-handler
-  [_req]
-  {:status 200
-   :body (j/write-value-as-string @data)})
-
-(defn debug-handler
-  [req]
-  {:status 200
-   :body (-> req params str)})
-
-;; (j/read-value "{\"executor-id\": \"executor1\", \"components\": [\"a\", \"b\"]}" mapper)
+  (let [edn (-> req
+                :body
+                (j/read-value mapper))]
+    (if (s/valid? command? edn)
+      (let [parameters (:parameters edn)
+            [data' output] (call (:command edn) (if (empty? parameters)
+                                                  [@data]
+                                                  [@data parameters]))]
+        (reset! data data')
+        {:status 200
+         :headers {"Content-Type" "application/json; charset=utf-8"}
+         :body (j/write-value-as-string output)})
+      {:status 400
+       :headers {"Content-Type" "text/plain; charset=utf-8"}
+       ;; :body (j/write-value-as-string {:error (s/explain-str command? edn)})})))
+       :body (s/explain-str command? edn)})))
 
 (def app
   (ring/ring-handler
    (ring/router
     ["/api"
-     ["/register" {:put {:responses {200 {:body {:remaining-executors pos-int?}}}
-                         :handler register-handler}}]
-     ["/status" {:get {:response {200 {:body ::data}}
-                       :handler status-handler}}]
-     ["/debug" {:get {:response {200 {:body ::data}}
-                      :handler debug-handler}}]])))
-    ;; {:data {:coercion reitit.coercion.spec/coercion
-    ;;         :middleware [rrc/coerce-exceptions-middleware
-    ;;                      rrc/coerce-request-middleware
-    ;;                      rrc/coerce-response-middleware]}})))
+     ["/command" {:post {:handler handler}}]])))

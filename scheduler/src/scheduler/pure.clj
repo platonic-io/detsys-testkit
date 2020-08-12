@@ -29,7 +29,7 @@
   {:total-executors     1
    :connected-executors 0
    :topology            {}
-   :agenda              (agenda/empty)
+   :agenda              (agenda/empty-agenda)
    :state               :started})
 
 (defn ap
@@ -40,6 +40,9 @@
   "Like `update`, but the function also has access to the original map."
   [m k f]
   (update m k #(f m %)))
+
+(s/def ::executor-id string?)
+(s/def ::components (s/coll-of string?))
 
 (>defn register-executor
   [data {:keys [executor-id components]}]
@@ -84,3 +87,8 @@
       (enqueue-command {:command {:name "a", :parameters []}, :component-id "c"} 1)
       first
       (enqueue-command {:command {:name "b", :parameters []}, :component-id "c"} 0)))
+
+
+(defn status
+  [data]
+  [data data])

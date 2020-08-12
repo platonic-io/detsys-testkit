@@ -11,7 +11,7 @@
 (def timestamp? int?)
 (def agenda? (s/coll-of (s/tuple entry? timestamp?)))
 
-(>defn empty
+(>defn empty-agenda
   []
   [=> agenda?]
   (pm/priority-map))

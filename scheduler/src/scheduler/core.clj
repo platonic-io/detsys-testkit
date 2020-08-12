@@ -3,6 +3,8 @@
             [ring.middleware.reload :as rmr]
             [ring.adapter.jetty :as jetty]
             [scheduler.handler :as handler])
+  (:import [org.eclipse.jetty.server
+            Server])
   (:gen-class))
 
 (set! *warn-on-reflection* true)
@@ -21,7 +23,7 @@
 
 (defn- stop-server
   []
-  (when @server (.stop @server))
+  (when @server (.stop ^Server @server))
   (reset! server nil))
 
 (defn- restart-server
