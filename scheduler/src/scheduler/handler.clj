@@ -40,7 +40,8 @@
              :body (json/write-str output)})))
       {:status 400
        :headers {"Content-Type" "text/plain; charset=utf-8"}
-       ;; :body (j/write-value-as-string {:error (s/explain-str command? edn)})})))
+       ;; TODO(stevan): can we return readable json instead of plain text?
+       ;; :body (json/write-str {:error (s/explain-str command? edn)})})))
        :body (s/explain-str command? edn)})))
 
 (def app handler)

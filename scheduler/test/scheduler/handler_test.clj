@@ -16,7 +16,7 @@
             :headers {"Content-Type" "application/json; charset=utf-8"}
             :body (json/write-str (pure/init-data))}
            (sut/app {:request-method :post
-                     :uri "/api/command"
+                     :uri "/"
                      :body (json/write-str
                             {:command "status"
                              :parameters {}})})))
@@ -24,7 +24,7 @@
             :headers {"Content-Type" "application/json; charset=utf-8"}
             :body (json/write-str {:remaining-executors 0})}
            (sut/app {:request-method :post
-                     :uri "/api/command"
+                     :uri "/"
                      :body (json/write-str
                             {:command "register-executor"
                              :parameters
