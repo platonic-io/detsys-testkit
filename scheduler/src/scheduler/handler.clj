@@ -21,12 +21,12 @@
 
 (defn register-handler
   [req]
-  (let [[output data'] (pure/register-executor @data (params req))]
+  (let [[data' output] (pure/register-executor @data (params req))]
     (reset! data data')
     ;; (log/debug (params req))
     (log/debug data')
     {:status 200
-     :body (j/write-value-as-string {:remaining-executors output})}))
+     :body (j/write-value-as-string output)}))
 
 (defn status-handler
   [_req]
