@@ -1,8 +1,10 @@
 (ns scheduler.pure
   (:require [clojure.spec.alpha :as s]
+            [clj-http.client :as client]
             [scheduler.spec :refer [>defn => component-id?]]
             [scheduler.agenda :as agenda]
-            [scheduler.json :as json]))
+            [scheduler.json :as json]
+            [taoensso.timbre :as log]))
 
 (defn nat?
   "Check if something is a natural number."
@@ -107,16 +109,21 @@
                   :body (merge entry {:timestamp timestamp})}])
         [data {:more? false}]))))
 
+;; TODO(stevan): move to other module?
+(defn execute!
+  [data]
+  (let [r (-> data execute second)]
+    (log/debug :execute r)
+    (when (:more? r)
+      (log/debug :more?)
+      (client/post (:url r) {:body (json/write (:body r))}))))
+
 (comment
   (-> (init-data)
-      (register-executor {:executor-id "e" :components ["c"]})
+      (register-executor {:executor-id "http://localhost:3000" :components ["c"]})
       first
       (enqueue-command {:entry {:command {:name "a", :parameters []}
                                 :component-id "c"}
                         :timestamp 1})
       first
-      execute
-      ;; first
-      ;; execute
-      )
-  )
+      execute!))

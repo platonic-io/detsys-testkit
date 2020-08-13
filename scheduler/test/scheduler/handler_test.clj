@@ -21,7 +21,7 @@
                      :uri "/"
                      :body (json/write
                             {:command "status"
-                             :parameters {}})}) ))
+                             :parameters {}})})))
   (t/is (= {:status 200
             :headers {"Content-Type" "application/json; charset=utf-8"}
             :body (json/write {:remaining-executors 0})}
@@ -60,7 +60,7 @@
                                                  ;; JSON seralisation of agenda
                                                  ;; doesn't seem to encode
                                                  ;; commands...
-           }
+            }
            (sut/app {:request-method :post
                      :uri "/"
                      :body (json/write
