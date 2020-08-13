@@ -1,6 +1,5 @@
 (ns scheduler.pure
   (:require [clojure.spec.alpha :as s]
-            [clj-http.client :as client]
             [scheduler.spec :refer [>defn => component-id?]]
             [scheduler.agenda :as agenda]
             [scheduler.json :as json]))
@@ -16,7 +15,8 @@
 (s/def ::agenda              agenda/agenda?)
 (s/def ::state               #{:ready :started :running
                                :error-cannot-register-in-this-state
-                               :error-cannot-enqueue-in-this-state})
+                               :error-cannot-enqueue-in-this-state
+                               :error-cannot-execute-in-this-state})
 
 (s/def ::data (s/keys :req-un [::total-executors
                                ::connected-executors
@@ -92,16 +92,20 @@
   [data]
   [data data])
 
-(defn execute!
+(defn execute
   [data]
-  (let [[agenda' [entry timestamp]] (agenda/dequeue (:agenda data))
-        data' (assoc data :agenda agenda')
-        executor-id (get (:topology data) (:component-id entry))]
-    (when entry
-      ;; TODO(stevan): retry with nonce?
-      (client/post (str executor-id "/api/command")
-                   {:body  (json/write (merge entry {:timestamp timestamp}))
-                    :debug true}))))
+  (if (not= (:state data) :running)
+    [(assoc data :state :error-cannot-execute-in-this-state) nil]
+    (let [[agenda' [entry timestamp]] (agenda/dequeue (:agenda data))]
+      (if entry
+        (let [data' (assoc data :agenda agenda')
+              executor-id (get (:topology data) (:component-id entry))]
+          ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
+          ;; this should be checked when commands are enqueued?
+          [data' {:more? true
+                  :url (str executor-id "/api/command")
+                  :body (merge entry {:timestamp timestamp})}])
+        [data {:more? false}]))))
 
 (comment
   (-> (init-data)
@@ -110,4 +114,9 @@
       (enqueue-command {:entry {:command {:name "a", :parameters []}
                                 :component-id "c"}
                         :timestamp 1})
-      first))
+      first
+      execute
+      ;; first
+      ;; execute
+      )
+  )
