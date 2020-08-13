@@ -73,9 +73,12 @@
             {:remaining-executors (max 0 (- (:total-executors data')
                                             (:connected-executors data')))}))))
 
+(s/def ::queue-size nat?)
+
 (>defn enqueue-command
   [data {:keys [entry timestamp]}]
-  [::data (s/keys :req-un [::entry ::timestamp]) => (s/tuple ::data #{:ok})]
+  [::data (s/keys :req-un [::entry ::timestamp])
+   => (s/tuple ::data (s/keys :req-un [::queue-size]))]
   (-> data
       (update :agenda #(agenda/enqueue % entry timestamp))
       (update :state (fn [state]
@@ -83,7 +86,7 @@
                          :ready   :running
                          :running :running
                          :error-cannot-enqueue-in-this-state)))
-      (ap (constantly :ok))))
+      (ap (fn [data'] {:queue-size (count (:agenda data'))}))))
 
 (defn status
   [data]
@@ -104,6 +107,7 @@
   (-> (init-data)
       (register-executor {:executor-id "e" :components ["c"]})
       first
-      (enqueue-command {:command {:name "a", :parameters []}, :component-id "c"} 1)
-      first
-      (enqueue-command {:command {:name "b", :parameters []}, :component-id "c"} 0)))
+      (enqueue-command {:entry {:command {:name "a", :parameters []}
+                                :component-id "c"}
+                        :timestamp 1})
+      first))

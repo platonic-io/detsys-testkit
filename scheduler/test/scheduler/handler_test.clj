@@ -29,4 +29,33 @@
                             {:command "register-executor"
                              :parameters
                              {:executor-id "executor1"
-                              :components ["component1" "component2"]}})}))))
+                              :components ["component1" "component2"]}})})))
+  (t/is (= {:status 200
+            :headers {"Content-Type" "application/json; charset=utf-8"}
+            :body (json/write {:queue-size 1})}
+           (sut/app {:request-method :post
+                     :uri "/"
+                     :body (json/write
+                            {:command "enqueue-command"
+                             :parameters
+                             {:entry {:command {:name "command1"
+                                                :parameters []}
+                                      :component-id "component1"}
+                              :timestamp 1}})})))
+
+  (t/is (= {:status 200
+            :headers {"Content-Type" "application/json; charset=utf-8"}
+            :body (json/write {:total-executors 1
+                               :connected-executors 1
+                               :topology {"component2" "executor1"
+                                          "component1" "executor1"}
+                               :agenda {{:command {:name "command1"
+                                                   :parameters []}
+                                         :component-id "component1"}
+                                        1}
+                               :state :running})}
+           (sut/app {:request-method :post
+                     :uri "/"
+                     :body (json/write
+                            {:command "status"
+                             :parameters {}})}))))
