@@ -116,6 +116,8 @@
     (log/debug :execute r)
     (when (:more? r)
       (log/debug :more?)
+      ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
+      ;; so that we don't end up executing the same command twice.
       (client/post (:url r) {:body (json/write (:body r))}))))
 
 (defn load-test!
