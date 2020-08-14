@@ -118,6 +118,10 @@
       (log/debug :more?)
       (client/post (:url r) {:body (json/write (:body r))}))))
 
+(defn load-test!
+  [data {:keys [test-id]}]
+  )
+
 (comment
   (-> (init-data)
       (register-executor {:executor-id "http://localhost:3000" :components ["c"]})
