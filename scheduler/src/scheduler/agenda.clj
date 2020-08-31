@@ -24,7 +24,7 @@
 (defn dequeue
   [agenda]
   [agenda? => (s/tuple agenda? (s/nilable (s/tuple entry? timestamp?)))]
-  [(rest agenda) (first agenda)])
+  [(pop agenda) (peek agenda)])
 
 (comment
   (-> (empty-agenda)
