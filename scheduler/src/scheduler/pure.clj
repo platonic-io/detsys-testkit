@@ -1,7 +1,10 @@
 (ns scheduler.pure
   (:require [clojure.spec.alpha :as s]
+            [clj-http.client :as client]
             [scheduler.spec :refer [>defn => component-id?]]
-            [scheduler.agenda :as agenda]))
+            [scheduler.agenda :as agenda]
+            [scheduler.json :as json]
+            [taoensso.timbre :as log]))
 
 (defn nat?
   "Check if something is a natural number."
@@ -14,7 +17,8 @@
 (s/def ::agenda              agenda/agenda?)
 (s/def ::state               #{:ready :started :running
                                :error-cannot-register-in-this-state
-                               :error-cannot-enqueue-in-this-state})
+                               :error-cannot-enqueue-in-this-state
+                               :error-cannot-execute-in-this-state})
 
 (s/def ::data (s/keys :req-un [::total-executors
                                ::connected-executors
@@ -71,9 +75,12 @@
             {:remaining-executors (max 0 (- (:total-executors data')
                                             (:connected-executors data')))}))))
 
+(s/def ::queue-size nat?)
+
 (>defn enqueue-command
   [data {:keys [entry timestamp]}]
-  [::data (s/keys :req-un [::entry ::timestamp]) => (s/tuple ::data #{:ok})]
+  [::data (s/keys :req-un [::entry ::timestamp])
+   => (s/tuple ::data (s/keys :req-un [::queue-size]))]
   (-> data
       (update :agenda #(agenda/enqueue % entry timestamp))
       (update :state (fn [state]
@@ -81,17 +88,48 @@
                          :ready   :running
                          :running :running
                          :error-cannot-enqueue-in-this-state)))
-      (ap (constantly :ok))))
-
-(comment
-  (-> (init-data)
-      (register-executor {:executor-id "e" :components ["c"]})
-      first
-      (enqueue-command {:command {:name "a", :parameters []}, :component-id "c"} 1)
-      first
-      (enqueue-command {:command {:name "b", :parameters []}, :component-id "c"} 0)))
-
+      (ap (fn [data'] {:queue-size (count (:agenda data'))}))))
 
 (defn status
   [data]
   [data data])
+
+(defn execute
+  [data]
+  (if (not= (:state data) :running)
+    [(assoc data :state :error-cannot-execute-in-this-state) nil]
+    (let [[agenda' [entry timestamp]] (agenda/dequeue (:agenda data))]
+      (if entry
+        (let [data' (assoc data :agenda agenda')
+              executor-id (get (:topology data) (:component-id entry))]
+          ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
+          ;; this should be checked when commands are enqueued?
+          [data' {:more? true
+                  :url (str executor-id "/api/command")
+                  :body (merge entry {:timestamp timestamp})}])
+        [data {:more? false}]))))
+
+;; TODO(stevan): move to other module?
+(defn execute!
+  [data]
+  (let [r (-> data execute second)]
+    (log/debug :execute r)
+    (when (:more? r)
+      (log/debug :more?)
+      ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
+      ;; so that we don't end up executing the same command twice.
+      (client/post (:url r) {:body (json/write (:body r))}))))
+
+(defn load-test!
+  [data {:keys [test-id]}]
+  )
+
+(comment
+  (-> (init-data)
+      (register-executor {:executor-id "http://localhost:3000" :components ["c"]})
+      first
+      (enqueue-command {:entry {:command {:name "a", :parameters []}
+                                :component-id "c"}
+                        :timestamp 1})
+      first
+      execute!))

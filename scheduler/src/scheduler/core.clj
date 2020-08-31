@@ -39,4 +39,4 @@
 
 (comment
   (start-server)
-  (stop-server))
+  (restart-server))

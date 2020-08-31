@@ -1,6 +1,6 @@
 (ns scheduler.handler
-  (:require [clojure.tools.logging :as log]
-            [clojure.data.json :as json]
+  (:require [taoensso.timbre :as log]
+            [scheduler.json :as json]
             [scheduler.pure :as pure]
             [clojure.spec.alpha :as s]))
 
@@ -23,7 +23,8 @@
   [req]
   (let [edn (-> req
                 :body
-                (json/read-str :key-fn keyword))]
+                (json/read))]
+    (log/debug :body edn)
     (if (s/valid? command? edn)
       (let [parameters (:parameters edn)
             [data' output] (call (:command edn) (if (empty? parameters)
@@ -32,12 +33,12 @@
         (if (error-state? (:state data'))
           {:status 400
            :headers {"Content-Type" "application/json; charset=utf-8"}
-           :body (json/write-str {:error (:state data')})}
+           :body (json/write {:error (:state data')})}
           (do
             (reset! data data')
             {:status 200
              :headers {"Content-Type" "application/json; charset=utf-8"}
-             :body (json/write-str output)})))
+             :body (json/write output)})))
       {:status 400
        :headers {"Content-Type" "text/plain; charset=utf-8"}
        ;; TODO(stevan): can we return readable json instead of plain text?
