@@ -7,16 +7,16 @@
             [scheduler.json :as json]
             [taoensso.timbre :as log]))
 
-(defn nat?
-  "Check if something is a natural number."
-  [x]
-  (and (int? x) (<= 0 x)))
-
 (s/def ::total-executors     pos-int?)
-(s/def ::connected-executors nat?)
+(s/def ::connected-executors nat-int?)
 (s/def ::topology            (s/map-of string? string?))
 (s/def ::agenda              agenda/agenda?)
-(s/def ::state               #{:ready :started :running
+(s/def ::state               #{:started
+                               :test-prepared
+                               :ready
+                               :requesting
+                               :responding
+                               :error-cannot-load-test-in-this-state
                                :error-cannot-register-in-this-state
                                :error-cannot-enqueue-in-this-state
                                :error-cannot-execute-in-this-state})
@@ -28,7 +28,7 @@
                                ::state]))
 
 (s/def ::components (s/coll-of component-id? :kind vector?))
-(s/def ::remaining-executors nat?)
+(s/def ::remaining-executors nat-int?)
 
 (>defn init-data
   []
@@ -44,6 +44,28 @@
 (defn ap
   [data f]
   [data (f data)])
+
+(s/def ::test-id nat-int?)
+(s/def ::queue-size nat-int?)
+
+;; TODO(stevan): test needs to contain executor topology, so we know how many
+;; executors to wait for.
+(>defn load-test!
+  [data {:keys [test-id]}]
+  [::data (s/keys :req-un [::test-id])
+   => (s/tuple ::data (s/keys :req-un [::queue-size]))]
+  (-> data
+      (update :agenda #(agenda/enqueue
+                        %
+                        ;; TODO(stevan): actually load the test from the db.
+                        {:command {:name :a, :parameters []}, :component-id "a"}
+                        1))
+      (update :state (fn [state]
+                       (case state
+                         :started :test-prepared
+                         :error-cannot-load-test-in-this-state)))
+      (ap (fn [data']
+            {:queue-size (count (:agenda data'))}))))
 
 (defn update+
   "Like `update`, but the function also has access to the original map."
@@ -71,14 +93,70 @@
                                 0  :ready
                                 1  :error-too-many-executors)]
                    (case state
-                     :started state'
+                     :test-prepared state'
                      :waiting-for-executors state'
                      :error-cannot-register-in-this-state))))
       (ap (fn [data']
             {:remaining-executors (max 0 (- (:total-executors data')
                                             (:connected-executors data')))}))))
 
-(s/def ::queue-size nat?)
+(defn execute
+  [data]
+  (if-not (contains? #{:ready :responding} (:state data))
+    [(assoc data :state :error-cannot-execute-in-this-state) nil]
+    (let [[agenda' [entry timestamp]] (agenda/dequeue (:agenda data))
+          data' (assoc data :agenda agenda')
+          ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
+          ;; this should be checked when commands are enqueued?
+          executor-id (get (:topology data) (:component-id entry))]
+      [data' {:url (str executor-id "/api/command")
+              :timestamp timestamp
+              :body (merge entry {:timestamp timestamp})}])))
+
+(-> (init-data)
+    (load-test! {:test-id 1})
+    first
+    (register-executor {:executor-id "http://localhost:3000" :components ["c"]})
+    first
+    (execute)
+    )
+
+(s/def ::entry agenda/entry?)
+
+(def entries? (s/coll-of (s/keys :req-un [::entry] :kind vector?)))
+
+(def timestamped-entries? (s/coll-of (s/tuple (s/keys :req-un [::entry]) agenda/timestamp?)
+                                     :kind seq?))
+
+(>defn timestamp-entries
+  [data entries timestamp]
+  [::data entries? agenda/timestamp? => (s/tuple ::data timestamped-entries?)]
+  (with-bindings {#'gen/*rnd* (:seed data)}
+    (let [timestamps (->> (gen/vec #(gen/uniform 1 10000) (count entries))
+                          (map #(+ timestamp %)))]
+      [(assoc data :seed gen/*rnd*) (map vector entries timestamps)])))
+
+
+(comment
+(timestamp-entries (init-data)
+                   [{:entry {:command {:name "do-inc" :parameters []}
+                             :component-id "inc"}}
+                    {:entry {:command {:name "do-inc" :parameters []}
+                             :component-id "inc"}}]
+                   1) )
+
+;; TODO(stevan): move to other module?
+(>defn execute!
+  [data]
+  [::data => (s/tuple ::data timestamped-entries?)]
+  (let [[data' {:keys [url timestamp body]} :as r] (execute data)]
+    (log/debug :execute r)
+    ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
+    ;; so that we don't end up executing the same command twice.
+    (timestamp-entries data' (-> (client/post url {:body (json/write body)})
+                                 :body
+                                 json/read)
+                       timestamp)))
 
 (>defn enqueue-command
   [data {:keys [entry timestamp]}]
@@ -89,31 +167,28 @@
       (update :total-commands inc)
       (update :state (fn [state]
                        (case state
-                         :ready   :running
-                         :running :running
+                         :responding :responding
                          :error-cannot-enqueue-in-this-state)))
       (ap (fn [data'] {:queue-size (count (:agenda data'))}))))
+
+(defn enqueue-commands
+  [data {:keys [commands]}]
+  (if (and (empty? commands) (-> data :agenda empty?))
+    [(update data :state :finished) {:queue-size 0}]
+    (let [data' (reduce (fn [ih command]
+                          (first (enqueue-command ih command))) data commands)]
+      [data' (count (:agenda data'))])))
+
+(enqueue-commands (-> (init-data)
+                      (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
+                      first)
+                  {:commands [{:entry {:command {:name "do-inc" :parameters []}
+                                       :component-id "inc"}
+                               :timestamp 1}]})
 
 (defn status
   [data]
   [data data])
-
-(defn execute
-  [data]
-  (if (not= (:state data) :running)
-    [(assoc data :state :error-cannot-execute-in-this-state) nil]
-    (let [[agenda' [entry timestamp]] (agenda/dequeue (:agenda data))]
-      (if entry
-        (let [data' (assoc data :agenda agenda')
-              executor-id (get (:topology data) (:component-id entry))]
-          ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
-          ;; this should be checked when commands are enqueued?
-          [data' {:more? true
-                  :url (str executor-id "/api/command")
-                  :timestamp timestamp
-                  :body (merge entry {:timestamp timestamp})}])
-        [data {:more? false}]))))
-
 
 (defn rand-int-in
   [seed min max]
@@ -135,27 +210,12 @@
                      first)
                  (rest commands)))))))
 
-;; TODO(stevan): move to other module?
-(defn execute!
-  [data]
-  (let [[data' r] (-> data execute)]
-    (log/debug :execute r)
-    (when (:more? r)
-      (log/debug :more?)
-      ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
-      ;; so that we don't end up executing the same command twice.
-      (let [response (client/post (:url r) {:body (json/write (:body r))})
-            new-commands (-> response :body json/read)]
-        (add-commands data' (:timestamp r) new-commands)))))
-
-(defn set-seeed!
+(defn set-seed!
   [data {new-seed :new-seed}]
   [(assoc data :seed (java.util.Random. new-seed)) new-seed])
 
-(defn load-test!
-  [data {:keys [test-id]}]
-  )
 
+(comment
 (def danne-test
   (-> (init-data)
       (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
@@ -168,6 +228,7 @@
                                 :component-id "inc"}
                         :timestamp 2})
       first))
+)
 
 (comment
   (-> (init-data)
