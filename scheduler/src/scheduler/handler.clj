@@ -15,10 +15,6 @@
   (log/debug :call f args)
   (apply (ns-resolve 'scheduler.pure (symbol f)) args))
 
-(defn error-state?
-  [state]
-  (some? (re-matches #"^error-.*$" (name state))))
-
 (defn handler
   [req]
   (let [edn (-> req
@@ -30,7 +26,7 @@
             [data' output] (call (:command edn) (if (empty? parameters)
                                                   [@data]
                                                   [@data parameters]))]
-        (if (error-state? (:state data'))
+        (if (pure/error-state? (:state data'))
           {:status 400
            :headers {"Content-Type" "application/json; charset=utf-8"}
            :body (json/write {:error (:state data')})}

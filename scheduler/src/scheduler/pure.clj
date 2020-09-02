@@ -2,6 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.data.generators :as gen]
             [clj-http.client :as client]
+            [clj-http.fake :as fake]
             [scheduler.spec :refer [>defn => component-id?]]
             [scheduler.agenda :as agenda]
             [scheduler.json :as json]
@@ -58,7 +59,7 @@
       (update :agenda #(agenda/enqueue
                         %
                         ;; TODO(stevan): actually load the test from the db.
-                        {:command {:name :a, :parameters []}, :component-id "a"}
+                        {:command {:name :a, :parameters []}, :component-id "c"}
                         1))
       (update :state (fn [state]
                        (case state
@@ -109,6 +110,7 @@
           ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
           ;; this should be checked when commands are enqueued?
           executor-id (get (:topology data) (:component-id entry))]
+      (assert executor-id (str "Executor `" executor-id "' isn't in topology."))
       [data' {:url (str executor-id "/api/command")
               :timestamp timestamp
               :body (merge entry {:timestamp timestamp})}])))
@@ -125,40 +127,74 @@
 
 (def entries? (s/coll-of (s/keys :req-un [::entry] :kind vector?)))
 
-(def timestamped-entries? (s/coll-of (s/tuple (s/keys :req-un [::entry]) agenda/timestamp?)
-                                     :kind seq?))
+(s/def ::responses entries?)
+
+(defn error-state?
+  [state]
+  (some? (re-matches #"^error-.*$" (name state))))
+
+;; TODO(stevan): move to other module, since isn't pure?
+;; TODO(stevan): can we avoid using nilable here? Return `Error + Data *
+;; Response` instead of always `Data * Response`? Or `Data * Error + Data * Response`?
+(>defn execute!
+  [data]
+  [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::responses])))]
+  (let [[data' {:keys [url timestamp body]}] (execute data)]
+    (if (error-state? (:state data'))
+      [data' nil]
+      ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
+      ;; so that we don't end up executing the same command twice.
+      (let [responses (-> (client/post url {:body (json/write body)})
+                          :body
+                          json/read)]
+        ;; TODO(stevan): Change executor to return this json object.
+        (assert (= (keys responses) '(:responses))
+                (str "execute!: unexpected response body: " responses))
+        [data' responses]))))
+
+(fake/with-fake-routes
+  {"http://localhost:3001/api/command"
+   (fn [_request] {:status 200
+                   :headers {}
+                   :body (json/write {:responses
+                                      [{:entry {:command {:name "b" :parameters []}
+                                                :component-id "c"}}]})})}
+  (-> (init-data)
+      (load-test! {:test-id 1})
+      first
+      (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
+      first
+      (execute!)))
+
+(def timestamped-entries? (s/coll-of (s/keys :req-un [::entry ::timestamp])
+                                     :kind vector?))
+
+(s/def ::timestamped-entries timestamped-entries?)
 
 (>defn timestamp-entries
   [data entries timestamp]
-  [::data entries? agenda/timestamp? => (s/tuple ::data timestamped-entries?)]
+  [::data entries? agenda/timestamp?
+   => (s/tuple ::data (s/keys :req-un [::timestamped-entries]))]
   (with-bindings {#'gen/*rnd* (:seed data)}
+    ;; TODO(stevan): define and use exponential distribution instead.
     (let [timestamps (->> (gen/vec #(gen/uniform 1 10000) (count entries))
-                          (map #(+ timestamp %)))]
-      [(assoc data :seed gen/*rnd*) (map vector entries timestamps)])))
-
+                          (mapv #(+ timestamp %)))]
+      [(assoc data :seed gen/*rnd*)
+       {:timestamped-entries
+        (mapv (fn [entry timestamp]
+                (merge entry {:timestamp timestamp})) entries timestamps)}])))
 
 (comment
-(timestamp-entries (init-data)
-                   [{:entry {:command {:name "do-inc" :parameters []}
-                             :component-id "inc"}}
-                    {:entry {:command {:name "do-inc" :parameters []}
-                             :component-id "inc"}}]
-                   1) )
+  (-> (init-data)
+      (timestamp-entries
+       [{:entry {:command {:name "do-inc" :parameters []}
+                 :component-id "inc"}}
+        {:entry {:command {:name "do-inc" :parameters []}
+                 :component-id "inc"}}]
+       1)
+      second) )
 
-;; TODO(stevan): move to other module?
-(>defn execute!
-  [data]
-  [::data => (s/tuple ::data timestamped-entries?)]
-  (let [[data' {:keys [url timestamp body]} :as r] (execute data)]
-    (log/debug :execute r)
-    ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
-    ;; so that we don't end up executing the same command twice.
-    (timestamp-entries data' (-> (client/post url {:body (json/write body)})
-                                 :body
-                                 json/read)
-                       timestamp)))
-
-(>defn enqueue-command
+(>defn enqueue-entry
   [data {:keys [entry timestamp]}]
   [::data (s/keys :req-un [::entry ::timestamp])
    => (s/tuple ::data (s/keys :req-un [::queue-size]))]
@@ -171,20 +207,33 @@
                          :error-cannot-enqueue-in-this-state)))
       (ap (fn [data'] {:queue-size (count (:agenda data'))}))))
 
-(defn enqueue-commands
-  [data {:keys [commands]}]
-  (if (and (empty? commands) (-> data :agenda empty?))
+(>defn enqueue-timestamped-entries
+  [data {:keys [timestamped-entries]}]
+  [::data (s/keys :req-un [::timestamped-entries])
+   => (s/tuple ::data (s/keys :req-un [::queue-size]))]
+  (if (and (empty? timestamped-entries) (-> data :agenda empty?))
     [(update data :state :finished) {:queue-size 0}]
-    (let [data' (reduce (fn [ih command]
-                          (first (enqueue-command ih command))) data commands)]
-      [data' (count (:agenda data'))])))
+    (let [data' (reduce (fn [ih timestamped-entry]
+                          (first (enqueue-entry ih timestamped-entry)))
+                        data
+                        timestamped-entries)]
+      [data' {:queue-size (count (:agenda data'))}])))
 
-(enqueue-commands (-> (init-data)
-                      (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
-                      first)
-                  {:commands [{:entry {:command {:name "do-inc" :parameters []}
-                                       :component-id "inc"}
-                               :timestamp 1}]})
+(enqueue-timestamped-entries
+ (-> (init-data)
+     (load-test! {:test-id 1})
+     first
+     (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
+     first)
+ (-> (init-data)
+     (timestamp-entries
+      [{:entry {:command {:name "do-inc" :parameters []}
+                :component-id "inc"}}
+       {:entry {:command {:name "do-inc" :parameters []}
+                :component-id "inc"}}]
+      1)
+     second)
+ )
 
 (defn status
   [data]
