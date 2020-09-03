@@ -257,11 +257,12 @@
 
 (>defn step!
   [data]
-  [::data => (s/tuple ::data (s/keys :req-un [::queue-size]))]
-  (let [[data' responses] (execute! data)
+  [::data => (s/tuple ::data (s/keys :req-un [::queue-size ::entry ::responses]))]
+  (let [entry (-> data :agenda peek first)
+        [data' responses] (execute! data)
         [data'' timestamped-entries] (timestamp-entries data' (:responses responses) 1)
         [data''' queue-size] (enqueue-timestamped-entries data'' timestamped-entries)]
-    [data''' queue-size]))
+    [data''' (merge {:entry entry} responses queue-size)]))
 
 
 (fake/with-fake-routes
@@ -282,8 +283,9 @@
       step!
       ))
 
-(defn status
+(>defn status
   [data]
+  [::data => (s/tuple ::data ::data)]
   [data data])
 
 (defn set-seed!
