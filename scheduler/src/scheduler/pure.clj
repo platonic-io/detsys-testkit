@@ -264,7 +264,6 @@
         [data''' queue-size] (enqueue-timestamped-entries data'' timestamped-entries)]
     [data''' (merge {:entry entry} responses queue-size)]))
 
-
 (fake/with-fake-routes
   {"http://localhost:3001/api/command"
    (fn [_request] {:status 200
@@ -283,10 +282,35 @@
       step!
       ))
 
+(defn run!
+  [data]
+  (loop [data data steps 0]
+    (if (= :finished (:state data))
+      [data {:steps steps}]
+      (recur (-> data step! first) (inc steps)))))
+
+(fake/with-fake-routes
+  {"http://localhost:3001/api/command"
+   (fn [_request] {:status 200
+                   :headers {}
+                   :body (json/write {:responses []
+                                      ;; [{:entry {:command {:name "b" :parameters []}
+                                      ;;           :component-id "c"}}]
+                                      })})}
+  (-> (init-data)
+      (load-test! {:test-id 1})
+      first
+      (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
+      first
+      run!
+      ))
+
 (>defn status
   [data]
   [::data => (s/tuple ::data ::data)]
   [data data])
+
+(status (init-data))
 
 (defn set-seed!
   [data {new-seed :new-seed}]
