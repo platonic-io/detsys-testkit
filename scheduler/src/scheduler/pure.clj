@@ -17,6 +17,7 @@
                                :ready
                                :requesting
                                :responding
+                               :finished
                                :error-cannot-load-test-in-this-state
                                :error-cannot-register-in-this-state
                                :error-cannot-enqueue-in-this-state
@@ -38,7 +39,7 @@
    :connected-executors 0
    :topology            {}
    :agenda              (agenda/empty-agenda)
-   :seed                (java.util.Random. 1)
+   :prng                (java.util.Random. 1)
    :total-commands      0
    :state               :started})
 
@@ -61,6 +62,10 @@
                         ;; TODO(stevan): actually load the test from the db.
                         {:command {:name :a, :parameters []}, :component-id "c"}
                         1))
+      (update :agenda #(agenda/enqueue
+                        %
+                        {:command {:name :b, :parameters []}, :component-id "c"}
+                        2))
       (update :state (fn [state]
                        (case state
                          :started :test-prepared
@@ -103,13 +108,19 @@
 
 (defn execute
   [data]
-  (if-not (contains? #{:ready :responding} (:state data))
+  (if-not (contains? #{:ready :requesting} (:state data))
     [(assoc data :state :error-cannot-execute-in-this-state) nil]
     (let [[agenda' [entry timestamp]] (agenda/dequeue (:agenda data))
-          data' (assoc data :agenda agenda')
+          data' (-> data
+                    (assoc :agenda agenda')
+                    (update :state (fn [state]
+                                     (case state
+                                       :ready :responding
+                                       :requesting :responding
+                                       :error-cannot-execute-in-this-state))))
           ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
           ;; this should be checked when commands are enqueued?
-          executor-id (get (:topology data) (:component-id entry))]
+          executor-id (get (:topology data') (:component-id entry))]
       (assert executor-id (str "Executor `" executor-id "' isn't in topology."))
       [data' {:url (str executor-id "/api/command")
               :timestamp timestamp
@@ -175,11 +186,11 @@
   [data entries timestamp]
   [::data entries? agenda/timestamp?
    => (s/tuple ::data (s/keys :req-un [::timestamped-entries]))]
-  (with-bindings {#'gen/*rnd* (:seed data)}
+  (with-bindings {#'gen/*rnd* (:prng data)}
     ;; TODO(stevan): define and use exponential distribution instead.
     (let [timestamps (->> (gen/vec #(gen/uniform 1 10000) (count entries))
                           (mapv #(+ timestamp %)))]
-      [(assoc data :seed gen/*rnd*)
+      [(assoc data :prng gen/*rnd*)
        {:timestamped-entries
         (mapv (fn [entry timestamp]
                 (merge entry {:timestamp timestamp})) entries timestamps)}])))
@@ -212,11 +223,20 @@
   [::data (s/keys :req-un [::timestamped-entries])
    => (s/tuple ::data (s/keys :req-un [::queue-size]))]
   (if (and (empty? timestamped-entries) (-> data :agenda empty?))
-    [(update data :state :finished) {:queue-size 0}]
-    (let [data' (reduce (fn [ih timestamped-entry]
-                          (first (enqueue-entry ih timestamped-entry)))
-                        data
-                        timestamped-entries)]
+    [(update data :state
+             (fn [state]
+               (case state
+                 :responding :finished
+                 :error-cannot-enqueue-in-this-state)))
+     {:queue-size 0}]
+    (let [data' (-> (reduce (fn [ih timestamped-entry]
+                              (first (enqueue-entry ih timestamped-entry)))
+                            data
+                            timestamped-entries)
+                    (update :state
+                            (fn [state] (case state
+                                          :responding :requesting
+                                          :error-cannot-enqueue-in-this-state))))]
       [data' {:queue-size (count (:agenda data'))}])))
 
 (enqueue-timestamped-entries
@@ -235,56 +255,36 @@
      second)
  )
 
+(defn step!
+  [data]
+  (let [[data' responses] (execute! data)
+        [data'' timestamped-entries] (timestamp-entries data' (:responses responses) 1)
+        [data''' queue-size] (enqueue-timestamped-entries data'' timestamped-entries)]
+    [data''' queue-size]))
+
+
+(fake/with-fake-routes
+  {"http://localhost:3001/api/command"
+   (fn [_request] {:status 200
+                   :headers {}
+                   :body (json/write {:responses []
+                                      ;; [{:entry {:command {:name "b" :parameters []}
+                                      ;;           :component-id "c"}}]
+                                      })})}
+  (-> (init-data)
+      (load-test! {:test-id 1})
+      first
+      (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
+      first
+      step!
+      first
+      step!
+      ))
+
 (defn status
   [data]
   [data data])
 
-(defn rand-int-in
-  [seed min max]
-  (+ min (.nextInt seed max)))
-
-;; we should probably check what is currently in the agenda as well
-;; to figure out where to schedule things..
-(defn add-commands
-  [data timestamp new-commands]
-  (let [seed (:seed data)]
-    (loop [data data
-           commands new-commands ;; if we have bound gen/*rnd* properly this is deterministic
-           ]
-      (if (empty? commands)
-        [data {}] ;; check if agenda is empty and change state?
-        (let [extra-time (rand-int-in seed 1 10000)]
-          (recur (-> (enqueue-command data {:entry (first commands) ;; pick at random with seed
-                                            :timestamp (+ timestamp extra-time)})
-                     first)
-                 (rest commands)))))))
-
 (defn set-seed!
   [data {new-seed :new-seed}]
-  [(assoc data :seed (java.util.Random. new-seed)) new-seed])
-
-
-(comment
-(def danne-test
-  (-> (init-data)
-      (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
-      first
-      (enqueue-command {:entry {:command {:name "do-inc" :parameters []}
-                                :component-id "inc"}
-                        :timestamp 1})
-      first
-      (enqueue-command {:entry {:command {:name "do-inc" :parameters []}
-                                :component-id "inc"}
-                        :timestamp 2})
-      first))
-)
-
-(comment
-  (-> (init-data)
-      (register-executor {:executor-id "http://localhost:3000" :components ["c"]})
-      first
-      (enqueue-command {:entry {:command {:name "a", :parameters []}
-                                :component-id "c"}
-                        :timestamp 1})
-      first
-      execute!))
+  [(assoc data :prng (java.util.Random. new-seed)) new-seed])
