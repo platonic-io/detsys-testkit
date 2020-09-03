@@ -255,8 +255,9 @@
      second)
  )
 
-(defn step!
+(>defn step!
   [data]
+  [::data => (s/tuple ::data (s/keys :req-un [::queue-size]))]
   (let [[data' responses] (execute! data)
         [data'' timestamped-entries] (timestamp-entries data' (:responses responses) 1)
         [data''' queue-size] (enqueue-timestamped-entries data'' timestamped-entries)]
