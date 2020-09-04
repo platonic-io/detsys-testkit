@@ -9,6 +9,7 @@
         org.clojure/data.generators   {:mvn/version "1.0.0"}
         org.clojure/data.priority-map {:mvn/version "1.0.0"}
         seancorfield/next.jdbc        {:mvn/version "1.1.582"}
+        org.xerial/sqlite-jdbc        {:mvn/version "3.32.3"}
         com.taoensso/timbre           {:mvn/version "4.10.0"}
         metosin/jsonista              {:mvn/version "0.2.2"}
         gnl/ghostwheel                {:mvn/version "0.3.9"}}
