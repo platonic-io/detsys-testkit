@@ -39,7 +39,7 @@
    :connected-executors 0
    :topology            {}
    :agenda              (agenda/empty-agenda)
-   :prng                (java.util.Random. 1)
+   :seed                1
    :total-commands      0
    :state               :started})
 
@@ -186,11 +186,12 @@
   [data entries timestamp]
   [::data entries? agenda/timestamp?
    => (s/tuple ::data (s/keys :req-un [::timestamped-entries]))]
-  (with-bindings {#'gen/*rnd* (:prng data)}
+  (with-bindings {#'gen/*rnd* (java.util.Random. (:seed data))}
     ;; TODO(stevan): define and use exponential distribution instead.
     (let [timestamps (->> (gen/vec #(gen/uniform 1 10000) (count entries))
-                          (mapv #(+ timestamp %)))]
-      [(assoc data :prng gen/*rnd*)
+                          (mapv #(+ timestamp %)))
+          new-seed (.nextLong gen/*rnd*)]
+      [(assoc data :seed new-seed)
        {:timestamped-entries
         (mapv (fn [entry timestamp]
                 (merge entry {:timestamp timestamp})) entries timestamps)}])))
@@ -315,4 +316,4 @@
 
 (defn set-seed!
   [data {new-seed :new-seed}]
-  [(assoc data :prng (java.util.Random. new-seed)) new-seed])
+  [(assoc data :seed new-seed) new-seed])
