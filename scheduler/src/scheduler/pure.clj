@@ -125,14 +125,13 @@
       [data' {:url (str executor-id "/api/command")
               :timestamp timestamp
               :body (merge entry {:timestamp timestamp})}])))
-
-(-> (init-data)
-    (load-test! {:test-id 1})
-    first
-    (register-executor {:executor-id "http://localhost:3000" :components ["c"]})
-    first
-    (execute)
-    )
+(comment
+  (-> (init-data)
+      (load-test! {:test-id 1})
+      first
+      (register-executor {:executor-id "http://localhost:3000" :components ["c"]})
+      first
+      (execute)))
 
 (s/def ::entry agenda/entry?)
 
@@ -163,19 +162,20 @@
                 (str "execute!: unexpected response body: " responses))
         [data' responses]))))
 
-(fake/with-fake-routes
-  {"http://localhost:3001/api/command"
-   (fn [_request] {:status 200
-                   :headers {}
-                   :body (json/write {:responses
-                                      [{:entry {:command {:name "b" :parameters []}
-                                                :component-id "c"}}]})})}
-  (-> (init-data)
-      (load-test! {:test-id 1})
-      first
-      (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
-      first
-      (execute!)))
+(comment
+  (fake/with-fake-routes
+    {"http://localhost:3001/api/command"
+     (fn [_request] {:status 200
+                     :headers {}
+                     :body (json/write {:responses
+                                        [{:entry {:command {:name "b" :parameters []}
+                                                  :component-id "c"}}]})})}
+    (-> (init-data)
+        (load-test! {:test-id 1})
+        first
+        (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
+        first
+        (execute!))))
 
 (def timestamped-entries? (s/coll-of (s/keys :req-un [::entry ::timestamp])
                                      :kind vector?))
@@ -203,7 +203,7 @@
         {:entry {:command {:name "do-inc" :parameters []}
                  :component-id "inc"}}]
        1)
-      second) )
+      second))
 
 (>defn enqueue-entry
   [data {:keys [entry timestamp]}]
@@ -239,21 +239,21 @@
                                           :error-cannot-enqueue-in-this-state))))]
       [data' {:queue-size (count (:agenda data'))}])))
 
-(enqueue-timestamped-entries
- (-> (init-data)
-     (load-test! {:test-id 1})
-     first
-     (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
-     first)
- (-> (init-data)
-     (timestamp-entries
-      [{:entry {:command {:name "do-inc" :parameters []}
-                :component-id "inc"}}
-       {:entry {:command {:name "do-inc" :parameters []}
-                :component-id "inc"}}]
-      1)
-     second)
- )
+(comment
+  (enqueue-timestamped-entries
+   (-> (init-data)
+       (load-test! {:test-id 1})
+       first
+       (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
+       first)
+   (-> (init-data)
+       (timestamp-entries
+        [{:entry {:command {:name "do-inc" :parameters []}
+                  :component-id "inc"}}
+         {:entry {:command {:name "do-inc" :parameters []}
+                  :component-id "inc"}}]
+        1)
+       second)))
 
 (>defn step!
   [data]
@@ -264,23 +264,23 @@
         [data''' queue-size] (enqueue-timestamped-entries data'' timestamped-entries)]
     [data''' (merge {:entry entry} responses queue-size)]))
 
-(fake/with-fake-routes
-  {"http://localhost:3001/api/command"
-   (fn [_request] {:status 200
-                   :headers {}
-                   :body (json/write {:responses []
+(comment
+  (fake/with-fake-routes
+    {"http://localhost:3001/api/command"
+     (fn [_request] {:status 200
+                     :headers {}
+                     :body (json/write {:responses []
                                       ;; [{:entry {:command {:name "b" :parameters []}
                                       ;;           :component-id "c"}}]
-                                      })})}
-  (-> (init-data)
-      (load-test! {:test-id 1})
-      first
-      (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
-      first
-      step!
-      first
-      step!
-      ))
+                                        })})}
+    (-> (init-data)
+        (load-test! {:test-id 1})
+        first
+        (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
+        first
+        step!
+        first
+        step!)))
 
 (defn run!
   [data]
@@ -289,28 +289,29 @@
       [data {:steps steps}]
       (recur (-> data step! first) (inc steps)))))
 
-(fake/with-fake-routes
-  {"http://localhost:3001/api/command"
-   (fn [_request] {:status 200
-                   :headers {}
-                   :body (json/write {:responses []
+(comment
+  (fake/with-fake-routes
+    {"http://localhost:3001/api/command"
+     (fn [_request] {:status 200
+                     :headers {}
+                     :body (json/write {:responses []
                                       ;; [{:entry {:command {:name "b" :parameters []}
                                       ;;           :component-id "c"}}]
-                                      })})}
-  (-> (init-data)
-      (load-test! {:test-id 1})
-      first
-      (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
-      first
-      run!
-      ))
+                                        })})}
+    (-> (init-data)
+        (load-test! {:test-id 1})
+        first
+        (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
+        first
+        run!)))
 
 (>defn status
   [data]
   [::data => (s/tuple ::data ::data)]
   [data data])
 
-(status (init-data))
+(comment
+  (status (init-data)))
 
 (defn set-seed!
   [data {new-seed :new-seed}]
