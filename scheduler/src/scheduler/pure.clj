@@ -188,9 +188,9 @@
    => (s/tuple ::data (s/keys :req-un [::timestamped-entries]))]
   (with-bindings {#'gen/*rnd* (java.util.Random. (:seed data))}
     ;; TODO(stevan): define and use exponential distribution instead.
-    (let [timestamps (->> (gen/vec #(gen/uniform 1 10000) (count entries))
-                          (mapv #(+ timestamp %)))
-          new-seed (.nextLong gen/*rnd*)]
+    (let [new-seed (.nextLong gen/*rnd*)
+          timestamps (->> (gen/vec #(gen/uniform 1 10000) (count entries))
+                          (mapv #(+ timestamp %)))]
       [(assoc data :seed new-seed)
        {:timestamped-entries
         (mapv (fn [entry timestamp]
