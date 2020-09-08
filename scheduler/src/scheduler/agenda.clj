@@ -1,41 +1,73 @@
 (ns scheduler.agenda
-  (:require [clojure.data.priority-map :as pm]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
+            [shams.priority-queue :as pq]
             [scheduler.spec :refer [>defn => component-id?]]))
 
 (def command? map?)
 (s/def ::command command?)
-(s/def ::component-id component-id?)
+(s/def ::to component-id?)
+(s/def ::from string?)
+(def timestamp? nat-int?)
+(s/def ::at timestamp?)
 (def entry? (s/keys :req-un [::command
-                             ::component-id]))
-(def timestamp? int?)
-(def agenda? (s/coll-of (s/tuple entry? timestamp?)))
+                             ::to
+                             ::from
+                             ::at]))
+(def agenda? (s/coll-of entry?))
 
 (>defn empty-agenda
   []
   [=> agenda?]
-  (pm/priority-map))
+  (pq/priority-queue
+   :at
+   :elements []
+   :priority-comparator compare
+   :variant :queue))
 
-(defn enqueue
-  [agenda entry timestamp]
-  [agenda? entry? timestamp? => agenda?]
-  (conj agenda [entry timestamp]))
+(>defn enqueue
+  [agenda entry]
+  [agenda? entry? => agenda?]
+  (conj agenda entry))
 
-(defn dequeue
+(>defn enqueue-many
+  [agenda entries]
+  [agenda? (s/coll-of entry?) => agenda?]
+  (reduce enqueue agenda entries))
+
+(>defn dequeue
   [agenda]
-  [agenda? => (s/tuple agenda? (s/nilable (s/tuple entry? timestamp?)))]
+  [agenda? => (s/tuple agenda? (s/nilable entry?))]
   [(pop agenda) (peek agenda)])
 
 (comment
   (-> (empty-agenda)
-      (enqueue {:command {:name :a, :parameters []}, :component-id "a"} 3)
-      (enqueue {:command {:name :b, :parameters []}, :component-id "b"} 1)
-      (enqueue {:command {:name :c, :parameters []}, :component-id "c"} 2)
+      (enqueue {:command {:name :a, :parameters []}
+                :to "a"
+                :from "client"
+                :at 3})
+      (enqueue-many [{:command {:name :b, :parameters []}
+                      :to "b"
+                      :from "client"
+                      :at 1}
+                    {:command {:name :c, :parameters []}
+                     :to "c"
+                     :from "client"
+                     :at 2}])
       (dequeue)
       first
       (dequeue)
       first
       (dequeue)
-      first
-      (dequeue)
-      second))
+      ) )
+
+(comment
+  (-> (empty-agenda)
+      (enqueue-many [{:command {:name :a, :parameters []}
+                      :to "t"
+                      :from "client"
+                      :at 1}
+                     {:command {:name :a, :parameters []}
+                      :to "t"
+                      :from "client"
+                      :at 1}])
+      ) )

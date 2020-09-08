@@ -1,10 +1,12 @@
 (ns scheduler.pure
+  (:refer-clojure :exclude [run!])
   (:require [clojure.spec.alpha :as s]
             [clojure.data.generators :as gen]
             [clj-http.client :as client]
             [clj-http.fake :as fake]
             [scheduler.spec :refer [>defn => component-id?]]
             [scheduler.agenda :as agenda]
+            [scheduler.db :as db]
             [scheduler.json :as json]
             [taoensso.timbre :as log]))
 
@@ -57,15 +59,7 @@
   [::data (s/keys :req-un [::test-id])
    => (s/tuple ::data (s/keys :req-un [::queue-size]))]
   (-> data
-      (update :agenda #(agenda/enqueue
-                        %
-                        ;; TODO(stevan): actually load the test from the db.
-                        {:command {:name :a, :parameters []}, :component-id "c"}
-                        1))
-      (update :agenda #(agenda/enqueue
-                        %
-                        {:command {:name :b, :parameters []}, :component-id "c"}
-                        2))
+      (update :agenda #(agenda/enqueue-many % (db/load-test! test-id)))
       (update :state (fn [state]
                        (case state
                          :started :test-prepared
@@ -110,7 +104,7 @@
   [data]
   (if-not (contains? #{:ready :requesting} (:state data))
     [(assoc data :state :error-cannot-execute-in-this-state) nil]
-    (let [[agenda' [entry timestamp]] (agenda/dequeue (:agenda data))
+    (let [[agenda' entry] (agenda/dequeue (:agenda data))
           data' (-> data
                     (assoc :agenda agenda')
                     (update :state (fn [state]
@@ -120,18 +114,18 @@
                                        :error-cannot-execute-in-this-state))))
           ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
           ;; this should be checked when commands are enqueued?
-          executor-id (get (:topology data') (:component-id entry))]
+          executor-id (get (:topology data') (:to entry))]
       (assert executor-id (str "Executor `" executor-id "' isn't in topology."))
       [data' {:url (str executor-id "/api/command")
-              :timestamp timestamp
-              :body (merge entry {:timestamp timestamp})}])))
+              :at (:at entry)
+              :body entry}])))
 (comment
   (-> (init-data)
       (load-test! {:test-id 1})
       first
-      (register-executor {:executor-id "http://localhost:3000" :components ["c"]})
+      (register-executor {:executor-id "http://localhost:3000" :components ["component0"]})
       first
-      (execute)))
+      (execute)) )
 
 (s/def ::entry agenda/entry?)
 
@@ -169,7 +163,7 @@
                      :headers {}
                      :body (json/write {:responses
                                         [{:entry {:command {:name "b" :parameters []}
-                                                  :component-id "c"}}]})})}
+                                                  :to "c"}}]})})}
     (-> (init-data)
         (load-test! {:test-id 1})
         first
@@ -200,9 +194,9 @@
   (-> (init-data)
       (timestamp-entries
        [{:entry {:command {:name "do-inc" :parameters []}
-                 :component-id "inc"}}
+                 :to "inc"}}
         {:entry {:command {:name "do-inc" :parameters []}
-                 :component-id "inc"}}]
+                 :to "inc"}}]
        1)
       second))
 
@@ -250,16 +244,16 @@
    (-> (init-data)
        (timestamp-entries
         [{:entry {:command {:name "do-inc" :parameters []}
-                  :component-id "inc"}}
+                  :to "inc"}}
          {:entry {:command {:name "do-inc" :parameters []}
-                  :component-id "inc"}}]
+                  :to "inc"}}]
         1)
        second)))
 
 (>defn step!
   [data]
   [::data => (s/tuple ::data (s/keys :req-un [::queue-size ::entry ::responses]))]
-  (let [entry (-> data :agenda peek first)
+  (let [entry (-> data :agenda peek)
         [data' responses] (execute! data)
         [data'' timestamped-entries] (timestamp-entries data' (:responses responses) 1)
         [data''' queue-size] (enqueue-timestamped-entries data'' timestamped-entries)]
@@ -272,16 +266,16 @@
                      :headers {}
                      :body (json/write {:responses []
                                       ;; [{:entry {:command {:name "b" :parameters []}
-                                      ;;           :component-id "c"}}]
+                                      ;;           :to "c"}}]
                                         })})}
     (-> (init-data)
         (load-test! {:test-id 1})
         first
-        (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
+        (register-executor {:executor-id "http://localhost:3001" :components ["component0"]})
         first
         step!
         first
-        step!)))
+        step!)) )
 
 (defn run!
   [data]
@@ -297,14 +291,15 @@
                      :headers {}
                      :body (json/write {:responses []
                                       ;; [{:entry {:command {:name "b" :parameters []}
-                                      ;;           :component-id "c"}}]
+                                      ;;           :to "c"}}]
                                         })})}
     (-> (init-data)
         (load-test! {:test-id 1})
         first
-        (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
+        (register-executor {:executor-id "http://localhost:3001" :components ["component0"]})
         first
-        run!)))
+        run!))
+  )
 
 (>defn status
   [data]

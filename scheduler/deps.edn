@@ -7,7 +7,7 @@
         clj-http-fake                 {:mvn/version "1.0.3"}
         org.clojure/clojure           {:mvn/version "1.10.1"}
         org.clojure/data.generators   {:mvn/version "1.0.0"}
-        org.clojure/data.priority-map {:mvn/version "1.0.0"}
+        shams/priority-queue          {:mvn/version "0.1.2"}
         seancorfield/next.jdbc        {:mvn/version "1.1.582"}
         org.xerial/sqlite-jdbc        {:mvn/version "3.32.3"}
         com.taoensso/timbre           {:mvn/version "4.10.0"}
