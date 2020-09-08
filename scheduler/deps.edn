@@ -3,8 +3,8 @@
         ring/ring-devel               {:mvn/version "1.8.1"}
         ring/ring-defaults            {:mvn/version "0.3.2"}
         ring/ring-jetty-adapter       {:mvn/version "1.8.1"}
-        clj-http                      {:mvn/version "3.10.2"}
-        clj-http-fake                 {:mvn/version "1.0.3"}
+        clj-http/clj-http             {:mvn/version "3.10.2"}
+        clj-http-fake/clj-http-fake   {:mvn/version "1.0.3"}
         org.clojure/clojure           {:mvn/version "1.10.1"}
         org.clojure/data.generators   {:mvn/version "1.0.0"}
         shams/priority-queue          {:mvn/version "0.1.2"}
@@ -24,15 +24,19 @@
            :eastwood {:main-opts ["-m" "eastwood.lint" {:source-paths ["src"]}]
                       :extra-deps {jonase/eastwood {:mvn/version "RELEASE"}}}
            :clj-kondo {:main-opts ["-m" "clj-kondo.main" "--lint" "src" "test"]
-                       :extra-deps {clj-kondo {:mvn/version "2020.05.09"}}
+                       :extra-deps {clj-kondo/clj-kondo {:mvn/version "2020.05.09"}}
                        :jvm-opts ["-Dclojure.main.report=stderr"]}
            :cljfmt {:main-opts ["-m" "cljfmt.main" "fix" "--indents" ".cljfmt.edn"]
-                    :extra-deps {cljfmt {:mvn/version "0.6.8"}}}
-           :uberjar {:extra-deps {uberdeps {:mvn/version "0.1.11"}}
+                    :extra-deps {cljfmt/cljfmt {:mvn/version "0.6.8"}}}
+           :uberjar {:extra-deps {uberdeps/uberdeps {:mvn/version "0.1.11"}}
                      :main-opts  ["-m" "uberdeps.uberjar"
                                   "--target" "target/scheduler.jar"]}
+           ;; Currently broken, see
+           ;; https://github.com/taylorwood/clj.native-image/issues/15 for
+           ;; workaround. Proper fix seems to be coming in Clojure 1.10.2.
            :native-image {:main-opts ["-m clj.native-image scheduler.core"
                                       "--initialize-at-build-time"
+                                      "--allow-incomplete-classpath"
                                       "--no-fallback"
                                       "--report-unsupported-elements-at-runtime"
                                       ;; optional native image name override
@@ -40,8 +44,8 @@
                                       "-H:+ReportExceptionStackTraces"]
                           :jvm-opts ["-Dclojure.compiler.direct-linking=true"]
                           :extra-deps
-                          {clj.native-image
+                          {clj.native-image/clj.native-image
                            {:git/url "https://github.com/taylorwood/clj.native-image.git"
-                            :sha "7708e7fd4572459c81f6a6b8e44c96f41cdd92d4"}}}}
+                            :sha "f3e40672d5c543b80a2019c1f07b2d3fe785962c"}}}}
  :mvn/repos {"central" {:url "https://repo1.maven.org/maven2/"}
              "clojars" {:url "https://repo.clojars.org/"}}}
