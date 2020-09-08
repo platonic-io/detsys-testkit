@@ -114,9 +114,9 @@
           ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
           ;; this should be checked when commands are enqueued?
           executor-id (get (:topology data') (:to entry))]
-      (assert executor-id (str "Executor `" executor-id "' isn't in topology."))
+      (assert executor-id (str "Target `" (:to entry) "' isn't in topology."))
       [data' {:url (str executor-id "/api/command")
-              :at (:at entry)
+              :timestamp (:at entry)
               :body entry}])))
 (comment
   (-> (init-data)
@@ -126,9 +126,11 @@
       first
       (execute)) )
 
-(s/def ::entry agenda/entry?)
+(def entry? (s/keys :req-un [::command
+                             ::to
+                             ::from]))
 
-(def entries? (s/coll-of (s/keys :req-un [::entry] :kind vector?)))
+(def entries? (s/coll-of entry? :kind vector?))
 
 (s/def ::responses entries?)
 
@@ -161,19 +163,18 @@
      (fn [_request] {:status 200
                      :headers {}
                      :body (json/write {:responses
-                                        [{:entry {:command {:name "b" :parameters []}
-                                                  :to "c"}}]})})}
+                                        [{:command {:name "b" :parameters []}
+                                          :to "component0"
+                                          :from "clinet0"}]})})}
     (-> (init-data)
         (load-test! {:test-id 1})
         first
-        (register-executor {:executor-id "http://localhost:3001" :components ["c"]})
+        (register-executor {:executor-id "http://localhost:3001" :components ["component0"]})
         first
-        (execute!))))
+        (execute!)))
+  )
 
-(def timestamped-entries? (s/coll-of (s/keys :req-un [::entry ::timestamp])
-                                     :kind vector?))
-
-(s/def ::timestamped-entries timestamped-entries?)
+(s/def ::timestamped-entries (s/coll-of agenda/entry?))
 
 (>defn timestamp-entries
   [data entries timestamp]
@@ -187,24 +188,25 @@
       [(assoc data :seed new-seed)
        {:timestamped-entries
         (mapv (fn [entry timestamp]
-                (merge entry {:timestamp timestamp})) entries timestamps)}])))
+                (merge entry {:at timestamp})) entries timestamps)}])))
 
 (comment
   (-> (init-data)
       (timestamp-entries
-       [{:entry {:command {:name "do-inc" :parameters []}
-                 :to "inc"}}
-        {:entry {:command {:name "do-inc" :parameters []}
-                 :to "inc"}}]
+       [{:command {:name "do-inc" :parameters []}
+         :to "inc"
+         :from "client"}
+        {:command {:name "do-inc" :parameters []}
+         :to "inc"
+         :from "client"}]
        1)
-      second))
+      second) )
 
 (>defn enqueue-entry
-  [data {:keys [entry timestamp]}]
-  [::data (s/keys :req-un [::entry ::timestamp])
-   => (s/tuple ::data (s/keys :req-un [::queue-size]))]
+  [data timestamped-entry]
+  [::data agenda/entry? => (s/tuple ::data (s/keys :req-un [::queue-size]))]
   (-> data
-      (update :agenda #(agenda/enqueue % entry timestamp))
+      (update :agenda #(agenda/enqueue % timestamped-entry))
       (update :state (fn [state]
                        (case state
                          :responding :responding
@@ -241,12 +243,14 @@
        first)
    (-> (init-data)
        (timestamp-entries
-        [{:entry {:command {:name "do-inc" :parameters []}
-                  :to "inc"}}
-         {:entry {:command {:name "do-inc" :parameters []}
-                  :to "inc"}}]
+        [{:command {:name "do-inc" :parameters []}
+          :to "inc"
+          :from "client"}
+         {:command {:name "do-inc" :parameters []}
+          :to "inc"
+          :from "client"}]
         1)
-       second)))
+       second)) )
 
 (>defn step!
   [data]

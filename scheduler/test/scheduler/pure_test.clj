@@ -33,3 +33,36 @@
                  first
                  sut/run!
                  second)))))
+
+(t/deftest run-with-responses-test
+  (let [fake-step! (fn [data]
+                     (fake/with-fake-routes
+                       {"http://localhost:3001/api/command"
+                        (fn [_request] {:status 200
+                                        :headers {}
+                                        :body
+                                        (json/write
+                                         {:responses
+                                          [{:command {:name "a", :parameters []}
+                                            :from "component0"
+                                            :to "component0"}]})})}
+                       (sut/step! data)))
+        fake-run! (fn [data]
+                    (fake/with-fake-routes
+                      {"http://localhost:3001/api/command"
+                       (fn [_request] {:status 200
+                                       :headers {}
+                                       :body (json/write {:responses []})})}
+                      (sut/run! data)))]
+
+    (t/is (= {:steps 2} ;; 3 in total, but `run!` only counts the ones it steps.
+             (-> (sut/init-data)
+                 (sut/load-test! {:test-id 1})
+                 first
+                 (sut/register-executor
+                  {:executor-id "http://localhost:3001" :components ["component0"]})
+                 first
+                 fake-step!
+                 first
+                 fake-run!
+                 second)))))
