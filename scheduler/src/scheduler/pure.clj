@@ -42,7 +42,6 @@
    :topology            {}
    :agenda              (agenda/empty-agenda)
    :seed                1
-   :total-commands      0
    :state               :started})
 
 (defn ap
@@ -205,8 +204,7 @@
   [::data (s/keys :req-un [::entry ::timestamp])
    => (s/tuple ::data (s/keys :req-un [::queue-size]))]
   (-> data
-      (update :agenda #(agenda/enqueue % (assoc entry :id (:total-commands data)) timestamp))
-      (update :total-commands inc)
+      (update :agenda #(agenda/enqueue % entry timestamp))
       (update :state (fn [state]
                        (case state
                          :responding :responding
