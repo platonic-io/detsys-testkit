@@ -99,6 +99,10 @@
             {:remaining-executors (max 0 (- (:total-executors data')
                                             (:connected-executors data')))}))))
 
+(defn create-run!
+  [data {:keys [test-id]}]
+  )
+
 (defn execute
   [data]
   (if-not (contains? #{:ready :requesting} (:state data))
@@ -144,7 +148,8 @@
 (>defn execute!
   [data]
   [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::responses])))]
-  (let [[data' {:keys [url timestamp body]}] (execute data)]
+  ;; TODO(stevan): timestamp not used?
+  (let [[data' {:keys [url _timestamp body]}] (execute data)]
     (if (error-state? (:state data'))
       [data' nil]
       ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
@@ -155,6 +160,9 @@
         ;; TODO(stevan): Change executor to return this json object.
         (assert (= (keys responses) '(:responses))
                 (str "execute!: unexpected response body: " responses))
+
+        ;; TODO(stevan): append `body` (the popped entry) to history here!
+
         [data' responses]))))
 
 (comment
