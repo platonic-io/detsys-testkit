@@ -18,12 +18,14 @@
 (s/def ::agenda              agenda/agenda?)
 (s/def ::state               #{:started
                                :test-prepared
+                               :executors-prepared
                                :ready
                                :requesting
                                :responding
                                :finished
                                :error-cannot-load-test-in-this-state
                                :error-cannot-register-in-this-state
+                               :error-cannot-create-run-in-this-state
                                :error-cannot-enqueue-in-this-state
                                :error-cannot-execute-in-this-state})
 
@@ -91,7 +93,7 @@
                  (let [state' (case (compare (:connected-executors data')
                                              (:total-executors data'))
                                 -1 :waiting-for-executors
-                                0  :ready
+                                0  :executors-prepared
                                 1  :error-too-many-executors)]
                    (case state
                      :test-prepared state'
@@ -103,7 +105,22 @@
 
 (defn create-run!
   [data {:keys [test-id]}]
-  )
+  (case (:state data)
+    :executors-prepared
+    (let [run-id (db/create-run! test-id (:seed data))]
+      [(-> data
+           (assoc :state :ready)
+           (assoc :run-id (:run-id run-id)))
+       run-id])
+    [(assoc data :state :error-cannot-create-run-in-this-state) nil]))
+
+(comment
+  (-> (init-data)
+      (load-test! {:test-id 1})
+      first
+      (register-executor {:executor-id "http://localhost:3000" :components ["component0"]})
+      first
+      (create-run! {:test-id 1})) )
 
 (defn execute
   [data]
@@ -163,8 +180,12 @@
         (assert (= (keys responses) '(:responses))
                 (str "execute!: unexpected response body: " responses))
 
-        ;; TODO(stevan): append `body` (the popped entry) to history here!
-
+        (assert (:run-id data) "execute!: no run-id set...")
+        (db/append-history! (:run-id data)
+                            (dissoc body :from :to :at)
+                            (:from body)
+                            (:to body)
+                            (:at body) )
         [data' responses]))))
 
 (comment
@@ -309,6 +330,8 @@
         (load-test! {:test-id 1})
         first
         (register-executor {:executor-id "http://localhost:3001" :components ["component0"]})
+        first
+        (create-run! {:test-id 1})
         first
         run!))
   )
