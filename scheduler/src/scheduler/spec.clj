@@ -2,6 +2,8 @@
   (:require [clojure.spec.alpha :as s]
             [ghostwheel.core :as g]))
 
+(set! *warn-on-reflection* true)
+
 (def component-id? string?)
 
 (defmacro >defn

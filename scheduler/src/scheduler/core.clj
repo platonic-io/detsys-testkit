@@ -17,7 +17,10 @@
   ([port]
    (reset! server (jetty/run-jetty (-> #'handler/app
                                        (rmd/wrap-defaults rmd/api-defaults)
-                                       rmr/wrap-reload)
+                                       ;; NOTE: wrap-reload needs to be disabled
+                                       ;; when native-image is compiled and run.
+                                       rmr/wrap-reload
+                                       )
                                    {:port port
                                     :join? false}))))
 

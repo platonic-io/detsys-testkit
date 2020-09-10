@@ -6,6 +6,8 @@
             [next.jdbc.result-set :as rs]
             [scheduler.json :as json]))
 
+(set! *warn-on-reflection* true)
+
 (def db nil)
 (def ds nil)
 

@@ -4,6 +4,8 @@
             [scheduler.pure :as pure]
             [clojure.spec.alpha :as s]))
 
+(set! *warn-on-reflection* true)
+
 (def data (atom (pure/init-data)))
 
 (s/def ::command string?)

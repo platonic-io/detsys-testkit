@@ -3,6 +3,8 @@
             [shams.priority-queue :as pq]
             [scheduler.spec :refer [>defn => component-id?]]))
 
+(set! *warn-on-reflection* true)
+
 (def command? map?)
 (s/def ::command command?)
 (s/def ::to component-id?)

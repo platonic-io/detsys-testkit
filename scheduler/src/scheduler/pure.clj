@@ -10,6 +10,8 @@
             [scheduler.json :as json]
             [taoensso.timbre :as log]))
 
+(set! *warn-on-reflection* true)
+
 (s/def ::total-executors     pos-int?)
 (s/def ::connected-executors nat-int?)
 (s/def ::topology            (s/map-of string? string?))
