@@ -118,7 +118,8 @@
   (setup-db "/tmp/test.sqlite3")
   (destroy-db!)
   (create-db!)
-  (insert-agenda! 1 0 "{\"name\": \"a\", \"parameters\": []}"
+  (create-test!)
+  (insert-agenda! 0 0 "{\"name\": \"a\", \"parameters\": []}"
                   "client0" "component0" 0)
   (insert-agenda! 1 1 "{\"name\": \"b\", \"parameters\": []}"
                   "client0" "component0" 1)
