@@ -1,6 +1,8 @@
 package sut
 
 import (
+	"bytes"
+	"errors"
 	"time"
 )
 
@@ -14,37 +16,59 @@ func NewNode() *Node {
 	}
 }
 
-type req interface {
-	req()
+type Req interface {
+	Req()
 }
 
 type Get struct{}
 type Inc struct{}
 
-func (g Get) req() {}
-func (g Inc) req() {}
+func (g Get) Req()                         {}
+func (g Get) MarshalJSON() ([]byte, error) { return []byte(`{"op":"get"}`), nil }
+func (g Get) UnmarshalJSON(data []byte) error {
+	// XXX: Remove all spaces from data?
+	if bytes.Equal(data, []byte(`{"op":"get"}`)) {
+		g = Get{}
+		return nil
+	} else {
+		return errors.New("Get: UnmarshalJSON")
+	}
+}
+
+func (g Inc) Req()                         {}
+func (g Inc) MarshalJSON() ([]byte, error) { return []byte(`{"op":"inc"}`), nil }
 
 type ClientRequest struct {
-	id      uint64
-	request req
+	Id      uint64 `json:"id"`
+	Request Req    `json:"request"`
 }
 
 type ClientResponse struct {
-	id  uint64
-	val int
+	Id  uint64 `json:"id"`
+	Val int    `json:"val"`
 }
 
-func (c ClientRequest) rpc()  {}
-func (c ClientResponse) rpc() {}
+func (c ClientRequest) Rpc()  {}
+func (c ClientResponse) Rpc() {}
 
-var _ rpc = ClientRequest{}
-var _ rpc = ClientResponse{}
+var _ Rpc = ClientRequest{}
+var _ Rpc = ClientResponse{}
 
-func (n *Node) receive(_ time.Time, from string, msg rpc) []addressedMessage {
-	return nil
+func (n *Node) Receive(_ time.Time, from string, msg Rpc) []AddressedMessage {
+	var msgs []AddressedMessage
+	msgs = []AddressedMessage{
+		{
+			Peer: from,
+			Msg: ClientResponse{
+				Id:  0,
+				Val: 0,
+			},
+		},
+	}
+	return msgs
 }
 
-func (n *Node) tick(_ time.Time) []addressedMessage {
+func (n *Node) Tick(_ time.Time) []AddressedMessage {
 	return nil
 }
 
