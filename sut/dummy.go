@@ -2,7 +2,7 @@ package sut
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"time"
 
 	"github.com/symbiont-io/detsys/lib"
@@ -28,30 +28,39 @@ type Get struct {
 
 func (_ Get) Rpc() {}
 
+type Inc struct {
+	Id uint64 `json:"id"`
+}
+
+func (_ Inc) Rpc() {}
+
 func (n *Node) Parse(msg string, raw json.RawMessage) lib.Rpc {
 	switch msg {
 	case "get":
-		var g Get
+		var op Get
 		// TODO(stevan): This allows unknown fields to be parsed, e.g.
-		// `parameters:='{""foo": 1}'`. Probably need to do the same
+		// `parameters:='{"foo": 1}'`. Probably need to do the same
 		// thing as in DecodeJsonBody with custom Decoder...
-		if err := json.Unmarshal(raw, &g); err != nil {
+		if err := json.Unmarshal(raw, &op); err != nil {
 			// http.Error(w, "Cannot decode 'Get'", http.StatusBadRequest)
 			// TODO(stevan): return custom error?
-			fmt.Println("Cannot decode 'Get'")
+			log.Fatal("Cannot decode 'Get'")
 			return nil
 		}
-		return g
-		//	default:
-		//		err := fmt.Sprintf("Unexpected 'Message': %s\n", msg.Message)
-		//		http.Error(w, err, http.StatusInternalServerError)
-		//		return
-		//	}
+		return op
+	case "inc":
+		var op Inc
+		if err := json.Unmarshal(raw, &op); err != nil {
+			log.Fatal("Cannot decode 'Inc'")
+			return nil
+		}
+		return op
+	default:
+		log.Fatalf("Unexpected 'Message': %s\n", msg)
+		return nil
 	}
 	return nil
 }
-
-type Inc struct{}
 
 // func (g Get) Req()                         {}
 // func (g Get) MarshalJSON() ([]byte, error) { return []byte(`{"op":"get"}`), nil }
@@ -73,16 +82,18 @@ type Inc struct{}
 // 	Request Req    `json:"request"`
 // }
 //
-// type ClientResponse struct {
-// 	Id  uint64 `json:"id"`
-// 	Val int    `json:"val"`
-// }
+type ClientResponse struct {
+	Id  uint64 `json:"id"`
+	Val int    `json:"val"`
+}
+
 //
 // func (c ClientRequest) Rpc()  {}
-// func (c ClientResponse) Rpc() {}
+func (c ClientResponse) Rpc() {}
+
 //
 // var _ Rpc = ClientRequest{}
-// var _ Rpc = ClientResponse{}
+var _ lib.Rpc = ClientResponse{}
 
 func (n *Node) Receive(_ time.Time, from string, msg lib.Rpc) []lib.AddressedMessage {
 	var msgs []lib.AddressedMessage
@@ -91,11 +102,26 @@ func (n *Node) Receive(_ time.Time, from string, msg lib.Rpc) []lib.AddressedMes
 		msgs = []lib.AddressedMessage{
 			{
 				Peer: from,
-				Msg:  Get{req.Id},
+				Msg: ClientResponse{
+					Id:  req.Id,
+					Val: n.state,
+				},
+			},
+		}
+	case Inc:
+		n.state = n.state + 1
+		msgs = []lib.AddressedMessage{
+			{
+				Peer: from,
+				Msg: ClientResponse{
+					Id:  req.Id,
+					Val: 0, // TODO(stevan): Use a different response type.
+				},
 			},
 		}
 	default:
-		return nil // XXX
+		log.Fatalf("Received known message: %s\n", msg)
+		return nil
 	}
 	return msgs
 }

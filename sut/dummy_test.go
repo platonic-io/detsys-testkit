@@ -2,7 +2,7 @@ package sut
 
 import (
 	"testing"
-	"time"
+	// "time"
 
 	"github.com/symbiont-io/detsys/executor"
 	"github.com/symbiont-io/detsys/lib"
@@ -33,9 +33,12 @@ func loop() {
 }
 
 func TestDummy(t *testing.T) {
-	setup()
-	time.Sleep(3 * time.Second)
-	teardown()
+	executor.Deploy(map[string]lib.Reactor{
+		"node1": &Node{},
+		"node2": &Node{}})
+	// setup()
+	// time.Sleep(3 * time.Second)
+	// teardown()
 	// lib.Execute(1)
 	// lib.Check
 }
