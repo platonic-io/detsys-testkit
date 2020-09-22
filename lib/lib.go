@@ -14,6 +14,7 @@ type Reactor interface {
 }
 
 type AddressedMessage struct {
-	Peer string `json:"peer"`
-	Msg  Rpc    `json:"msg"`
+	To         string `json:"to"`
+	Command    string `json:"command"`
+	Parameters Rpc    `json:"parameters"`
 }

@@ -101,8 +101,9 @@ func (n *Node) Receive(_ time.Time, from string, msg lib.Rpc) []lib.AddressedMes
 	case Get:
 		msgs = []lib.AddressedMessage{
 			{
-				Peer: from,
-				Msg: ClientResponse{
+				To:      from,
+				Command: "get",
+				Parameters: ClientResponse{
 					Id:  req.Id,
 					Val: n.state,
 				},
@@ -112,8 +113,9 @@ func (n *Node) Receive(_ time.Time, from string, msg lib.Rpc) []lib.AddressedMes
 		n.state = n.state + 1
 		msgs = []lib.AddressedMessage{
 			{
-				Peer: from,
-				Msg: ClientResponse{
+				To:      from,
+				Command: "inc",
+				Parameters: ClientResponse{
 					Id:  req.Id,
 					Val: 0, // TODO(stevan): Use a different response type.
 				},

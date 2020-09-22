@@ -76,7 +76,7 @@
   (update m k #(f m %)))
 
 (s/def ::executor-id string?)
-(s/def ::components (s/coll-of string?))
+(s/def ::components (s/coll-of string? :kind vector?))
 
 (>defn register-executor
   [data {:keys [executor-id components]}]
@@ -102,6 +102,15 @@
       (ap (fn [data']
             {:remaining-executors (max 0 (- (:total-executors data')
                                             (:connected-executors data')))}))))
+
+(comment
+  (let [executor-id "http://localhost:3001"
+        components ["components0"]]
+    (apply hash-map
+           (interleave components
+                       (replicate (count components)
+                                  executor-id))))
+  )
 
 (defn create-run!
   [data {:keys [test-id]}]
@@ -150,6 +159,7 @@
       (execute)) )
 
 (def entry? (s/keys :req-un [::command
+                             ::parameters
                              ::to
                              ::from]))
 
@@ -173,9 +183,14 @@
       [data' nil]
       ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
       ;; so that we don't end up executing the same command twice.
-      (let [responses (-> (client/post url {:body (json/write body)})
+      (let [responses (-> (client/post url {:body (json/write body)
+                                            :content-type "application/json; charset=utf-8"})
                           :body
                           json/read)]
+
+        ;; TODO(stevan): go into error state if response body is of form {"error": ...}
+        ;; (if (:error responses) true false)
+
         ;; TODO(stevan): Change executor to return this json object.
         (assert (= (keys responses) '(:responses))
                 (str "execute!: unexpected response body: " responses))
@@ -224,10 +239,12 @@
 (comment
   (-> (init-data)
       (timestamp-entries
-       [{:command {:name "do-inc" :parameters []}
+       [{:command "do-inc"
+         :parameters {}
          :to "inc"
          :from "client"}
-        {:command {:name "do-inc" :parameters []}
+        {:command "do-inc"
+         :parameters {}
          :to "inc"
          :from "client"}]
        1)
@@ -267,21 +284,24 @@
 
 (comment
   (enqueue-timestamped-entries
-   (-> (init-data)
-       (load-test! {:test-id 1})
-       first
-       (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
-       first)
-   (-> (init-data)
-       (timestamp-entries
-        [{:command {:name "do-inc" :parameters []}
-          :to "inc"
-          :from "client"}
-         {:command {:name "do-inc" :parameters []}
-          :to "inc"
-          :from "client"}]
-        1)
-       second)) )
+ (-> (init-data)
+     (load-test! {:test-id 1})
+     first
+     (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
+     first)
+ (-> (init-data)
+     (timestamp-entries
+      [{:command "do-inc"
+        :parameters {}
+        :to "inc"
+        :from "client"}
+       {:command "do-inc"
+        :parameters {}
+        :to "inc"
+        :from "client"}]
+      1)
+     second) )
+)
 
 (>defn step!
   [data]
@@ -297,10 +317,10 @@
     {"http://localhost:3001/api/command"
      (fn [_request] {:status 200
                      :headers {}
-                     :body (json/write {:responses []
-                                      ;; [{:entry {:command {:name "b" :parameters []}
-                                      ;;           :to "c"}}]
-                                        })})}
+                     :body (json/write {:responses [{:command :a
+                                                     :parameters {}
+                                                     :to "to"
+                                                     :from "from"}]})})}
     (-> (init-data)
         (load-test! {:test-id 1})
         first

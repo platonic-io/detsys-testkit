@@ -3,7 +3,8 @@
             [ring.middleware.reload :as rmr]
             [ring.adapter.jetty :as jetty]
             [scheduler.handler :as handler]
-            [scheduler.db :as db])
+            [scheduler.db :as db]
+            [scheduler.pure :as pure])
   (:import [org.eclipse.jetty.server
             Server])
   (:gen-class))
@@ -17,6 +18,7 @@
    (start-server false 3000))
   ([reload port]
    (db/setup-db "/tmp/test.sqlite3")
+   (reset! handler/data (pure/init-data))
    (reset! server (jetty/run-jetty (cond-> #'handler/app
                                      true (rmd/wrap-defaults rmd/api-defaults)
                                      ;; NOTE: wrap-reload needs to be disabled
@@ -44,4 +46,4 @@
 (comment
   (start-server true 3000)
   (stop-server)
-  (restart-server))
+  (restart-server) )

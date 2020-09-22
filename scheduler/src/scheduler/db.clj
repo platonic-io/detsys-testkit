@@ -28,7 +28,8 @@
      CREATE TABLE agenda (
        test_id      INTEGER  NOT NULL,
        id           INTEGER  NOT NULL,
-       command      JSON     NOT NULL,
+       command      TEXT     NOT NULL,
+       parameters   JSON     NOT NULL,
        `from`       TEXT     NOT NULL,
        `to`         TEXT     NOT NULL,
        at           INTEGER  NOT NULL,
@@ -76,11 +77,11 @@
       first))
 
 (defn insert-agenda!
-  [test-id id command from to at]
+  [test-id id command parameters from to at]
   (jdbc/execute-one!
    ds
-   ["INSERT INTO agenda (test_id, id, command, `from`, `to`, at)
-     VALUES (?, ?, ?, ?, ?, ?)" test-id id command from to at]
+   ["INSERT INTO agenda (test_id, id, command, parameters, `from`, `to`, at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)" test-id id command parameters from to at]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (defn load-test!
@@ -91,7 +92,7 @@
         {:return-keys true :builder-fn rs/as-unqualified-lower-maps})
        (mapv #(-> %
                   (dissoc :id :test_id)
-                  (update :command json/read)))))
+                  (update :parameters json/read)))))
 
 (defn create-run!
   [test-id seed]
@@ -119,10 +120,10 @@
   (destroy-db!)
   (create-db!)
   (create-test!)
-  (insert-agenda! 0 0 "{\"name\": \"a\", \"parameters\": []}"
-                  "client0" "component0" 0)
-  (insert-agenda! 1 1 "{\"name\": \"b\", \"parameters\": []}"
-                  "client0" "component0" 1)
+  (insert-agenda! 1 0 "inc" "{\"id\": 1}"
+                  "client0" "node1" "1970-01-01T00:00:00Z")
+  (insert-agenda! 1 1 "get" "{\"id\": 1}"
+                  "client0" "node1" "1970-01-01T00:00:01Z")
   (load-test! 1)
   (create-run! 0 123)
   (append-history! 1 "{\"name\": \"a\", \"parameters\": []}" "client0" "component0" 0)
