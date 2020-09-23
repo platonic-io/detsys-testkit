@@ -8,6 +8,8 @@
             [scheduler.agenda :as agenda]
             [scheduler.db :as db]
             [scheduler.json :as json]
+            [scheduler.random :as random]
+            [scheduler.time :as time]
             [taoensso.timbre :as log]))
 
 (set! *warn-on-reflection* true)
@@ -16,6 +18,7 @@
 (s/def ::connected-executors nat-int?)
 (s/def ::topology            (s/map-of string? string?))
 (s/def ::agenda              agenda/agenda?)
+(s/def ::clock               time/instant?)
 (s/def ::state               #{:started
                                :test-prepared
                                :executors-prepared
@@ -33,6 +36,7 @@
                                ::connected-executors
                                ::topology
                                ::agenda
+                               ::clock
                                ::state]))
 
 (s/def ::components (s/coll-of component-id? :kind vector?))
@@ -46,6 +50,7 @@
    :topology            {}
    :agenda              (agenda/empty-agenda)
    :seed                1
+   :clock               (time/init-clock)
    :state               :started})
 
 (defn ap
@@ -150,11 +155,22 @@
       [data' {:url (str executor-id "/api/command")
               :timestamp (:at entry)
               :body entry}])))
+
+(comment
+  (-> (init-data)
+      (update :agenda #(agenda/enqueue
+                        %
+                        {:command :a, :parameters {}, :at (time/instant 0), :from "f", :to "t"}))
+      :agenda
+      agenda/dequeue) )
+
 (comment
   (-> (init-data)
       (load-test! {:test-id 1})
       first
-      (register-executor {:executor-id "http://localhost:3000" :components ["component0"]})
+      (register-executor {:executor-id "http://localhost:3000" :components ["node1" "node2"]})
+      first
+      (create-run! {:test-id 1})
       first
       (execute)) )
 
@@ -171,14 +187,30 @@
   [state]
   (some? (re-matches #"^error-.*$" (name state))))
 
+(defn partition-haskell
+  "Effectively though non-lazily splits the `coll`ection using `pred`,
+  essentially like `[(filter coll pred) (remove coll pred)]`"
+  [pred coll]
+  (let [match (transient [])
+        no-match (transient [])]
+    (doseq [v coll]
+      (if (pred v)
+        (conj! match v)
+        (conj! no-match v)))
+    [(persistent! match) (persistent! no-match)]))
+
+(comment
+  (partition-haskell odd? (range 10))
+  (partition-haskell odd? [])
+  )
+
 ;; TODO(stevan): move to other module, since isn't pure?
 ;; TODO(stevan): can we avoid using nilable here? Return `Error + Data *
 ;; Response` instead of always `Data * Response`? Or `Data * Error + Data * Response`?
 (>defn execute!
   [data]
   [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::responses])))]
-  ;; TODO(stevan): timestamp not used?
-  (let [[data' {:keys [url _timestamp body]}] (execute data)]
+  (let [[data' {:keys [url timestamp body]}] (execute data)]
     (if (error-state? (:state data'))
       [data' nil]
       ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
@@ -194,14 +226,24 @@
         ;; TODO(stevan): Change executor to return this json object.
         (assert (= (keys responses) '(:responses))
                 (str "execute!: unexpected response body: " responses))
+        (log/debug :responses responses)
 
         (assert (:run-id data) "execute!: no run-id set...")
         (db/append-history! (:run-id data)
                             (dissoc body :from :to :at)
                             (:from body)
                             (:to body)
-                            (:at body) )
-        [data' responses]))))
+                            (:at body))
+        (let [[client-responses internal]
+              (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
+                                 (:responses responses))]
+          (doseq [client-response client-responses]
+            (db/append-history! (:run-id data)
+                                (dissoc client-response :from :to :at)
+                                (:from client-response)
+                                (:to client-response)
+                                (:at client-response)))
+          [(assoc data' :clock timestamp) {:responses internal}])))))
 
 (comment
   (fake/with-fake-routes
@@ -209,13 +251,17 @@
      (fn [_request] {:status 200
                      :headers {}
                      :body (json/write {:responses
-                                        [{:command {:name "b" :parameters []}
-                                          :to "component0"
-                                          :from "clinet0"}]})})}
+                                        [{:command "inc",
+                                          :parameters {}
+                                          :to "client:0"
+                                          :from "node1"}]})})}
     (-> (init-data)
         (load-test! {:test-id 1})
         first
-        (register-executor {:executor-id "http://localhost:3001" :components ["component0"]})
+        (register-executor {:executor-id "http://localhost:3001"
+                            :components ["node1" "node2"]})
+        first
+        (create-run! {:test-id 1})
         first
         (execute!)))
   )
@@ -224,13 +270,12 @@
 
 (>defn timestamp-entries
   [data entries timestamp]
-  [::data entries? agenda/timestamp?
+  [::data entries? time/instant?
    => (s/tuple ::data (s/keys :req-un [::timestamped-entries]))]
   (with-bindings {#'gen/*rnd* (java.util.Random. (:seed data))}
-    ;; TODO(stevan): define and use exponential distribution instead.
     (let [new-seed (.nextLong gen/*rnd*)
-          timestamps (->> (gen/vec #(gen/uniform 1 10000) (count entries))
-                          (mapv #(+ timestamp %)))]
+          timestamps (->> (gen/vec #(random/exponential 20) (count entries))
+                          (mapv #(time/plus-millis timestamp %)))]
       [(assoc data :seed new-seed)
        {:timestamped-entries
         (mapv (fn [entry timestamp]
@@ -247,7 +292,7 @@
          :parameters {}
          :to "inc"
          :from "client"}]
-       1)
+       (time/instant (time/init-clock)))
       second) )
 
 (>defn enqueue-entry
@@ -260,6 +305,23 @@
                          :responding :responding
                          :error-cannot-enqueue-in-this-state)))
       (ap (fn [data'] {:queue-size (count (:agenda data'))}))))
+
+(comment
+
+  (s/valid? agenda/entry? {:command :a, :parameters {}, :at 0, :from "f", :to "t"})
+
+  (-> (init-data)
+      (load-test! {:test-id 1})
+      first
+      (register-executor {:executor-id "http://localhost:3001" :components ["node1" "node2"]})
+      first
+      (create-run! {:test-id 1})
+      first
+      (execute)
+      first
+      (enqueue-entry {:command :a, :parameters {}, :at 0, :from "f", :to "t"})
+      )
+  )
 
 (>defn enqueue-timestamped-entries
   [data {:keys [timestamped-entries]}]
@@ -298,7 +360,8 @@
        {:command "do-inc"
         :parameters {}
         :to "inc"
-        :from "client"}]
+        :from "client"}
+       ]
       1)
      second) )
 )
@@ -308,7 +371,9 @@
   [::data => (s/tuple ::data (s/keys :req-un [::queue-size ::entry ::responses]))]
   (let [entry (-> data :agenda peek)
         [data' responses] (execute! data)
-        [data'' timestamped-entries] (timestamp-entries data' (:responses responses) 1)
+        [data'' timestamped-entries] (timestamp-entries data'
+                                                        (:responses responses)
+                                                        (-> data' :clock))
         [data''' queue-size] (enqueue-timestamped-entries data'' timestamped-entries)]
     [data''' (merge {:entry entry} responses queue-size)]))
 

@@ -62,7 +62,7 @@ func handler(topology map[string]lib.Reactor) http.HandlerFunc {
 			v := node.Parse(msg.Command, rpc)
 			log.Printf("Handling rpc: %+v", v)
 			messages := node.Receive(msg.At, msg.From, v)
-			var messages2 [2]AddressedMessage2
+			messages2 := make([]AddressedMessage2, len(messages))
 			for index, message := range messages {
 				messages2[index] = AddressedMessage2{
 					From:       msg.To,

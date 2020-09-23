@@ -18,6 +18,7 @@
    (start-server false 3000))
   ([reload port]
    (db/setup-db "/tmp/test.sqlite3")
+   ;; (db/create-db!)
    (reset! handler/data (pure/init-data))
    (reset! server (jetty/run-jetty (cond-> #'handler/app
                                      true (rmd/wrap-defaults rmd/api-defaults)

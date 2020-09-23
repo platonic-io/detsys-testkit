@@ -3,6 +3,7 @@
         ring/ring-devel               {:mvn/version "1.8.1"}
         ring/ring-defaults            {:mvn/version "0.3.2"}
         ring/ring-jetty-adapter       {:mvn/version "1.8.1"}
+        clojure.java-time             {:mvn/version "0.3.2"}
         clj-http/clj-http             {:mvn/version "3.10.2"}
         clj-http-fake/clj-http-fake   {:mvn/version "1.0.3"}
         org.clojure/clojure           {:mvn/version "1.10.2-alpha1"}

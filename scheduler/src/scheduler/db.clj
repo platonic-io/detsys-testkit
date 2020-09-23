@@ -4,7 +4,8 @@
             [next.jdbc :as jdbc]
             [next.jdbc.sql :as sql]
             [next.jdbc.result-set :as rs]
-            [scheduler.json :as json]))
+            [scheduler.json :as json]
+            [scheduler.time :as time]))
 
 (set! *warn-on-reflection* true)
 
@@ -92,6 +93,7 @@
         {:return-keys true :builder-fn rs/as-unqualified-lower-maps})
        (mapv #(-> %
                   (dissoc :id :test_id)
+                  (update :at time/instant)
                   (update :parameters json/read)))))
 
 (defn create-run!
@@ -112,7 +114,7 @@
    ds
    ["INSERT INTO history (run_id, id, command, `from`, `to`, at)
      VALUES (?, (SELECT IFNULL(MAX(id), -1) + 1 FROM history WHERE run_id = ?), ?, ?, ?, ?)"
-    run-id run-id command from to at]
+    run-id run-id command from to (str at)]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (comment
@@ -121,9 +123,9 @@
   (create-db!)
   (create-test!)
   (insert-agenda! 1 0 "inc" "{\"id\": 1}"
-                  "client0" "node1" "1970-01-01T00:00:00Z")
+                  "client:0" "node1" "1970-01-01T00:00:00Z")
   (insert-agenda! 1 1 "get" "{\"id\": 1}"
-                  "client0" "node1" "1970-01-01T00:00:01Z")
+                  "client:0" "node1" "1970-01-01T00:00:01Z")
   (load-test! 1)
   (create-run! 0 123)
   (append-history! 1 "{\"name\": \"a\", \"parameters\": []}" "client0" "component0" 0)
