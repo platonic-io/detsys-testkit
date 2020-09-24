@@ -48,10 +48,10 @@
      CREATE TABLE history (
        run_id       INTEGER  NOT NULL,
        id           INTEGER  NOT NULL,
-       command      JSON     NOT NULL,
-       `from`       TEXT     NOT NULL,
-       `to`         TEXT     NOT NULL,
-       at           INTEGER  NOT NULL,
+       kind         TEXT     NOT NULL CHECK(kind IN (\"invoke\", \"ok\", \"fail\", \"info\")),
+       command      TEXT     NOT NULL,
+       parameters   JSON     NOT NULL,
+       process      INTEGER  NOT NULL,
        PRIMARY KEY(run_id, id),
        FOREIGN KEY(run_id) REFERENCES run(id))"])
   )
@@ -109,12 +109,12 @@
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (defn append-history!
-  [run-id command from to at]
+  [run-id kind command parameters process]
   (jdbc/execute-one!
    ds
-   ["INSERT INTO history (run_id, id, command, `from`, `to`, at)
+   ["INSERT INTO history (run_id, id, kind, command, parameters, process)
      VALUES (?, (SELECT IFNULL(MAX(id), -1) + 1 FROM history WHERE run_id = ?), ?, ?, ?, ?)"
-    run-id run-id command from to (str at)]
+    run-id run-id (name kind) command parameters process]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (comment
@@ -122,14 +122,9 @@
   (destroy-db!)
   (create-db!)
   (create-test!)
-  (insert-agenda! 1 0 "inc" "{\"id\": 1}"
-                  "client:0" "node1" "1970-01-01T00:00:00Z")
-  (insert-agenda! 1 1 "get" "{\"id\": 1}"
-                  "client:0" "node1" "1970-01-01T00:00:01Z")
+  (insert-agenda! 1 0 "inc" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:00Z")
+  (insert-agenda! 1 1 "get" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:01Z")
   (load-test! 1)
   (create-run! 0 123)
-  (append-history! 1 "{\"name\": \"a\", \"parameters\": []}" "client0" "component0" 0)
-  (append-history! 1 "{\"name\": \"b\", \"parameters\": []}" "client0" "component0" 1)
-  (append-history! 2 "{\"name\": \"a\", \"parameters\": []}" "client0" "component0" 0)
-  (append-history! 2 "{\"name\": \"b\", \"parameters\": []}" "client0" "component0" 1)
+  (append-history! 1 :invoke "a" "{\"id\": 1}" 0)
   )

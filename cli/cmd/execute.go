@@ -1,7 +1,8 @@
 package cmd
 
 import (
-	"strconv"
+	"fmt"
+	"log"
 
 	"github.com/spf13/cobra"
 	"github.com/symbiont-io/detsys/lib"
@@ -13,9 +14,9 @@ var executeCmd = &cobra.Command{
 	Long:  ``,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		testId, err := strconv.Atoi(args[0])
+		testId, err := lib.ParseTestId(args[0])
 		if err != nil {
-			panic(err)
+			log.Fatalln(err)
 		}
 		lib.Execute(testId)
 	},

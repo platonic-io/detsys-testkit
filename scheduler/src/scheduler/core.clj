@@ -18,7 +18,13 @@
    (start-server false 3000))
   ([reload port]
    (db/setup-db "/tmp/test.sqlite3")
-   ;; (db/create-db!)
+   (try (db/destroy-db!)
+        (catch org.sqlite.SQLiteException e
+          (println e)))
+   (db/create-db!)
+   (db/create-test!)
+   (db/insert-agenda! 1 0 "inc" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:00Z")
+   (db/insert-agenda! 1 1 "get" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:01Z")
    (reset! handler/data (pure/init-data))
    (reset! server (jetty/run-jetty (cond-> #'handler/app
                                      true (rmd/wrap-defaults rmd/api-defaults)

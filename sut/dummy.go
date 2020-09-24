@@ -117,7 +117,7 @@ func (n *Node) Receive(_ time.Time, from string, msg lib.Rpc) []lib.AddressedMes
 				Command: "inc",
 				Parameters: ClientResponse{
 					Id:  req.Id,
-					Val: 0, // TODO(stevan): Use a different response type.
+					Val: -1, // TODO(stevan): Use a different response type.
 				},
 			},
 		}

@@ -9,12 +9,13 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "detsys",
-	Short: "Command-line interface for determinstic system tests library",
+	Short: "Command-line interface for deterministic system tests library",
 	Long:  ``,
 }
 
 func init() {
 	rootCmd.AddCommand(executeCmd)
+	rootCmd.AddCommand(statusCmd)
 }
 
 func Execute() {

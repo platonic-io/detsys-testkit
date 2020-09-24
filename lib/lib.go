@@ -18,3 +18,25 @@ type AddressedMessage struct {
 	Command    string `json:"command"`
 	Parameters Rpc    `json:"parameters"`
 }
+
+var quit chan struct{}
+
+func Setup(f func()) {
+	quit = make(chan struct{})
+	go loop(f)
+}
+
+func Teardown() {
+	close(quit)
+}
+
+func loop(f func()) {
+	for {
+		select {
+		case <-quit:
+			return
+		default:
+			f()
+		}
+	}
+}

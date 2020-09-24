@@ -136,6 +136,7 @@
       first
       (create-run! {:test-id 1})) )
 
+;; TODO(stevan): check if agenda is empty...
 (defn execute
   [data]
   (if-not (contains? #{:ready :requesting} (:state data))
@@ -204,6 +205,14 @@
   (partition-haskell odd? [])
   )
 
+(>defn parse-client-id
+  [s]
+  [string? => nat-int?]
+  (->> s (re-matches #"^client:(\d+)$") second Integer/parseInt))
+
+(comment
+  (parse-client-id "client:0") )
+
 ;; TODO(stevan): move to other module, since isn't pure?
 ;; TODO(stevan): can we avoid using nilable here? Return `Error + Data *
 ;; Response` instead of always `Data * Response`? Or `Data * Error + Data * Response`?
@@ -229,20 +238,24 @@
         (log/debug :responses responses)
 
         (assert (:run-id data) "execute!: no run-id set...")
-        (db/append-history! (:run-id data)
-                            (dissoc body :from :to :at)
-                            (:from body)
-                            (:to body)
-                            (:at body))
+        ;; TODO(stevan): only append if :from client!
+        (when (re-matches #"^client:\d+$" (:from body))
+          (db/append-history! (:run-id data)
+                              :invoke
+                              (:command body)
+                              (-> body :parameters json/write)
+                              (-> body :from parse-client-id)))
+
         (let [[client-responses internal]
               (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
                                  (:responses responses))]
+          ;; TODO(stevan): use seed to shuffle client-responses?
           (doseq [client-response client-responses]
             (db/append-history! (:run-id data)
-                                (dissoc client-response :from :to :at)
-                                (:from client-response)
-                                (:to client-response)
-                                (:at client-response)))
+                                :ok ;; TODO(stevan): have SUT decide this?
+                                (:command client-response)
+                                (-> client-response :parameters json/write)
+                                (-> client-response :to parse-client-id)))
           [(assoc data' :clock timestamp) {:responses internal}])))))
 
 (comment
@@ -432,3 +445,8 @@
 (defn set-seed!
   [data {new-seed :new-seed}]
   [(assoc data :seed new-seed) new-seed])
+
+
+(defn reset
+  [_data]
+  [(init-data) :reset])
