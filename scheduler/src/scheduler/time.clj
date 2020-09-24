@@ -16,6 +16,8 @@
   [instant? double? => instant?]
   (time/plus instant (time/nanos (* ms 1000000))))
 
+(def instant time/instant)
+
 (comment
   (str (plus-millis (init-clock) 18.22324))
   )
