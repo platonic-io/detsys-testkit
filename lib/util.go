@@ -3,6 +3,7 @@ package lib
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -42,4 +43,8 @@ func PostParse(command string, parameters interface{}, target interface{}) {
 	if err := json.Unmarshal(body, &target); err != nil {
 		log.Fatalln(err)
 	}
+}
+
+func panicf(format string, a ...interface{}) {
+	panic(fmt.Sprintf(format, a...))
 }

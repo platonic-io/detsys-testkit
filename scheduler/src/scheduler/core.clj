@@ -23,8 +23,8 @@
           (println e)))
    (db/create-db!)
    (db/create-test!)
-   (db/insert-agenda! 1 0 "inc" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:00Z")
-   (db/insert-agenda! 1 1 "get" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:01Z")
+   (db/insert-agenda! 1 0 "write" "{\"value\": 1}" "client:0" "frontend" "1970-01-01T00:00:00Z")
+   (db/insert-agenda! 1 1 "read" "{}" "client:0" "frontend" "1970-01-01T00:00:10Z")
    (reset! handler/data (pure/init-data))
    (reset! server (jetty/run-jetty (cond-> #'handler/app
                                      true (rmd/wrap-defaults rmd/api-defaults)

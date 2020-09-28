@@ -10,13 +10,15 @@ import (
 func TestDummy(t *testing.T) {
 	lib.Setup(func() {
 		executor.Deploy(map[string]lib.Reactor{
-			"node1": &Node{},
-			"node2": &Node{}})
+			"frontend":  NewFrontEnd(),
+			"register1": NewRegister(),
+			"register2": NewRegister(),
+		})
 	})
 	lib.Reset()
 	// testId := lib.Generate()
 	testId := lib.TestId{1}
-	runId := lib.Execute(testId)
+	lib.Execute(testId)
 	lib.Teardown()
 	// lib.Check
 }
