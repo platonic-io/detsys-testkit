@@ -60,6 +60,16 @@
 (s/def ::test-id nat-int?)
 (s/def ::queue-size nat-int?)
 
+;; (if-let [{:keys [message value]} (:error {:error {:message :cannot-load-test-in-this-state, :value :test-prepared}})]
+;;  [message value])
+
+(defn precondition
+  [data event]
+  (case event
+    :load-test (if (= (:state data) :started)
+                 :ok
+                 :error-cannot-load-test-in-this-state)))
+
 ;; TODO(stevan): test needs to contain executor topology, so we know how many
 ;; executors to wait for.
 (>defn load-test!
@@ -153,15 +163,17 @@
           ;; this should be checked when commands are enqueued?
           executor-id (get (:topology data') (:to entry))]
       (assert executor-id (str "Target `" (:to entry) "' isn't in topology."))
-      [data' {:url (str executor-id "/api/command")
+      [data' {:url executor-id
               :timestamp (:at entry)
               :body entry}])))
 
 (comment
   (-> (init-data)
-      (update :agenda #(agenda/enqueue
-                        %
-                        {:command :a, :parameters {}, :at (time/instant 0), :from "f", :to "t"}))
+      (update
+       :agenda
+       #(agenda/enqueue
+         %
+         {:kind "invoke", :event :a, :args {}, :at (time/instant 0), :from "f", :to "t"}))
       :agenda
       agenda/dequeue) )
 
@@ -169,20 +181,28 @@
   (-> (init-data)
       (load-test! {:test-id 1})
       first
-      (register-executor {:executor-id "http://localhost:3000" :components ["node1" "node2"]})
+      (register-executor {:executor-id "http://localhost:3000/api/v1/event"
+                          :components ["node1" "node2"]})
       first
       (create-run! {:test-id 1})
       first
       (execute)) )
 
-(def entry? (s/keys :req-un [::command
-                             ::parameters
+(s/def ::kind string?)
+(s/def ::event string?)
+(s/def ::args map?)
+(s/def ::to string?)
+(s/def ::from string?)
+
+(def entry? (s/keys :req-un [::kind
+                             ::event
+                             ::args
                              ::to
                              ::from]))
 
 (def entries? (s/coll-of entry? :kind vector?))
 
-(s/def ::responses entries?)
+(s/def ::events entries?)
 
 (defn error-state?
   [state]
@@ -218,60 +238,61 @@
 ;; Response` instead of always `Data * Response`? Or `Data * Error + Data * Response`?
 (>defn execute!
   [data]
-  [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::responses])))]
+  [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
   (let [[data' {:keys [url timestamp body]}] (execute data)]
     (if (error-state? (:state data'))
       [data' nil]
       ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
       ;; so that we don't end up executing the same command twice.
-      (let [responses (-> (client/post url {:body (json/write body)
-                                            :content-type "application/json; charset=utf-8"})
+      (let [events (-> (client/post url {:body (json/write body)
+                                         :content-type "application/json; charset=utf-8"})
                           :body
                           json/read)]
 
         ;; TODO(stevan): go into error state if response body is of form {"error": ...}
-        ;; (if (:error responses) true false)
+        ;; (if (:error events) true false)
 
         ;; TODO(stevan): Change executor to return this json object.
-        (assert (= (keys responses) '(:responses))
-                (str "execute!: unexpected response body: " responses))
-        (log/debug :responses responses)
+        (assert (= (keys events) '(:events))
+                (str "execute!: unexpected response body: " events))
+        (log/debug :events events)
 
         (assert (:run-id data) "execute!: no run-id set...")
         ;; TODO(stevan): only append if :from client!
         (when (re-matches #"^client:\d+$" (:from body))
           (db/append-history! (:run-id data)
                               :invoke
-                              (:command body)
-                              (-> body :parameters json/write)
+                              (:event body)
+                              (-> body :args json/write)
                               (-> body :from parse-client-id)))
 
         (let [[client-responses internal]
               (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
-                                 (:responses responses))]
+                                 (:events events))]
           ;; TODO(stevan): use seed to shuffle client-responses?
           (doseq [client-response client-responses]
             (db/append-history! (:run-id data)
                                 :ok ;; TODO(stevan): have SUT decide this?
-                                (:command client-response)
+                                (:event client-response)
                                 (-> client-response :parameters json/write)
                                 (-> client-response :to parse-client-id)))
-          [(assoc data' :clock timestamp) {:responses internal}])))))
+          [(assoc data' :clock timestamp) {:events internal}])))))
 
 (comment
   (fake/with-fake-routes
-    {"http://localhost:3001/api/command"
+    {"http://localhost:3001/api/v1/event"
      (fn [_request] {:status 200
                      :headers {}
-                     :body (json/write {:responses
-                                        [{:command "inc",
-                                          :parameters {}
+                     :body (json/write {:events
+                                        [{:kind "invoke"
+                                          :event "inc",
+                                          :args {}
                                           :to "client:0"
                                           :from "node1"}]})})}
     (-> (init-data)
         (load-test! {:test-id 1})
         first
-        (register-executor {:executor-id "http://localhost:3001"
+        (register-executor {:executor-id "http://localhost:3001/api/v1/event"
                             :components ["node1" "node2"]})
         first
         (create-run! {:test-id 1})
@@ -297,12 +318,14 @@
 (comment
   (-> (init-data)
       (timestamp-entries
-       [{:command "do-inc"
-         :parameters {}
+       [{:kind "invoke"
+         :event "do-inc"
+         :args {}
          :to "inc"
          :from "client"}
-        {:command "do-inc"
-         :parameters {}
+        {:kind "invoke"
+         :event "do-inc"
+         :args {}
          :to "inc"
          :from "client"}]
        (time/instant (time/init-clock)))
@@ -321,7 +344,8 @@
 
 (comment
 
-  (s/valid? agenda/entry? {:command :a, :parameters {}, :at 0, :from "f", :to "t"})
+  (s/explain-str agenda/entry? {:kind "invoke", :event :a, :args {}, :at (time/instant 0)
+                                :from "f", :to "t"})
 
   (-> (init-data)
       (load-test! {:test-id 1})
@@ -332,7 +356,8 @@
       first
       (execute)
       first
-      (enqueue-entry {:command :a, :parameters {}, :at 0, :from "f", :to "t"})
+      (enqueue-entry {:kind "invoke", :event :a, :args {}, :at (time/instant 0)
+                      :from "f", :to "t"})
       )
   )
 
@@ -366,43 +391,49 @@
      first)
  (-> (init-data)
      (timestamp-entries
-      [{:command "do-inc"
-        :parameters {}
+      [{:kind "invoke"
+        :event "do-inc"
+        :args {}
         :to "inc"
         :from "client"}
-       {:command "do-inc"
-        :parameters {}
+       {:kind "invoke"
+        :event "do-inc"
+        :args {}
         :to "inc"
         :from "client"}
        ]
-      1)
+      (time/instant (time/init-clock)))
      second) )
 )
 
 (>defn step!
   [data]
-  [::data => (s/tuple ::data (s/keys :req-un [::queue-size ::entry ::responses]))]
+  [::data => (s/tuple ::data (s/keys :req-un [::queue-size ::entry ::events]))]
   (let [entry (-> data :agenda peek)
-        [data' responses] (execute! data)
+        [data' events] (execute! data)
         [data'' timestamped-entries] (timestamp-entries data'
-                                                        (:responses responses)
+                                                        (:events events)
                                                         (-> data' :clock))
         [data''' queue-size] (enqueue-timestamped-entries data'' timestamped-entries)]
-    [data''' (merge {:entry entry} responses queue-size)]))
+    [data''' (merge {:entry entry} events queue-size)]))
 
 (comment
   (fake/with-fake-routes
-    {"http://localhost:3001/api/command"
+    {"http://localhost:3001/api/v1/event"
      (fn [_request] {:status 200
                      :headers {}
-                     :body (json/write {:responses [{:command :a
-                                                     :parameters {}
-                                                     :to "to"
-                                                     :from "from"}]})})}
+                     :body (json/write {:events [{:kind "invoke"
+                                                  :event :a
+                                                  :args {}
+                                                  :to "node1"
+                                                  :from "from"}]})})}
     (-> (init-data)
         (load-test! {:test-id 1})
         first
-        (register-executor {:executor-id "http://localhost:3001" :components ["component0"]})
+        (register-executor {:executor-id "http://localhost:3001/api/v1/event"
+                            :components ["node1"]})
+        first
+        (create-run! {:test-id 1})
         first
         step!
         first
@@ -417,17 +448,15 @@
 
 (comment
   (fake/with-fake-routes
-    {"http://localhost:3001/api/command"
+    {"http://localhost:3001/api/v1/event"
      (fn [_request] {:status 200
                      :headers {}
-                     :body (json/write {:responses []
-                                      ;; [{:entry {:command {:name "b" :parameters []}
-                                      ;;           :to "c"}}]
-                                        })})}
+                     :body (json/write {:events []})})}
     (-> (init-data)
         (load-test! {:test-id 1})
         first
-        (register-executor {:executor-id "http://localhost:3001" :components ["component0"]})
+        (register-executor {:executor-id "http://localhost:3001/api/v1/event"
+                            :components ["node1"]})
         first
         (create-run! {:test-id 1})
         first
@@ -440,12 +469,11 @@
   [data data])
 
 (comment
-  (status (init-data)))
+  (status (init-data)) )
 
 (defn set-seed!
   [data {new-seed :new-seed}]
   [(assoc data :seed new-seed) new-seed])
-
 
 (defn reset
   [_data]
