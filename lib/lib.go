@@ -135,7 +135,13 @@ func unmarshal(un Unmarshaler, kind string, event string, from string, input jso
 			Request: req,
 		}
 	case "message":
-		return nil, nil
+		var msg Message
+		if err := un.ParseMessage(event, input, &msg); err != nil {
+			return nil, err
+		}
+		iev = &InternalMessage{
+			Message: msg,
+		}
 	case "fault":
 		return nil, nil
 	default:
