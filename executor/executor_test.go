@@ -63,26 +63,13 @@ func (un *Un) ParseMessage(msg string, input json.RawMessage, output *lib.Messag
 
 // Shouldn't part of this code be in the lib?
 func (m *M) MarshalEvent(args lib.Args) string {
-	var s string
-	switch args.(type) {
+	switch event := args.(type) {
 	case *lib.ClientResponse:
-		s = "write"
+		return "write"
 	case *lib.InternalMessage:
-		s = "ack"
+		return "ack"
 	default:
-		s = "UNKNOWN EVENT"
-	}
-	return s
-}
-
-func (m *M) MarshalKind(args lib.Args) string {
-	switch args.(type) {
-	case *lib.ClientResponse:
-		return "ok"
-	case *lib.InternalMessage:
-		return "message"
-	default:
-		return "UNKNOWN KIND"
+		panic(fmt.Sprintf("Unknown event: %T", event))
 	}
 }
 

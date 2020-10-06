@@ -171,12 +171,22 @@ func unmarshal(un Unmarshaler, kind string, event string, from string, input jso
 // }
 
 type Marshaler interface {
-	MarshalKind(_ Args) string
 	MarshalEvent(_ Args) string
 }
 
 type Events struct {
 	Events []UnscheduledEvent `json:"events"`
+}
+
+func MarshalKind(args Args) string {
+	switch kind := args.(type) {
+	case *ClientResponse:
+		return "ok"
+	case *InternalMessage:
+		return "message"
+	default:
+		panic(fmt.Sprintf("%T", kind))
+	}
 }
 
 func MarshalUnscheduledEvents(m Marshaler, from string, oevs []OutEvent) json.RawMessage {
@@ -185,7 +195,7 @@ func MarshalUnscheduledEvents(m Marshaler, from string, oevs []OutEvent) json.Ra
 		usevs[index] = UnscheduledEvent{
 			From:  from,
 			To:    oev.To,
-			Kind:  m.MarshalKind(oev.Args),
+			Kind:  MarshalKind(oev.Args),
 			Event: m.MarshalEvent(oev.Args),
 			Args:  oev.Args,
 		}
