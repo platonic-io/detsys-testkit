@@ -12,7 +12,7 @@ type TestId struct {
 func ParseTestId(s string) (TestId, error) {
 	i, err := strconv.Atoi(s)
 	if err != nil {
-		return TestId{-1}, err
+		return TestId{}, err
 	}
 	return TestId{i}, nil
 }
@@ -64,9 +64,6 @@ func Reset() {
 func Execute(testId TestId) RunId {
 	qs := LoadTest(testId)
 	fmt.Printf("Loaded test of size: %d\n", qs.QueueSize)
-	// TODO(stevan): Make executorUrl and nodes part of topology.
-	const executorUrl string = "http://localhost:3001"
-	RegisterExecutor(executorUrl, []string{"node1", "node2"})
 	runId := CreateRun(testId)
 	Run()
 	fmt.Printf("Finished run id: %d\n", runId.RunId)

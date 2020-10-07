@@ -29,8 +29,9 @@
      CREATE TABLE agenda (
        test_id      INTEGER  NOT NULL,
        id           INTEGER  NOT NULL,
-       command      TEXT     NOT NULL,
-       parameters   JSON     NOT NULL,
+       kind         TEXT     NOT NULL CHECK(kind IN (\"invoke\", \"fault\", \"message\")),
+       event        TEXT     NOT NULL,
+       args         JSON     NOT NULL,
        `from`       TEXT     NOT NULL,
        `to`         TEXT     NOT NULL,
        at           INTEGER  NOT NULL,
@@ -49,8 +50,8 @@
        run_id       INTEGER  NOT NULL,
        id           INTEGER  NOT NULL,
        kind         TEXT     NOT NULL CHECK(kind IN (\"invoke\", \"ok\", \"fail\", \"info\")),
-       command      TEXT     NOT NULL,
-       parameters   JSON     NOT NULL,
+       event        TEXT     NOT NULL,
+       args         JSON     NOT NULL,
        process      INTEGER  NOT NULL,
        PRIMARY KEY(run_id, id),
        FOREIGN KEY(run_id) REFERENCES run(id))"])
@@ -78,11 +79,11 @@
       first))
 
 (defn insert-agenda!
-  [test-id id command parameters from to at]
+  [test-id id kind event args from to at]
   (jdbc/execute-one!
    ds
-   ["INSERT INTO agenda (test_id, id, command, parameters, `from`, `to`, at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)" test-id id command parameters from to at]
+   ["INSERT INTO agenda (test_id, id, kind, event, args, `from`, `to`, at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)" test-id id kind event args from to at]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (defn load-test!
@@ -94,7 +95,7 @@
        (mapv #(-> %
                   (dissoc :id :test_id)
                   (update :at time/instant)
-                  (update :parameters json/read)))))
+                  (update :args json/read)))))
 
 (defn create-run!
   [test-id seed]
@@ -109,12 +110,12 @@
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (defn append-history!
-  [run-id kind command parameters process]
+  [run-id kind event args process]
   (jdbc/execute-one!
    ds
-   ["INSERT INTO history (run_id, id, kind, command, parameters, process)
+   ["INSERT INTO history (run_id, id, kind, event, args, process)
      VALUES (?, (SELECT IFNULL(MAX(id), -1) + 1 FROM history WHERE run_id = ?), ?, ?, ?, ?)"
-    run-id run-id (name kind) command parameters process]
+    run-id run-id (name kind) event args process]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (comment
@@ -122,8 +123,8 @@
   (destroy-db!)
   (create-db!)
   (create-test!)
-  (insert-agenda! 1 0 "inc" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:00Z")
-  (insert-agenda! 1 1 "get" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:01Z")
+  (insert-agenda! 1 0 "invoke" "inc" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:00Z")
+  (insert-agenda! 1 1 "invoke" "get" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:01Z")
   (load-test! 1)
   (create-run! 0 123)
   (append-history! 1 :invoke "a" "{\"id\": 1}" 0)

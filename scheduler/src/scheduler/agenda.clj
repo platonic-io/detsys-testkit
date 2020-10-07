@@ -6,16 +6,18 @@
 
 (set! *warn-on-reflection* true)
 
-(def command? (s/or :string string?
-                    :keyword keyword?))
-(s/def ::command command?)
-(def parameters? map?)
-(s/def ::parameters parameters?)
+(s/def ::kind string?)
+(def event? (s/or :string string?
+                  :keyword keyword?))
+(s/def ::event event?)
+(def args? map?)
+(s/def ::args args?)
 (s/def ::to component-id?)
 (s/def ::from string?)
 (s/def ::at time/instant?)
-(def entry? (s/keys :req-un [::command
-                             ::parameters
+(def entry? (s/keys :req-un [::kind
+                             ::event
+                             ::args
                              ::to
                              ::from
                              ::at]))
@@ -47,21 +49,24 @@
 
 (comment
   (-> (empty-agenda)
-      (enqueue {:command :a
-                :parameters {:p 1}
+      (enqueue {:kind "invoke"
+                :event :a
+                :args {:p 1}
                 :to "a"
                 :from "client"
-                :at 3})
-      (enqueue-many [{:command :b
-                      :parameters {:q 2}
+                :at (time/instant 3)})
+      (enqueue-many [{:kind "invoke"
+                      :event :b
+                      :args {:q 2}
                       :to "b"
                       :from "client"
-                      :at 1}
-                     {:command :c
-                      :parameters {:q 2}
+                      :at (time/instant 1)}
+                     {:kind "invoke"
+                      :event :c
+                      :args {:q 2}
                       :to "c"
                       :from "client"
-                      :at 2}])
+                      :at (time/instant 2)}])
       (dequeue)
       first
       (dequeue)
@@ -71,14 +76,16 @@
 
 (comment
   (-> (empty-agenda)
-      (enqueue-many [{:command :a
-                      :parameters {}
+      (enqueue-many [{:kind "invoke"
+                      :event :a
+                      :args {}
                       :to "t"
                       :from "client"
-                      :at 1}
-                     {:command :a
-                      :parameters {}
+                      :at (time/instant 1)}
+                     {:kind "invoke"
+                      :event :a
+                      :args {}
                       :to "t"
                       :from "client"
-                      :at 1}])
+                      :at (time/instant 1)}])
       ) )

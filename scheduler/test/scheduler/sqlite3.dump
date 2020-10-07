@@ -6,14 +6,23 @@ CREATE TABLE test (
 CREATE TABLE agenda (
        test_id      INTEGER  NOT NULL,
        id           INTEGER  NOT NULL,
-       command      JSON     NOT NULL,
+       kind         TEXT     NOT NULL,
+       event        TEXT     NOT NULL,
+       args         JSON     NOT NULL,
        `from`       TEXT     NOT NULL,
        `to`         TEXT     NOT NULL,
        at           INTEGER  NOT NULL,
 
        PRIMARY KEY(test_id, id),
        FOREIGN KEY(test_id) REFERENCES test(id));
-INSERT INTO agenda VALUES(1,0,'{"name": "a", "parameters": []}','client0','component0',0);
-INSERT INTO agenda VALUES(1,1,'{"name": "b", "parameters": []}','client0','component0',1);
+CREATE TABLE run (
+  test_id       INTEGER  NOT NULL,
+  id            INTEGER  NOT NULL,
+  seed          INTEGER  NOT NULL,
+  create_time   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(test_id, id),
+  FOREIGN KEY(test_id) REFERENCES test(id));
+INSERT INTO agenda VALUES(1,0,'invoke','a','{}','client0','component0','1970-01-01T00:00:00Z');
+INSERT INTO agenda VALUES(1,1,'invoke','b','{}','client0','component0','1970-01-01T00:00:01Z');
 DELETE FROM sqlite_sequence;
 COMMIT;
