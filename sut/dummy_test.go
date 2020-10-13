@@ -1,6 +1,7 @@
 package sut
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/symbiont-io/detsys/executor"
@@ -8,17 +9,24 @@ import (
 )
 
 func TestDummy(t *testing.T) {
-	lib.Setup(func() {
-		executor.Deploy(map[string]lib.Reactor{
-			"frontend":  NewFrontEnd(),
-			"register1": NewRegister(),
-			"register2": NewRegister(),
-		})
-	})
+	frontEnd := NewFrontEnd()
+	topology := map[string]lib.Reactor{
+		"frontend":  frontEnd,
+		"register1": NewRegister(),
+		"register2": NewRegister(),
+	}
 	lib.Reset()
-	// testId := lib.Generate()
 	testId := lib.TestId{1}
-	lib.Execute(testId)
+	qs := lib.LoadTest(testId)
+	fmt.Printf("Loaded test of size: %d\n", qs.QueueSize)
+	lib.Setup(func() {
+		executor.Deploy(topology, frontEnd, frontEnd)
+	})
+	executor.Register(topology)
+	runId := lib.CreateRun(testId)
+	lib.Run()
+	fmt.Printf("Finished run id: %d\n", runId.RunId)
+	// testId := lib.Generate()
 	lib.Teardown()
 	// lib.Check
 }
