@@ -54,6 +54,7 @@ func handler(topology map[string]lib.Reactor, un lib.Unmarshaler, m lib.Marshale
 }
 
 func Register(topology map[string]lib.Reactor) {
+	// TODO(stevan): Make executorUrl part of topology.
 	const executorUrl string = "http://localhost:3001/api/v1/event"
 
 	components := make([]string, 0, len(topology))
@@ -65,7 +66,6 @@ func Register(topology map[string]lib.Reactor) {
 
 func Deploy(topology map[string]lib.Reactor, un lib.Unmarshaler, m lib.Marshaler) {
 	log.Printf("Deploying topology: %+v\n", topology)
-	// TODO(stevan): Make executorUrl part of topology.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/event", handler(topology, un, m))
 	err := http.ListenAndServe(":3001", mux)

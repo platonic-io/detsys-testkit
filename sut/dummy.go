@@ -232,12 +232,13 @@ var _ lib.Reactor = &Register{}
 // ---------------------------------------------------------------------
 
 type FrontEnd struct {
-	inFlight      map[uint64]SessionId
-	nextSessionId int
+	inFlight                map[uint64]SessionId
+	inFlightSessionToClient map[SessionId]uint64
+	nextSessionId           int
 }
 
 func NewFrontEnd() *FrontEnd {
-	return &FrontEnd{nil, 0}
+	return &FrontEnd{map[uint64]SessionId{}, map[SessionId]uint64{}, 0}
 }
 
 const register1 string = "register1"
@@ -262,13 +263,20 @@ func (fe *FrontEnd) NewSessionId(clientId uint64) (SessionId, error) {
 
 	sessionId.Id = fe.nextSessionId
 	fe.nextSessionId++
+	fe.inFlight[clientId] = sessionId
+	fe.inFlightSessionToClient[sessionId] = clientId
 
 	return sessionId, nil
 }
 
 func (fe *FrontEnd) RemoveSession(sessionId SessionId) (uint64, bool) {
-	// fixme
-	return 0, true
+	clientId, ok := fe.inFlightSessionToClient[sessionId]
+
+	if ok {
+		delete(fe.inFlight, clientId)
+		delete(fe.inFlightSessionToClient, sessionId)
+	}
+	return clientId, ok
 }
 
 func (fe *FrontEnd) ReceiveClient(at time.Time, from string, event lib.ClientRequest) []lib.OutEvent {
@@ -276,7 +284,7 @@ func (fe *FrontEnd) ReceiveClient(at time.Time, from string, event lib.ClientReq
 	sessionId, err := fe.NewSessionId(event.Id)
 
 	if err != nil {
-		// maybe note fatal?
+		// maybe not fatal?
 		log.Fatal(err)
 		return nil
 	}
