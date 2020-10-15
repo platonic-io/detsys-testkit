@@ -19,9 +19,15 @@ func (sessionId SessionId) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + strconv.Itoa(sessionId.Id) + `"`), nil
 }
 
-func (sessionId *SessionId) UnMarshalJSON(body []byte) (err error) {
-	inner := 0
-	if err := json.Unmarshal(body, &inner); err != nil {
+func (sessionId *SessionId) UnmarshalJSON(body []byte) (err error) {
+	var s string
+
+	if err := json.Unmarshal(body, &s); err != nil {
+		return err
+	}
+
+	inner, err := strconv.Atoi(s)
+	if err != nil {
 		return err
 	}
 
@@ -51,7 +57,7 @@ type Write struct {
 func (_ Write) Request() {}
 
 type Value struct {
-	Value int `json: "value"`
+	Value int `json:"value"`
 }
 
 func (_ Value) Response() {}
@@ -62,15 +68,15 @@ type Ack struct {
 func (_ Ack) Response() {}
 
 type InternalRequest struct {
-	Id      SessionId   `json: "id"`
-	Request lib.Request `json: "request`
+	Id      SessionId   `json:"id"`
+	Request lib.Request `json:"request"`
 }
 
 func (_ InternalRequest) Message() {}
 
 type InternalResponse struct {
-	Id       SessionId    `json: "id"`
-	Response lib.Response `json: "response"`
+	Id       SessionId    `json:"id"`
+	Response lib.Response `json:"response"`
 }
 
 func (_ InternalResponse) Message() {}
@@ -276,6 +282,7 @@ func (fe *FrontEnd) RemoveSession(sessionId SessionId) (uint64, bool) {
 		delete(fe.inFlight, clientId)
 		delete(fe.inFlightSessionToClient, sessionId)
 	}
+
 	return clientId, ok
 }
 
@@ -358,9 +365,9 @@ func (n *FrontEnd) ParseMessage(message string, raw json.RawMessage, msg *lib.Me
 func (_ *FrontEnd) MarshalRequest(request lib.Request) string {
 	switch ev := request.(type) {
 	case Read:
-		return "Read"
+		return "read"
 	case Write:
-		return "Write"
+		return "write"
 	default:
 		panic(fmt.Errorf("Unknown Request event: %#v\n", ev))
 	}
@@ -369,9 +376,9 @@ func (_ *FrontEnd) MarshalRequest(request lib.Request) string {
 func (_ *FrontEnd) MarshalResponse(response lib.Response) string {
 	switch ev := response.(type) {
 	case Ack:
-		return "Ack"
+		return "ack"
 	case Value:
-		return "Value"
+		return "value"
 	default:
 		panic(fmt.Errorf("Unknown Response event: %#v\n", ev))
 	}

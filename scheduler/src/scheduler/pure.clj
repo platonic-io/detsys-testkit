@@ -274,7 +274,7 @@
             (db/append-history! (:run-id data)
                                 :ok ;; TODO(stevan): have SUT decide this?
                                 (:event client-response)
-                                (-> client-response :parameters json/write)
+                                (-> client-response :args :response json/write)
                                 (-> client-response :to parse-client-id)))
           [(assoc data' :clock timestamp) {:events internal}])))))
 

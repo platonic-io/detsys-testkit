@@ -30,6 +30,11 @@ type InternalMessage struct {
 	Message Message `json:"message"`
 }
 
+func (im InternalMessage) MarshalJSON() ([]byte, error) {
+	bs, err := json.Marshal(im.Message)
+	return bs, err
+}
+
 type Message interface{ Message() }
 
 func (_ InternalMessage) InEvent() {}
