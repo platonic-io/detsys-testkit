@@ -4,7 +4,8 @@
              [edn :as edn]]
             [clojure.java.io :as io]
             [elle [core :as elle]
-             [list-append :refer :all]])
+             [list-append :as list-append]
+             [rw-register :as rw-register]])
   (:import (java.io PushbackReader)
            [lockfix LockFix])
   (:gen-class))
@@ -24,19 +25,19 @@
       monitor (Object.)]
   (defn log-capture!
     ([logger-ns]
-      (log-capture! logger-ns :info :error))
+     (log-capture! logger-ns :info :error))
     ([logger-ns out-level err-level]
-      (locking* monitor
-        (compare-and-set! orig nil [System/out System/err])
-        (System/setOut  (#'clojure.tools.logging/log-stream out-level logger-ns))
-        (System/setErr (#'clojure.tools.logging/log-stream err-level logger-ns)))))
+     (locking* monitor
+               (compare-and-set! orig nil [System/out System/err])
+               (System/setOut  (#'clojure.tools.logging/log-stream out-level logger-ns))
+               (System/setErr (#'clojure.tools.logging/log-stream err-level logger-ns)))))
   (defn log-uncapture!
     []
     (locking* monitor
-      (when-let [[out err :as v] @orig]
-        (swap! orig (constantly nil))
-        (System/setOut out)
-        (System/setErr err)))))
+              (when-let [[out err :as v] @orig]
+                (swap! orig (constantly nil))
+                (System/setOut out)
+                (System/setErr err)))))
 
 (alter-var-root #'clojure.tools.logging/log-capture! (constantly log-capture!))
 (alter-var-root #'clojure.tools.logging/log-uncapture! (constantly log-uncapture!))
@@ -49,22 +50,27 @@
          (take-while identity)
          vec)))
 
-(defn c
-  "Check a history."
-  [opts history]
-  (-> (check opts history)
-      ;; We don't care about these; it's kinda redundant.
+(defn checker-rw-register
+  [filename]
+  (-> (rw-register/check
+       {:consistency-models [:strict-serializable]
+        :linearizable-keys? true}
+       (read-history filename))
       (dissoc :also-not)))
 
-(defn cf
-  "Checks a file."
-  [opts filename]
-  (c opts (read-history filename)))
-
-(defn checker
+(defn checker-list-append
   [filename]
-  (cf {:consistency-models [:strict-serializable]} filename))
+  (-> (list-append/check
+       {:consistency-models [:strict-serializable]}
+       (read-history filename))
+      (dissoc :also-not)))
+
+(checker-rw-register "./history/rw-register.edn")
 
 (defn -main
   [& args]
-  (pprint (checker (first args))))
+  (case (first args)
+    "rw-register" (pprint (checker-rw-register (second args)))
+    "list-append" (pprint (checker-list-append (second args)))
+    (println
+     "First argument should be a model, i.e. either \"rw-register\" or \"list-append\"")))
