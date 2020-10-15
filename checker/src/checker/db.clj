@@ -70,9 +70,9 @@
   (-> op
       (dissoc :event :run_id :kind :args)
       (set/rename-keys {:id :index})
-      (assoc :type (op-type op))
-      (assoc :f :txn)
-      (assoc :value [(conj (reg-op op) value)])))
+      (assoc :type (op-type op)
+             :f :txn
+             :value [(conj (reg-op op) value)])))
 
 (defn rewrite
   "We need to rewrite histories that look like:
