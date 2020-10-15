@@ -5,7 +5,8 @@
             [clojure.java.io :as io]
             [elle [core :as elle]
              [list-append :as list-append]
-             [rw-register :as rw-register]])
+             [rw-register :as rw-register]]
+            [checker.db :as db])
   (:import (java.io PushbackReader)
            [lockfix LockFix])
   (:gen-class))
@@ -51,26 +52,32 @@
          vec)))
 
 (defn checker-rw-register
-  [filename]
+  [run-id]
   (-> (rw-register/check
        {:consistency-models [:strict-serializable]
         :linearizable-keys? true}
-       (read-history filename))
+       (db/get-history run-id))
       (dissoc :also-not)))
 
 (defn checker-list-append
-  [filename]
+  [run-id]
   (-> (list-append/check
        {:consistency-models [:strict-serializable]}
-       (read-history filename))
+       (db/get-history run-id))
       (dissoc :also-not)))
 
-(checker-rw-register "./history/rw-register.edn")
+(defn exit
+  [result]
+  (if (:valid? result)
+    (System/exit 0)
+    (do
+      (pprint result)
+      (System/exit 1))))
 
 (defn -main
   [& args]
   (case (first args)
-    "rw-register" (pprint (checker-rw-register (second args)))
-    "list-append" (pprint (checker-list-append (second args)))
+    "rw-register" (exit (checker-rw-register (second args)))
+    "list-append" (exit (checker-list-append (second args)))
     (println
      "First argument should be a model, i.e. either \"rw-register\" or \"list-append\"")))
