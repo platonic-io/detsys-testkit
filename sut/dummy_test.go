@@ -28,7 +28,6 @@ func TestDummy(t *testing.T) {
 	fmt.Printf("Finished run id: %d\n", runId.RunId)
 	// testId := lib.Generate()
 	lib.Teardown()
-	// lib.Check
 	result := lib.Check("rw-register", runId)
 	if !result {
 		t.Errorf("Test-run %d doesn't pass analysis", runId)
