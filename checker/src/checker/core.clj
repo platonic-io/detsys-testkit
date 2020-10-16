@@ -13,8 +13,11 @@
 
 (set! *warn-on-reflection* true)
 
-(defmacro locking* ;; patched version of clojure.core/locking to workaround
-                   ;; GraalVM unbalanced monitor issue.
+;; patched version of clojure.core/locking to workaround GraalVM unbalanced
+;; monitor issue. Compile lockfix with:
+;; javac java/src/lockfix/LockFix.java -cp \
+;;       ~/.m2/repository/org/clojure/clojure/1.10.2-alpha1/clojure-1.10.2-alpha1.jar
+(defmacro locking*
   "Executes exprs in an implicit do, while holding the monitor of x.
   Will release the monitor of x in all circumstances."
   {:added "1.0"}
