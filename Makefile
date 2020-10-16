@@ -28,4 +28,4 @@ setup: create-db generate-test
 
 test-sut: run-scheduler run-test-sut stop-scheduler
 
-test: test-executor test-sut
+test: test-scheduler test-executor test-sut
