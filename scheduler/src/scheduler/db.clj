@@ -48,12 +48,12 @@
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (defn append-history!
-  [run-id kind event args process]
+  [test-id run-id kind event args process]
   (jdbc/execute-one!
    ds
-   ["INSERT INTO history (run_id, id, kind, event, args, process)
-     VALUES (?, (SELECT IFNULL(MAX(id), -1) + 1 FROM history WHERE run_id = ?), ?, ?, ?, ?)"
-    run-id run-id (name kind) event args process]
+   ["INSERT INTO history (test_id, run_id, id, kind, event, args, process)
+     VALUES (?, ?, (SELECT IFNULL(MAX(id), -1) + 1 FROM history WHERE run_id = ?), ?, ?, ?, ?)"
+    test-id run-id run-id (name kind) event args process]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (comment

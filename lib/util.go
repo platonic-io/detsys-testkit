@@ -9,6 +9,10 @@ import (
 	"net/http"
 )
 
+type TestId struct {
+	TestId int `json:"test-id"`
+}
+
 const schedulerUrl string = "http://localhost:3000"
 
 type SchedulerRequest struct {

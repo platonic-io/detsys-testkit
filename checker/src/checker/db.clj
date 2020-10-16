@@ -16,7 +16,7 @@
 ;; https://grishaev.me/en/clj-sqlite/
 
 (def spec
-  {:dbname    "/tmp/test.sqlite3"
+  {:dbname    "../db/detsys.sqlite3"
    :classname "org.sqlite.JDBC"
    :dbtype    "sqlite"})
 
@@ -68,7 +68,7 @@
 (defn rewrite-op
   [op value]
   (-> op
-      (dissoc :event :run_id :kind :args)
+      (dissoc :event :test_id :run_id :kind :args)
       (set/rename-keys {:id :index})
       (assoc :type (op-type op)
              :f :txn
@@ -95,12 +95,12 @@
     :info (throw "implement later")))
 
 (defn get-history
-  [run-id]
-  (->> (sql/find-by-keys db :history {:run_id run-id}
+  [test-id run-id]
+  (->> (sql/find-by-keys db :history {:test_id test-id, :run_id run-id}
                          {:builder-fn rs/as-unqualified-lower-maps})
        (mapv #(update % :args json/read))
        (reduce rewrite [{} []])
        second))
 
 (comment
-  (pp/pprint (get-history 0)))
+  (pp/pprint (get-history 1 0)) )

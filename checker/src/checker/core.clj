@@ -55,18 +55,18 @@
          vec)))
 
 (defn checker-rw-register
-  [run-id]
+  [test-id run-id]
   (-> (rw-register/check
        {:consistency-models [:strict-serializable]
         :linearizable-keys? true}
-       (db/get-history run-id))
+       (db/get-history test-id run-id))
       (dissoc :also-not)))
 
 (defn checker-list-append
-  [run-id]
+  [test-id run-id]
   (-> (list-append/check
        {:consistency-models [:strict-serializable]}
-       (db/get-history run-id))
+       (db/get-history test-id run-id))
       (dissoc :also-not)))
 
 (defn exit
@@ -80,7 +80,7 @@
 (defn -main
   [& args]
   (case (first args)
-    "rw-register" (exit (checker-rw-register (second args)))
-    "list-append" (exit (checker-list-append (second args)))
+    "rw-register" (exit (checker-rw-register (second args) (second (next args))))
+    "list-append" (exit (checker-list-append (second args) (second (next args))))
     (println
      "First argument should be a model, i.e. either \"rw-register\" or \"list-append\"")))

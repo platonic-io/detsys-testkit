@@ -16,7 +16,7 @@ func TestDummy(t *testing.T) {
 		"register2": NewRegister(),
 	}
 	lib.Reset()
-	testId := lib.TestId{1}
+	testId := lib.GenerateTest()
 	qs := lib.LoadTest(testId)
 	fmt.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	lib.Setup(func() {
@@ -26,9 +26,8 @@ func TestDummy(t *testing.T) {
 	runId := lib.CreateRun(testId)
 	lib.Run()
 	fmt.Printf("Finished run id: %d\n", runId.RunId)
-	// testId := lib.Generate()
 	lib.Teardown()
-	result := lib.Check("rw-register", runId)
+	result := lib.Check("rw-register", testId, runId)
 	if !result {
 		t.Errorf("Test-run %d doesn't pass analysis", runId)
 	}

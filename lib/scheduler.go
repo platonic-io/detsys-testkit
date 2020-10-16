@@ -5,10 +5,6 @@ import (
 	"strconv"
 )
 
-type TestId struct {
-	TestId int `json:"test-id"`
-}
-
 func ParseTestId(s string) (TestId, error) {
 	i, err := strconv.Atoi(s)
 	if err != nil {
