@@ -132,9 +132,11 @@
   (case (:state data)
     :executors-prepared
     (let [run-id (db/create-run! test-id (:seed data))]
+      (log/info :run-id run-id)
       [(-> data
-           (assoc :state :ready)
-           (assoc :run-id (:run-id run-id)))
+           (assoc :state :ready
+                  :test-id test-id
+                  :run-id (:run-id run-id)))
        run-id])
     [(assoc data :state :error-cannot-create-run-in-this-state) nil]))
 
@@ -258,9 +260,9 @@
         (log/debug :events events)
 
         (assert (:run-id data) "execute!: no run-id set...")
-        ;; TODO(stevan): only append if :from client!
         (when (re-matches #"^client:\d+$" (:from body))
-          (db/append-history! (:run-id data)
+          (db/append-history! (:test-id data)
+                              (:run-id data)
                               :invoke
                               (:event body)
                               (-> body :args json/write)
@@ -271,7 +273,8 @@
                                  (:events events))]
           ;; TODO(stevan): use seed to shuffle client-responses?
           (doseq [client-response client-responses]
-            (db/append-history! (:run-id data)
+            (db/append-history! (:test-id data)
+                                (:run-id data)
                                 :ok ;; TODO(stevan): have SUT decide this?
                                 (:event client-response)
                                 (-> client-response :args :response json/write)

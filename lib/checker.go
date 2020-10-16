@@ -7,10 +7,12 @@ import (
 	"strconv"
 )
 
-func Check(model string, runId RunId) bool {
+func Check(model string, testId TestId, runId RunId) bool {
 	fmt.Printf("Analysing model: `%s` for run %+v\n", model, runId)
 
-	cmd := exec.Command("clj", "-m", "checker.core", model, strconv.Itoa(runId.RunId))
+	cmd := exec.Command("clj", "-m", "checker.core", model,
+		strconv.Itoa(testId.TestId),
+		strconv.Itoa(runId.RunId))
 
 	path, err := os.Getwd()
 	if err != nil {
@@ -18,11 +20,12 @@ func Check(model string, runId RunId) bool {
 		return false
 	}
 
-	cmd.Dir = path + "/../checker"
-	err = cmd.Run()
+	cmd.Dir = path + "/../checker/"
+
+	out, err := cmd.CombinedOutput()
 
 	if err != nil {
-		fmt.Printf("Error occured during analysis:\n%v\n", err)
+		fmt.Printf("Error occured during analysis:\n%s\n", string(out))
 		return false
 	}
 
