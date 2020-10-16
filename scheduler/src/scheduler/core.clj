@@ -17,14 +17,7 @@
   ([]
    (start-server false 3000))
   ([reload port]
-   (db/setup-db "/tmp/test.sqlite3")
-   (try (db/destroy-db!)
-        (catch org.sqlite.SQLiteException e
-          (println e)))
-   (db/create-db!)
-   (db/create-test!)
-   (db/insert-agenda! 1 0 "invoke" "write" "{\"value\": 1}" "client:0" "frontend" "1970-01-01T00:00:00Z")
-   (db/insert-agenda! 1 1 "invoke" "read" "{}" "client:0" "frontend" "1970-01-01T00:00:10Z")
+   (db/setup-db "../db/detsys.sqlite3")
    (reset! handler/data (pure/init-data))
    (reset! server (jetty/run-jetty (cond-> #'handler/app
                                      true (rmd/wrap-defaults rmd/api-defaults)
