@@ -21,23 +21,9 @@ func handler(topology map[string]lib.Reactor, un lib.Unmarshaler, m lib.Marshale
 				http.StatusNotFound)
 			return
 		}
-		log.Println("Handling request")
-		// if err := decodeJSONBody(w, r, &msg); err != nil {
-		// 	var mr *malformedRequest
-		// 	if errors.As(err, &mr) {
-		// 		log.Printf("%+v\n", err)
-		// 		http.Error(w, jsonError(mr.msg), mr.status)
-		// 	} else {
-		// 		log.Printf("%+v\n", err)
-		// 		http.Error(w,
-		// 			jsonError(http.StatusText(
-		// 				http.StatusInternalServerError)),
-		// 			http.StatusInternalServerError)
-		// 	}
-		// 	return
-		// }
 		r.Body = http.MaxBytesReader(w, r.Body, 1048576)
-		// XXX: Inefficient, reuse parts of decodeJSONBody?
+		// XXX: Inefficient, reuse ideas from:
+		// https://www.alexedwards.net/blog/how-to-properly-parse-a-json-request-body ?
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			panic(err)
