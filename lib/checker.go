@@ -8,7 +8,7 @@ import (
 )
 
 func Check(model string, testId TestId, runId RunId) bool {
-	fmt.Printf("Analysing model: `%s` for run %+v\n", model, runId)
+	fmt.Printf("Analysing model: `%s` for run %+v of test %+v\n", model, runId, testId)
 
 	cmd := exec.Command("clj", "-m", "checker.core", model,
 		strconv.Itoa(testId.TestId),

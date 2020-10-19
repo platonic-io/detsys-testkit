@@ -44,12 +44,15 @@
 ;; ---------------------------------------------------------------------
 
 (defn reg-op
-  [op]
-  (case (:event op)
-    "write" [:w :x]
-    "ack"   [:w :x]
-    "read"  [:r :x]
-    "value" [:r :x]))
+  [model op]
+  (let [w (case model
+            :list-append :append
+            :w)]
+    (case (:event op)
+      "write" [w :x]
+      "ack"   [w :x]
+      "read"  [:r :x]
+      "value" [:r :x])))
 
 (defn op-type
   [op]
@@ -61,18 +64,20 @@
 
 (defn op-value
   [args]
-  (if (int? (:value args))
-    (:value args)
-    nil))
+  (let [v (:value args)]
+    (cond
+      (int? v) v
+      (vector? v) v
+      :else nil)))
 
 (defn rewrite-op
-  [op value]
+  [model op value]
   (-> op
       (dissoc :event :test_id :run_id :kind :args)
       (set/rename-keys {:id :index})
       (assoc :type (op-type op)
              :f :txn
-             :value [(conj (reg-op op) value)])))
+             :value [(conj (reg-op model op) value)])))
 
 (defn rewrite
   "We need to rewrite histories that look like:
@@ -85,21 +90,21 @@
 
   We use state to keep track of the :args from :invoke for each :process, so that
   we can use the same :args in the response."
-  [[state acc] op]
+  [model [state acc] op]
   (case (op-type op)
     :invoke [(assoc state (:process op) (:args op))
-             (conj acc (rewrite-op op (op-value (:args op))))]
-    :ok [state (conj acc (rewrite-op op (or (op-value (:args op))
+             (conj acc (rewrite-op model op (op-value (:args op))))]
+    :ok [state (conj acc (rewrite-op model op (or (op-value (:args op))
                                             (op-value (get state (:process op))))))]
     :fail (throw "implement later")
     :info (throw "implement later")))
 
 (defn get-history
-  [test-id run-id]
+  [model test-id run-id]
   (->> (sql/find-by-keys db :history {:test_id test-id, :run_id run-id}
                          {:builder-fn rs/as-unqualified-lower-maps})
        (mapv #(update % :args json/read))
-       (reduce rewrite [{} []])
+       (reduce (partial rewrite model) [{} []])
        second))
 
 (comment

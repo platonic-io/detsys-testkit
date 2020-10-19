@@ -59,14 +59,14 @@
   (-> (rw-register/check
        {:consistency-models [:strict-serializable]
         :linearizable-keys? true}
-       (db/get-history test-id run-id))
+       (db/get-history :rw-register test-id run-id))
       (dissoc :also-not)))
 
 (defn checker-list-append
   [test-id run-id]
   (-> (list-append/check
        {:consistency-models [:strict-serializable]}
-       (db/get-history test-id run-id))
+       (db/get-history :list-append test-id run-id))
       (dissoc :also-not)))
 
 (defn exit

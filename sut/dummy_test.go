@@ -27,7 +27,7 @@ func TestDummy(t *testing.T) {
 	lib.Run()
 	fmt.Printf("Finished run id: %d\n", runId.RunId)
 	lib.Teardown()
-	result := lib.Check("rw-register", testId, runId)
+	result := lib.Check("list-append", testId, runId)
 	if !result {
 		t.Errorf("Test-run %d doesn't pass analysis", runId)
 	}

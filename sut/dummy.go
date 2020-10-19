@@ -36,12 +36,12 @@ func (sessionId *SessionId) UnmarshalJSON(body []byte) (err error) {
 }
 
 type Register struct {
-	value int
+	value []int
 }
 
 func NewRegister() *Register {
 	return &Register{
-		value: 0,
+		value: []int{},
 	}
 }
 
@@ -57,7 +57,7 @@ type Write struct {
 func (_ Write) Request() {}
 
 type Value struct {
-	Value int `json:"value"`
+	Value []int `json:"value"`
 }
 
 func (_ Value) Response() {}
@@ -99,7 +99,7 @@ func (r *Register) Receive(_ time.Time, from string, event lib.InEvent) []lib.Ou
 					},
 				}
 			case Write:
-				r.value = imsg.Value
+				r.value = append(r.value, imsg.Value)
 				oevs = []lib.OutEvent{
 					{
 						To: from,
@@ -227,12 +227,12 @@ func (r *Register) ParseMessage(message string, raw json.RawMessage, msg *lib.Me
 var _ lib.InEvent = lib.ClientRequest{1, Write{2}}
 var _ lib.Args = lib.ClientResponse{1, Ack{}}
 var _ lib.InEvent = lib.ClientRequest{1, Read{}}
-var _ lib.Args = lib.ClientResponse{1, Value{2}}
+var _ lib.Args = lib.ClientResponse{1, Value{[]int{2}}}
 
 var _ lib.InEvent = lib.InternalMessage{InternalRequest{SessionId{0}, Write{2}}}
 var _ lib.Args = lib.InternalMessage{InternalResponse{SessionId{0}, Ack{}}}
 var _ lib.InEvent = lib.InternalMessage{InternalRequest{SessionId{0}, Read{}}}
-var _ lib.Args = lib.InternalMessage{InternalResponse{SessionId{0}, Value{2}}}
+var _ lib.Args = lib.InternalMessage{InternalResponse{SessionId{0}, Value{[]int{2}}}}
 var _ lib.Reactor = &Register{}
 
 // ---------------------------------------------------------------------
