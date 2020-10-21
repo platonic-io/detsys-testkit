@@ -15,17 +15,16 @@ conn = sqlite3.connect('../db/detsys.sqlite3')
 conn.row_factory = sqlite3.Row
 c = conn.cursor()
 
-sums = []
 products = []
 
 for run_id in args.run_ids:
+    sums = []
     c.execute("select * from network_trace where test_id = (?) and run_id = (?)",
               (args.test_id, run_id))
     for r in c:
         if r['at'] < args.eff:
             sums.append("O({}, {}, {})".format(r['from'], r['to'], r['at']))
     products.append(sums)
-    sums = []
 
 c.close()
 
