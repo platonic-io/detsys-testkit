@@ -1,7 +1,9 @@
 import argparse
 import sqlite3
 import z3
+import json
 
+# Command-line argument parsing.
 parser = argparse.ArgumentParser(description='Lineage-driven fault injection.')
 parser.add_argument('--eff', metavar='TIME', type=int, required=True,
                     help='the time when finite failures end')
@@ -9,8 +11,10 @@ parser.add_argument('--test-id', metavar='TEST_ID', type=int, required=True,
                     help='the test id')
 parser.add_argument('--run-ids', metavar='RUN_ID', type=int, nargs='+', required=True,
                     help='the run ids')
+parser.add_argument('--json', action='store_true', help='output in JSON format?')
 args = parser.parse_args()
 
+# Load network traces from the database.
 conn = sqlite3.connect('../db/detsys.sqlite3')
 conn.row_factory = sqlite3.Row
 c = conn.cursor()
@@ -23,15 +27,29 @@ for run_id in args.run_ids:
               (args.test_id, run_id))
     for r in c:
         if r['at'] < args.eff:
-            sums.append("O({}, {}, {})".format(r['from'], r['to'], r['at']))
+            sums.append("{'kind': 'omission', 'from':'%s', 'to':'%s', 'at':%d}" %
+                        (r['from'], r['to'], r['at']))
     products.append(sums)
 
 c.close()
 
+# Create and solve SAT formula.
 for i, sum in enumerate(products):
     products[i] = z3.Or(z3.Bools(sum))
 
 s = z3.Solver()
 s.add(z3.And(products))
 s.check()
-print(s.model())
+m = s.model()
+
+# Output the result.
+if not(args.json):
+    print(m)
+else:
+    faults = []
+    for d in m.decls():
+        if m[d]:
+            Dict = eval(d.name())
+            faults.append(Dict)
+
+    print(json.dumps({"faults": faults}))
