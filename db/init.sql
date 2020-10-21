@@ -33,3 +33,16 @@ CREATE TABLE history (
   PRIMARY KEY(test_id, run_id, id),
   FOREIGN KEY(test_id) REFERENCES test(id),
   FOREIGN KEY(run_id)  REFERENCES run(id));
+
+CREATE TABLE network_trace (
+  test_id      INTEGER  NOT NULL,
+  run_id       INTEGER  NOT NULL,
+  id           INTEGER  NOT NULL,
+  message      TEXT     NOT NULL,
+  args         JSON     NOT NULL,
+  `from`       TEXT     NOT NULL,
+  `to`         TEXT     NOT NULL,
+  at           DATETIME NOT NULL,
+  PRIMARY KEY(test_id, run_id, id),
+  FOREIGN KEY(test_id) REFERENCES test(id),
+  FOREIGN KEY(run_id)  REFERENCES run(id));
