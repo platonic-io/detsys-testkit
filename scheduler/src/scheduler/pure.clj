@@ -156,11 +156,7 @@
         entry' (-> entry
                    (select-keys [:to :from :at])
                    (assoc :kind "omission")
-                   (update :at str)
-                   )]
-    (prn {:faults faults
-          :entry entry'
-          :contains? (contains? faults entry')})
+                   (update :at str))]
     ((set faults) entry')))
 
 ;; TODO(stevan): check if agenda is empty...
