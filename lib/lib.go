@@ -66,6 +66,13 @@ type OutEvent struct {
 	Args Args
 }
 
+type Fault struct {
+	Kind string `json:"kind"`
+	From string `json:"from"`
+	To   string `json:"to"`
+	At   time.Time `json:"at"`
+}
+
 type Reactor interface {
 	Receive(at time.Time, from string, event InEvent) []OutEvent
 	Tick(at time.Time) []OutEvent
