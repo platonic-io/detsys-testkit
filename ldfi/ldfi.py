@@ -27,8 +27,9 @@ for run_id in args.run_ids:
               (args.test_id, run_id))
     for r in c:
         if r['at'] < args.eff:
-            sums.append("{'kind': 'omission', 'from':'%s', 'to':'%s', 'at':%d}" %
+            sums.append("{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}" %
                         (r['from'], r['to'], r['at']))
+        sums.append("{'kind':'crash', 'from':'%s', 'at':%d}" % (r['from'], r['at']))
     products.append(sums)
 
 c.close()
