@@ -39,6 +39,13 @@ for run_id in args.run_ids:
 
 c.close()
 
+# Sanity check.
+for i, run_id in enumerate(args.run_ids):
+    if not products[i]:
+        print("Error: couldn't find a network trace for test id: %d, and run id: %d." %
+              (args.test_id, run_id))
+        exit(1)
+
 # Create and solve SAT formula.
 for i, sum in enumerate(products):
     products[i] = z3.Or(z3.Bools(sum))
@@ -47,19 +54,35 @@ crashes = z3.Bools(list(crashes))
 
 s = z3.Solver()
 s.add(z3.And(products))
-crashes.append(args.crashes)
-s.add(z3.AtMost(crashes))
-s.check()
-m = s.model()
+if crashes:
+    crashes.append(args.crashes)
+    s.add(z3.AtMost(crashes))
+r = s.check()
 
 # Output the result.
-if not(args.json):
-    print(m)
+if r == z3.unsat:
+    if not(args.json):
+        print("No further faults can be injected at this point, the test case is")
+        print("certified for this particular failure specification!")
+    else:
+        print(json.dumps({"faults": []}))
+elif r == z3.unknown:
+         print("Impossible: the SAT solver returned 'unknown'")
+         try:
+             print(s.model())
+         except Z3Exception:
+             pass
+         finally:
+             exit(2)
 else:
-    faults = []
-    for d in m.decls():
-        if m[d]:
-            Dict = eval(d.name())
-            faults.append(Dict)
+    m = s.model()
 
-    print(json.dumps({"faults": faults}))
+    if not(args.json):
+        print(m)
+    else:
+        faults = []
+        for d in m.decls():
+            if m[d]:
+                Dict = eval(d.name())
+                faults.append(Dict)
+        print(json.dumps({"faults": faults}))
