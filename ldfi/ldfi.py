@@ -7,6 +7,8 @@ import json
 parser = argparse.ArgumentParser(description='Lineage-driven fault injection.')
 parser.add_argument('--eff', metavar='TIME', type=int, required=True,
                     help='the time when finite failures end')
+parser.add_argument('--crashes', metavar='INT', type=int, required=True,
+                    help='the max amount of node crashes')
 parser.add_argument('--test-id', metavar='TEST_ID', type=int, required=True,
                     help='the test id')
 parser.add_argument('--run-ids', metavar='RUN_ID', type=int, nargs='+', required=True,
@@ -20,6 +22,7 @@ conn.row_factory = sqlite3.Row
 c = conn.cursor()
 
 products = []
+crashes = set()
 
 for run_id in args.run_ids:
     sums = []
@@ -29,7 +32,9 @@ for run_id in args.run_ids:
         if r['at'] < args.eff:
             sums.append("{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}" %
                         (r['from'], r['to'], r['at']))
-        sums.append("{'kind':'crash', 'from':'%s', 'at':%d}" % (r['from'], r['at']))
+        crash = "{'kind':'crash', 'from':'%s', 'at':%d}" % (r['from'], r['at'])
+        sums.append(crash)
+        crashes.add(crash)
     products.append(sums)
 
 c.close()
@@ -38,8 +43,12 @@ c.close()
 for i, sum in enumerate(products):
     products[i] = z3.Or(z3.Bools(sum))
 
+crashes = z3.Bools(list(crashes))
+
 s = z3.Solver()
 s.add(z3.And(products))
+crashes.append(args.crashes)
+s.add(z3.AtMost(crashes))
 s.check()
 m = s.model()
 
