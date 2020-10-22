@@ -1,4 +1,5 @@
 import argparse
+import os
 import sqlite3
 import z3
 import json
@@ -17,7 +18,9 @@ parser.add_argument('--json', action='store_true', help='output in JSON format?'
 args = parser.parse_args()
 
 # Load network traces from the database.
-conn = sqlite3.connect('../db/detsys.sqlite3')
+db = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                  '..', 'db', 'detsys.sqlite3'))
+conn = sqlite3.connect(db)
 conn.row_factory = sqlite3.Row
 c = conn.cursor()
 
