@@ -1,12 +1,34 @@
 package sut
 
 import (
-	"fmt"
+	"log"
 	"testing"
 
 	"github.com/symbiont-io/detsys/executor"
 	"github.com/symbiont-io/detsys/lib"
 )
+
+func once(testId lib.TestId, topology map[string]lib.Reactor, t *testing.T) lib.RunId {
+	lib.Reset()
+	frontEnd := NewFrontEnd()
+	lib.Setup(func() {
+		executor.Deploy(topology,
+			frontEnd, // TODO(stevan): can we get rid of this?
+			frontEnd)
+	})
+	qs := lib.LoadTest(testId)
+	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
+	executor.Register(topology)
+	runId := lib.CreateRun(testId)
+	lib.Run()
+	log.Printf("Finished run id: %d\n", runId.RunId)
+	lib.Teardown()
+	result := lib.Check("list-append", testId, runId)
+	if !result {
+		t.Errorf("Test-run %d doesn't pass analysis", runId)
+	}
+	return runId
+}
 
 func TestDummy(t *testing.T) {
 	frontEnd := NewFrontEnd()
@@ -15,36 +37,23 @@ func TestDummy(t *testing.T) {
 		"register1": NewRegister(),
 		"register2": NewRegister(),
 	}
-	lib.Reset()
 	testId := lib.GenerateTest()
-	qs := lib.LoadTest(testId)
-	fmt.Printf("Loaded test of size: %d\n", qs.QueueSize)
-	lib.Setup(func() {
-		executor.Deploy(topology, frontEnd, frontEnd)
-	})
-	executor.Register(topology)
-	runId := lib.CreateRun(testId)
 
-	// test Inject
-	lib.InjectFaults(lib.Faults{
-		Faults: []lib.Fault{
-			lib.Fault{
-				Kind: "omission",
-				Args: lib.Omission{
-					From: "register1",
-					To: "frontend",
-					At: 2,
-				},
-			},
-		},
-	})
-
-	lib.Run()
-	fmt.Printf("Finished run id: %d\n", runId.RunId)
-	lib.Teardown()
-	result := lib.Check("list-append", testId, runId)
-	if !result {
-		t.Errorf("Test-run %d doesn't pass analysis", runId)
+	var runIds []lib.RunId
+	var faults []lib.Fault
+	failSpec := lib.FailSpec{
+		EFF:     10,
+		Crashes: 0,
+		EOT:     100,
+	}
+	for {
+		lib.InjectFaults(lib.Faults{faults})
+		runId := once(testId, topology, t)
+		runIds = append(runIds, runId)
+		faults = lib.Ldfi(testId, runIds, failSpec).Faults
+		if len(faults) == 0 {
+			break
+		}
 	}
 
 }

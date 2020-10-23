@@ -3,7 +3,6 @@ package lib
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -25,19 +24,19 @@ func Post(command string, parameters interface{}) []byte {
 		Command:    command,
 		Parameters: parameters})
 	if err != nil {
-		log.Fatalln(err)
+		log.Panicln(err)
 	}
 	resp, err := http.Post(schedulerUrl, "application/json", bytes.NewBuffer(json))
 	if err != nil {
-		log.Fatalln(err)
+		log.Panicln(err)
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatalln(err)
+		log.Panicln(err)
 	}
 	if resp.StatusCode != 200 {
-		log.Fatalln(string(body))
+		log.Panicln(string(body))
 	}
 	return body
 }
@@ -45,10 +44,6 @@ func Post(command string, parameters interface{}) []byte {
 func PostParse(command string, parameters interface{}, target interface{}) {
 	body := Post(command, parameters)
 	if err := json.Unmarshal(body, &target); err != nil {
-		log.Fatalln(err)
+		log.Panicln(err)
 	}
-}
-
-func panicf(format string, a ...interface{}) {
-	panic(fmt.Sprintf(format, a...))
 }

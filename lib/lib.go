@@ -66,7 +66,6 @@ type OutEvent struct {
 	Args Args
 }
 
-
 type Reactor interface {
 	Receive(at time.Time, from string, event InEvent) []OutEvent
 	Tick(at time.Time) []OutEvent
