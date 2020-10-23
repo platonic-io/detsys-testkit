@@ -37,6 +37,7 @@
                                ::topology
                                ::agenda
                                ::clock
+                               ::faults
                                ::state]))
 
 (s/def ::components (s/coll-of component-id? :kind vector?))
@@ -50,6 +51,7 @@
    :topology            {}
    :agenda              (agenda/empty-agenda)
    :seed                1
+   :faults              []
    :clock               (time/init-clock)
    :state               :started})
 
@@ -148,26 +150,39 @@
       first
       (create-run! {:test-id 1})) )
 
+(defn should-drop?
+  [data entry]
+  (let [faults (:faults data)
+        entry' (-> entry
+                   (select-keys [:to :from :at])
+                   (assoc :kind "omission")
+                   (update :at str))]
+    ((set faults) entry')))
+
 ;; TODO(stevan): check if agenda is empty...
 (defn execute
   [data]
   (if-not (contains? #{:ready :requesting} (:state data))
     [(assoc data :state :error-cannot-execute-in-this-state) nil]
-    (let [[agenda' entry] (agenda/dequeue (:agenda data))
-          data' (-> data
-                    (assoc :agenda agenda')
-                    (update :state (fn [state]
-                                     (case state
-                                       :ready :responding
-                                       :requesting :responding
-                                       :error-cannot-execute-in-this-state))))
-          ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
-          ;; this should be checked when commands are enqueued?
-          executor-id (get (:topology data') (:to entry))]
-      (assert executor-id (str "Target `" (:to entry) "' isn't in topology."))
-      [data' {:url executor-id
-              :timestamp (:at entry)
-              :body entry}])))
+    (loop [agenda (:agenda data)]
+      (let [[agenda' entry] (agenda/dequeue agenda)
+            data' (-> data
+                      (assoc :agenda agenda')
+                      (update :state (fn [state]
+                                       (case state
+                                         :ready :responding
+                                         :requesting :responding
+                                         :error-cannot-execute-in-this-state))))
+            ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
+            ;; this should be checked when commands are enqueued?
+            executor-id (get (:topology data') (:to entry))]
+        (if (should-drop? data entry)
+          (recur agenda')
+          (do
+            (assert executor-id (str "Target `" (:to entry) "' isn't in topology."))
+            [data' {:url executor-id
+                    :timestamp (:at entry)
+                    :body entry}]))))))
 
 (comment
   (-> (init-data)
@@ -481,3 +496,17 @@
 (defn reset
   [_data]
   [(init-data) :reset])
+
+(def fault? (s/keys :req-un [:scheduler.agenda/kind
+                             :scheduler.agenda/to
+                             :scheduler.agenda/from
+                             :scheduler.agenda/at]))
+
+(s/def ::faults (s/coll-of fault?))
+
+(>defn inject-faults!
+  [data faults]
+  [::data (s/keys :req [::faults]) => (s/tuple ::data map?)]
+  [(update data :faults (fn [fs] (apply conj fs (:faults faults))))
+   {:ok "added faults"}
+   ])

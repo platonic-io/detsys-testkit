@@ -43,6 +43,12 @@ func CreateRun(testId TestId) RunId {
 	return runId
 }
 
+func InjectFaults(faults []Fault) {
+	Post("inject-faults!", struct{
+		Faults []Fault `json:"faults"`
+	}{faults})
+}
+
 func Run() {
 	Post("run!", struct{}{})
 }
