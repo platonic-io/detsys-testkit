@@ -275,13 +275,21 @@
         (log/debug :events events)
 
         (assert (:run-id data) "execute!: no run-id set...")
-        (when (re-matches #"^client:\d+$" (:from body))
+        (cond (re-matches #"^client:\d+$" (:from body))
           (db/append-history! (:test-id data)
                               (:run-id data)
                               :invoke
                               (:event body)
                               (-> body :args json/write)
-                              (-> body :from parse-client-id)))
+                              (-> body :from parse-client-id))
+          (= (:kind body) "message")
+          (db/append-trace! (:test-id data)
+                            (:run-id data)
+                            (-> body :event)
+                            (-> body :args json/write)
+                            (-> body :from)
+                            (-> body :to)
+                            (-> body :at str)))
 
         (let [[client-responses internal]
               (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
