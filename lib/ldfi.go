@@ -2,7 +2,6 @@ package lib
 
 import (
 	"encoding/json"
-	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -65,7 +64,7 @@ func (f *Fault) UnmarshalJSON(bs []byte) error {
 			},
 		}
 	default:
-		log.Fatal("Impossible: unknown kind")
+		panicf("Unknown kind: %+v\n", s)
 	}
 	return nil
 }
@@ -84,7 +83,7 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 
 	path, err := os.Getwd()
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	cmd.Dir = path + "/../ldfi/"
@@ -92,14 +91,14 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 	out, err := cmd.Output()
 
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	var faults Faults
 	err = json.Unmarshal(out, &faults)
 
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	return faults
