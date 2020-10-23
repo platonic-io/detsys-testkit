@@ -73,6 +73,6 @@
   (jdbc/execute-one!
    ds
    ["INSERT INTO network_trace (test_id, run_id, id, message, args, `from`, `to`, at)
-     VALUES (?, ?, (SELECT IFNULL(MAX(id), -1) + 1 FROM network_trace WHERE run_id = ?), ?, ?, ?, ?, ?)"
-    test-id run-id run-id message args from to at]
+     VALUES (?, ?, (SELECT IFNULL(MAX(id), -1) + 1 FROM network_trace WHERE test_id = ? AND run_id = ?), ?, ?, ?, ?, ?)"
+    test-id run-id test-id run-id message args from to at]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
