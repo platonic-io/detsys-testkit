@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"log"
 	"strconv"
 )
 
@@ -43,10 +44,32 @@ func CreateRun(testId TestId) RunId {
 	return runId
 }
 
-func InjectFaults(faults []Fault) {
+func InjectFaults(faults Faults) {
+	type SchedulerFault struct {
+		Kind string `json:"kind"`
+		From string `json:"from"`
+		To   string `json:"to"`
+		At   int `json:"at"` // should be time.Time?
+	}
+	schedulerFaults := make([]SchedulerFault, 0, len(faults.Faults))
+	for _, fault := range faults.Faults {
+		var schedulerFault SchedulerFault
+		switch ev := fault.Args.(type) {
+		case Omission:
+			//assert fault.Kind?
+			schedulerFault.Kind = fault.Kind;
+			schedulerFault.From = ev.From;
+			schedulerFault.To = ev.To;
+			schedulerFault.At = ev.At; // convert?
+		default:
+			log.Panic("Unknown fault type: %#v\n", fault)
+		}
+		schedulerFaults = append(schedulerFaults, schedulerFault)
+
+	}
 	Post("inject-faults!", struct{
-		Faults []Fault `json:"faults"`
-	}{faults})
+		Faults []SchedulerFault `json:"faults"`
+	}{schedulerFaults})
 }
 
 func Run() {
