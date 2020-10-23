@@ -9,6 +9,7 @@ import (
 )
 
 func once(testId lib.TestId, topology map[string]lib.Reactor, t *testing.T) lib.RunId {
+	lib.Reset()
 	frontEnd := NewFrontEnd()
 	lib.Setup(func() {
 		executor.Deploy(topology,
@@ -46,7 +47,6 @@ func TestDummy(t *testing.T) {
 		EOT:     100,
 	}
 	for {
-		lib.Reset()
 		lib.InjectFaults(lib.Faults{faults})
 		runId := once(testId, topology, t)
 		runIds = append(runIds, runId)
