@@ -24,6 +24,21 @@ func TestDummy(t *testing.T) {
 	})
 	executor.Register(topology)
 	runId := lib.CreateRun(testId)
+
+	// test Inject
+	lib.InjectFaults(lib.Faults{
+		Faults: []lib.Fault{
+			lib.Fault{
+				Kind: "omission",
+				Args: lib.Omission{
+					From: "register1",
+					To: "frontend",
+					At: 2,
+				},
+			},
+		},
+	})
+
 	lib.Run()
 	fmt.Printf("Finished run id: %d\n", runId.RunId)
 	lib.Teardown()

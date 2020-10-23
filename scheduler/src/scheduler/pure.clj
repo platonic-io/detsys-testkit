@@ -53,6 +53,7 @@
    :seed                1
    :faults              []
    :clock               (time/init-clock)
+   :logical-clock       0
    :state               :started})
 
 (defn ap
@@ -154,9 +155,9 @@
   [data entry]
   (let [faults (:faults data)
         entry' (-> entry
-                   (select-keys [:to :from :at])
-                   (assoc :kind "omission")
-                   (update :at str))]
+                   (select-keys [:to :from])
+                   (assoc :kind "omission"
+                          :at (:logical-clock data)))]
     ((set faults) entry')))
 
 ;; TODO(stevan): check if agenda is empty...
@@ -164,25 +165,22 @@
   [data]
   (if-not (contains? #{:ready :requesting} (:state data))
     [(assoc data :state :error-cannot-execute-in-this-state) nil]
-    (loop [agenda (:agenda data)]
-      (let [[agenda' entry] (agenda/dequeue agenda)
-            data' (-> data
-                      (assoc :agenda agenda')
-                      (update :state (fn [state]
-                                       (case state
-                                         :ready :responding
-                                         :requesting :responding
-                                         :error-cannot-execute-in-this-state))))
-            ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
-            ;; this should be checked when commands are enqueued?
-            executor-id (get (:topology data') (:to entry))]
-        (if (should-drop? data entry)
-          (recur agenda')
-          (do
-            (assert executor-id (str "Target `" (:to entry) "' isn't in topology."))
-            [data' {:url executor-id
-                    :timestamp (:at entry)
-                    :body entry}]))))))
+    (let [[agenda' entry] (agenda/dequeue (:agenda data))
+          data' (-> data
+                    (assoc :agenda agenda')
+                    (update :state (fn [state]
+                                     (case state
+                                       :ready :responding
+                                       :requesting :responding
+                                       :error-cannot-execute-in-this-state))))
+          ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
+          ;; this should be checked when commands are enqueued?
+          executor-id (get (:topology data') (:to entry))]
+      (assert executor-id (str "Target `" (:to entry) "' isn't in topology."))
+      [data' {:url executor-id
+              :timestamp (:at entry)
+              :body entry
+              :dropped? (should-drop? data entry)}])))
 
 (comment
   (-> (init-data)
@@ -256,9 +254,16 @@
 (>defn execute!
   [data]
   [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
-  (let [[data' {:keys [url timestamp body]}] (execute data)]
-    (if (error-state? (:state data'))
-      [data' nil]
+  (let [[data' {:keys [url timestamp body dropped?]}] (execute data)
+        data' (-> data'
+                  (assoc :clock timestamp)
+                  (update :logical-clock inc))]
+    (if (or (error-state? (:state data'))
+            dropped?)
+      (do
+        (log/debug :not-processing {:state (:state data')
+                                    :dropped? dropped?})
+        [data' nil])
       ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
       ;; so that we don't end up executing the same command twice.
       (let [events (-> (client/post url {:body (json/write body)
