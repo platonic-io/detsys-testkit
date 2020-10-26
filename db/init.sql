@@ -10,7 +10,7 @@ CREATE TABLE agenda (
   args         JSON     NOT NULL,
   `from`       TEXT     NOT NULL,
   `to`         TEXT     NOT NULL,
-  at           INTEGER  NOT NULL,
+  at           DATETIME NOT NULL,
   PRIMARY KEY(test_id, id),
   FOREIGN KEY(test_id) REFERENCES test(id));
 
@@ -42,7 +42,7 @@ CREATE TABLE network_trace (
   args         JSON     NOT NULL,
   `from`       TEXT     NOT NULL,
   `to`         TEXT     NOT NULL,
-  at           DATETIME NOT NULL,
+  at           INTEGER  NOT NULL,
   PRIMARY KEY(test_id, run_id, id),
   FOREIGN KEY(test_id) REFERENCES test(id),
   FOREIGN KEY(run_id)  REFERENCES run(id));
