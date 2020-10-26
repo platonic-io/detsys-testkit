@@ -510,10 +510,12 @@
   [_data]
   [(init-data) :reset])
 
+(s/def ::at nat-int?)
+
 (def fault? (s/keys :req-un [:scheduler.agenda/kind
                              :scheduler.agenda/to
                              :scheduler.agenda/from
-                             :scheduler.agenda/at]))
+                             ::at]))
 
 (s/def ::faults (s/coll-of fault?))
 

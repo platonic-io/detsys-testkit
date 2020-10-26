@@ -50,10 +50,13 @@ func Register(topology map[string]lib.Reactor) {
 	lib.RegisterExecutor(executorUrl, components)
 }
 
-func Deploy(topology map[string]lib.Reactor, un lib.Unmarshaler, m lib.Marshaler) {
+func Deploy(srv *http.Server, topology map[string]lib.Reactor, un lib.Unmarshaler, m lib.Marshaler) {
 	log.Printf("Deploying topology: %+v\n", topology)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/event", handler(topology, un, m))
-	err := http.ListenAndServe(":3001", mux)
-	panic(err)
+	srv.Addr = ":3001"
+	srv.Handler = mux
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		panic(err)
+	}
 }

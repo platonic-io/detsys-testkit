@@ -1,7 +1,9 @@
 package sut
 
 import (
+	"context"
 	"log"
+	"net/http"
 	"testing"
 
 	"github.com/symbiont-io/detsys/executor"
@@ -10,8 +12,9 @@ import (
 
 func once(testId lib.TestId, topology map[string]lib.Reactor, t *testing.T) lib.RunId {
 	frontEnd := NewFrontEnd()
+	var srv http.Server
 	lib.Setup(func() {
-		executor.Deploy(topology,
+		executor.Deploy(&srv, topology,
 			frontEnd, // TODO(stevan): can we get rid of this?
 			frontEnd)
 	})
@@ -22,6 +25,9 @@ func once(testId lib.TestId, topology map[string]lib.Reactor, t *testing.T) lib.
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)
 	lib.Teardown()
+	if err := srv.Shutdown(context.Background()); err != nil {
+		panic(err)
+	}
 	result := lib.Check("list-append", testId, runId)
 	if !result {
 		t.Errorf("Test-run %d doesn't pass analysis", runId)
@@ -41,7 +47,7 @@ func TestDummy(t *testing.T) {
 	var runIds []lib.RunId
 	var faults []lib.Fault
 	failSpec := lib.FailSpec{
-		EFF:     0,
+		EFF:     10,
 		Crashes: 0,
 		EOT:     0,
 	}
@@ -51,6 +57,7 @@ func TestDummy(t *testing.T) {
 		runId := once(testId, topology, t)
 		runIds = append(runIds, runId)
 		faults = lib.Ldfi(testId, runIds, failSpec).Faults
+		log.Printf("Found potential faults: %#v\n", faults)
 		if len(faults) == 0 {
 			break
 		}
