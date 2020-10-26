@@ -71,16 +71,17 @@ func (f *Fault) UnmarshalJSON(bs []byte) error {
 }
 
 func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
-	var runIdsArg []string
-	for _, runId := range runIds {
-		runIdsArg = append(runIdsArg, strconv.Itoa(runId.RunId))
-	}
-	cmd := exec.Command("./ldfi.py",
+	args := []string{
 		"--json",
 		"--eff", strconv.Itoa(fail.EFF),
 		"--crashes", strconv.Itoa(fail.Crashes),
 		"--test-id", strconv.Itoa(testId.TestId),
-		"--run-ids", strings.Join(runIdsArg, " "))
+		"--run-ids",
+	}
+	for _, runId := range runIds {
+		args = append(args, strconv.Itoa(runId.RunId))
+	}
+	cmd := exec.Command("./ldfi.py", args...)
 
 	path, err := os.Getwd()
 	if err != nil {
