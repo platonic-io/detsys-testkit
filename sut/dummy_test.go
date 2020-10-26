@@ -10,8 +10,13 @@ import (
 	"github.com/symbiont-io/detsys/lib"
 )
 
-func once(testId lib.TestId, topology map[string]lib.Reactor, t *testing.T) (lib.RunId, bool) {
+func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	frontEnd := NewFrontEnd()
+	topology := map[string]lib.Reactor{
+		"frontend":  frontEnd,
+		"register1": NewRegister(),
+		"register2": NewRegister(),
+	}
 	var srv http.Server
 	lib.Setup(func() {
 		executor.Deploy(&srv, topology,
@@ -33,12 +38,6 @@ func once(testId lib.TestId, topology map[string]lib.Reactor, t *testing.T) (lib
 }
 
 func TestDummy(t *testing.T) {
-	frontEnd := NewFrontEnd()
-	topology := map[string]lib.Reactor{
-		"frontend":  frontEnd,
-		"register1": NewRegister(),
-		"register2": NewRegister(),
-	}
 	testId := lib.GenerateTest()
 
 	var runIds []lib.RunId
@@ -51,7 +50,7 @@ func TestDummy(t *testing.T) {
 	for {
 		lib.Reset()
 		lib.InjectFaults(lib.Faults{faults})
-		runId, result := once(testId, topology, t)
+		runId, result := once(testId, t)
 		if !result {
 			t.Errorf("Test-run %d doesn't pass analysis", runId)
 			t.Errorf("faults: %#v\n", faults)
