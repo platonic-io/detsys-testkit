@@ -65,8 +65,7 @@
   (insert-agenda! 1 1 "invoke" "get" "{\"id\": 1}" "client:0" "node1" "1970-01-01T00:00:01Z")
   (load-test! 1)
   (create-run! 0 123)
-  (append-history! 1 :invoke "a" "{\"id\": 1}" 0)
-  )
+  (append-history! 1 :invoke "a" "{\"id\": 1}" 0))
 
 (defn append-trace!
   [test-id run-id message args from to at]

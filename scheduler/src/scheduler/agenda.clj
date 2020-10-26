@@ -71,8 +71,7 @@
       first
       (dequeue)
       first
-      (dequeue)
-      ) )
+      (dequeue)))
 
 (comment
   (-> (empty-agenda)
@@ -87,5 +86,4 @@
                       :args {}
                       :to "t"
                       :from "client"
-                      :at (time/instant 1)}])
-      ) )
+                      :at (time/instant 1)}])))

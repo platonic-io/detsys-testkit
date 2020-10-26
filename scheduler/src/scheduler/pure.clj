@@ -127,8 +127,7 @@
     (apply hash-map
            (interleave components
                        (replicate (count components)
-                                  executor-id))))
-  )
+                                  executor-id)))))
 
 (defn create-run!
   [data {:keys [test-id]}]
@@ -149,7 +148,7 @@
       first
       (register-executor {:executor-id "http://localhost:3000" :components ["component0"]})
       first
-      (create-run! {:test-id 1})) )
+      (create-run! {:test-id 1})))
 
 (defn should-drop?
   [data entry]
@@ -190,7 +189,7 @@
          %
          {:kind "invoke", :event :a, :args {}, :at (time/instant 0), :from "f", :to "t"}))
       :agenda
-      agenda/dequeue) )
+      agenda/dequeue))
 
 (comment
   (-> (init-data)
@@ -201,7 +200,7 @@
       first
       (create-run! {:test-id 1})
       first
-      (execute)) )
+      (execute)))
 
 (s/def ::kind string?)
 (s/def ::event string?)
@@ -237,8 +236,7 @@
 
 (comment
   (partition-haskell odd? (range 10))
-  (partition-haskell odd? [])
-  )
+  (partition-haskell odd? []))
 
 (>defn parse-client-id
   [s]
@@ -246,7 +244,7 @@
   (->> s (re-matches #"^client:(\d+)$") second Integer/parseInt))
 
 (comment
-  (parse-client-id "client:0") )
+  (parse-client-id "client:0"))
 
 ;; TODO(stevan): move to other module, since isn't pure?
 ;; TODO(stevan): can we avoid using nilable here? Return `Error + Data *
@@ -258,56 +256,56 @@
         data' (-> data'
                   (assoc :clock timestamp)
                   (update :logical-clock inc))]
-    (if (or (error-state? (:state data'))
-            dropped?)
-      (do
-        (log/debug :not-processing {:state (:state data')
-                                    :dropped? dropped?})
-        [data' {:events []}])
-      ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
-      ;; so that we don't end up executing the same command twice.
-      (let [events (-> (client/post url {:body (json/write body)
-                                         :content-type "application/json; charset=utf-8"})
-                          :body
-                          json/read)]
+    (cond
+      (error-state? (:state data')) [data' nil]
+      dropped? (do
+                 (log/debug :dropped? dropped?)
+                 [data' {:events []}])
+      :else (do
+        ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
+        ;; so that we don't end up executing the same command twice.
+        (let [events (-> (client/post url {:body (json/write body)
+                                           :content-type "application/json; charset=utf-8"})
+                         :body
+                         json/read)]
 
-        ;; TODO(stevan): go into error state if response body is of form {"error": ...}
-        ;; (if (:error events) true false)
+          ;; TODO(stevan): go into error state if response body is of form {"error": ...}
+          ;; (if (:error events) true false)
 
-        ;; TODO(stevan): Change executor to return this json object.
-        (assert (= (keys events) '(:events))
-                (str "execute!: unexpected response body: " events))
-        (log/debug :events events)
+          ;; TODO(stevan): Change executor to return this json object.
+          (assert (= (keys events) '(:events))
+                  (str "execute!: unexpected response body: " events))
+          (log/debug :events events)
 
-        (assert (:run-id data) "execute!: no run-id set...")
-        (cond (re-matches #"^client:\d+$" (:from body))
-          (db/append-history! (:test-id data)
-                              (:run-id data)
-                              :invoke
-                              (:event body)
-                              (-> body :args json/write)
-                              (-> body :from parse-client-id))
-          (= (:kind body) "message")
-          (db/append-trace! (:test-id data)
-                            (:run-id data)
-                            (-> body :event)
-                            (-> body :args json/write)
-                            (-> body :from)
-                            (-> body :to)
-                            (-> data :logical-clock)))
+          (assert (:run-id data) "execute!: no run-id set...")
+          (cond (re-matches #"^client:\d+$" (:from body))
+                (db/append-history! (:test-id data)
+                                    (:run-id data)
+                                    :invoke
+                                    (:event body)
+                                    (-> body :args json/write)
+                                    (-> body :from parse-client-id))
+                (= (:kind body) "message")
+                (db/append-trace! (:test-id data)
+                                  (:run-id data)
+                                  (-> body :event)
+                                  (-> body :args json/write)
+                                  (-> body :from)
+                                  (-> body :to)
+                                  (-> data :logical-clock)))
 
-        (let [[client-responses internal]
-              (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
-                                 (:events events))]
-          ;; TODO(stevan): use seed to shuffle client-responses?
-          (doseq [client-response client-responses]
-            (db/append-history! (:test-id data)
-                                (:run-id data)
-                                :ok ;; TODO(stevan): have SUT decide this?
-                                (:event client-response)
-                                (-> client-response :args :response json/write)
-                                (-> client-response :to parse-client-id)))
-          [(assoc data' :clock timestamp) {:events internal}])))))
+          (let [[client-responses internal]
+                (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
+                                   (:events events))]
+            ;; TODO(stevan): use seed to shuffle client-responses?
+            (doseq [client-response client-responses]
+              (db/append-history! (:test-id data)
+                                  (:run-id data)
+                                  :ok ;; TODO(stevan): have SUT decide this?
+                                  (:event client-response)
+                                  (-> client-response :args :response json/write)
+                                  (-> client-response :to parse-client-id)))
+            [(assoc data' :clock timestamp) {:events internal}]))))))
 
 (comment
   (fake/with-fake-routes
@@ -328,8 +326,7 @@
         first
         (create-run! {:test-id 1})
         first
-        (execute!)))
-  )
+        (execute!))))
 
 (s/def ::timestamped-entries (s/coll-of agenda/entry?))
 
@@ -360,7 +357,7 @@
          :to "inc"
          :from "client"}]
        (time/instant (time/init-clock)))
-      second) )
+      second))
 
 (>defn enqueue-entry
   [data timestamped-entry]
@@ -388,9 +385,7 @@
       (execute)
       first
       (enqueue-entry {:kind "invoke", :event :a, :args {}, :at (time/instant 0)
-                      :from "f", :to "t"})
-      )
-  )
+                      :from "f", :to "t"})))
 
 (>defn enqueue-timestamped-entries
   [data {:keys [timestamped-entries]}]
@@ -415,27 +410,25 @@
 
 (comment
   (enqueue-timestamped-entries
- (-> (init-data)
-     (load-test! {:test-id 1})
-     first
-     (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
-     first)
- (-> (init-data)
-     (timestamp-entries
-      [{:kind "invoke"
-        :event "do-inc"
-        :args {}
-        :to "inc"
-        :from "client"}
-       {:kind "invoke"
-        :event "do-inc"
-        :args {}
-        :to "inc"
-        :from "client"}
-       ]
-      (time/instant (time/init-clock)))
-     second) )
-)
+   (-> (init-data)
+       (load-test! {:test-id 1})
+       first
+       (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
+       first)
+   (-> (init-data)
+       (timestamp-entries
+        [{:kind "invoke"
+          :event "do-inc"
+          :args {}
+          :to "inc"
+          :from "client"}
+         {:kind "invoke"
+          :event "do-inc"
+          :args {}
+          :to "inc"
+          :from "client"}]
+        (time/instant (time/init-clock)))
+       second)))
 
 (>defn step!
   [data]
@@ -468,7 +461,7 @@
         first
         step!
         first
-        step!)) )
+        step!)))
 
 (defn run!
   [data]
@@ -491,8 +484,7 @@
         first
         (create-run! {:test-id 1})
         first
-        run!))
-  )
+        run!)))
 
 (>defn status
   [data]
@@ -500,7 +492,7 @@
   [data data])
 
 (comment
-  (status (init-data)) )
+  (status (init-data)))
 
 (defn set-seed!
   [data {new-seed :new-seed}]
@@ -523,5 +515,4 @@
   [data faults]
   [::data (s/keys :req-un [::faults]) => (s/tuple ::data map?)]
   [(update data :faults (fn [fs] (apply conj fs (:faults faults))))
-   {:ok "added faults"}
-   ])
+   {:ok "added faults"}])

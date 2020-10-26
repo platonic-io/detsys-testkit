@@ -11,4 +11,4 @@
   (/ (reduce + 0 xs) (count xs)))
 
 (comment
-  (mean (repeatedly 10000 #(exponential 0.2))) )
+  (mean (repeatedly 10000 #(exponential 0.2))))

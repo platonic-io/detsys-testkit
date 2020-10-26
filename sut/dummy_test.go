@@ -54,11 +54,11 @@ func TestDummy(t *testing.T) {
 		runId, result := once(testId, topology, t)
 		if !result {
 			t.Errorf("Test-run %d doesn't pass analysis", runId)
+			t.Errorf("faults: %#v\n", faults)
 			break
 		}
 		runIds = append(runIds, runId)
 		faults = lib.Ldfi(testId, runIds, failSpec).Faults
-		log.Printf("Found potential faults: %#v\n", faults)
 		if len(faults) == 0 {
 			break
 		}

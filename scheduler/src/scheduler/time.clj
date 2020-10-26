@@ -19,5 +19,4 @@
 (def instant time/instant)
 
 (comment
-  (str (plus-millis (init-clock) 18.22324))
-  )
+  (str (plus-millis (init-clock) 18.22324)))

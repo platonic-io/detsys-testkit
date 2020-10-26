@@ -12,8 +12,7 @@
     :encoders {shams.priority_queue.PersistentPriorityQueue
                (fn [^shams.priority_queue.PersistentPriorityQueue pq
                     ^JsonGenerator jg]
-                 (.writeString jg (str (.seq pq))))}
-    }))
+                 (.writeString jg (str (.seq pq))))}}))
 
 (defn read
   [s]
