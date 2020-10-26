@@ -10,7 +10,7 @@ import (
 	"github.com/symbiont-io/detsys/lib"
 )
 
-func once(testId lib.TestId, topology map[string]lib.Reactor, t *testing.T) lib.RunId {
+func once(testId lib.TestId, topology map[string]lib.Reactor, t *testing.T) (lib.RunId, bool) {
 	frontEnd := NewFrontEnd()
 	var srv http.Server
 	lib.Setup(func() {
@@ -29,10 +29,7 @@ func once(testId lib.TestId, topology map[string]lib.Reactor, t *testing.T) lib.
 		panic(err)
 	}
 	result := lib.Check("list-append", testId, runId)
-	if !result {
-		t.Errorf("Test-run %d doesn't pass analysis", runId)
-	}
-	return runId
+	return runId, result
 }
 
 func TestDummy(t *testing.T) {
@@ -54,7 +51,11 @@ func TestDummy(t *testing.T) {
 	for {
 		lib.Reset()
 		lib.InjectFaults(lib.Faults{faults})
-		runId := once(testId, topology, t)
+		runId, result := once(testId, topology, t)
+		if !result {
+			t.Errorf("Test-run %d doesn't pass analysis", runId)
+			break
+		}
 		runIds = append(runIds, runId)
 		faults = lib.Ldfi(testId, runIds, failSpec).Faults
 		log.Printf("Found potential faults: %#v\n", faults)

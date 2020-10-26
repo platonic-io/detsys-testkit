@@ -263,7 +263,7 @@
       (do
         (log/debug :not-processing {:state (:state data')
                                     :dropped? dropped?})
-        [data' nil])
+        [data' {:events []}])
       ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
       ;; so that we don't end up executing the same command twice.
       (let [events (-> (client/post url {:body (json/write body)
