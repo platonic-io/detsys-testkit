@@ -33,11 +33,13 @@ func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	if err := srv.Shutdown(context.Background()); err != nil {
 		panic(err)
 	}
-	result := lib.Check("list-append", testId, runId)
+	model := "list-append"
+	log.Printf("Analysing model %s for %+v and %+v\n", model, testId, runId)
+	result := lib.Check(model, testId, runId)
 	return runId, result
 }
 
-func TestDummy(t *testing.T) {
+func TestRegister(t *testing.T) {
 	testId := lib.GenerateTest()
 
 	var runIds []lib.RunId
@@ -52,7 +54,7 @@ func TestDummy(t *testing.T) {
 		lib.InjectFaults(lib.Faults{faults})
 		runId, result := once(testId, t)
 		if !result {
-			t.Errorf("Test-run %d doesn't pass analysis", runId)
+			t.Errorf("%+v and %+v doesn't pass analysis", testId, runId)
 			t.Errorf("faults: %#v\n", faults)
 			break
 		}

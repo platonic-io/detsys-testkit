@@ -1,45 +1,13 @@
 (ns checker.db
   (:require
+   [clojure.java.shell :as shell]
    [checker.json :as json]
    [clojure.pprint :as pp]
    [clojure.set :as set]
-   [mount.core :as mount]
-   [next.jdbc :as jdbc]
-   [next.jdbc.sql :as sql]
-   [next.jdbc.result-set :as rs]))
+   [clojure.string :as str]
+   [clojure.edn :as edn]))
 
 (set! *warn-on-reflection* true)
-
-;; ---------------------------------------------------------------------
-
-;; The following stuff related to db connections comes from:
-;; https://grishaev.me/en/clj-sqlite/
-
-(def spec
-  {:dbname    "../db/detsys.sqlite3"
-   :classname "org.sqlite.JDBC"
-   :dbtype    "sqlite"})
-
-(declare db)
-
-(defn on-start
-  []
-  (let [conn (jdbc/get-connection spec)]
-    (assoc spec :connection conn)))
-
-(defn on-stop
-  []
-  (let [^java.sql.Connection conn (:connection db)]
-    (-> conn .close))
-  nil)
-
-(mount/defstate
-  ^{:on-reload :noop}
-  db
-  :start (on-start)
-  :stop (on-stop))
-
-(mount/start #'db)
 
 ;; ---------------------------------------------------------------------
 
@@ -95,17 +63,47 @@
     :invoke [(assoc state (:process op) (:args op))
              (conj acc (rewrite-op model op (op-value (:args op))))]
     :ok [state (conj acc (rewrite-op model op (or (op-value (:args op))
-                                            (op-value (get state (:process op))))))]
+                                                  (op-value (get state (:process op))))))]
     :fail (throw "implement later")
     :info (throw "implement later")))
 
+;; TODO(stevan): make this more robust...
+(def db "../../db/detsys.sqlite3")
+
+(defn query [& args]
+  (apply shell/sh "sqlite3" db args))
+
+(defn parse
+  [test-id run-id id kind event args process]
+  {:test-id (edn/read-string test-id)
+   :run-id  (edn/read-string run-id)
+   :id      (edn/read-string id)
+   :kind    kind
+   :event   event
+   :args    (json/read args)
+   :process (edn/read-string process)})
+
 (defn get-history
   [model test-id run-id]
-  (->> (sql/find-by-keys db :history {:test_id test-id, :run_id run-id}
-                         {:builder-fn rs/as-unqualified-lower-maps})
-       (mapv #(update % :args json/read))
-       (reduce (partial rewrite model) [{} []])
-       second))
+  (let [out (query (str "SELECT * FROM history where test_id = "
+                        test-id " AND run_id = " run-id))]
+    (when (not= 0 (:exit out))
+      (println out))
+    (try
+      (->> out
+           :out
+           str/split-lines
+           (map #(str/split % #"\|"))
+           (map (partial apply parse))
+           (reduce (partial rewrite model) [{} []])
+           second)
+      (catch Exception e
+        (println out)
+        (println model)
+        (println test-id)
+        (println run-id)
+        (println e)
+        (System/exit 1)))))
 
 (comment
-  (pp/pprint (get-history 1 0)) )
+  (pp/pprint (get-history :rw-register 6 0)) )

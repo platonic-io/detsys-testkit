@@ -8,9 +8,7 @@ import (
 )
 
 func Check(model string, testId TestId, runId RunId) bool {
-	fmt.Printf("Analysing model: `%s` for run %+v of test %+v\n", model, runId, testId)
-
-	cmd := exec.Command("clj", "-m", "checker.core", model,
+	cmd := exec.Command("./checker", model,
 		strconv.Itoa(testId.TestId),
 		strconv.Itoa(runId.RunId))
 
@@ -20,12 +18,12 @@ func Check(model string, testId TestId, runId RunId) bool {
 		return false
 	}
 
-	cmd.Dir = path + "/../checker/"
+	cmd.Dir = path + "/../checker/target/"
 
 	out, err := cmd.CombinedOutput()
 
 	if err != nil {
-		fmt.Printf("Error occured during analysis:\n%s\n", string(out))
+		fmt.Printf("Error occured during analysis:\n%s\n%s\n", err, string(out))
 		return false
 	}
 
