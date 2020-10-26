@@ -41,9 +41,9 @@ func TestDummy(t *testing.T) {
 	var runIds []lib.RunId
 	var faults []lib.Fault
 	failSpec := lib.FailSpec{
-		EFF:     10,
+		EFF:     0,
 		Crashes: 0,
-		EOT:     100,
+		EOT:     0,
 	}
 	for {
 		lib.Reset()

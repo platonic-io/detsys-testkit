@@ -89,10 +89,10 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 
 	cmd.Dir = path + "/../ldfi/"
 
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 
 	if err != nil {
-		log.Panic(err)
+		log.Panicf("%s\n%s\n", err, out)
 	}
 
 	var faults Faults

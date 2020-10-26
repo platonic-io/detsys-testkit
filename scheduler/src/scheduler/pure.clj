@@ -294,7 +294,7 @@
                             (-> body :args json/write)
                             (-> body :from)
                             (-> body :to)
-                            (-> body :at str)))
+                            (-> data :logical-clock)))
 
         (let [[client-responses internal]
               (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
@@ -519,7 +519,7 @@
 
 (>defn inject-faults!
   [data faults]
-  [::data (s/keys :req [::faults]) => (s/tuple ::data map?)]
+  [::data (s/keys :req-un [::faults]) => (s/tuple ::data map?)]
   [(update data :faults (fn [fs] (apply conj fs (:faults faults))))
    {:ok "added faults"}
    ])
