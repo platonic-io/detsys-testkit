@@ -6,6 +6,10 @@
   [x]
   (instance? java.time.Instant x))
 
+(defn before?
+  [this that]
+  (time/before? this that))
+
 (>defn init-clock
   []
   [=> instant?]

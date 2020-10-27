@@ -31,10 +31,10 @@
                                       "--no-fallback"
                                       "--report-unsupported-elements-at-runtime"
                                       "--initialize-at-run-time=sun.awt.X11GraphicsConfig"
-                                      "--initialize-at-run-time=sun.awt.dnd.SunDropTargetContextPeer$EventDispatcher"
                                       "--initialize-at-run-time=javax.imageio.ImageTypeSpecifier"
                                       "--initialize-at-run-time=sun.java2d.SurfaceData"
                                       "--initialize-at-run-time=com.sun.imageio.plugins.jpeg.JPEG$JCS"
+                                      "--initialize-at-run-time=sun.awt.dnd.SunDropTargetContextPeer$EventDispatcher"
                                       "-H:Name=target/checker"
                                       "-H:+ReportExceptionStackTraces"]
                           :jvm-opts ["-Djava.awt.headless=true"

@@ -11,7 +11,7 @@ import (
 
 func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	topology := map[string]lib.Reactor{
-		"frontend":  NewFrontEnd(),
+		"frontend":  NewFrontEnd2(),
 		"register1": NewRegister(),
 		"register2": NewRegister(),
 	}
@@ -21,6 +21,7 @@ func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 		executor.Deploy(&srv, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
+	lib.SetSeed(lib.Seed{4})
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	executor.Register(topology)
 	runId := lib.CreateRun(testId)
@@ -46,6 +47,7 @@ func TestRegister(t *testing.T) {
 	for {
 		lib.Reset()
 		lib.InjectFaults(lib.Faults{faults})
+		log.Printf("Injecting faults: %#v\n", faults)
 		runId, result := once(testId, t)
 		if !result {
 			t.Errorf("%+v and %+v doesn't pass analysis", testId, runId)

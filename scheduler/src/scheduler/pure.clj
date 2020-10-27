@@ -17,8 +17,15 @@
 (s/def ::total-executors     pos-int?)
 (s/def ::connected-executors nat-int?)
 (s/def ::topology            (s/map-of string? string?))
+(s/def ::seed                integer?)
 (s/def ::agenda              agenda/agenda?)
 (s/def ::clock               time/instant?)
+(s/def ::next-tick           time/instant?)
+(s/def ::tick-frequency      double?)
+(s/def ::client-requests     (s/coll-of agenda/entry?))
+(s/def ::client-timeout-ms   double?)
+(s/def ::client-delay-ms     double?)
+(s/def ::logical-clock       nat-int?)
 (s/def ::state               #{:started
                                :test-prepared
                                :executors-prepared
@@ -32,12 +39,20 @@
                                :error-cannot-enqueue-in-this-state
                                :error-cannot-execute-in-this-state})
 
+
 (s/def ::data (s/keys :req-un [::total-executors
                                ::connected-executors
                                ::topology
+                               ::seed
                                ::agenda
-                               ::clock
                                ::faults
+                               ::clock
+                               ::next-tick
+                               ::tick-frequency
+                               ::client-requests
+                               ::client-timeout-ms
+                               ::client-delay-ms
+                               ::logical-clock
                                ::state]))
 
 (s/def ::components (s/coll-of component-id? :kind vector?))
@@ -53,6 +68,11 @@
    :seed                1
    :faults              []
    :clock               (time/init-clock)
+   :next-tick           (time/init-clock)
+   :tick-frequency      50.0
+   :client-requests     []
+   :client-timeout-ms   (* 30.0 1000)
+   :client-delay-ms     (* 1.0 1000)
    :logical-clock       0
    :state               :started})
 
@@ -159,9 +179,25 @@
                           :at (:logical-clock data)))]
     ((set faults) entry')))
 
+(defn from-client?
+  [body]
+  (-> body :from (re-matches #"^client:\d+$")))
+
+(s/def ::url string?)
+(s/def ::timestamp time/instant?)
+(s/def ::body agenda/entry?)
+(s/def ::dropped boolean?)
+(s/def ::new-entries (s/coll-of agenda/entry?))
+
 ;; TODO(stevan): check if agenda is empty...
 (defn execute
   [data]
+  ;; [::data => (s/tuple ::data (s/nilable
+  ;;                             (s/keys :req-un [::url
+  ;;                                              ::timestamp
+  ;;                                              ::body
+  ;;                                              ::dropped?
+  ;;                                              ::new-entries])))]
   (if-not (contains? #{:ready :requesting} (:state data))
     [(assoc data :state :error-cannot-execute-in-this-state) nil]
     (let [[agenda' entry] (agenda/dequeue (:agenda data))
@@ -174,12 +210,19 @@
                                        :error-cannot-execute-in-this-state))))
           ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
           ;; this should be checked when commands are enqueued?
+          entry-from-client-with-current-request (some #(= (-> % :from)
+                                                           (-> entry :from))
+                                                       (:client-requests data'))
           executor-id (get (:topology data') (:to entry))]
       (assert executor-id (str "Target `" (:to entry) "' isn't in topology."))
       [data' {:url executor-id
               :timestamp (:at entry)
               :body entry
-              :dropped? (should-drop? data entry)}])))
+              :dropped? (or (should-drop? data entry)
+                            entry-from-client-with-current-request)
+              :new-entries (if entry-from-client-with-current-request
+                             [(update entry :at #(time/plus-millis % (:client-delay-ms data')))]
+                             [])}])))
 
 (comment
   (-> (init-data)
@@ -246,66 +289,137 @@
 (comment
   (parse-client-id "client:0"))
 
+(>defn add-client-request
+  [data body]
+  [::data agenda/entry? => ::data]
+  (update data :client-requests (fn [m] (conj m body))))
+
+(>defn remove-client-requests
+  [data clients]
+  [::data (s/coll-of string?) => ::data]
+  (let [clients-set (set clients)]
+    (update data :client-requests (fn [m]
+                                    (remove (fn [body]
+                                              (contains? clients-set (:from body))) m)))))
+
+(>defn expired-clients
+  [data current-time]
+  [::data time/instant? => (s/tuple ::data (s/coll-of agenda/entry?))]
+  (let [expired? (fn [body] (time/before? (time/plus-millis (:at body)
+                                                           (:client-timeout-ms data))
+                                         current-time))
+        [to-drop to-keep] (partition-haskell expired? (-> data :client-requests))]
+    [(assoc data :client-requests to-keep)
+     to-drop]))
+
 ;; TODO(stevan): move to other module, since isn't pure?
 ;; TODO(stevan): can we avoid using nilable here? Return `Error + Data *
 ;; Response` instead of always `Data * Response`? Or `Data * Error + Data * Response`?
 (>defn execute!
   [data]
   [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
-  (let [[data' {:keys [url timestamp body dropped?]}] (execute data)
+  (let [[data' {:keys [url timestamp body dropped? new-entries]}] (execute data)
         data' (-> data'
                   (assoc :clock timestamp)
                   (update :logical-clock inc))]
     (cond
-      (error-state? (:state data')) [data' nil]
-      dropped? (do
-                 (log/debug :dropped? dropped?)
-                 [data' {:events []}])
-      :else (do
-        ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
-        ;; so that we don't end up executing the same command twice.
-        (let [events (-> (client/post url {:body (json/write body)
-                                           :content-type "application/json; charset=utf-8"})
-                         :body
-                         json/read)]
+      (error-state? (:state data')) [data nil]
+      dropped? (let [[data' expired-clients] (expired-clients data' timestamp)
+                     _ (doseq [client expired-clients]
+                         (db/append-history! (:test-id data')
+                                             (:run-id data')
+                                             :info
+                                             (:event client)
+                                             (-> client :args json/write)
+                                             (-> client :from parse-client-id)))]
+                 (log/debug :dropped? dropped? :clock (:clock data') :new-entries new-entries)
+                 [data' {:events new-entries}])
+      :else (let [[data' expired-clients] (expired-clients data' timestamp)
+                  _ (doseq [client expired-clients]
+                      (db/append-history! (:test-id data')
+                                          (:run-id data')
+                                          :info
+                                          (:event client)
+                                          (-> client :args json/write)
+                                          (-> client :from parse-client-id)))
+                  ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
+                  ;; so that we don't end up executing the same command twice.
+                  events (-> (client/post url {:body (json/write body)
+                                               :content-type "application/json; charset=utf-8"})
+                             :body
+                             json/read)
+                  is-from-client? (re-matches #"^client:\d+$" (:from body))]
 
-          ;; TODO(stevan): go into error state if response body is of form {"error": ...}
-          ;; (if (:error events) true false)
+              ;; TODO(stevan): go into error state if response body is of form {"error": ...}
+              ;; (if (:error events) true false)
 
-          ;; TODO(stevan): Change executor to return this json object.
-          (assert (= (keys events) '(:events))
-                  (str "execute!: unexpected response body: " events))
-          (log/debug :events events)
+              ;; TODO(stevan): Change executor to return this json object.
+              (assert (= (keys events) '(:events))
+                      (str "execute!: unexpected response body: " events))
+              (log/debug :events events)
 
-          (assert (:run-id data) "execute!: no run-id set...")
-          (cond (re-matches #"^client:\d+$" (:from body))
-                (db/append-history! (:test-id data)
-                                    (:run-id data)
-                                    :invoke
-                                    (:event body)
-                                    (-> body :args json/write)
-                                    (-> body :from parse-client-id))
-                (= (:kind body) "message")
-                (db/append-trace! (:test-id data)
-                                  (:run-id data)
-                                  (-> body :event)
-                                  (-> body :args json/write)
-                                  (-> body :from)
-                                  (-> body :to)
-                                  (-> data :logical-clock)))
+              (assert (:run-id data) "execute!: no run-id set...")
+              (cond is-from-client?
+                    (db/append-history! (:test-id data)
+                                        (:run-id data)
+                                        :invoke
+                                        (:event body)
+                                        (-> body :args json/write)
+                                        (-> body :from parse-client-id))
+                    (= (:kind body) "message")
+                    (db/append-trace! (:test-id data)
+                                      (:run-id data)
+                                      (-> body :event)
+                                      (-> body :args json/write)
+                                      (-> body :from)
+                                      (-> body :to)
+                                      (-> data :logical-clock)))
 
-          (let [[client-responses internal]
-                (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
-                                   (:events events))]
-            ;; TODO(stevan): use seed to shuffle client-responses?
-            (doseq [client-response client-responses]
-              (db/append-history! (:test-id data)
-                                  (:run-id data)
-                                  :ok ;; TODO(stevan): have SUT decide this?
-                                  (:event client-response)
-                                  (-> client-response :args :response json/write)
-                                  (-> client-response :to parse-client-id)))
-            [(assoc data' :clock timestamp) {:events internal}]))))))
+              (let [[client-responses internal]
+                    (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
+                                       (:events events))
+                    data'' (cond-> data'
+                             is-from-client? (add-client-request body)
+                             true (remove-client-requests (map :to client-responses)))]
+                ;; TODO(stevan): use seed to shuffle client-responses?
+                (doseq [client-response client-responses]
+                  (db/append-history! (:test-id data)
+                                      (:run-id data)
+                                      :ok ;; TODO(stevan): have SUT decide this?
+                                      (:event client-response)
+                                      (-> client-response :args :response json/write)
+                                      (-> client-response :to parse-client-id)))
+                [data'' {:events internal}])))))
+
+(>defn tick!
+ [data]
+ [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
+ (assert (not (empty? (:agenda data))))
+ (let [all-events (transient [])]
+   (doseq [[component _url] (:topology data)]
+     (let [url "http://localhost:3001/api/v1/tick"
+           events (-> (client/put url {:body (json/write {:at (:next-tick data)
+                                                          :component component})
+                                       :content-type "application/json; charset=utf-8"})
+                      :body
+                      json/read)]
+       (assert (= (keys events) '(:events))
+               (str "execute!: unexpected response body: " events))
+       (doseq [event (:events events)]
+         (conj! all-events event))))
+   (let [events (persistent! all-events)]
+     [(-> data
+          (update :next-tick (fn [c] (time/plus-millis c (:tick-frequency data))))
+          (assoc :state :responding) ;; probably??
+          (assoc :clock (:next-tick data)))
+      {:events events}])))
+
+(>defn execute-or-tick!
+ [data entry]
+ [::data agenda/entry? => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
+ (if (time/before? (:next-tick data) (:at entry))
+   (tick! data)
+   (execute! data)))
 
 (comment
   (fake/with-fake-routes
@@ -434,7 +548,7 @@
   [data]
   [::data => (s/tuple ::data (s/keys :req-un [::queue-size ::entry ::events]))]
   (let [entry (-> data :agenda peek)
-        [data' events] (execute! data)
+        [data' events] (execute-or-tick! data entry)
         [data'' timestamped-entries] (timestamp-entries data'
                                                         (:events events)
                                                         (-> data' :clock))
@@ -494,8 +608,12 @@
 (comment
   (status (init-data)))
 
-(defn set-seed!
+
+(s/def ::new-seed integer?)
+
+(>defn set-seed!
   [data {new-seed :new-seed}]
+  [::data (s/keys :req-un [::new-seed]) => (s/tuple ::data integer?)]
   [(assoc data :seed new-seed) new-seed])
 
 (defn reset
