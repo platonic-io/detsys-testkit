@@ -46,14 +46,6 @@
 (alter-var-root #'clojure.tools.logging/log-capture! (constantly log-capture!))
 (alter-var-root #'clojure.tools.logging/log-uncapture! (constantly log-uncapture!))
 
-(defn read-history
-  "Reads a history of op maps from a file."
-  [filename]
-  (with-open [r (PushbackReader. (io/reader filename))]
-    (->> (repeatedly #(edn/read {:eof nil} r))
-         (take-while identity)
-         vec)))
-
 (defn checker-rw-register
   [test-id run-id]
   (-> (rw-register/check
