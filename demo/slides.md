@@ -56,7 +56,10 @@ System tests, in general, are:
   state, produce a set of messages;
 
 * All messages get set via the Scheduler which randomly, but deterministically
-  using a seed, determines the arrival order of the messages.
+  using a seed, determines the arrival order of the messages;
+
+* Timeouts and retires are handled by explicit tick messages, that are also
+  deterministically sent by the Scheduler.
 
 ---
 
@@ -142,9 +145,20 @@ System tests, in general, are:
 
 ---
 
+# Bonus: How does the Elle checker work?
+
+---
+
+# Bonus: How does lineage-driven fault injection work?
+
+
+---
+
 # Future work (next release)
 
 * Regression tests
 * Integration with Sean's work
+
+---
 
 # Questions?
