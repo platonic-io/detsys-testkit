@@ -34,7 +34,6 @@
                                       "--initialize-at-run-time=javax.imageio.ImageTypeSpecifier"
                                       "--initialize-at-run-time=sun.java2d.SurfaceData"
                                       "--initialize-at-run-time=com.sun.imageio.plugins.jpeg.JPEG$JCS"
-                                      "--initialize-at-run-time=com.sun.imageio.plugins.jpeg.JPEG$JCS"
                                       "-H:Name=target/checker"
                                       "-H:+ReportExceptionStackTraces"]
                           :jvm-opts ["-Djava.awt.headless=true"
