@@ -1,7 +1,6 @@
 package sut
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"testing"
@@ -29,10 +28,7 @@ func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	runId := lib.CreateRun(testId)
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)
-	lib.Teardown()
-	if err := srv.Shutdown(context.Background()); err != nil {
-		panic(err)
-	}
+	lib.Teardown(&srv)
 	model := "list-append"
 	log.Printf("Analysing model %s for %+v and %+v\n", model, testId, runId)
 	result := lib.Check(model, testId, runId)

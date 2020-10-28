@@ -1,8 +1,10 @@
 package lib
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -221,8 +223,11 @@ func Setup(f func()) {
 	go loop(f)
 }
 
-func Teardown() {
+func Teardown(srv *http.Server) {
 	close(quit)
+	if err := srv.Shutdown(context.Background()); err != nil {
+		panic(err)
+	}
 }
 
 func loop(f func()) {
