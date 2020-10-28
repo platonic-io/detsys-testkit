@@ -14,7 +14,7 @@ DB=${DB:-"detsys.sqlite3"}
 
 function display_help() {
     echo "$(basename $0) <command>"
-    echo "<command> ::= init | drop_tables"
+    echo "<command> ::= init | drop_tables | reset"
     exit 1
 }
 
