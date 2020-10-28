@@ -52,8 +52,9 @@ System tests, in general, are:
 
 # Solution for non-determinism
 
-* SUT is assumed to be written on reactor form, i.e. given a message and some
-  state, produce a set of messages;
+* SUT is assumed to be written on reactor form, i.e. given an incoming message
+  and some internal state, update the state and produce a set of outgoing
+  messages;
 
 * All messages get set via the Scheduler which randomly, but deterministically
   using a seed, determines the arrival order of the messages;
