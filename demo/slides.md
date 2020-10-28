@@ -21,8 +21,8 @@ System tests, in general, are:
 
 * Ephemeral
 
-  - Can't test performance over time;
-  - Can't test upgrades, or backup and restore;
+  - Hard to test performance over time;
+  - Hard to test upgrades, or backup and restore;
 
 * Language specific
 
