@@ -106,4 +106,4 @@
         (System/exit 1)))))
 
 (comment
-  (pp/pprint (get-history :rw-register 6 0)) )
+  (pp/pprint (get-history :rw-register 6 0)))
