@@ -1,10 +1,29 @@
 ---
-title: Fast and deterministic system tests
+title: Towards fast and deterministic system tests
 author: Stevan Andjelkovic and Daniel Gustafsson
-date: 28th Oct, 2020
+date: 29th Oct, 2020
 header-includes:
   - \definecolor{links}{HTML}{2A1B81}
   - \hypersetup{colorlinks,linkcolor=,urlcolor=links}
+---
+
+# Overview
+
+* Explain the problem with current approaches to system tests;
+
+* Give a high-level overview of test library we've started to develop that
+  addresses said problems;
+
+* Demo;
+
+* More detailed explaination of how the test library works, in particular:
+  - Lineage-driven fault injection;
+  - Elle checker.
+
+* Next steps and future work;
+
+* Summary.
+
 ---
 
 # The problem
@@ -39,7 +58,7 @@ System tests, in general, are:
 * Executor: receives messages from the scheduler and executes them against the
   system under test (SUT);
 
-* Injector: figures out which faults to inject;
+* Ldfi: figures out which faults to inject;
 
 * Checker: analyses the output of a test case execution and determines if it was
   a success or not.
@@ -82,7 +101,7 @@ System tests, in general, are:
 # Solution to ill-specified guarantees
 
 * The Checker component uses Jepsen's state-of-the-art Elle checker, which
-  provides precise models and guarentees;
+  provides precise models and guarantees;
 
 * Lineage-driven fault injection is used to give guarantees in the presence
   faults;
@@ -146,20 +165,88 @@ System tests, in general, are:
 
 ---
 
-# Bonus: How does the Elle checker work?
+# How does the Elle checker work?
 
 ---
 
-# Bonus: How does lineage-driven fault injection work?
+# How does lineage-driven fault injection work?
 
+```
+
+traces := []
+faults := {}
+result := ""
+
+forever:
+    inject(faults)
+    success, trace := run(test)
+    if !success:
+        result := failure(faults)
+        break
+    traces.append(trace)
+    faults := ldfi(traces)
+    if faults is empty:
+        result := "success"
+        break
+```
 
 ---
 
-# Future work (next release)
+# How does lineage-driven fault injection work? \#2
+
+```
+
+fun ldfi(list of trace) -> set of fault
+
+type trace =
+  { message: Msg,
+    from: Node,
+    to: Node,
+    at: Time }
+
+type fault
+  = omission { from: Node, to: Node, at: Time}
+  | ...
+```
+
+---
+
+# How does lineage-driven fault injection work? \#3
+
+* `fun ldfi(traces: list of trace) -> set of fault`
+
+* Each trace contains possible messages to drop,
+  so create a big OR-expression like:
+
+```
+      omission(msg0...) OR omission(msg1...) OR ...
+```
+
+* For each run/trace we gather more constrints, so
+  create a big AND-expression between traces, e.g.:
+
+```
+      (omission(msg0...) OR omission(msg1...) OR ...)
+      AND
+      (NOT(omission(msg0...)) OR omission(msg1...) OR ...)
+      AND ...
+```
+
+* Solve this formula using SAT solver
+  - Minimal solution = smallest set of faults that can potentially break the test
+  - No solutions = no set of faults can break the test
+
+---
+
+# Next steps and future work
 
 * Regression tests
 * Integration with Sean's work
 
 ---
 
-# Questions?
+# Summary
+
+---
+
+# Questions or comments?
