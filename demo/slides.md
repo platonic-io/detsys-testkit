@@ -1,10 +1,12 @@
 ---
 title: Towards fast and deterministic system tests
-author: Stevan Andjelkovic and Daniel Gustafsson
+author: Stevan Andjelkovic \and Daniel Gustafsson
 date: 29th Oct, 2020
 header-includes:
   - \definecolor{links}{HTML}{2A1B81}
   - \hypersetup{colorlinks,linkcolor=,urlcolor=links}
+nocite: |
+  @elle, @ldfi
 ---
 
 # Overview
@@ -216,14 +218,14 @@ type fault
 * `fun ldfi(traces: list of trace) -> set of fault`
 
 * Each trace contains possible messages to drop,
-  so create a big OR-expression like:
+  so create a big OR-formula like:
 
 ```
       omission(msg0...) OR omission(msg1...) OR ...
 ```
 
 * For each run/trace we gather more constrints, so
-  create a big AND-expression between traces, e.g.:
+  create a big AND-formula between traces, e.g.:
 
 ```
       (omission(msg0...) OR omission(msg1...) OR ...)
@@ -232,7 +234,7 @@ type fault
       AND ...
 ```
 
-* Solve this formula using SAT solver
+* Solve this CNF-formula using SAT solver
   - Minimal solution = smallest set of faults that can potentially break the test
   - No solutions = no set of faults can break the test
 
@@ -250,3 +252,7 @@ type fault
 ---
 
 # Questions or comments?
+
+---
+
+# References
