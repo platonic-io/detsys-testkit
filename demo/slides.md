@@ -155,13 +155,13 @@ System tests, in general, are:
 
 ---
 
-# Example: shared register v2, success
+# Demo: shared register v2, success
 
 ![register_v2_success](image/register_v2_working.png)\
 
 ---
 
-# Example: shared register v2, counterexample
+# Demo: shared register v2, counterexample
 
 ![register_v2](image/register_counterexample2.png)\
 
@@ -236,7 +236,7 @@ type fault
 
 * Solve this CNF-formula using SAT solver
   - Minimal solution = smallest set of faults that can potentially break the test
-  - No solutions = no set of faults can break the test
+  - No solutions = no set of faults can break this particular test case
 
 ---
 
