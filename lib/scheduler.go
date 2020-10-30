@@ -2,7 +2,6 @@ package lib
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 )
 
@@ -49,7 +48,7 @@ func InjectFaults(faults Faults) {
 		Kind string `json:"kind"`
 		From string `json:"from"`
 		To   string `json:"to"`
-		At   int `json:"at"` // should be time.Time?
+		At   int    `json:"at"` // should be time.Time?
 	}
 	schedulerFaults := make([]SchedulerFault, 0, len(faults.Faults))
 	for _, fault := range faults.Faults {
@@ -57,17 +56,17 @@ func InjectFaults(faults Faults) {
 		switch ev := fault.Args.(type) {
 		case Omission:
 			//assert fault.Kind?
-			schedulerFault.Kind = fault.Kind;
-			schedulerFault.From = ev.From;
-			schedulerFault.To = ev.To;
-			schedulerFault.At = ev.At; // convert?
+			schedulerFault.Kind = fault.Kind
+			schedulerFault.From = ev.From
+			schedulerFault.To = ev.To
+			schedulerFault.At = ev.At // convert?
 		default:
-			log.Panic("Unknown fault type: %#v\n", fault)
+			panic(fmt.Sprintf("Unknown fault type: %#v\n", fault))
 		}
 		schedulerFaults = append(schedulerFaults, schedulerFault)
 
 	}
-	Post("inject-faults!", struct{
+	Post("inject-faults!", struct {
 		Faults []SchedulerFault `json:"faults"`
 	}{schedulerFaults})
 }
@@ -84,13 +83,4 @@ func Status() map[string]interface{} {
 
 func Reset() {
 	Post("reset", struct{}{})
-}
-
-func Execute(testId TestId) RunId {
-	qs := LoadTest(testId)
-	fmt.Printf("Loaded test of size: %d\n", qs.QueueSize)
-	runId := CreateRun(testId)
-	Run()
-	fmt.Printf("Finished run id: %d\n", runId.RunId)
-	return runId
 }
