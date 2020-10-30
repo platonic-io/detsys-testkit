@@ -2,6 +2,7 @@
  :deps {org.clojure/clojure           {:mvn/version "1.10.2-alpha2"}
         elle/elle                     {:mvn/version "0.1.2"}
         spootnik/unilog               {:mvn/version "0.7.25"}
+        me.raynes/fs                  {:mvn/version "1.4.6"}
         metosin/jsonista              {:mvn/version "0.2.7"}}
  :aliases {:test {:extra-paths ["test"]
                   :extra-deps {com.cognitect/test-runner
