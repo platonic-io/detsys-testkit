@@ -3,7 +3,6 @@ package executor
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 
 	"github.com/symbiont-io/detsys/lib"
@@ -32,7 +31,6 @@ func handler(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc 
 		if err := lib.UnmarshalScheduledEvent(m, body, &sev); err != nil {
 			panic(err)
 		}
-		log.Printf("Handling event: %+v", sev)
 		oevs := topology[sev.To].Receive(sev.At, sev.From, sev.Event)
 		bs := lib.MarshalUnscheduledEvents(m, sev.To, oevs)
 		fmt.Fprint(w, string(bs))
@@ -51,7 +49,6 @@ func Register(topology map[string]lib.Reactor) {
 }
 
 func Deploy(srv *http.Server, topology map[string]lib.Reactor, m lib.Marshaler) {
-	log.Printf("Deploying topology: %+v\n", topology)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/event", handler(topology, m))
 	srv.Addr = ":3001"
@@ -59,4 +56,13 @@ func Deploy(srv *http.Server, topology map[string]lib.Reactor, m lib.Marshaler) 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		panic(err)
 	}
+}
+
+func DeployRaw(srv *http.Server, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {
+	topologyCooked := make(map[string]lib.Reactor, len(topology))
+	for name, component := range topology {
+		topologyCooked[name] = constructor(component)
+	}
+
+	Deploy(srv, topologyCooked, m)
 }
