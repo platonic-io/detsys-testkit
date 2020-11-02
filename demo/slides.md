@@ -42,8 +42,11 @@ System tests, in general, are:
 
 * Ephemeral
 
-  - Hard to test performance over time;
-  - Hard to test upgrades, or backup and restore;
+  - Hard to test performance over time, i.e. test one month worth of traffic,
+    check if everything is fine, then test another month's worth of traffic the
+    day after;
+
+  - Hard to test upgrades, or backup and restore from crashes, etc;
 
 * Language specific
 
