@@ -13,7 +13,7 @@ func jsonError(s string) string {
 	return fmt.Sprintf("{\"error\":\"%s\"}", s)
 }
 
-func handler(topology map[string]lib.Reactor, un lib.Unmarshaler, m lib.Marshaler) http.HandlerFunc {
+func handler(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "POST" {
@@ -29,7 +29,7 @@ func handler(topology map[string]lib.Reactor, un lib.Unmarshaler, m lib.Marshale
 			panic(err)
 		}
 		var sev lib.ScheduledEvent
-		if err := lib.UnmarshalScheduledEvent(un, body, &sev); err != nil {
+		if err := lib.UnmarshalScheduledEvent(m, body, &sev); err != nil {
 			panic(err)
 		}
 		log.Printf("Handling event: %+v", sev)
@@ -50,10 +50,10 @@ func Register(topology map[string]lib.Reactor) {
 	lib.RegisterExecutor(executorUrl, components)
 }
 
-func Deploy(srv *http.Server, topology map[string]lib.Reactor, un lib.Unmarshaler, m lib.Marshaler) {
+func Deploy(srv *http.Server, topology map[string]lib.Reactor, m lib.Marshaler) {
 	log.Printf("Deploying topology: %+v\n", topology)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/event", handler(topology, un, m))
+	mux.HandleFunc("/api/v1/event", handler(topology, m))
 	srv.Addr = ":3001"
 	srv.Handler = mux
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {

@@ -28,10 +28,9 @@ type Value struct {
 
 func (_ Value) Response() {}
 
-type Un struct{}
-type M struct{}
+type Marshaler struct{}
 
-func (un *Un) ParseRequest(req string, input json.RawMessage, output *lib.Request) error {
+func (_ *Marshaler) UnmarshalRequest(req string, input json.RawMessage, output *lib.Request) error {
 	switch req {
 	case "write":
 		var w Write
@@ -43,26 +42,15 @@ func (un *Un) ParseRequest(req string, input json.RawMessage, output *lib.Reques
 	return nil
 }
 
-func (un *Un) ParseMessage(msg string, input json.RawMessage, output *lib.Message) error {
+func (_ *Marshaler) UnmarshalMessage(msg string, input json.RawMessage, output *lib.Message) error {
 	switch msg {
 	case "ack":
 		*output = Ack{}
 	}
 	return nil
-	//var resp Response
-	//switch msg {
-	//case "Value":
-	//var v Value
-	//if err := json.Unmarshal(raw, &v); err != nil {
-	//panic(err)
-	//}
-	//resp = v
-	//}
-	//return resp
 }
 
-// Shouldn't part of this code be in the lib?
-func (m *M) MarshalEvent(args lib.Args) string {
+func (_ *Marshaler) MarshalEvent(args lib.Args) string {
 	switch event := args.(type) {
 	case *lib.ClientResponse:
 		return "write"
@@ -73,8 +61,7 @@ func (m *M) MarshalEvent(args lib.Args) string {
 	}
 }
 
-var un lib.Unmarshaler = &Un{}
-var m lib.Marshaler = &M{}
+var m lib.Marshaler = &Marshaler{}
 
 // ---------------------------------------------------------------------
 // Ensure that incoming events can be unmarshaled.
@@ -119,7 +106,7 @@ func TestSchedulerContractClientRequest(t *testing.T) {
                           "args": {"value": 1}}`)
 
 	var got lib.ScheduledEvent
-	if err := lib.UnmarshalScheduledEvent(un, input, &got); err != nil {
+	if err := lib.UnmarshalScheduledEvent(m, input, &got); err != nil {
 		t.Error(err)
 		return
 	}
@@ -144,7 +131,7 @@ func TestSchedulerContractInternalMessage(t *testing.T) {
 	                  "args": {}}`)
 
 	var got lib.ScheduledEvent
-	if err := lib.UnmarshalScheduledEvent(un, input, &got); err != nil {
+	if err := lib.UnmarshalScheduledEvent(m, input, &got); err != nil {
 		t.Error(err)
 		return
 	}

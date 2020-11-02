@@ -10,17 +10,15 @@ import (
 )
 
 func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
-	frontEnd := NewFrontEnd()
 	topology := map[string]lib.Reactor{
-		"frontend":  frontEnd,
+		"frontend":  NewFrontEnd(),
 		"register1": NewRegister(),
 		"register2": NewRegister(),
 	}
+	marshaler := NewMarshaler()
 	var srv http.Server
 	lib.Setup(func() {
-		executor.Deploy(&srv, topology,
-			frontEnd, // TODO(stevan): can we get rid of this?
-			frontEnd)
+		executor.Deploy(&srv, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
