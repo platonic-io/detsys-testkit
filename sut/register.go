@@ -132,7 +132,7 @@ func NewFrontEnd() *FrontEnd {
 const register1 string = "register1"
 const register2 string = "register2"
 
-func Translate(req lib.Request, sessionId SessionId) *lib.InternalMessage {
+func translate(req lib.Request, sessionId SessionId) *lib.InternalMessage {
 	return &lib.InternalMessage{
 		Message: InternalRequest{
 			Id:      sessionId,
@@ -181,11 +181,11 @@ func (fe *FrontEnd) ReceiveClient(at time.Time, from string, event lib.ClientReq
 	oevs = []lib.OutEvent{
 		{
 			To:   register1,
-			Args: Translate(event.Request, sessionId),
+			Args: translate(event.Request, sessionId),
 		},
 		{
 			To:   register2,
-			Args: Translate(event.Request, sessionId),
+			Args: translate(event.Request, sessionId),
 		},
 	}
 
