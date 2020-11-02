@@ -132,15 +132,6 @@ func NewFrontEnd() *FrontEnd {
 const register1 string = "register1"
 const register2 string = "register2"
 
-func translate(req lib.Request, sessionId SessionId) *lib.InternalMessage {
-	return &lib.InternalMessage{
-		Message: InternalRequest{
-			Id:      sessionId,
-			Request: req,
-		},
-	}
-}
-
 func (fe *FrontEnd) NewSessionId(clientId uint64) (SessionId, error) {
 	var sessionId SessionId
 	_, ok := fe.inFlight[clientId]
@@ -166,6 +157,15 @@ func (fe *FrontEnd) RemoveSession(sessionId SessionId) (uint64, bool) {
 	}
 
 	return clientId, ok
+}
+
+func translate(req lib.Request, sessionId SessionId) *lib.InternalMessage {
+	return &lib.InternalMessage{
+		Message: InternalRequest{
+			Id:      sessionId,
+			Request: req,
+		},
+	}
 }
 
 func (fe *FrontEnd) ReceiveClient(at time.Time, from string, event lib.ClientRequest) []lib.OutEvent {
