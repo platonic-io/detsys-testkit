@@ -12,7 +12,7 @@ func jsonError(s string) string {
 	return fmt.Sprintf("{\"error\":\"%s\"}", s)
 }
 
-func handler(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
+func handler(testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "POST" {
@@ -31,7 +31,11 @@ func handler(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc 
 		if err := lib.UnmarshalScheduledEvent(m, body, &sev); err != nil {
 			panic(err)
 		}
+		heapBefore := dumpHeapJson(topology[sev.To])
 		oevs := topology[sev.To].Receive(sev.At, sev.From, sev.Event)
+		heapAfter := dumpHeapJson(topology[sev.To])
+		heapDiff := jsonDiff(heapBefore, heapAfter)
+		appendHeapTrace(testId, sev.To, heapDiff, sev.At)
 		bs := lib.MarshalUnscheduledEvents(m, sev.To, oevs)
 		fmt.Fprint(w, string(bs))
 	}
@@ -48,9 +52,9 @@ func Register(topology map[string]lib.Reactor) {
 	lib.RegisterExecutor(executorUrl, components)
 }
 
-func Deploy(srv *http.Server, topology map[string]lib.Reactor, m lib.Marshaler) {
+func Deploy(srv *http.Server, testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/event", handler(topology, m))
+	mux.HandleFunc("/api/v1/event", handler(testId, topology, m))
 	srv.Addr = ":3001"
 	srv.Handler = mux
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
@@ -58,11 +62,11 @@ func Deploy(srv *http.Server, topology map[string]lib.Reactor, m lib.Marshaler) 
 	}
 }
 
-func DeployRaw(srv *http.Server, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {
+func DeployRaw(srv *http.Server, testId lib.TestId, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {
 	topologyCooked := make(map[string]lib.Reactor, len(topology))
 	for name, component := range topology {
 		topologyCooked[name] = constructor(component)
 	}
 
-	Deploy(srv, topologyCooked, m)
+	Deploy(srv, testId, topologyCooked, m)
 }

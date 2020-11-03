@@ -3,22 +3,27 @@ package sut
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/symbiont-io/detsys/lib"
 )
 
 type SessionId struct {
-	Id int
+	Id int `json:"id"`
+}
+
+func (sid SessionId) MarshalText() ([]byte, error) {
+	return []byte(strconv.Itoa(sid.Id)), nil
 }
 
 type Register struct {
-	value []int
+	Value []int `json:"value"`
 }
 
 func NewRegister() *Register {
 	return &Register{
-		value: []int{},
+		Value: []int{},
 	}
 }
 
@@ -71,12 +76,12 @@ func (r *Register) Receive(_ time.Time, from string, event lib.InEvent) []lib.Ou
 						To: from,
 						Args: &lib.InternalMessage{InternalResponse{
 							Id:       msg.Id,
-							Response: Value{r.value},
+							Response: Value{r.Value},
 						}},
 					},
 				}
 			case Write:
-				r.value = append(r.value, imsg.Value)
+				r.Value = append(r.Value, imsg.Value)
 				oevs = []lib.OutEvent{
 					{
 						To: from,
@@ -120,9 +125,9 @@ var _ lib.Reactor = &Register{}
 // ---------------------------------------------------------------------
 
 type FrontEnd struct {
-	inFlight                map[uint64]SessionId
-	inFlightSessionToClient map[SessionId]uint64
-	nextSessionId           int
+	InFlight                map[uint64]SessionId `json:"inFlight"`
+	InFlightSessionToClient map[SessionId]uint64 `json:"inFlightSessionToClient"`
+	NextSessionId           int                  `json:"nextSessionId"`
 }
 
 func NewFrontEnd() *FrontEnd {
@@ -134,26 +139,26 @@ const register2 string = "register2"
 
 func (fe *FrontEnd) NewSessionId(clientId uint64) (SessionId, error) {
 	var sessionId SessionId
-	_, ok := fe.inFlight[clientId]
+	_, ok := fe.InFlight[clientId]
 
 	if ok {
 		return sessionId, fmt.Errorf("Client %d already has a session", clientId)
 	}
 
-	sessionId.Id = fe.nextSessionId
-	fe.nextSessionId++
-	fe.inFlight[clientId] = sessionId
-	fe.inFlightSessionToClient[sessionId] = clientId
+	sessionId.Id = fe.NextSessionId
+	fe.NextSessionId++
+	fe.InFlight[clientId] = sessionId
+	fe.InFlightSessionToClient[sessionId] = clientId
 
 	return sessionId, nil
 }
 
 func (fe *FrontEnd) RemoveSession(sessionId SessionId) (uint64, bool) {
-	clientId, ok := fe.inFlightSessionToClient[sessionId]
+	clientId, ok := fe.InFlightSessionToClient[sessionId]
 
 	if ok {
-		delete(fe.inFlight, clientId)
-		delete(fe.inFlightSessionToClient, sessionId)
+		delete(fe.InFlight, clientId)
+		delete(fe.InFlightSessionToClient, sessionId)
 	}
 
 	return clientId, ok

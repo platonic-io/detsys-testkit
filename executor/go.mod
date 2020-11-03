@@ -1,10 +1,12 @@
 module github.com/symbiont-io/detsys/executor
 
-go 1.13
+go 1.15
 
 replace github.com/symbiont-io/detsys/lib => ../lib
 
 require (
-	github.com/golang/gddo v0.0.0-20200831202555-721e228c7686
+	github.com/evanphx/json-patch v4.9.0+incompatible
+	github.com/evanphx/json-patch/v5 v5.1.0 // indirect
+	github.com/mattn/go-sqlite3 v1.14.4
 	github.com/symbiont-io/detsys/lib v0.0.0-00010101000000-000000000000
 )

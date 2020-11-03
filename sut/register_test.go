@@ -18,7 +18,7 @@ func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	marshaler := NewMarshaler()
 	var srv http.Server
 	lib.Setup(func() {
-		executor.Deploy(&srv, topology, marshaler)
+		executor.Deploy(&srv, testId, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
