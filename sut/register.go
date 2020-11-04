@@ -9,59 +9,17 @@ import (
 	"github.com/symbiont-io/detsys/lib"
 )
 
-type SessionId struct {
-	Id int `json:"id"`
-}
-
-func (sid SessionId) MarshalText() ([]byte, error) {
-	return []byte(strconv.Itoa(sid.Id)), nil
-}
-
 type Register struct {
-	Value []int `json:"value"`
+	value    []int
+	sessions []SessionId
 }
 
 func NewRegister() *Register {
 	return &Register{
-		Value: []int{},
+		value:    []int{},
+		sessions: []SessionId{},
 	}
 }
-
-type Read struct {
-}
-
-func (_ Read) Request() {}
-
-type Write struct {
-	Value int `json:"value"`
-}
-
-func (_ Write) Request() {}
-
-type Value struct {
-	Value []int `json:"value"`
-}
-
-func (_ Value) Response() {}
-
-type Ack struct {
-}
-
-func (_ Ack) Response() {}
-
-type InternalRequest struct {
-	Id      SessionId   `json:"id"`
-	Request lib.Request `json:"request"`
-}
-
-func (_ InternalRequest) Message() {}
-
-type InternalResponse struct {
-	Id       SessionId    `json:"id"`
-	Response lib.Response `json:"response"`
-}
-
-func (_ InternalResponse) Message() {}
 
 func (r *Register) Receive(_ time.Time, from string, event lib.InEvent) []lib.OutEvent {
 	var oevs []lib.OutEvent
@@ -81,7 +39,17 @@ func (r *Register) Receive(_ time.Time, from string, event lib.InEvent) []lib.Ou
 					},
 				}
 			case Write:
-				r.Value = append(r.Value, imsg.Value)
+				found := false
+				for _, session := range r.sessions {
+					if session == msg.Id {
+						found = true
+						break
+					}
+				}
+				if !found {
+					r.value = append(r.value, imsg.Value)
+					r.sessions = append(r.sessions, msg.Id)
+				}
 				oevs = []lib.OutEvent{
 					{
 						To: from,
@@ -124,20 +92,44 @@ var _ lib.Reactor = &Register{}
 
 // ---------------------------------------------------------------------
 
+type SessionIdWithContext struct {
+	Id SessionId
+	At time.Time
+}
+
+type OnGoingInternalRequest struct {
+	Register      string
+	Request       lib.Request
+	SessionId     SessionId
+	At            time.Time
+	NumberOfTries int
+}
+
 type FrontEnd struct {
-	InFlight                map[uint64]SessionId `json:"inFlight"`
-	InFlightSessionToClient map[SessionId]uint64 `json:"inFlightSessionToClient"`
-	NextSessionId           int                  `json:"nextSessionId"`
+	InFlight                map[uint64]SessionIdWithContext `json:"inFlight"`
+	InFlightSessionToClient map[SessionId]uint64            `json:"inFlightSessionToClient"`
+	NextSessionId           int                             `json:"nextSessionId"`
+}
+
+type FrontEnd2 struct {
+	onGoing          []OnGoingInternalRequest
+	inFlight         map[SessionId]uint64
+	receivedResponse map[SessionId]bool
+	nextSessionId    int
 }
 
 func NewFrontEnd() *FrontEnd {
-	return &FrontEnd{map[uint64]SessionId{}, map[SessionId]uint64{}, 0}
+	return &FrontEnd{map[uint64]SessionIdWithContext{}, map[SessionId]uint64{}, 0}
+}
+
+func NewFrontEnd2() *FrontEnd2 {
+	return &FrontEnd2{[]OnGoingInternalRequest{}, map[SessionId]uint64{}, map[SessionId]bool{}, 0}
 }
 
 const register1 string = "register1"
 const register2 string = "register2"
 
-func (fe *FrontEnd) NewSessionId(clientId uint64) (SessionId, error) {
+func (fe *FrontEnd) NewSessionId(clientId uint64, at time.Time) (SessionId, error) {
 	var sessionId SessionId
 	_, ok := fe.InFlight[clientId]
 
@@ -147,7 +139,10 @@ func (fe *FrontEnd) NewSessionId(clientId uint64) (SessionId, error) {
 
 	sessionId.Id = fe.NextSessionId
 	fe.NextSessionId++
-	fe.InFlight[clientId] = sessionId
+	fe.InFlight[clientId] = SessionIdWithContext{
+		Id: sessionId,
+		At: at,
+	}
 	fe.InFlightSessionToClient[sessionId] = clientId
 
 	return sessionId, nil
@@ -175,7 +170,7 @@ func translate(req lib.Request, sessionId SessionId) *lib.InternalMessage {
 
 func (fe *FrontEnd) ReceiveClient(at time.Time, from string, event lib.ClientRequest) []lib.OutEvent {
 	var oevs []lib.OutEvent
-	sessionId, err := fe.NewSessionId(event.Id)
+	sessionId, err := fe.NewSessionId(event.Id, at)
 
 	if err != nil {
 		// maybe not fatal?
@@ -194,9 +189,44 @@ func (fe *FrontEnd) ReceiveClient(at time.Time, from string, event lib.ClientReq
 		},
 	}
 
-	// we should also add ack if this was a write, and if so also add an ack..
-
 	return oevs
+}
+
+func (fe *FrontEnd2) ReceiveClient(at time.Time, from string, event lib.ClientRequest) []lib.OutEvent {
+	sessionId := SessionId{fe.nextSessionId}
+	fe.nextSessionId++
+
+	fe.inFlight[sessionId] = event.Id
+	fe.receivedResponse[sessionId] = false
+
+	args := translate(event.Request, sessionId)
+
+	fe.onGoing = append(fe.onGoing, OnGoingInternalRequest{
+		Register:      register1,
+		Request:       event.Request,
+		SessionId:     sessionId,
+		At:            at,
+		NumberOfTries: 0,
+	})
+	fe.onGoing = append(fe.onGoing, OnGoingInternalRequest{
+		Register:      register2,
+		Request:       event.Request,
+		SessionId:     sessionId,
+		At:            at,
+		NumberOfTries: 0,
+	})
+
+	return []lib.OutEvent{
+		{
+			To:   register1,
+			Args: args,
+		},
+		{
+			To:   register2,
+			Args: args,
+		},
+	}
+
 }
 
 func (fe *FrontEnd) Receive(at time.Time, from string, event lib.InEvent) []lib.OutEvent {
@@ -230,6 +260,88 @@ func (fe *FrontEnd) Receive(at time.Time, from string, event lib.InEvent) []lib.
 	return oevs
 }
 
-func (_ *FrontEnd) Tick(_ time.Time) []lib.OutEvent {
+func (fe *FrontEnd2) RemoveSession(sessionId SessionId) (uint64, bool) {
+	clientId, ok := fe.inFlight[sessionId]
+
+	if ok {
+		delete(fe.inFlight, sessionId)
+
+		temp := fe.onGoing[:0]
+
+		for _, on := range fe.onGoing {
+			if on.SessionId != sessionId {
+				temp = append(temp, on)
+			}
+		}
+
+		fe.onGoing = temp
+	}
+
+	return clientId, ok
+}
+
+func (fe *FrontEnd2) Receive(at time.Time, from string, event lib.InEvent) []lib.OutEvent {
+	var oevs []lib.OutEvent
+	switch ev := event.(type) {
+	case *lib.ClientRequest:
+		oevs = fe.ReceiveClient(at, from, *ev)
+	case *lib.InternalMessage:
+		switch msg := (*ev).Message.(type) {
+		case InternalResponse:
+			if new, ok := fe.receivedResponse[msg.Id]; !new || !ok {
+				fe.receivedResponse[msg.Id] = true
+				break
+			}
+			clientId, ok := fe.RemoveSession(msg.Id)
+			if ok {
+				oevs = []lib.OutEvent{
+					{
+						To: fmt.Sprintf("client:%d", clientId),
+						Args: &lib.ClientResponse{
+							Id:       clientId,
+							Response: msg.Response,
+						},
+					},
+				}
+			}
+		default:
+			log.Fatalf("Received unknown message: %+v\n", msg)
+			return nil
+		}
+	default:
+		log.Fatalf("Received unknown message: %#v\n", ev)
+		return nil
+	}
+	return oevs
+}
+
+func (fe *FrontEnd) Tick(at time.Time) []lib.OutEvent {
+	duration, _ := time.ParseDuration("25s")
+	for key, value := range fe.inFlight {
+		if at.After(value.At.Add(duration)) {
+			delete(fe.inFlight, key)
+		}
+	}
+
 	return nil
+}
+
+func (fe *FrontEnd2) Tick(at time.Time) []lib.OutEvent {
+	resend := []lib.OutEvent{}
+
+	resendTimer, _ := time.ParseDuration("5s")
+
+	for _, on := range fe.onGoing {
+		if at.After(on.At.Add(resendTimer)) {
+			on.At = at
+			on.NumberOfTries++
+			event := lib.OutEvent{
+				To:   on.Register,
+				Args: translate(on.Request, on.SessionId),
+			}
+			resend = append(resend, event)
+		}
+	}
+
+	return resend
 }
