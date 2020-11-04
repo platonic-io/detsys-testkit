@@ -68,10 +68,10 @@
   (append-history! 1 :invoke "a" "{\"id\": 1}" 0))
 
 (defn append-trace!
-  [test-id run-id message args from to at]
+  [test-id run-id message args from to sent-logical-time at]
   (jdbc/execute-one!
    ds
-   ["INSERT INTO network_trace (test_id, run_id, id, message, args, `from`, `to`, at)
-     VALUES (?, ?, (SELECT IFNULL(MAX(id), -1) + 1 FROM network_trace WHERE test_id = ? AND run_id = ?), ?, ?, ?, ?, ?)"
-    test-id run-id test-id run-id message args from to at]
+   ["INSERT INTO network_trace (test_id, run_id, id, message, args, `from`, `to`, sent_logical_time, at)
+     VALUES (?, ?, (SELECT IFNULL(MAX(id), -1) + 1 FROM network_trace WHERE test_id = ? AND run_id = ?), ?, ?, ?, ?, ?, ?)"
+    test-id run-id test-id run-id message args from to sent-logical-time at]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))

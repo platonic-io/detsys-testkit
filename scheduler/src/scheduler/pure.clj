@@ -349,6 +349,8 @@
                                                :content-type "application/json; charset=utf-8"})
                              :body
                              json/read)
+                  sent-logical-time (or (-> body :sent-logical-time)
+                                        0) ;; TODO(danne) figure out when client requests were made
                   is-from-client? (re-matches #"^client:\d+$" (:from body))]
 
               ;; TODO(stevan): go into error state if response body is of form {"error": ...}
@@ -360,33 +362,26 @@
               (log/debug :events events)
 
               (assert (:run-id data) "execute!: no run-id set...")
-              (cond is-from-client?
-                    (do
-                      (db/append-history! (:test-id data)
-                                          (:run-id data)
-                                          :invoke
-                                          (:event body)
-                                          (-> body :args json/write)
-                                          (-> body :from parse-client-id))
-                      (db/append-trace! (:test-id data)
-                                        (:run-id data)
-                                        (-> body :event)
-                                        (-> body :args json/write)
-                                        (-> body :from)
-                                        (-> body :to)
-                                        (-> data :logical-clock)))
-                    (= (:kind body) "message")
-                    (db/append-trace! (:test-id data)
-                                      (:run-id data)
-                                      (-> body :event)
-                                      (-> body :args json/write)
-                                      (-> body :from)
-                                      (-> body :to)
-                                      (-> data :logical-clock)))
+              (db/append-trace! (:test-id data)
+                                (:run-id data)
+                                (-> body :event)
+                                (-> body :args json/write)
+                                (-> body :from)
+                                (-> body :to)
+                                sent-logical-time
+                                (-> data :logical-clock))
+              (when is-from-client?
+                (db/append-history! (:test-id data)
+                                    (:run-id data)
+                                    :invoke
+                                    (:event body)
+                                    (-> body :args json/write)
+                                    (-> body :from parse-client-id)))
 
               (let [[client-responses internal]
                     (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
                                        (:events events))
+                    internal (mapv #(assoc % :sent-logical-time (:logical-clock data)) internal)
                     data'' (cond-> data'
                              is-from-client? (add-client-request body)
                              true (remove-client-requests (map :to client-responses)))]
@@ -397,7 +392,15 @@
                                       :ok ;; TODO(stevan): have SUT decide this?
                                       (:event client-response)
                                       (-> client-response :args :response json/write)
-                                      (-> client-response :to parse-client-id)))
+                                      (-> client-response :to parse-client-id))
+                  (db/append-trace! (:test-id data)
+                                    (:run-id data)
+                                    (-> client-response :event)
+                                    (-> client-response :args json/write)
+                                    (-> client-response :from)
+                                    (-> client-response :to)
+                                    (-> data :logical-clock) ;; should we advance clock for client responses?
+                                    (-> data :logical-clock)))
                 [data'' {:events internal}])))))
 
 (>defn tick!
@@ -417,9 +420,12 @@
                (str "execute!: unexpected response body: " events))
        (doseq [event (:events events)]
          (conj! all-events event))))
-   (let [events (persistent! all-events)]
+   (let [events (->> all-events
+                     persistent!
+                     (mapv #(assoc % :sent-logical-time (:logical-clock data))))]
      [(-> data
           (update :next-tick (fn [c] (time/plus-millis c (:tick-frequency data))))
+          (update :logical-clock (if (empty? events) identity inc))
           (assoc :state :responding) ;; probably??
           (assoc :clock (:next-tick data)))
       {:events events}])))
@@ -463,9 +469,7 @@
           timestamps (->> (gen/vec #(random/exponential 20) (count entries))
                           (mapv #(time/plus-millis timestamp %)))]
       [(assoc data :seed new-seed)
-       {:timestamped-entries
-        (mapv (fn [entry timestamp]
-                (merge entry {:at timestamp})) entries timestamps)}])))
+       {:timestamped-entries (mapv (fn [entry timestamp] (merge entry {:at timestamp})) entries timestamps)}])))
 
 (comment
   (-> (init-data)
@@ -480,7 +484,8 @@
          :args {}
          :to "inc"
          :from "client"}]
-       (time/instant (time/init-clock)))
+       (time/instant (time/init-clock))
+       0)
       second))
 
 (>defn enqueue-entry
@@ -551,7 +556,8 @@
           :args {}
           :to "inc"
           :from "client"}]
-        (time/instant (time/init-clock)))
+        (time/instant (time/init-clock))
+        0)
        second)))
 
 (>defn step!
