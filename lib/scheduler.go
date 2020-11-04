@@ -22,6 +22,10 @@ type QueueSize struct {
 	QueueSize int `json:"queue-size"`
 }
 
+type Seed struct {
+	Seed int `json:"new-seed"`
+}
+
 func LoadTest(testId TestId) QueueSize {
 	var queueSize QueueSize
 	PostParse("load-test!", testId, &queueSize)
@@ -36,6 +40,10 @@ func RegisterExecutor(executorId string, components []string) {
 		ExecutorId: executorId,
 		Components: components,
 	})
+}
+
+func SetSeed(seed Seed) {
+	Post("set-seed!", seed)
 }
 
 func CreateRun(testId TestId) RunId {
