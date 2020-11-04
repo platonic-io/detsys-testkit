@@ -190,14 +190,14 @@
 (s/def ::new-entries (s/coll-of agenda/entry?))
 
 ;; TODO(stevan): check if agenda is empty...
-(defn execute
+(>defn fetch-new-entry!
   [data]
-  ;; [::data => (s/tuple ::data (s/nilable
-  ;;                             (s/keys :req-un [::url
-  ;;                                              ::timestamp
-  ;;                                              ::body
-  ;;                                              ::dropped?
-  ;;                                              ::new-entries])))]
+  [::data => (s/tuple ::data (s/nilable
+                              (s/keys :req-un [::url
+                                               ::timestamp
+                                               ::body
+                                               ::dropped?
+                                               ::new-entries])))]
   (if-not (contains? #{:ready :requesting} (:state data))
     [(assoc data :state :error-cannot-execute-in-this-state) nil]
     (let [[agenda' entry] (agenda/dequeue (:agenda data))
@@ -243,7 +243,7 @@
       first
       (create-run! {:test-id 1})
       first
-      (execute)))
+      (fetch-new-entry!)))
 
 (s/def ::kind string?)
 (s/def ::event string?)
@@ -318,7 +318,7 @@
 (>defn execute!
   [data]
   [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
-  (let [[data' {:keys [url timestamp body dropped? new-entries]}] (execute data)
+  (let [[data' {:keys [url timestamp body dropped? new-entries]}] (fetch-new-entry! data)
         data' (-> data'
                   (assoc :clock timestamp)
                   (update :logical-clock inc))]
@@ -344,7 +344,8 @@
                                           (-> client :from parse-client-id)))
                   ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
                   ;; so that we don't end up executing the same command twice.
-                  events (-> (client/post url {:body (json/write body)
+                  events (-> (client/post (str url "event")
+                                          {:body (json/write body)
                                                :content-type "application/json; charset=utf-8"})
                              :body
                              json/read)
@@ -396,11 +397,12 @@
  [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
  (assert (not (empty? (:agenda data))))
  (let [all-events (transient [])]
-   (doseq [[component _url] (:topology data)]
-     (let [url "http://localhost:3001/api/v1/tick"
-           events (-> (client/put url {:body (json/write {:at (:next-tick data)
-                                                          :component component})
-                                       :content-type "application/json; charset=utf-8"})
+   (doseq [[component url] (:topology data)]
+     (let [url (str url "tick")
+           events (-> (client/put url
+                                  {:body (json/write {:at (:next-tick data)
+                                                      :component component})
+                                   :content-type "application/json; charset=utf-8"})
                       :body
                       json/read)]
        (assert (= (keys events) '(:events))
@@ -496,7 +498,7 @@
       first
       (create-run! {:test-id 1})
       first
-      (execute)
+      (fetch-new-entry!)
       first
       (enqueue-entry {:kind "invoke", :event :a, :args {}, :at (time/instant 0)
                       :from "f", :to "t"})))

@@ -71,7 +71,7 @@ func handleTick(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFu
 
 func Register(topology map[string]lib.Reactor) {
 	// TODO(stevan): Make executorUrl part of topology.
-	const executorUrl string = "http://localhost:3001/api/v1/event"
+	const executorUrl string = "http://localhost:3001/api/v1/"
 
 	components := make([]string, 0, len(topology))
 	for component, _ := range topology {
