@@ -56,6 +56,39 @@ func helper(query string) []HeapDiff {
 	return diffs
 }
 
+type NetworkEvent struct {
+	Message string
+	Args    []byte
+	From    string
+	To      string
+	At      int
+}
+
+func getNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
+	db, err := sql.Open("sqlite3", "../db/detsys.sqlite3")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	rows, err := db.Query("SELECT message,args,`from`,`to`,at FROM network_trace WHERE test_id = ? AND run_id = ?", testId.TestId, runId.RunId)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+
+	var trace []NetworkEvent
+	for rows.Next() {
+		event := NetworkEvent{}
+		err := rows.Scan(&event.Message, &event.Args, &event.From, &event.To, &event.At)
+		if err != nil {
+			panic(err)
+		}
+		trace = append(trace, event)
+	}
+	return trace
+}
+
 func applyDiff(original, diff []byte) []byte {
 	new, err := jsonpatch.MergePatch(original, diff)
 	if err != nil {
@@ -78,6 +111,7 @@ func prettyJson(input []byte) []byte {
 func traceHeap(testId lib.TestId, runId lib.RunId) {
 	inits := getInitHeap(testId)
 	changes := getHeapTrace(testId, runId)
+	network := getNetworkTrace(testId, runId)
 
 	heap := make(map[string][]byte)
 
@@ -85,8 +119,9 @@ func traceHeap(testId lib.TestId, runId lib.RunId) {
 		heap[init.Component] = []byte(init.Diff)
 		fmt.Printf("%s %s\n", init.Component, prettyJson(heap[init.Component]))
 	}
-	for _, change := range changes {
-		fmt.Printf("===\n")
+	for i, change := range changes {
+		fmt.Printf("\n%s === %s %s ===> %s\n\n", network[i].From, network[i].Message,
+			string(network[i].Args), network[i].To)
 		new := applyDiff(heap[change.Component], change.Diff)
 		heap[change.Component] = []byte(new)
 		fmt.Printf("%s %s\n", change.Component, prettyJson(new))
