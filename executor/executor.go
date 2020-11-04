@@ -84,7 +84,7 @@ func Register(topology map[string]lib.Reactor) {
 
 func Deploy(srv *http.Server, testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/event", handler(topology, m))
+	mux.HandleFunc("/api/v1/event", handler(testId, topology, m))
 	mux.HandleFunc("/api/v1/tick", handleTick(topology, m))
 	srv.Addr = ":3001"
 	srv.Handler = mux

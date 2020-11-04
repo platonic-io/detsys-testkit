@@ -3,21 +3,20 @@ package sut
 import (
 	"fmt"
 	"log"
-	"strconv"
 	"time"
 
 	"github.com/symbiont-io/detsys/lib"
 )
 
 type Register struct {
-	value    []int
-	sessions []SessionId
+	Value    []int
+	Sessions []SessionId
 }
 
 func NewRegister() *Register {
 	return &Register{
-		value:    []int{},
-		sessions: []SessionId{},
+		Value:    []int{},
+		Sessions: []SessionId{},
 	}
 }
 
@@ -40,15 +39,15 @@ func (r *Register) Receive(_ time.Time, from string, event lib.InEvent) []lib.Ou
 				}
 			case Write:
 				found := false
-				for _, session := range r.sessions {
+				for _, session := range r.Sessions {
 					if session == msg.Id {
 						found = true
 						break
 					}
 				}
 				if !found {
-					r.value = append(r.value, imsg.Value)
-					r.sessions = append(r.sessions, msg.Id)
+					r.Value = append(r.Value, imsg.Value)
+					r.Sessions = append(r.Sessions, msg.Id)
 				}
 				oevs = []lib.OutEvent{
 					{
@@ -317,9 +316,9 @@ func (fe *FrontEnd2) Receive(at time.Time, from string, event lib.InEvent) []lib
 
 func (fe *FrontEnd) Tick(at time.Time) []lib.OutEvent {
 	duration, _ := time.ParseDuration("25s")
-	for key, value := range fe.inFlight {
+	for key, value := range fe.InFlight {
 		if at.After(value.At.Add(duration)) {
-			delete(fe.inFlight, key)
+			delete(fe.InFlight, key)
 		}
 	}
 
