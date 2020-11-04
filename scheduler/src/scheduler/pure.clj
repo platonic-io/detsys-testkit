@@ -279,12 +279,20 @@
 
           (assert (:run-id data) "execute!: no run-id set...")
           (cond (re-matches #"^client:\d+$" (:from body))
-                (db/append-history! (:test-id data)
+                (do
+                  (db/append-history! (:test-id data)
+                                      (:run-id data)
+                                      :invoke
+                                      (:event body)
+                                      (-> body :args json/write)
+                                      (-> body :from parse-client-id))
+                  (db/append-trace! (:test-id data)
                                     (:run-id data)
-                                    :invoke
-                                    (:event body)
+                                    (-> body :event)
                                     (-> body :args json/write)
-                                    (-> body :from parse-client-id))
+                                    (-> body :from)
+                                    (-> body :to)
+                                    (-> data :logical-clock)))
                 (= (:kind body) "message")
                 (db/append-trace! (:test-id data)
                                   (:run-id data)
