@@ -31,7 +31,8 @@ crashes = set()
 
 for run_id in args.run_ids:
     sums = []
-    c.execute("select * from network_trace where test_id = (?) and run_id = (?)",
+    c.execute("""select * from network_trace
+                 where test_id = (?) and run_id = (?) and not (`from` like 'client:%')""",
               (args.test_id, run_id))
     for r in c:
         if r['at'] < args.eff:
