@@ -6,6 +6,7 @@ import (
 	"github.com/nsf/jsondiff"
 	"github.com/rivo/tview"
 	"os"
+	"sort"
 	"strconv"
 
 	"github.com/symbiont-io/detsys/debugger"
@@ -35,7 +36,13 @@ func selectionHandler(heaps []map[string][]byte, row, column int) {
 	textView.Clear()
 	opts := jsondiff.DefaultConsoleOptions()
 	opts.Indent = "  "
-	for component, old := range heaps[max(0, row)] {
+	components := make([]string, 0, len(heaps))
+	for component := range heaps[0] {
+		components = append(components, component)
+	}
+	sort.Strings(components)
+	for _, component := range components {
+		old := heaps[max(0, row)][component]
 		new := heaps[min(max(0, row)+1, len(heaps)-1)][component]
 		_, strdiff := jsondiff.Compare(old, new, &opts)
 		fmt.Fprintf(w, "%s ", component)
