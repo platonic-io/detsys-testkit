@@ -33,6 +33,7 @@ for run_id in args.run_ids:
     sums = []
     c.execute("""select * from network_trace
                  where test_id = (?) and run_id = (?)
+                   and dropped = 0
                    and not (`from` like 'client:%')
                    and not (`to` like 'client:%')""",
               (args.test_id, run_id))

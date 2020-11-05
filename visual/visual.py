@@ -9,6 +9,7 @@ parser.add_argument('--test-id', metavar='TEST_ID', type=int, required=True,
                     help='the test id')
 parser.add_argument('--run-id', metavar='RUN_ID', type=int, required=True,
                     help='the run id')
+parser.add_argument('--colours', action='store_true')
 args = parser.parse_args()
 
 db = os.path.abspath(os.path.join(os.path.dirname(__file__),
@@ -29,7 +30,7 @@ for r in c:
     nodes.add(r['from'])
     nodes.add(r['to'])
 
-    edges.add((r['from'], r['to'], r['sent_logical_time'], r['at']))
+    edges.add((r['from'], r['to'], r['sent_logical_time'], r['at'], r['dropped'], r['message']))
     max_time = max(max_time, r['at'])
 nodes = list(nodes)
 
@@ -50,8 +51,8 @@ for id, n in enumerate(nodes):
 dot +="  }\n"
 
 def occurs(n, i):
-    for fro, to, st, at in edges:
-        if (fro == n and st == i) or (to == n and i == at):
+    for fro, to, st, at, d, _ in edges:
+        if (fro == n and st == i) or (to == n and i == at and d == 0):
             return True
     return False
 
@@ -61,10 +62,16 @@ for id, n in enumerate(nodes):
         dot += "  node_%s_%d[label=\"%s\", group=\"%s\"%s];\n" % (id, i, i, n, extra)
     dot += "\n"
 
-for f,t,st,at in edges:
+colours = ['aquamarine4', 'burlywood4', 'cadetblue4', 'cornflowerblue', 'darksalmon',
+           'deepskyblue3', 'firebrick2', 'goldenrod3', 'hotpink3', 'lawngreen',
+           'olivedrab3', 'orchid3', 'plum3', 'sandybrown']
+
+for f,t,st,at,d,m in edges:
     fi = nodes.index(f)
     ti = nodes.index(t)
-    dot += "  node_%s_%d -> node_%s_%d [constraint=false];\n" % (fi, st, ti, at)
+    colour = colours[hash("%s -> %s" % (f,t)) % len(colours)] if args.colours else "black"
+    extra = ", color=\"%s\"" % colour if d == 0 else ", arrowhead=\"box\", style=\"dashed\", color=\"gray75\""
+    dot += "  node_%s_%d -> node_%s_%d [constraint=false,label=\"%s\"%s];\n" % (fi, st, ti, at, m, extra)
 
 dot += "\n"
 for id, n in enumerate(nodes):
