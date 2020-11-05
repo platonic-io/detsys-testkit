@@ -32,7 +32,7 @@ var textView = tview.NewTextView().
 	SetDynamicColors(true)
 var w = tview.ANSIWriter(textView)
 
-func selectionHandler(heaps []map[string][]byte, row, column int) {
+func selectionHandler(heaps []map[string][]byte, row int) {
 	textView.Clear()
 	opts := jsondiff.DefaultConsoleOptions()
 	opts.Indent = "  "
@@ -42,8 +42,8 @@ func selectionHandler(heaps []map[string][]byte, row, column int) {
 	}
 	sort.Strings(components)
 	for _, component := range components {
-		old := heaps[max(0, row)][component]
-		new := heaps[min(max(0, row)+1, len(heaps)-1)][component]
+		old := heaps[row][component]
+		new := heaps[min(row+1, len(heaps)-1)][component]
 		_, strdiff := jsondiff.Compare(old, new, &opts)
 		fmt.Fprintf(w, "%s ", component)
 		fmt.Fprintf(w, "%s\n\n", strdiff)
@@ -66,11 +66,7 @@ func main() {
 
 	textView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("System state")
 
-	for component, state := range heaps[0] {
-		fmt.Fprintf(w, "%s ", component)
-		fmt.Fprintf(w, "%s\n\n", string(debugger.PrettyJson(state)))
-
-	}
+	selectionHandler(heaps, 0)
 
 	table := tview.NewTable().
 		SetFixed(1, 1)
@@ -103,7 +99,7 @@ func main() {
 	}
 	table.SetBorder(true).SetTitle("Events")
 	table.SetSelectable(true, false)
-	table.SetSelectionChangedFunc(func(row, column int) { selectionHandler(heaps, row, column) })
+	table.SetSelectionChangedFunc(func(row, column int) { selectionHandler(heaps, max(0, row)) })
 
 	layout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
