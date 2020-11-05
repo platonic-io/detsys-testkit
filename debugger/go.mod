@@ -9,5 +9,6 @@ require (
 	github.com/evanphx/json-patch/v5 v5.1.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.4
 	github.com/nsf/jsondiff v0.0.0-20200515183724-f29ed568f4ce
+	github.com/rivo/tview v0.0.0-20201018122409-d551c850a743
 	github.com/symbiont-io/detsys/lib v0.0.0-00010101000000-000000000000
 )
