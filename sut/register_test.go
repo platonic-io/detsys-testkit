@@ -11,7 +11,7 @@ import (
 
 func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	topology := map[string]lib.Reactor{
-		"frontend":  NewFrontEnd2(),
+		"frontend":  NewFrontEnd(),
 		"register1": NewRegister(),
 		"register2": NewRegister(),
 	}

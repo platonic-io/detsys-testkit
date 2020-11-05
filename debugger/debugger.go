@@ -7,6 +7,7 @@ import (
 	"fmt"
 	jsonpatch "github.com/evanphx/json-patch"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/nsf/jsondiff"
 
 	"github.com/symbiont-io/detsys/lib"
 )
@@ -122,8 +123,12 @@ func traceHeap(testId lib.TestId, runId lib.RunId) {
 	for i, change := range changes {
 		fmt.Printf("\n%s === %s %s ===> %s\n\n", network[i].From, network[i].Message,
 			string(network[i].Args), network[i].To)
-		new := applyDiff(heap[change.Component], change.Diff)
+		old := heap[change.Component]
+		new := applyDiff(old, change.Diff)
 		heap[change.Component] = []byte(new)
-		fmt.Printf("%s %s\n", change.Component, prettyJson(new))
+		opts := jsondiff.DefaultConsoleOptions()
+		opts.Indent = "  "
+		_, strdiff := jsondiff.Compare(old, new, &opts)
+		fmt.Printf("%s %s\n", change.Component, strdiff)
 	}
 }
