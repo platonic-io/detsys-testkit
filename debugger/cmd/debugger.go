@@ -42,8 +42,8 @@ func selectionHandler(heaps []map[string][]byte, row int) {
 	}
 	sort.Strings(components)
 	for _, component := range components {
-		old := heaps[row][component]
-		new := heaps[min(row+1, len(heaps)-1)][component]
+		old := heaps[row-1][component]
+		new := heaps[min(row, len(heaps))][component]
 		_, strdiff := jsondiff.Compare(old, new, &opts)
 		fmt.Fprintf(w, "%s ", component)
 		fmt.Fprintf(w, "%s\n\n", strdiff)
@@ -66,7 +66,7 @@ func main() {
 
 	textView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("System state")
 
-	selectionHandler(heaps, 0)
+	selectionHandler(heaps, 1)
 
 	table := tview.NewTable().
 		SetFixed(1, 1)
@@ -99,7 +99,7 @@ func main() {
 	}
 	table.SetBorder(true).SetTitle("Events")
 	table.SetSelectable(true, false)
-	table.SetSelectionChangedFunc(func(row, column int) { selectionHandler(heaps, max(0, row)) })
+	table.SetSelectionChangedFunc(func(row, column int) { selectionHandler(heaps, max(1, row)) })
 
 	layout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
