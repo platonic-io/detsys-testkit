@@ -202,7 +202,9 @@
     [(assoc data :state :error-cannot-execute-in-this-state) nil]
     (let [[agenda' entry] (agenda/dequeue (:agenda data))
           data' (-> data
-                    (assoc :agenda agenda')
+                    (assoc :agenda agenda'
+                           :clock (:at entry))
+                    (update :logical-clock inc)
                     (update :state (fn [state]
                                      (case state
                                        :ready :responding
@@ -218,7 +220,7 @@
       [data' {:url executor-id
               :timestamp (:at entry)
               :body entry
-              :dropped? (or (should-drop? data entry)
+              :dropped? (or (should-drop? data' entry)
                             entry-from-client-with-current-request)
               :new-entries (if entry-from-client-with-current-request
                              [(update entry :at #(time/plus-millis % (:client-delay-ms data')))]
@@ -321,10 +323,7 @@
   (let [[data' {:keys [url timestamp body dropped? new-entries]}] (fetch-new-entry! data)]
     (if (error-state? (:state data'))
       [data nil]
-      (let [data' (-> data'
-                      (assoc :clock timestamp)
-                      (update :logical-clock inc))
-            [data' expired-clients] (expired-clients data' timestamp)
+      (let [[data' expired-clients] (expired-clients data' timestamp)
             _ (doseq [client expired-clients]
                 (db/append-history! (:test-id data')
                                     (:run-id data')
@@ -332,9 +331,10 @@
                                     (:event client)
                                     (-> client :args json/write)
                                     (-> client :from parse-client-id)))
+            is-from-client? (re-matches #"^client:\d+$" (:from body))
             sent-logical-time (or (-> body :sent-logical-time)
-                                  0) ;; TODO(danne) figure out when client requests were made
-            ]
+                                  (and is-from-client?
+                                       (:logical-clock data)))]
         (db/append-trace! (:test-id data)
                           (:run-id data)
                           (-> body :event)
@@ -342,7 +342,7 @@
                           (-> body :from)
                           (-> body :to)
                           sent-logical-time
-                          (-> data :logical-clock)
+                          (-> data' :logical-clock)
                           dropped?)
         (if dropped?
           (do
@@ -354,8 +354,7 @@
                                        {:body (json/write body)
                                         :content-type "application/json; charset=utf-8"})
                           :body
-                          json/read)
-               is-from-client? (re-matches #"^client:\d+$" (:from body))]
+                          json/read)]
             ;; TODO(stevan): go into error state if response body is of form {"error": ...}
             ;; (if (:error events) true false)
 
@@ -376,9 +375,10 @@
             (let [[client-responses internal]
                   (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
                                      (:events events))
-                  internal (mapv #(assoc % :sent-logical-time (:logical-clock data)) internal)
+                  internal (mapv #(assoc % :sent-logical-time (:logical-clock data')) internal)
                   data'' (cond-> data'
                            is-from-client? (add-client-request body)
+                           (not (empty? client-responses)) (update :logical-clock inc)
                            true (remove-client-requests (map :to client-responses)))]
               ;; TODO(stevan): use seed to shuffle client-responses?
               (doseq [client-response client-responses]
@@ -394,8 +394,8 @@
                                   (-> client-response :args json/write)
                                   (-> client-response :from)
                                   (-> client-response :to)
-                                  (-> data :logical-clock) ;; should we advance clock for client responses?
-                                  (-> data :logical-clock)
+                                  (-> data' :logical-clock) ;; should we advance clock for client responses?
+                                  (-> data'' :logical-clock)
                                   false))
               [data'' {:events internal}])))))))
 
@@ -418,7 +418,7 @@
          (conj! all-events event))))
    (let [events (->> all-events
                      persistent!
-                     (mapv #(assoc % :sent-logical-time (:logical-clock data))))]
+                     (mapv #(assoc % :sent-logical-time (-> data :logical-clock inc))))]
      [(-> data
           (update :next-tick (fn [c] (time/plus-millis c (:tick-frequency data))))
           (update :logical-clock (if (empty? events) identity inc))
