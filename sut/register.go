@@ -9,8 +9,8 @@ import (
 )
 
 type Register struct {
-	Value    []int
-	Sessions []SessionId
+	Value    []int       `json:"value"`
+	Sessions []SessionId `json:"sessions"`
 }
 
 func NewRegister() *Register {

@@ -3,6 +3,7 @@ package debugger
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -28,7 +29,7 @@ func NewFrontEnd() *FrontEnd {
 }
 
 func TestGetInitHeap(t *testing.T) {
-	init := getInitHeap(lib.TestId{1})
+	init := GetInitHeap(lib.TestId{1})
 	expected := []byte(`{"inFlight":{},"inFlightSessionToClient":{},"nextSessionId":0}`)
 
 	if !bytes.Equal(init[0].Diff, expected) {
@@ -37,7 +38,7 @@ func TestGetInitHeap(t *testing.T) {
 }
 
 func TestGetHeapTrace(t *testing.T) {
-	diffs := getHeapTrace(lib.TestId{1}, lib.RunId{0})
+	diffs := GetHeapTrace(lib.TestId{1}, lib.RunId{0})
 	expected := []byte(`{"inFlight":{"0":"0"},"inFlightSessionToClient":{"0":0},"nextSessionId":1}`)
 	if !bytes.Equal(diffs[0].Diff, expected) {
 		t.Error("nope")
@@ -63,4 +64,9 @@ func TestGetHeapTrace(t *testing.T) {
 
 func TestTraceHeap(t *testing.T) {
 	traceHeap(lib.TestId{1}, lib.RunId{0})
+}
+
+func TestHeaps(t *testing.T) {
+	heaps := Heaps(lib.TestId{1}, lib.RunId{0})
+	fmt.Printf("%v", heaps)
 }
