@@ -32,7 +32,7 @@ func GetHeapTrace(testId lib.TestId, runId lib.RunId) []HeapDiff {
 }
 
 func helper(query string) []HeapDiff {
-	db, err := sql.Open("sqlite3", "../../db/detsys.sqlite3")
+	db, err := sql.Open("sqlite3", "../db/detsys.sqlite3")
 	if err != nil {
 		panic(err)
 	}
@@ -66,7 +66,7 @@ type NetworkEvent struct {
 }
 
 func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
-	db, err := sql.Open("sqlite3", "../../db/detsys.sqlite3")
+	db, err := sql.Open("sqlite3", "../db/detsys.sqlite3")
 	if err != nil {
 		panic(err)
 	}

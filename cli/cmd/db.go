@@ -35,7 +35,7 @@ var dbDropTablesCmd = &cobra.Command{
 	Use:   "drop-tables",
 	Short: "Drop all tables in the database",
 	Long:  ``,
-	Args:  cobra.ExactArgs(0),
+	Args:  cobra.NoArgs,
 	Run: func(_ *cobra.Command, args []string) {
 		cmd := exec.Command("../db/db.sh", "drop_tables")
 
@@ -52,7 +52,7 @@ var dbResetCmd = &cobra.Command{
 	Use:   "reset",
 	Short: "Drop all tables and then initialise the database",
 	Long:  ``,
-	Args:  cobra.ExactArgs(0),
+	Args:  cobra.NoArgs,
 	Run: func(_ *cobra.Command, args []string) {
 		cmd := exec.Command("../db/db.sh", "reset")
 
