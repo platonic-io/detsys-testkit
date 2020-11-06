@@ -34,6 +34,9 @@ var w = tview.ANSIWriter(textView)
 
 func selectionHandler(heaps []map[string][]byte, row int) {
 	textView.Clear()
+	// Debugging
+	// fmt.Fprintf(w, "ROW: %d\n", row)
+	// fmt.Fprintf(w, "LEN heaps: %d\n\n", (len(heaps)))
 	opts := jsondiff.DefaultConsoleOptions()
 	opts.Indent = "  "
 	components := make([]string, 0, len(heaps))

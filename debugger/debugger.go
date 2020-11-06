@@ -27,7 +27,8 @@ func GetInitHeap(testId lib.TestId) []HeapDiff {
 func GetHeapTrace(testId lib.TestId, runId lib.RunId) []HeapDiff {
 	query := fmt.Sprintf(`SELECT component,heap
                               FROM heap_trace
-                              WHERE test_id = %d AND run_id = %d`, testId.TestId, runId.RunId)
+                              WHERE test_id = %d
+                                AND run_id = %d`, testId.TestId, runId.RunId)
 	return helper(query)
 }
 
@@ -72,7 +73,8 @@ func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SELECT message,args,`from`,`to`,at FROM network_trace WHERE test_id = ? AND run_id = ?", testId.TestId, runId.RunId)
+	// TODO(stevan): Deal with dropped and client responses properly...
+	rows, err := db.Query("SELECT message,args,`from`,`to`,at FROM network_trace WHERE test_id = ? AND run_id = ? AND dropped = 0 AND NOT(`to` LIKE 'client:%')", testId.TestId, runId.RunId)
 	if err != nil {
 		panic(err)
 	}
