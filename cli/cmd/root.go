@@ -20,6 +20,7 @@ func init() {
 	dbCmd.AddCommand(dbInitCmd)
 	dbCmd.AddCommand(dbDropTablesCmd)
 	dbCmd.AddCommand(dbResetCmd)
+	dbCmd.AddCommand(dbShellCmd)
 	rootCmd.AddCommand(debugCmd)
 }
 

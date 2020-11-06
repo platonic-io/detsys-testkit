@@ -28,10 +28,10 @@ var debugCmd = &cobra.Command{
 			strconv.Itoa(testId.TestId),
 			strconv.Itoa(runId.RunId))
 
-		out, err := cmd.CombinedOutput()
+		err = cmd.Run()
 
 		if err != nil {
-			fmt.Printf("%s\n", out)
+			fmt.Printf("%s\n", err)
 			os.Exit(1)
 		}
 	},
