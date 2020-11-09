@@ -8,6 +8,10 @@ import (
 	jsonpatch "github.com/evanphx/json-patch"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/nsf/jsondiff"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/symbiont-io/detsys/lib"
 )
@@ -33,7 +37,7 @@ func GetHeapTrace(testId lib.TestId, runId lib.RunId) []HeapDiff {
 }
 
 func helper(query string) []HeapDiff {
-	db, err := sql.Open("sqlite3", "../db/detsys.sqlite3")
+	db, err := sql.Open("sqlite3", "../../db/detsys.sqlite3")
 	if err != nil {
 		panic(err)
 	}
@@ -67,7 +71,7 @@ type NetworkEvent struct {
 }
 
 func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
-	db, err := sql.Open("sqlite3", "../db/detsys.sqlite3")
+	db, err := sql.Open("sqlite3", "../../db/detsys.sqlite3")
 	if err != nil {
 		panic(err)
 	}
@@ -158,4 +162,68 @@ func Heaps(testId lib.TestId, runId lib.RunId) []map[string][]byte {
 		}
 	}
 	return heaps
+}
+
+func colon(s string) string {
+	return strings.Replace(s, ":", "", -1)
+}
+
+func SequenceDiagrams(testId lib.TestId, runId lib.RunId) [][]byte {
+	tmpfile, err := ioutil.TempFile("", "sequence_diagram_*_000.txt")
+	if err != nil {
+		panic(err)
+	}
+	net := GetNetworkTrace(testId, runId)
+	for i := 0; i < len(net); i++ {
+		if _, err := tmpfile.Write([]byte("@startuml\n")); err != nil {
+			tmpfile.Close()
+			panic(err)
+		}
+		for j, event := range net {
+			var line string
+			if i == j {
+				line = fmt.Sprintf("%s --> %s : %s\n",
+					colon(event.From), colon(event.To), event.Message)
+			} else {
+				line = fmt.Sprintf("%s -> %s : %s\n",
+					colon(event.From), colon(event.To), event.Message)
+			}
+			if _, err := tmpfile.Write([]byte(line)); err != nil {
+				tmpfile.Close()
+				panic(err)
+			}
+		}
+		if _, err := tmpfile.Write([]byte("@enduml\n")); err != nil {
+			tmpfile.Close()
+			panic(err)
+		}
+	}
+
+	cmd := exec.Command("plantuml", "-tutxt", tmpfile.Name())
+	err = cmd.Run()
+	if err != nil {
+		panic(err)
+	}
+
+	base := strings.TrimSuffix(tmpfile.Name(), ".txt")
+
+	diagrams := make([][]byte, len(net))
+	var file string
+
+	for i := 0; i < len(net); i++ {
+		if i == 0 {
+			file = base + ".utxt"
+		} else {
+			file = fmt.Sprintf("%s_%03d.utxt", base, i)
+		}
+		diagram, err := ioutil.ReadFile(file)
+		if err != nil {
+			panic(err)
+		}
+		diagrams[i] = []byte(diagram)
+		os.Remove(file)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	return diagrams
 }

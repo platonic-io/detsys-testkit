@@ -70,3 +70,9 @@ func TestHeaps(t *testing.T) {
 	heaps := Heaps(lib.TestId{1}, lib.RunId{0})
 	fmt.Printf("%v", heaps)
 }
+
+func TestSequenceDiagrams(t *testing.T) {
+	for _, diagram := range SequenceDiagrams(lib.TestId{1}, lib.RunId{0}) {
+		fmt.Printf("%s\n", string(diagram))
+	}
+}
