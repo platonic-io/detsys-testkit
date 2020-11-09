@@ -257,9 +257,17 @@ type fault
 
 # Summary
 
-* Treat system tests themselves as a long-running application;
+* We have seen how to solve the following problems of existing system tests:
+  * Non-determinism;
+  * Weak guarantees;
+  * Ephemeral;
+  * Language specific.
 
-* Ask programmer to abstract away concurrency from programs, provide a bunch of
+* Key insights:
+
+  * Treat system tests themselves as a long-running application;
+
+  * Ask programmer to abstract away concurrency from programs, provide a bunch of
   tools for free in return.
 
 ---
