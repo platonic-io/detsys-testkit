@@ -129,7 +129,7 @@ func main() {
 		return event
 	})
 
-	if err := app.SetRoot(layout, true).SetFocus(table).Run(); err != nil {
+	if err := app.SetRoot(layout, true).SetFocus(table).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
 }
