@@ -1,7 +1,7 @@
 ---
 title: Towards fast and deterministic system tests
 author: Stevan Andjelkovic \and Daniel Gustafsson
-date: 29th Oct, 2020
+date: 9th Nov, 2020
 header-includes:
   - \definecolor{links}{HTML}{2A1B81}
   - \hypersetup{colorlinks,linkcolor=,urlcolor=links}
@@ -245,12 +245,22 @@ type fault
 
 # Next steps and future work
 
-* Regression tests
-* Integration with Sean's work
+* Next steps
+  * Regression tests;
+  * Integration with Sean's work.
+
+* Future work
+  * Test case generation, including extending existing/already run test cases;
+  * Support for deployment, for testing upgrades and backup/restore.
 
 ---
 
 # Summary
+
+* Treat system tests themselves as a long-running application;
+
+* Ask programmer to abstract away concurrency from programs, provide a bunch of
+  tools for free in return.
 
 ---
 
