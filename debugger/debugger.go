@@ -182,7 +182,7 @@ func SequenceDiagrams(testId lib.TestId, runId lib.RunId) [][]byte {
 		for j, event := range net {
 			var line string
 			if i == j {
-				line = fmt.Sprintf("%s --> %s : %s\n",
+				line = fmt.Sprintf("%s -> %s : <<< %s >>>\n",
 					colon(event.From), colon(event.To), event.Message)
 			} else {
 				line = fmt.Sprintf("%s -> %s : %s\n",
