@@ -26,14 +26,7 @@ func jsonDiff(original []byte, modified []byte) []byte {
 	return diff
 }
 
-func appendHeapTrace(testId lib.TestId, component string, diff []byte, at time.Time) {
-	// XXX: create connection outside of handler...
-	db, err := sql.Open("sqlite3", "../db/detsys.sqlite3")
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-
+func appendHeapTrace(db *sql.DB, testId lib.TestId, component string, diff []byte, at time.Time) {
 	stmt, err := db.Prepare("SELECT MAX(id) FROM run WHERE test_id = ?")
 	if err != nil {
 		panic(err)

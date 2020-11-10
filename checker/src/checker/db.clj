@@ -68,8 +68,8 @@
                                                     (op-value (get state (:process op))))))]
     :fail (throw "implement later")))
 
-;; TODO(stevan): make this more robust...
-(def db "../../db/detsys.sqlite3")
+(def db (or (System/getenv "DETSYS_DB")
+            (str (System/getenv "HOME") "/.detsys.db")))
 
 (defn query [& args]
   (apply shell/sh "sqlite3" db args))

@@ -12,8 +12,7 @@ parser.add_argument('--run-id', metavar='RUN_ID', type=int, required=True,
 parser.add_argument('--colours', action='store_true')
 args = parser.parse_args()
 
-db = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                  '..', 'db', 'detsys.sqlite3'))
+db = os.getenv("DETSYS_DB", os.getenv("HOME") + "/.detsys.db")
 
 conn = sqlite3.connect(db)
 conn.row_factory = sqlite3.Row

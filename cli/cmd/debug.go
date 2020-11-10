@@ -24,7 +24,7 @@ var debugCmd = &cobra.Command{
 		if err != nil {
 			panic(err)
 		}
-		cmd := exec.Command("../debugger/cmd/cmd",
+		cmd := exec.Command("detsys-debug",
 			strconv.Itoa(testId.TestId),
 			strconv.Itoa(runId.RunId))
 

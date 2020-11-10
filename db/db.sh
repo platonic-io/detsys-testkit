@@ -10,7 +10,7 @@ set -o nounset
 pushd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )" > /dev/null
 
 CMD=${1:-""}
-DB=${DB:-"detsys.sqlite3"}
+DETSYS_DB=${DETSYS_DB:-"${HOME}/.detsys.db"}
 
 function display_help() {
     echo "$(basename $0) <command>"
@@ -19,10 +19,10 @@ function display_help() {
 }
 
 case "${CMD}" in
-    init)        sqlite3 "${DB}" < init.sql ;;
-    drop_tables) sqlite3 "${DB}" < drop_tables.sql ;;
-    reset)       sqlite3 "${DB}" < drop_tables.sql
-                 sqlite3 "${DB}" < init.sql ;;
+    init)        sqlite3 "${DETSYS_DB}" < init.sql ;;
+    drop_tables) sqlite3 "${DETSYS_DB}" < drop_tables.sql ;;
+    reset)       sqlite3 "${DETSYS_DB}" < drop_tables.sql
+                 sqlite3 "${DETSYS_DB}" < init.sql ;;
     *)           display_help ;;
 esac
 
