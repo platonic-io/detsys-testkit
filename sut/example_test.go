@@ -70,3 +70,7 @@ func TestRegister1(t *testing.T) {
 func TestRegister2(t *testing.T) {
 	testRegisterWithFrontEnd(func () lib.Reactor { return NewFrontEnd2()}, 1000.0, t)
 }
+
+func TestRegister3(t *testing.T) {
+	testRegisterWithFrontEnd(func () lib.Reactor { return NewFrontEnd3()}, 1000.0, t)
+}
