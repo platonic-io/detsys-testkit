@@ -36,11 +36,20 @@ func GetHeapTrace(testId lib.TestId, runId lib.RunId) []HeapDiff {
 	return helper(query)
 }
 
-func helper(query string) []HeapDiff {
-	db, err := sql.Open("sqlite3", "../../db/detsys.sqlite3")
+func openDB() *sql.DB {
+	path, ok := os.LookupEnv("DETSYS_DB")
+	if !ok {
+		path = os.Getenv("HOME") + "/.detsys.db"
+	}
+	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		panic(err)
 	}
+	return db
+}
+
+func helper(query string) []HeapDiff {
+	db := openDB()
 	defer db.Close()
 
 	// TODO(stevan): We are not using the `at` field from the database.
@@ -71,10 +80,7 @@ type NetworkEvent struct {
 }
 
 func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
-	db, err := sql.Open("sqlite3", "../../db/detsys.sqlite3")
-	if err != nil {
-		panic(err)
-	}
+	db := openDB()
 	defer db.Close()
 
 	// TODO(stevan): Deal with dropped and client responses properly...

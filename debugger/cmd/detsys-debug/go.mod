@@ -1,10 +1,10 @@
-module github.com/symbiont-io/detsys/debugger/cmd
+module github.com/symbiont-io/detsys/debugger/cmd/detsys-debug
 
 go 1.15
 
-replace github.com/symbiont-io/detsys/lib => ../../lib
+replace github.com/symbiont-io/detsys/lib => ../../../lib
 
-replace github.com/symbiont-io/detsys/debugger => ../
+replace github.com/symbiont-io/detsys/debugger => ../../
 
 require (
 	github.com/gdamore/tcell/v2 v2.0.1-0.20201017141208-acf90d56d591
