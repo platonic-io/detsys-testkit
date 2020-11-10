@@ -30,9 +30,6 @@ func main() {
 		help()
 	}
 
-	//migrations := &migrate.HttpFileSystemMigrationSource{
-	//	FileSystem: pkger.Dir("/migrations"),
-	//}
 	migrations := &migrate.PackrMigrationSource{
 		Box: packr.NewBox("./migrations"),
 	}
