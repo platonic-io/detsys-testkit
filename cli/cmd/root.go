@@ -14,7 +14,6 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(executeCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(dbCmd)
 	dbCmd.AddCommand(dbInitCmd)
