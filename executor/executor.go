@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,7 +15,7 @@ func jsonError(s string) string {
 	return fmt.Sprintf("{\"error\":\"%s\"}", s)
 }
 
-func handler(testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
+func handler(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "POST" {
@@ -37,7 +38,7 @@ func handler(testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler
 		oevs := topology[sev.To].Receive(sev.At, sev.From, sev.Event)
 		heapAfter := dumpHeapJson(topology[sev.To])
 		heapDiff := jsonDiff(heapBefore, heapAfter)
-		appendHeapTrace(testId, sev.To, heapDiff, sev.At)
+		appendHeapTrace(db, testId, sev.To, heapDiff, sev.At)
 		bs := lib.MarshalUnscheduledEvents(m, sev.To, oevs)
 		fmt.Fprint(w, string(bs))
 	}
@@ -84,13 +85,16 @@ func Register(topology map[string]lib.Reactor) {
 
 func Deploy(srv *http.Server, testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/event", handler(testId, topology, m))
+
+	db := lib.OpenDB()
+	mux.HandleFunc("/api/v1/event", handler(db, testId, topology, m))
 	mux.HandleFunc("/api/v1/tick", handleTick(topology, m))
 	srv.Addr = ":3001"
 	srv.Handler = mux
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		panic(err)
 	}
+	defer db.Close()
 }
 
 func DeployRaw(srv *http.Server, testId lib.TestId, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {

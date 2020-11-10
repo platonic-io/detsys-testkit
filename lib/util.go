@@ -2,10 +2,12 @@ package lib
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 )
 
@@ -63,4 +65,16 @@ func ParseRunId(s string) (RunId, error) {
 		return RunId{}, err
 	}
 	return RunId{i}, nil
+}
+
+func OpenDB() *sql.DB {
+	path, ok := os.LookupEnv("DETSYS_DB")
+	if !ok {
+		path = os.Getenv("HOME") + "/.detsys.db"
+	}
+	db, err := sql.Open("sqlite3", path)
+	if err != nil {
+		panic(err)
+	}
+	return db
 }
