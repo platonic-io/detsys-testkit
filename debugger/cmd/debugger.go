@@ -32,8 +32,15 @@ var textView = tview.NewTextView().
 	SetDynamicColors(true)
 var w = tview.ANSIWriter(textView)
 
-func selectionHandler(heaps []map[string][]byte, row int) {
+var diagram = tview.NewTextView().
+	SetWrap(false).
+	SetDynamicColors(true)
+var w2 = tview.ANSIWriter(diagram)
+
+func selectionHandler(heaps []map[string][]byte, diagrams [][]byte, row int) {
 	textView.Clear()
+	diagram.Clear()
+	fmt.Fprintf(w2, "%s", string(diagrams[row-1]))
 	// Debugging
 	// fmt.Fprintf(w, "ROW: %d\n", row)
 	// fmt.Fprintf(w, "LEN heaps: %d\n\n", (len(heaps)))
@@ -66,10 +73,12 @@ func main() {
 	app := tview.NewApplication()
 	heaps := debugger.Heaps(lib.TestId{testId}, lib.RunId{runId})
 	events := debugger.GetNetworkTrace(lib.TestId{testId}, lib.RunId{runId})
+	diagrams := debugger.SequenceDiagrams(lib.TestId{testId}, lib.RunId{runId})
 
 	textView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("System state")
+	diagram.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Sequence diagram")
 
-	selectionHandler(heaps, 1)
+	selectionHandler(heaps, diagrams, 1)
 
 	table := tview.NewTable().
 		SetFixed(1, 1)
@@ -102,12 +111,15 @@ func main() {
 	}
 	table.SetBorder(true).SetTitle("Events")
 	table.SetSelectable(true, false)
-	table.SetSelectionChangedFunc(func(row, column int) { selectionHandler(heaps, max(1, row)) })
+	table.SetSelectionChangedFunc(
+		func(row, column int) { selectionHandler(heaps, diagrams, max(1, row)) })
 
 	layout := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(textView, 0, 1, false).
-		AddItem(table, 20, 1, false)
+		AddItem(tview.NewFlex().
+			SetDirection(tview.FlexRow).
+			AddItem(textView, 0, 1, false).
+			AddItem(table, 20, 1, false), 0, 1, false).
+		AddItem(diagram, 0, 1, false)
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == 'q' {
@@ -117,7 +129,7 @@ func main() {
 		return event
 	})
 
-	if err := app.SetRoot(layout, true).SetFocus(table).Run(); err != nil {
+	if err := app.SetRoot(layout, true).SetFocus(table).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
 }
