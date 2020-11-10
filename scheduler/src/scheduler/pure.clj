@@ -628,6 +628,14 @@
   [::data (s/keys :req-un [::new-seed]) => (s/tuple ::data integer?)]
   [(assoc data :seed new-seed) new-seed])
 
+(s/def ::new-tick-frequency (s/or :integer integer? :double double?))
+
+(>defn set-tick-frequency!
+  [data {new-tick-frequency :new-tick-frequency}]
+  [::data (s/keys :req-un [::new-tick-frequency]) => (s/tuple ::data double?)]
+  (let [tick-frequency (double new-tick-frequency)]
+    [(assoc data :tick-frequency tick-frequency) tick-frequency]))
+
 (defn reset
   [_data]
   [(init-data) :reset])
