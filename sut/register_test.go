@@ -9,9 +9,9 @@ import (
 	"github.com/symbiont-io/detsys/lib"
 )
 
-func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
+func once(newFrontEnd func()lib.Reactor, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	topology := map[string]lib.Reactor{
-		"frontend":  NewFrontEnd(),
+		"frontend":  newFrontEnd(),
 		"register1": NewRegister(),
 		"register2": NewRegister(),
 	}
@@ -34,7 +34,7 @@ func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	return runId, result
 }
 
-func TestRegister(t *testing.T) {
+func testRegisterWithFrontEnd(newFrontEnd func()lib.Reactor, tickFrequency float64,  t *testing.T) {
 	testId := lib.GenerateTest()
 
 	var runIds []lib.RunId
@@ -47,8 +47,9 @@ func TestRegister(t *testing.T) {
 	for {
 		lib.Reset()
 		lib.InjectFaults(lib.Faults{faults})
+		lib.SetTickFrequency(tickFrequency)
 		log.Printf("Injecting faults: %#v\n", faults)
-		runId, result := once(testId, t)
+		runId, result := once(newFrontEnd, testId, t)
 		if !result {
 			t.Errorf("%+v and %+v doesn't pass analysis", testId, runId)
 			t.Errorf("faults: %#v\n", faults)
@@ -60,5 +61,12 @@ func TestRegister(t *testing.T) {
 			break
 		}
 	}
+}
 
+func TestRegister1(t *testing.T) {
+	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd()}, 5000.0, t)
+}
+
+func TestRegister2(t *testing.T) {
+	testRegisterWithFrontEnd(func () lib.Reactor { return NewFrontEnd2()}, 1000.0, t)
 }

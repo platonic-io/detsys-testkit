@@ -71,6 +71,12 @@ func InjectFaults(faults Faults) {
 	}{schedulerFaults})
 }
 
+func SetTickFrequency(tickFrequency float64) {
+	Post("set-tick-frequency!", struct {
+		TickFrequency float64 `json:"new-tick-frequency"`
+	}{tickFrequency})
+}
+
 func Run() {
 	Post("run!", struct{}{})
 }
