@@ -24,8 +24,7 @@ def main():
     args = parser.parse_args()
 
     # Load network traces from the database.
-    db = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                      '..', 'db', 'detsys.sqlite3'))
+    db = os.getenv("DETSYS_DB", os.getenv("HOME") + "/.detsys.db")
     conn = sqlite3.connect(db)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
