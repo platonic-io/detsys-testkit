@@ -65,7 +65,6 @@ var dbResetCmd = &cobra.Command{
 	},
 }
 
-// TODO(stevan): Make this work...
 var dbShellCmd = &cobra.Command{
 	Use:   "shell",
 	Short: "Start interactive shell session with the database",
@@ -73,6 +72,12 @@ var dbShellCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	Run: func(_ *cobra.Command, args []string) {
 		cmd := exec.Command("sqlite3", "-interactive", "../db/detsys.sqlite3")
+
+		// These three lines are important, or else `cmd.Run()` will
+		// just immediately exit.
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 
 		err := cmd.Run()
 
