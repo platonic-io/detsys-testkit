@@ -1,3 +1,4 @@
+-- +migrate Up
 CREATE TABLE test (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
@@ -66,3 +67,12 @@ CREATE TABLE deployment (
   args         JSON      NOT NULL,
   PRIMARY KEY(test_id, component),
   FOREIGN KEY(test_id) REFERENCES test(id));
+
+-- +migrate Down
+DROP TABLE test;
+DROP TABLE agenda;
+DROP TABLE run;
+DROP TABLE history;
+DROP TABLE network_trace;
+DROP TABLE heap_trace;
+DROP TABLE deployment;

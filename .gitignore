@@ -4,4 +4,3 @@ target/
 classes/
 reports/
 .eastwood
-detsys.sqlite3
