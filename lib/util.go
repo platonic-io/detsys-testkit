@@ -67,11 +67,16 @@ func ParseRunId(s string) (RunId, error) {
 	return RunId{i}, nil
 }
 
-func OpenDB() *sql.DB {
+func DBPath() string {
 	path, ok := os.LookupEnv("DETSYS_DB")
 	if !ok {
 		path = os.Getenv("HOME") + "/.detsys.db"
 	}
+	return path
+}
+
+func OpenDB() *sql.DB {
+	path := DBPath()
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		panic(err)
