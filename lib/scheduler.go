@@ -2,16 +2,9 @@ package lib
 
 import (
 	"fmt"
+	"log"
 	"strconv"
 )
-
-func ParseTestId(s string) (TestId, error) {
-	i, err := strconv.Atoi(s)
-	if err != nil {
-		return TestId{}, err
-	}
-	return TestId{i}, nil
-}
 
 type RunId struct {
 	RunId int `json:"run-id"`
@@ -19,6 +12,10 @@ type RunId struct {
 
 type QueueSize struct {
 	QueueSize int `json:"queue-size"`
+}
+
+type Seed struct {
+	Seed int `json:"new-seed"`
 }
 
 func LoadTest(testId TestId) QueueSize {
@@ -35,6 +32,10 @@ func RegisterExecutor(executorId string, components []string) {
 		ExecutorId: executorId,
 		Components: components,
 	})
+}
+
+func SetSeed(seed Seed) {
+	Post("set-seed!", seed)
 }
 
 func CreateRun(testId TestId) RunId {

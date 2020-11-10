@@ -64,8 +64,9 @@
              (conj acc (rewrite-op model op (op-value (:args op))))]
     :ok [state (conj acc (rewrite-op model op (or (op-value (:args op))
                                                   (op-value (get state (:process op))))))]
-    :fail (throw "implement later")
-    :info (throw "implement later")))
+    :info [state (conj acc (rewrite-op model op (or (op-value (:args op))
+                                                    (op-value (get state (:process op))))))]
+    :fail (throw "implement later")))
 
 ;; TODO(stevan): make this more robust...
 (def db "../../db/detsys.sqlite3")
@@ -106,4 +107,4 @@
         (System/exit 1)))))
 
 (comment
-  (pp/pprint (get-history :rw-register 6 0)) )
+  (pp/pprint (get-history :rw-register 6 0)))

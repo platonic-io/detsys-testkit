@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 type TestId struct {
@@ -46,4 +47,20 @@ func PostParse(command string, parameters interface{}, target interface{}) {
 	if err := json.Unmarshal(body, &target); err != nil {
 		log.Panicln(err)
 	}
+}
+
+func ParseTestId(s string) (TestId, error) {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return TestId{}, err
+	}
+	return TestId{i}, nil
+}
+
+func ParseRunId(s string) (RunId, error) {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return RunId{}, err
+	}
+	return RunId{i}, nil
 }

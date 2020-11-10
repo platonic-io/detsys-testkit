@@ -1,7 +1,6 @@
 package sut
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"testing"
@@ -11,28 +10,24 @@ import (
 )
 
 func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
-	frontEnd := NewFrontEnd()
 	topology := map[string]lib.Reactor{
-		"frontend":  frontEnd,
+		"frontend":  NewFrontEnd(),
 		"register1": NewRegister(),
 		"register2": NewRegister(),
 	}
+	marshaler := NewMarshaler()
 	var srv http.Server
 	lib.Setup(func() {
-		executor.Deploy(&srv, topology,
-			frontEnd, // TODO(stevan): can we get rid of this?
-			frontEnd)
+		executor.Deploy(&srv, testId, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
+	lib.SetSeed(lib.Seed{4})
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	executor.Register(topology)
 	runId := lib.CreateRun(testId)
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)
-	lib.Teardown()
-	if err := srv.Shutdown(context.Background()); err != nil {
-		panic(err)
-	}
+	lib.Teardown(&srv)
 	model := "list-append"
 	log.Printf("Analysing model %s for %+v and %+v\n", model, testId, runId)
 	result := lib.Check(model, testId, runId)
@@ -52,6 +47,7 @@ func TestRegister(t *testing.T) {
 	for {
 		lib.Reset()
 		lib.InjectFaults(lib.Faults{faults})
+		log.Printf("Injecting faults: %#v\n", faults)
 		runId, result := once(testId, t)
 		if !result {
 			t.Errorf("%+v and %+v doesn't pass analysis", testId, runId)

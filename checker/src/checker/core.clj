@@ -6,7 +6,8 @@
             [elle [core :as elle]
              [list-append :as list-append]
              [rw-register :as rw-register]]
-            [checker.db :as db])
+            [checker.db :as db]
+            [me.raynes.fs :as fs])
   (:import (java.io PushbackReader)
            [lockfix LockFix])
   (:gen-class))
@@ -46,14 +47,6 @@
 (alter-var-root #'clojure.tools.logging/log-capture! (constantly log-capture!))
 (alter-var-root #'clojure.tools.logging/log-uncapture! (constantly log-uncapture!))
 
-(defn read-history
-  "Reads a history of op maps from a file."
-  [filename]
-  (with-open [r (PushbackReader. (io/reader filename))]
-    (->> (repeatedly #(edn/read {:eof nil} r))
-         (take-while identity)
-         vec)))
-
 (defn checker-rw-register
   [test-id run-id]
   (-> (rw-register/check
@@ -64,10 +57,13 @@
 
 (defn checker-list-append
   [test-id run-id]
-  (-> (list-append/check
-       {:consistency-models [:strict-serializable]}
-       (db/get-history :list-append test-id run-id))
-      (dissoc :also-not)))
+  (let [dir (fs/temp-dir "detsys-elle")]
+    (-> (list-append/check
+         {:consistency-models [:strict-serializable]
+          :directory dir}
+         (db/get-history :list-append test-id run-id))
+        (dissoc :also-not)
+        (assoc :elle-output dir))))
 
 (defn exit
   [result]

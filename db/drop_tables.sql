@@ -3,3 +3,5 @@ DROP TABLE agenda;
 DROP TABLE run;
 DROP TABLE history;
 DROP TABLE network_trace;
+DROP TABLE heap_trace;
+DROP TABLE deployment;

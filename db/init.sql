@@ -42,7 +42,27 @@ CREATE TABLE network_trace (
   args         JSON     NOT NULL,
   `from`       TEXT     NOT NULL,
   `to`         TEXT     NOT NULL,
+  sent_logical_time INTEGER NOT NULL,
   at           INTEGER  NOT NULL,
+  dropped      INT2     NOT NULL,
   PRIMARY KEY(test_id, run_id, id),
   FOREIGN KEY(test_id) REFERENCES test(id),
   FOREIGN KEY(run_id)  REFERENCES run(id));
+
+CREATE TABLE heap_trace (
+  test_id      INTEGER   NOT NULL,
+  run_id       INTEGER   NOT NULL,
+  id           INTEGER   NOT NULL,
+  component    TEXT      NOT NULL,
+  heap         JSON      NOT NULL,
+  at           DATETIME  NOT NULL,
+  PRIMARY KEY(test_id, run_id, id),
+  FOREIGN KEY(test_id) REFERENCES test(id),
+  FOREIGN KEY(run_id)  REFERENCES run(id));
+
+CREATE TABLE deployment (
+  test_id      INTEGER   NOT NULL,
+  component    TEXT      NOT NULL,
+  args         JSON      NOT NULL,
+  PRIMARY KEY(test_id, component),
+  FOREIGN KEY(test_id) REFERENCES test(id));
