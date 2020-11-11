@@ -1,7 +1,7 @@
 ---
 title: Towards fast and deterministic system tests
 author: Stevan Andjelkovic \and Daniel Gustafsson
-date: 9th Nov, 2020
+date: 11th Nov, 2020
 header-includes:
   - \definecolor{links}{HTML}{2A1B81}
   - \hypersetup{colorlinks,linkcolor=,urlcolor=links}
@@ -19,8 +19,8 @@ nocite: |
 * Demo;
 
 * More detailed explaination of how the test library works, in particular:
-  - Lineage-driven fault injection;
-  - Elle checker.
+  - Elle checker;
+  - Lineage-driven fault injection.
 
 * Next steps and future work;
 
