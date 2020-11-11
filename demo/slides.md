@@ -113,7 +113,7 @@ System tests, in general, are:
   faults;
 
 * Operational profiles/usage models will later be used to drive test case
-  generation, and guarantee system test coverage.
+  generation, and guarantee system test coverage and reliability.
 
 ---
 
