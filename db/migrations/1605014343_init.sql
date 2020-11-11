@@ -1,9 +1,9 @@
 -- +migrate Up
-CREATE TABLE test (
+CREATE TABLE IF NOT EXISTS test (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
 
-CREATE TABLE agenda (
+CREATE TABLE IF NOT EXISTS agenda (
   test_id      INTEGER  NOT NULL,
   id           INTEGER  NOT NULL,
   kind         TEXT     NOT NULL CHECK(kind IN ("invoke", "fault", "message")),
@@ -15,7 +15,7 @@ CREATE TABLE agenda (
   PRIMARY KEY(test_id, id),
   FOREIGN KEY(test_id) REFERENCES test(id));
 
-CREATE TABLE run (
+CREATE TABLE IF NOT EXISTS run (
   test_id       INTEGER  NOT NULL,
   id            INTEGER  NOT NULL,
   seed          INTEGER  NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE run (
   PRIMARY KEY(test_id, id),
   FOREIGN KEY(test_id) REFERENCES test(id));
 
-CREATE TABLE history (
+CREATE TABLE IF NOT EXISTS history (
   test_id      INTEGER  NOT NULL,
   run_id       INTEGER  NOT NULL,
   id           INTEGER  NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE history (
   FOREIGN KEY(test_id) REFERENCES test(id),
   FOREIGN KEY(run_id)  REFERENCES run(id));
 
-CREATE TABLE network_trace (
+CREATE TABLE IF NOT EXISTS network_trace (
   test_id      INTEGER  NOT NULL,
   run_id       INTEGER  NOT NULL,
   id           INTEGER  NOT NULL,
@@ -50,7 +50,7 @@ CREATE TABLE network_trace (
   FOREIGN KEY(test_id) REFERENCES test(id),
   FOREIGN KEY(run_id)  REFERENCES run(id));
 
-CREATE TABLE heap_trace (
+CREATE TABLE IF NOT EXISTS heap_trace (
   test_id      INTEGER   NOT NULL,
   run_id       INTEGER   NOT NULL,
   id           INTEGER   NOT NULL,
@@ -61,18 +61,29 @@ CREATE TABLE heap_trace (
   FOREIGN KEY(test_id) REFERENCES test(id),
   FOREIGN KEY(run_id)  REFERENCES run(id));
 
-CREATE TABLE deployment (
+CREATE TABLE IF NOT EXISTS deployment (
   test_id      INTEGER   NOT NULL,
   component    TEXT      NOT NULL,
   args         JSON      NOT NULL,
   PRIMARY KEY(test_id, component),
   FOREIGN KEY(test_id) REFERENCES test(id));
 
+CREATE TABLE IF NOT EXISTS analysis (
+  test_id      INTEGER   NOT NULL,
+  run_id       INTEGER   NOT NULL,
+  id           INTEGER   NOT NULL,
+  valid        INT2      NOT NULL,
+  result       JSON      NOT NULL,
+  PRIMARY KEY(test_id, run_id, id),
+  FOREIGN KEY(test_id) REFERENCES test(id),
+  FOREIGN KEY(run_id)  REFERENCES run(id));
+
 -- +migrate Down
-DROP TABLE test;
-DROP TABLE agenda;
-DROP TABLE run;
-DROP TABLE history;
-DROP TABLE network_trace;
-DROP TABLE heap_trace;
-DROP TABLE deployment;
+DROP TABLE IF EXISTS test;
+DROP TABLE IF EXISTS agenda;
+DROP TABLE IF EXISTS run;
+DROP TABLE IF EXISTS history;
+DROP TABLE IF EXISTS network_trace;
+DROP TABLE IF EXISTS heap_trace;
+DROP TABLE IF EXISTS deployment;
+DROP TABLE IF EXISTS analysis;

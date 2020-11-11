@@ -63,20 +63,26 @@
           :directory dir}
          (db/get-history :list-append test-id run-id))
         (dissoc :also-not)
-        (assoc :elle-output dir))))
+        (assoc :elle-output (str dir)))))
 
-(defn exit
-  [result]
-  (if (:valid? result)
-    (System/exit 0)
-    (do
-      (pprint result)
-      (System/exit 1))))
+(defn analyse
+  [test-id run-id checker]
+  (let [result (checker test-id run-id)
+        valid? (:valid? result)]
+    (db/store-result test-id run-id valid? result)
+    (if valid?
+      (System/exit 0)
+      (do
+        (pprint result)
+        (System/exit 1)))))
 
 (defn -main
   [& args]
-  (case (first args)
-    "rw-register" (exit (checker-rw-register (second args) (second (next args))))
-    "list-append" (exit (checker-list-append (second args) (second (next args))))
+  (let [model   (first args)
+        test-id (second args)
+        run-id  (second (next args))]
+  (case model
+    "rw-register" (analyse test-id run-id checker-rw-register)
+    "list-append" (analyse test-id run-id checker-list-append)
     (println
-     "First argument should be a model, i.e. either \"rw-register\" or \"list-append\"")))
+     "First argument should be a model, i.e. either \"rw-register\" or \"list-append\""))))

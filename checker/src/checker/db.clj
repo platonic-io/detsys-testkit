@@ -106,5 +106,21 @@
         (println e)
         (System/exit 1)))))
 
+(defn store-result
+  [test-id run-id valid? result]
+  (let [q (str "INSERT INTO analysis (test_id, run_id, id, valid, result) "
+               "VALUES(" test-id ", " run-id ", "
+               "(SELECT IFNULL(MAX(id), - 1) + 1 FROM analysis WHERE test_id = "
+               test-id " AND run_id = " run-id "), " (if valid? 1 0) ", '"
+               (str/replace (json/write result) #"'" "''")
+               "')")
+        out (query q)]
+
+    (when (not= 0 (:exit out))
+      (println q)
+      (println out)
+      (System/exit 1))))
+
 (comment
-  (pp/pprint (get-history :rw-register 6 0)))
+  (pp/pprint (get-history :rw-register 6 0))
+  (store-result 1 0 1 "{}"))
