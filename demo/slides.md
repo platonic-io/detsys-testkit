@@ -18,7 +18,7 @@ nocite: |
 
 * Demo;
 
-* More detailed explaination of how the test library works, in particular:
+* More detailed explanation of how the test library works, in particular:
   - Elle checker;
   - Lineage-driven fault injection.
 
@@ -58,7 +58,7 @@ System tests, in general, are:
 # Parts of the solution
 
 * Generator: generates random test cases;
-* Scheduler: determinstically controls the network traffic during the test;
+* Scheduler: deterministically controls the network traffic during the test;
 
 * Executor: receives messages from the scheduler and executes them against the
   system under test (SUT);
@@ -228,7 +228,7 @@ type fault
       omission(msg0...) OR omission(msg1...) OR ...
 ```
 
-* For each run/trace we gather more constrints, so
+* For each run/trace we gather more constraints, so
   create a big AND-formula between traces, e.g.:
 
 ```
@@ -255,7 +255,7 @@ type fault
 
 * Guarantee: given a program and a failure spec, either produce a set of faults
   which respect the failure specification and cause the program to fail, or
-  certify that there are no faults for that failure specifaction which can cause
+  certify that there are no faults for that failure specification which can cause
   the program to fail.
 
 ---
