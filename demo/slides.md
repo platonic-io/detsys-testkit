@@ -74,7 +74,7 @@ System tests, in general, are:
 
 ---
 
-# Solution for non-determinism
+# Solution for non-determinism and speed
 
 * SUT is assumed to be written on reactor form, i.e. given an incoming message
   and some internal state, update the state and produce a set of outgoing
@@ -84,7 +84,8 @@ System tests, in general, are:
   using a seed, determines the arrival order of the messages;
 
 * Timeouts and retires are handled by explicit tick messages, that are also
-  deterministically sent by the Scheduler.
+  deterministically sent by the Scheduler, which means we can speed up time and
+  not have to wait for actual timeouts to happen.
 
 ---
 
