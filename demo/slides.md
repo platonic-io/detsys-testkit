@@ -83,7 +83,7 @@ System tests, in general, are:
 * All messages get set via the Scheduler which randomly, but deterministically
   using a seed, determines the arrival order of the messages;
 
-* Timeouts and retires are handled by explicit tick messages, that are also
+* Timeouts and retries are handled by explicit tick messages, that are also
   deterministically sent by the Scheduler, which means we can speed up time and
   not have to wait for actual timeouts to happen.
 
@@ -172,6 +172,11 @@ System tests, in general, are:
 ---
 
 # How does the Elle checker work?
+
+```
+
+```
+
 
 ---
 
