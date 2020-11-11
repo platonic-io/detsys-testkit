@@ -78,7 +78,7 @@ System tests, in general, are:
 
 * SUT is assumed to be written on reactor form, i.e. given an incoming message
   and some internal state, update the state and produce a set of outgoing
-  messages;
+  messages [@joe, p 87];
 
 * All messages get set via the Scheduler which randomly, but deterministically
   using a seed, determines the arrival order of the messages;
@@ -282,7 +282,7 @@ type fault
 
 * Key insights:
 
-  * Treat system tests themselves as a long-running application;
+  * Treat system tests _themselves_ as a long-running application;
 
   * Ask programmer to abstract away concurrency from programs, provide a bunch of
   tools for free in return.
