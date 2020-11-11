@@ -32,7 +32,7 @@ nocite: |
 
 System tests, in general, are:
 
-* Non-deterministic
+* Non-deterministic and slow
 
   - Running the same test twice can yield different outcomes, esp. around
     fault-injection;
@@ -258,7 +258,7 @@ type fault
 # Summary
 
 * We have seen how to solve the following problems of existing system tests:
-  * Non-determinism;
+  * Non-determinism and speed;
   * Weak guarantees;
   * Ephemeral;
   * Language specific.
