@@ -244,6 +244,22 @@ type fault
 
 ---
 
+# How does lineage-driven fault injection work? \#4
+
+* Will this not go on forever?
+
+* Stopping criteria via failure specification:
+  * End time for finite faults, i.e. message omissions (EFF)
+  * End of test time (EOT)
+  * Max crashes (not implemented yet)
+
+* Guarantee: given a program and a failure spec, either produce a set of faults
+  which respect the failure specification and cause the program to fail, or
+  certify that there are no faults for that failure specifaction which can cause
+  the program to fail.
+
+---
+
 # Next steps and future work
 
 * Next steps
