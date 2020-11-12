@@ -64,11 +64,12 @@
              (conj acc (rewrite-op model op (op-value (:args op))))]
     :ok [state (conj acc (rewrite-op model op (or (op-value (:args op))
                                                   (op-value (get state (:process op))))))]
-    :fail (throw "implement later")
-    :info (throw "implement later")))
+    :info [state (conj acc (rewrite-op model op (or (op-value (:args op))
+                                                    (op-value (get state (:process op))))))]
+    :fail (throw "implement later")))
 
-;; TODO(stevan): make this more robust...
-(def db "../../db/detsys.sqlite3")
+(def db (or (System/getenv "DETSYS_DB")
+            (str (System/getenv "HOME") "/.detsys.db")))
 
 (defn query [& args]
   (apply shell/sh "sqlite3" db args))
@@ -105,5 +106,21 @@
         (println e)
         (System/exit 1)))))
 
+(defn store-result
+  [test-id run-id valid? result]
+  (let [q (str "INSERT INTO analysis (test_id, run_id, id, valid, result) "
+               "VALUES(" test-id ", " run-id ", "
+               "(SELECT IFNULL(MAX(id), - 1) + 1 FROM analysis WHERE test_id = "
+               test-id " AND run_id = " run-id "), " (if valid? 1 0) ", '"
+               (str/replace (json/write result) #"'" "''")
+               "')")
+        out (query q)]
+
+    (when (not= 0 (:exit out))
+      (println q)
+      (println out)
+      (System/exit 1))))
+
 (comment
-  (pp/pprint (get-history :rw-register 6 0)) )
+  (pp/pprint (get-history :rw-register 6 0))
+  (store-result 1 0 1 "{}"))

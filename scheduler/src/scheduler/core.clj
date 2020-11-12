@@ -17,7 +17,8 @@
   ([]
    (start-server false 3000))
   ([reload port]
-   (db/setup-db "../db/detsys.sqlite3")
+   (db/setup-db (or (System/getenv "DETSYS_DB")
+                    (str (System/getenv "HOME") "/.detsys.db")))
    (reset! handler/data (pure/init-data))
    (reset! server (jetty/run-jetty (cond-> #'handler/app
                                      true (rmd/wrap-defaults rmd/api-defaults)
@@ -39,7 +40,7 @@
 
 (defn -main
   [& _args]
-  (let [port (Integer/parseInt (or (System/getenv "SCHEDULER_PORT") "3000"))]
+  (let [port (Integer/parseInt (or (System/getenv "DETSYS_SCHEDULER_PORT") "3000"))]
     (start-server false port)
     (println (str "Running webserver at http:/127.0.0.1:" port "/"))))
 

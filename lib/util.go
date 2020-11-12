@@ -2,10 +2,13 @@ package lib
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 )
 
 type TestId struct {
@@ -46,4 +49,37 @@ func PostParse(command string, parameters interface{}, target interface{}) {
 	if err := json.Unmarshal(body, &target); err != nil {
 		log.Panicln(err)
 	}
+}
+
+func ParseTestId(s string) (TestId, error) {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return TestId{}, err
+	}
+	return TestId{i}, nil
+}
+
+func ParseRunId(s string) (RunId, error) {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return RunId{}, err
+	}
+	return RunId{i}, nil
+}
+
+func DBPath() string {
+	path, ok := os.LookupEnv("DETSYS_DB")
+	if !ok {
+		path = os.Getenv("HOME") + "/.detsys.db"
+	}
+	return path
+}
+
+func OpenDB() *sql.DB {
+	path := DBPath()
+	db, err := sql.Open("sqlite3", path)
+	if err != nil {
+		panic(err)
+	}
+	return db
 }

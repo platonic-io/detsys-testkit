@@ -17,3 +17,11 @@ Build and run native image via GraalVM:
 clj -A:native-image
 ./target/checker
 ```
+
+### Build docker image
+
+From the same directory as this README is in, do:
+
+```bash
+docker build -t detsys/checker -f docker/Dockerfile .
+```

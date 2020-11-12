@@ -6,7 +6,8 @@
             [elle [core :as elle]
              [list-append :as list-append]
              [rw-register :as rw-register]]
-            [checker.db :as db])
+            [checker.db :as db]
+            [me.raynes.fs :as fs])
   (:import (java.io PushbackReader)
            [lockfix LockFix])
   (:gen-class))
@@ -46,14 +47,6 @@
 (alter-var-root #'clojure.tools.logging/log-capture! (constantly log-capture!))
 (alter-var-root #'clojure.tools.logging/log-uncapture! (constantly log-uncapture!))
 
-(defn read-history
-  "Reads a history of op maps from a file."
-  [filename]
-  (with-open [r (PushbackReader. (io/reader filename))]
-    (->> (repeatedly #(edn/read {:eof nil} r))
-         (take-while identity)
-         vec)))
-
 (defn checker-rw-register
   [test-id run-id]
   (-> (rw-register/check
@@ -64,23 +57,32 @@
 
 (defn checker-list-append
   [test-id run-id]
-  (-> (list-append/check
-       {:consistency-models [:strict-serializable]}
-       (db/get-history :list-append test-id run-id))
-      (dissoc :also-not)))
+  (let [dir (fs/temp-dir "detsys-elle")]
+    (-> (list-append/check
+         {:consistency-models [:strict-serializable]
+          :directory dir}
+         (db/get-history :list-append test-id run-id))
+        (dissoc :also-not)
+        (assoc :elle-output (str dir)))))
 
-(defn exit
-  [result]
-  (if (:valid? result)
-    (System/exit 0)
-    (do
-      (pprint result)
-      (System/exit 1))))
+(defn analyse
+  [test-id run-id checker]
+  (let [result (checker test-id run-id)
+        valid? (:valid? result)]
+    (db/store-result test-id run-id valid? result)
+    (if valid?
+      (System/exit 0)
+      (do
+        (pprint result)
+        (System/exit 1)))))
 
 (defn -main
   [& args]
-  (case (first args)
-    "rw-register" (exit (checker-rw-register (second args) (second (next args))))
-    "list-append" (exit (checker-list-append (second args) (second (next args))))
+  (let [model   (first args)
+        test-id (second args)
+        run-id  (second (next args))]
+  (case model
+    "rw-register" (analyse test-id run-id checker-rw-register)
+    "list-append" (analyse test-id run-id checker-list-append)
     (println
-     "First argument should be a model, i.e. either \"rw-register\" or \"list-append\"")))
+     "First argument should be a model, i.e. either \"rw-register\" or \"list-append\""))))
