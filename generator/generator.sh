@@ -4,17 +4,20 @@
 # https://stackoverflow.com/a/246128/3858681
 pushd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )" > /dev/null
 
-DB=${DB:-"../db/detsys.sqlite3"}
+DETSYS_DB=${DETSYS_DB:-"${HOME}/.detsys.db"}
 
 # Create test.
-sqlite3 "${DB}" "INSERT INTO test DEFAULT VALUES"
-TEST_ID=$(sqlite3 "${DB}" "SELECT max(id) from test")
+sqlite3 "${DETSYS_DB}" "INSERT INTO test DEFAULT VALUES"
+TEST_ID=$(sqlite3 "${DETSYS_DB}" "SELECT max(id) from test")
 
-sqlite3 "${DB}" <<EOF
+sqlite3 "${DETSYS_DB}" <<EOF
 INSERT INTO agenda (test_id, id, kind, event, args, \`from\`, \`to\`, at)
 VALUES
   (${TEST_ID}, 0, "invoke", "write", '{"value": 1}', "client:0", "frontend", "1970-01-01T00:00:00Z"),
   (${TEST_ID}, 1, "invoke", "read",  "{}",           "client:0", "frontend", "1970-01-01T00:00:10Z");
+INSERT INTO deployment VALUES(${TEST_ID}, "frontend", '{"inFlight":{},"inFlightSessionToClient":{},"nextSessionId":0}');
+INSERT INTO deployment VALUES(${TEST_ID}, "register1", '{"value":[]}');
+INSERT INTO deployment VALUES(${TEST_ID}, "register2", '{"value":[]}');
 EOF
 
 echo "${TEST_ID}"

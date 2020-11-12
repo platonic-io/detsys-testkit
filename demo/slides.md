@@ -83,7 +83,7 @@ System tests, in general, are:
 * All messages get set via the Scheduler which randomly, but deterministically
   using a seed, determines the arrival order of the messages;
 
-* Timeouts and retires are handled by explicit tick messages, that are also
+* Timeouts and retries are handled by explicit tick messages, that are also
   deterministically sent by the Scheduler, which means we can speed up time and
   not have to wait for actual timeouts to happen.
 
@@ -139,6 +139,30 @@ System tests, in general, are:
 
 ---
 
+# Demo: Super Naive Implementation
+
+* The topology is 1 Frontend, 2 Register;
+
+* Each register records a history of all writes;
+
+* On client requests, the Frontend sends the request to both register and answer
+  with the first one responding (what could possibly go wrong?);
+
+* Network calls are assumed to work (naive).
+
+---
+
+# Demo: Resend logic
+
+* Instead of trusting the first, lets wait for both;
+
+* But now we need to have retries, since if one message gets dropped, we will get
+  stuck;
+  
+* Introducing `tick`s.
+
+---
+
 # Demo: shared register v1, success
 
 ![register_v1_success](image/register_v1_working.png)\
@@ -172,6 +196,11 @@ System tests, in general, are:
 ---
 
 # How does the Elle checker work?
+
+```
+
+```
+
 
 ---
 

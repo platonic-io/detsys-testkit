@@ -1,7 +1,8 @@
 {:paths ["src" "java/src"]
- :deps {org.clojure/clojure           {:mvn/version "1.10.2-alpha1"}
-        elle/elle                     {:mvn/version "0.1.3-SNAPSHOT"}
+ :deps {org.clojure/clojure           {:mvn/version "1.10.2-alpha2"}
+        elle/elle                     {:mvn/version "0.1.2"}
         spootnik/unilog               {:mvn/version "0.7.25"}
+        me.raynes/fs                  {:mvn/version "1.4.6"}
         metosin/jsonista              {:mvn/version "0.2.7"}}
  :aliases {:test {:extra-paths ["test"]
                   :extra-deps {com.cognitect/test-runner
@@ -30,6 +31,9 @@
                                       "--no-fallback"
                                       "--report-unsupported-elements-at-runtime"
                                       "--initialize-at-run-time=sun.awt.X11GraphicsConfig"
+                                      "--initialize-at-run-time=javax.imageio.ImageTypeSpecifier"
+                                      "--initialize-at-run-time=sun.java2d.SurfaceData"
+                                      "--initialize-at-run-time=com.sun.imageio.plugins.jpeg.JPEG$JCS"
                                       "--initialize-at-run-time=sun.awt.dnd.SunDropTargetContextPeer$EventDispatcher"
                                       "-H:Name=target/checker"
                                       "-H:+ReportExceptionStackTraces"]
