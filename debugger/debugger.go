@@ -2,7 +2,6 @@ package debugger
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	jsonpatch "github.com/evanphx/json-patch"
@@ -64,6 +63,7 @@ type NetworkEvent struct {
 	Args    []byte
 	From    string
 	To      string
+	Dropped bool
 	At      int
 }
 
@@ -72,7 +72,7 @@ func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
 	defer db.Close()
 
 	// TODO(stevan): Deal with dropped and client responses properly...
-	rows, err := db.Query("SELECT message,args,`from`,`to`,at FROM network_trace WHERE test_id = ? AND run_id = ? AND dropped = 0 AND NOT(`to` LIKE 'client:%')", testId.TestId, runId.RunId)
+	rows, err := db.Query("SELECT message,args,`from`,`to`,dropped,at FROM network_trace WHERE test_id = ? AND run_id = ? AND dropped = 0 AND NOT(`to` LIKE 'client:%')", testId.TestId, runId.RunId)
 	if err != nil {
 		panic(err)
 	}
@@ -81,7 +81,7 @@ func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
 	var trace []NetworkEvent
 	for rows.Next() {
 		event := NetworkEvent{}
-		err := rows.Scan(&event.Message, &event.Args, &event.From, &event.To, &event.At)
+		err := rows.Scan(&event.Message, &event.Args, &event.From, &event.To, &event.Dropped, &event.At)
 		if err != nil {
 			panic(err)
 		}
@@ -134,8 +134,9 @@ func traceHeap(testId lib.TestId, runId lib.RunId) {
 func Heaps(testId lib.TestId, runId lib.RunId) []map[string][]byte {
 	inits := GetInitHeap(testId)
 	changes := GetHeapTrace(testId, runId)
+	network := GetNetworkTrace(testId, runId)
 
-	heaps := make([]map[string][]byte, len(changes)+1)
+	heaps := make([]map[string][]byte, len(network)+1)
 
 	m := make(map[string][]byte)
 	for _, init := range inits {
@@ -143,14 +144,14 @@ func Heaps(testId lib.TestId, runId lib.RunId) []map[string][]byte {
 	}
 	heaps[0] = m
 
-	for i, change := range changes {
-		old := heaps[i][change.Component]
-		new := applyDiff(old, change.Diff)
+	for i, _ := range network {
+		old := heaps[i][changes[i].Component]
+		new := applyDiff(old, changes[i].Diff)
 		m2 := make(map[string][]byte)
-		m2[change.Component] = []byte(new)
+		m2[changes[i].Component] = []byte(new)
 		heaps[i+1] = m2
 		for component, heap := range heaps[i] {
-			if component != change.Component {
+			if component != changes[i].Component {
 				heaps[i+1][component] = heap
 			}
 		}
