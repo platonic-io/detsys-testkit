@@ -139,6 +139,30 @@ System tests, in general, are:
 
 ---
 
+# Demo: Super Naive Implementation
+
+* The topology is 1 Frontend, 2 Register;
+
+* Each register records a history of all writes;
+
+* On client requests, the Frontend sends the request to both register and answer
+  with the first one responding (what could possibly go wrong?);
+
+* Network calls are assumed to work (naive).
+
+---
+
+# Demo: Resend logic
+
+* Instead of trusting the first, lets wait for both;
+
+* But now we need to have retries, since if one message gets dropped, we will get
+  stuck;
+  
+* Introducing `tick`s.
+
+---
+
 # Demo: shared register v1, success
 
 ![register_v1_success](image/register_v1_working.png)\

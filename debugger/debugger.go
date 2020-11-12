@@ -2,7 +2,6 @@ package debugger
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	jsonpatch "github.com/evanphx/json-patch"
