@@ -71,8 +71,7 @@ func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
 	db := lib.OpenDB()
 	defer db.Close()
 
-	// TODO(stevan): Deal with dropped and client responses properly...
-	rows, err := db.Query("SELECT message,args,`from`,`to`,dropped,at FROM network_trace WHERE test_id = ? AND run_id = ? AND NOT(`to` LIKE 'client:%')", testId.TestId, runId.RunId)
+	rows, err := db.Query("SELECT message,args,`from`,`to`,dropped,at FROM network_trace WHERE test_id = ? AND run_id = ?", testId.TestId, runId.RunId)
 	if err != nil {
 		panic(err)
 	}
@@ -146,28 +145,17 @@ func Heaps(testId lib.TestId, runId lib.RunId) []map[string][]byte {
 
 	dropped := 0
 	for i, event := range network {
-		if event.Dropped {
+		if event.Dropped || strings.HasPrefix(event.To, "client") {
 			dropped++
-			old := heaps[i][changes[i-1].Component]
-			new := applyDiff(old, changes[i-1].Diff)
-			m2 := make(map[string][]byte)
-			m2[changes[i-1].Component] = []byte(new)
-			heaps[i+1] = m2
-			for component, heap := range heaps[i] {
-				if component != changes[i-1].Component {
-					heaps[i+1][component] = heap
-				}
-			}
-		} else {
-			old := heaps[i][changes[i-dropped].Component]
-			new := applyDiff(old, changes[i-dropped].Diff)
-			m2 := make(map[string][]byte)
-			m2[changes[i-dropped].Component] = []byte(new)
-			heaps[i+1] = m2
-			for component, heap := range heaps[i] {
-				if component != changes[i-dropped].Component {
-					heaps[i+1][component] = heap
-				}
+		}
+		old := heaps[i][changes[i-dropped].Component]
+		new := applyDiff(old, changes[i-dropped].Diff)
+		m2 := make(map[string][]byte)
+		m2[changes[i-dropped].Component] = []byte(new)
+		heaps[i+1] = m2
+		for component, heap := range heaps[i] {
+			if component != changes[i-dropped].Component {
+				heaps[i+1][component] = heap
 			}
 		}
 	}
