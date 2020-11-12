@@ -158,40 +158,8 @@ System tests, in general, are:
 
 * But now we need to have retries, since if one message gets dropped, we will get
   stuck;
-  
+
 * Introducing `tick`s.
-
----
-
-# Demo: shared register v1, success
-
-![register_v1_success](image/register_v1_working.png)\
-
----
-
-# Demo: shared register v1, counterexample
-
-![register_v1](image/register_counterexample1.png)\
-
----
-
-# Demo: the testsuite of the SUT
-
-* Show the code of `detsys/sut/register_test.go`;
-* `go test`;
-* Ensure that we find the problem.
-
----
-
-# Demo: shared register v2, success
-
-![register_v2_success](image/register_v2_working.png)\
-
----
-
-# Demo: shared register v2, counterexample
-
-![register_v2](image/register_counterexample2.png)\
 
 ---
 
