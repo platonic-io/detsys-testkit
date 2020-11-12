@@ -3,7 +3,6 @@ package lib
 import (
 	"encoding/json"
 	"log"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -81,14 +80,7 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 	for _, runId := range runIds {
 		args = append(args, strconv.Itoa(runId.RunId))
 	}
-	cmd := exec.Command("./ldfi.py", args...)
-
-	path, err := os.Getwd()
-	if err != nil {
-		log.Panic(err)
-	}
-
-	cmd.Dir = path + "/../ldfi/"
+	cmd := exec.Command("detsys-ldfi", args...)
 
 	out, err := cmd.CombinedOutput()
 

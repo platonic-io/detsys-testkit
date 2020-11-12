@@ -13,8 +13,8 @@ and run-ids, while adhearing to the failure specification.
 #### Usage
 
 ```
-usage: ldfi.py [-h] --eff TIME --crashes INT --test-id TEST_ID --run-ids
-               RUN_ID [RUN_ID ...] [--json]
+usage: detsys-ldfi [-h] --eff TIME --crashes INT --test-id TEST_ID --run-ids
+                   RUN_ID [RUN_ID ...] [--json]
 
 Lineage-driven fault injection.
 
@@ -28,8 +28,20 @@ optional arguments:
   --json                output in JSON format?
 ```
 
+#### Installation
+
+```
+pip install .
+```
+
+Or, if you also want to run the tests before installing:
+
+```
+pip install --install-option pytest .
+```
+
 #### Run testsuite
 
 ```
-python -m unittest ldfi_test
+python -m unittest tests/ldfi_test.py
 ```
