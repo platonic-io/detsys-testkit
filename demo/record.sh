@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-OUTPUT_FILE="detsys_1_part_1"
+OUTPUT_FILE="detsys_1_part_5"
 VIDEO_SIZE="1600x900"
 
 ffmpeg -f alsa -i default \
