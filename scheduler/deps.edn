@@ -1,19 +1,19 @@
-{:paths ["src"]
- :deps {ring/ring-core                {:mvn/version "1.8.1"}
-        ring/ring-devel               {:mvn/version "1.8.1"}
-        ring/ring-defaults            {:mvn/version "0.3.2"}
-        ring/ring-jetty-adapter       {:mvn/version "1.8.1"}
-        clojure.java-time             {:mvn/version "0.3.2"}
-        clj-http/clj-http             {:mvn/version "3.10.2"}
-        clj-http-fake/clj-http-fake   {:mvn/version "1.0.3"}
-        org.clojure/clojure           {:mvn/version "1.10.2-alpha1"}
-        org.clojure/data.generators   {:mvn/version "1.0.0"}
-        shams/priority-queue          {:mvn/version "0.1.2"}
-        seancorfield/next.jdbc        {:mvn/version "1.1.582"}
-        org.xerial/sqlite-jdbc        {:mvn/version "3.32.3"}
-        com.taoensso/timbre           {:mvn/version "4.10.0"}
-        metosin/jsonista              {:mvn/version "0.2.7"}
-        gnl/ghostwheel                {:mvn/version "0.3.9"}}
+{:paths ["src" "java/src"]
+ :deps {ring/ring-core                      {:mvn/version "1.8.1"}
+        ring/ring-devel                     {:mvn/version "1.8.1"}
+        ring/ring-defaults                  {:mvn/version "0.3.2"}
+        ring/ring-jetty-adapter             {:mvn/version "1.8.1"}
+        clojure.java-time/clojure.java-time {:mvn/version "0.3.2"}
+        clj-http/clj-http                   {:mvn/version "3.10.2"}
+        clj-http-fake/clj-http-fake         {:mvn/version "1.0.3"}
+        org.clojure/clojure                 {:mvn/version "1.10.2-alpha4"}
+        org.clojure/data.generators         {:mvn/version "1.0.0"}
+        shams/priority-queue                {:mvn/version "0.1.2"}
+        seancorfield/next.jdbc              {:mvn/version "1.1.582"}
+        org.xerial/sqlite-jdbc              {:mvn/version "3.32.3.2"}
+        com.taoensso/timbre                 {:mvn/version "4.10.0"}
+        metosin/jsonista                    {:mvn/version "0.2.7"}
+        gnl/ghostwheel                      {:mvn/version "0.3.9"}}
  :aliases {:dev {:jvm-opts ["-Dghostwheel.enabled=true"]}
            :test {:extra-paths ["test"]
                   :extra-deps {com.cognitect/test-runner
@@ -32,18 +32,29 @@
            :uberjar {:extra-deps {uberdeps/uberdeps {:mvn/version "0.1.11"}}
                      :main-opts  ["-m" "uberdeps.uberjar"
                                   "--target" "target/scheduler.jar"]}
-           ;; Currently broken, see
-           ;; https://github.com/taylorwood/clj.native-image/issues/15 for
-           ;; workaround. Proper fix seems to be coming in Clojure 1.10.2.
            :native-image {:main-opts ["-m clj.native-image scheduler.core"
-                                      "--initialize-at-build-time"
+                                      "--verbose"
                                       "--allow-incomplete-classpath"
                                       "--no-fallback"
                                       "--report-unsupported-elements-at-runtime"
-                                      ;; optional native image name override
-                                      "-H:Name=target/scheduler"
+                                      "--initialize-at-build-time"
+                                      "--initialize-at-build-time=org.sqlite.JDBC"
+                                      "--initialize-at-build-time=org.sqlite.core.DB$ProgressObserver"
+                                      "--initialize-at-build-time=org.sqlite.core.DB"
+                                      "--initialize-at-build-time=org.sqlite.core.NativeDB"
+                                      "--initialize-at-build-time=org.sqlite.ProgressHandler"
+                                      "--initialize-at-build-time=org.sqlite.Function"
+                                      "--initialize-at-build-time=org.sqlite.Function$Aggregate"
+                                      "--initialize-at-build-time=org.sqlite.Function$Window"
+                                      "-H:IncludeResources=db/.*|static/.*|templates/.*|.*.yml|.*.xml|.*/org/sqlite/.*|org/sqlite/.*"
+                                      "-H:JNIConfigurationFiles=native-image/jni-config.json"
+                                      "-H:EnableURLProtocols=http,https"
+                                      "-H:Path=target/"
+                                      "-H:Name=scheduler"
                                       "-H:+ReportExceptionStackTraces"]
-                          :jvm-opts ["-Dclojure.compiler.direct-linking=true"]
+                          :jvm-opts ["-Dclojure.compiler.direct-linking=true"
+                                     "-Dclojure.spec.skip-macros=true"
+                                     "-Dfile.encoding=UTF-8"]
                           :extra-deps
                           {clj.native-image/clj.native-image
                            {:git/url "https://github.com/taylorwood/clj.native-image.git"

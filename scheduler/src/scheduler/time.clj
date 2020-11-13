@@ -1,26 +1,31 @@
 (ns scheduler.time
-  (:require [java-time :as time]
-            [scheduler.spec :refer [>defn =>]]))
+  (:require [scheduler.spec :refer [>defn =>]]))
+
+(set! *warn-on-reflection* true)
 
 (defn instant?
   [x]
   (instance? java.time.Instant x))
 
 (defn before?
-  [this that]
-  (time/before? this that))
+  [^java.time.Instant this ^java.time.Instant that]
+  (.isBefore this that))
 
-(>defn init-clock
+(>defn init-clock ^java.time.Instant
   []
   [=> instant?]
-  (time/instant 0))
+  (java.time.Instant/ofEpochSecond 0))
 
-(>defn plus-millis
-  [instant ms]
+(defn plus-millis ^java.time.Instant
+  [^java.time.Instant instant ^double ms]
   [instant? double? => instant?]
-  (time/plus instant (time/nanos (* ms 1000000))))
+  (.plusNanos instant (* ms 1000000)))
 
-(def instant time/instant)
+(defn instant
+  [s]
+  (java.time.Instant/parse s))
 
 (comment
-  (str (plus-millis (init-clock) 18.22324)))
+  (before? (init-clock) (java.time.Instant/now))
+  (plus-millis (init-clock) 18.22324)
+  (instant "1970-10-10T00:00:00Z") )

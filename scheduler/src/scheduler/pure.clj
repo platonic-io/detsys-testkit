@@ -480,9 +480,8 @@
          :args {}
          :to "inc"
          :from "client"}]
-       (time/instant (time/init-clock))
-       0)
-      second))
+       (time/init-clock))
+      second) )
 
 (>defn enqueue-entry
   [data timestamped-entry]
