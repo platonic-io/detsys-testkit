@@ -106,6 +106,9 @@ func main() {
 			case "At":
 				tableCell = tview.NewTableCell(strconv.Itoa(event.At))
 			}
+			if event.Dropped {
+				tableCell.SetTextColor(tcell.ColorGray)
+			}
 			table.SetCell(row+1, column, tableCell)
 		}
 	}
