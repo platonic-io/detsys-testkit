@@ -44,12 +44,11 @@ func handler(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor, m l
 	}
 }
 
-type TickRequest struct {
-	Component string    `json:"component"`
-	At        time.Time `json:"at"`
-}
-
 func handleTick(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
+	type TickRequest struct {
+		Component string    `json:"component"`
+		At        time.Time `json:"at"`
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "PUT" {
@@ -72,6 +71,34 @@ func handleTick(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFu
 	}
 }
 
+func handleTimer(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
+	type TimerRequest struct {
+		Component string    `json:"to"`
+		At        time.Time `json:"at"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		if r.Method != "POST" {
+			http.Error(w, jsonError("Method is not supported."),
+				http.StatusNotFound)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 1048576)
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			panic(err)
+		}
+		var req TimerRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			panic(err)
+		}
+		oevs := topology[req.Component].Timer(req.At)
+		bs := lib.MarshalUnscheduledEvents(m, req.Component, oevs)
+		fmt.Fprint(w, string(bs))
+	}
+}
+
 func Register(topology map[string]lib.Reactor) {
 	// TODO(stevan): Make executorUrl part of topology.
 	const executorUrl string = "http://localhost:3001/api/v1/"
@@ -89,6 +116,7 @@ func Deploy(srv *http.Server, testId lib.TestId, topology map[string]lib.Reactor
 	db := lib.OpenDB()
 	mux.HandleFunc("/api/v1/event", handler(db, testId, topology, m))
 	mux.HandleFunc("/api/v1/tick", handleTick(topology, m))
+	mux.HandleFunc("/api/v1/timer", handleTimer(topology, m))
 	srv.Addr = ":3001"
 	srv.Handler = mux
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {

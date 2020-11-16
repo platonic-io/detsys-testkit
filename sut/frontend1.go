@@ -130,3 +130,7 @@ func (fe *FrontEnd) Tick(at time.Time) []lib.OutEvent {
 
 	return nil
 }
+
+func (fe *FrontEnd) Timer(at time.Time) []lib.OutEvent {
+	return nil
+}

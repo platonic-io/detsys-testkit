@@ -86,29 +86,61 @@ func unmarshal(m Marshaler, kind string, event string, from string, input json.R
 	return iev, nil
 }
 
-func MarshalKind(args Args) string {
-	switch kind := args.(type) {
-	case *ClientResponse:
-		return "ok"
-	case *InternalMessage:
-		return "message"
-	default:
-		panic(fmt.Sprintf("%T", kind))
-	}
+type unscheduledEvent struct {
+	To    string `json:"to"`
+	From  string `json:"from"`
+	Kind  string `json:"kind"`
+	Event string `json:"event"`
+	Args  Args   `json:"args"`
 }
+type timerEvent struct {
+	Kind     string        `json:"kind"`
+	Args     struct{}      `json:"args"`
+	From     string        `json:"from"`
+	Duration time.Duration `json:"duration-ns"`
+}
+type event interface{ IsEvent() }
+
+func (_ unscheduledEvent) IsEvent() {}
+func (_ timerEvent) IsEvent()       {}
 
 func MarshalUnscheduledEvents(m Marshaler, from string, oevs []OutEvent) json.RawMessage {
-	usevs := make([]UnscheduledEvent, len(oevs))
+
+	usevs := make([]event, len(oevs))
 	for index, oev := range oevs {
-		usevs[index] = UnscheduledEvent{
-			From:  from,
-			To:    oev.To,
-			Kind:  MarshalKind(oev.Args),
-			Event: m.MarshalEvent(oev.Args),
-			Args:  oev.Args,
+		var event event
+		switch kindT := oev.Args.(type) {
+		case *ClientResponse:
+			event = unscheduledEvent{
+				From:  from,
+				To:    oev.To,
+				Kind:  "ok",
+				Event: m.MarshalEvent(oev.Args),
+				Args:  oev.Args,
+			}
+		case *InternalMessage:
+			event = unscheduledEvent{
+				From:  from,
+				To:    oev.To,
+				Kind:  "message",
+				Event: m.MarshalEvent(oev.Args),
+				Args:  oev.Args,
+			}
+		case *Timer:
+			event = timerEvent{
+				Kind:     "timer",
+				Args:     struct{}{},
+				From:     from,
+				Duration: kindT.Duration,
+			}
+		default:
+			panic(fmt.Sprintf("%T", kindT))
 		}
+		usevs[index] = event
 	}
-	bs, err := json.Marshal(Events{usevs})
+	bs, err := json.Marshal(struct {
+		Events []event `json:"events"`
+	}{usevs})
 	if err != nil {
 		panic(err)
 	}

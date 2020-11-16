@@ -8,17 +8,19 @@ import (
 	"github.com/symbiont-io/detsys/lib"
 )
 
-type FrontEnd3 struct {
+type FrontEnd4 struct {
 	OnGoing       []OnGoingInternalRequest
 	InFlight      map[SessionId]uint64
 	NextSessionId int
+	ResendTimer   time.Duration
 }
 
-func NewFrontEnd3() *FrontEnd3 {
-	return &FrontEnd3{[]OnGoingInternalRequest{}, map[SessionId]uint64{}, 0}
+func NewFrontEnd4() *FrontEnd4 {
+	resendTimer, _ := time.ParseDuration("5s")
+	return &FrontEnd4{[]OnGoingInternalRequest{}, map[SessionId]uint64{}, 0, resendTimer}
 }
 
-func (fe *FrontEnd3) ReceiveClient(at time.Time, from string, event lib.ClientRequest) []lib.OutEvent {
+func (fe *FrontEnd4) ReceiveClient(at time.Time, from string, event lib.ClientRequest) []lib.OutEvent {
 	sessionId := SessionId{fe.NextSessionId}
 	fe.NextSessionId++
 
@@ -50,13 +52,20 @@ func (fe *FrontEnd3) ReceiveClient(at time.Time, from string, event lib.ClientRe
 			To:   register2,
 			Args: args,
 		},
+		{
+			To: "frontend",
+			Args: &lib.Timer{
+				Duration: fe.ResendTimer,
+			},
+		},
 	}
 }
 
-func (fe *FrontEnd3) RemoveSession(from string, sessionId SessionId) (uint64, bool) {
+func (fe *FrontEnd4) RemoveSession(from string, sessionId SessionId) (uint64, bool) {
 	clientId, ok := fe.InFlight[sessionId]
 
 	noMore := true
+	found := false
 	if ok {
 		temp := fe.OnGoing[:0]
 
@@ -66,6 +75,8 @@ func (fe *FrontEnd3) RemoveSession(from string, sessionId SessionId) (uint64, bo
 			} else if from != on.Register {
 				noMore = false
 				temp = append(temp, on)
+			} else {
+				found = true
 			}
 		}
 
@@ -76,10 +87,10 @@ func (fe *FrontEnd3) RemoveSession(from string, sessionId SessionId) (uint64, bo
 		fe.OnGoing = temp
 	}
 
-	return clientId, noMore
+	return clientId, (noMore && found)
 }
 
-func (fe *FrontEnd3) Receive(at time.Time, from string, event lib.InEvent) []lib.OutEvent {
+func (fe *FrontEnd4) Receive(at time.Time, from string, event lib.InEvent) []lib.OutEvent {
 	var oevs []lib.OutEvent
 	switch ev := event.(type) {
 	case *lib.ClientRequest:
@@ -110,13 +121,15 @@ func (fe *FrontEnd3) Receive(at time.Time, from string, event lib.InEvent) []lib
 	return oevs
 }
 
-func (fe *FrontEnd3) Tick(at time.Time) []lib.OutEvent {
+func (_ *FrontEnd4) Tick(at time.Time) []lib.OutEvent {
+	return nil
+}
+
+func (fe *FrontEnd4) Timer(at time.Time) []lib.OutEvent {
 	resend := []lib.OutEvent{}
 
-	resendTimer, _ := time.ParseDuration("5s")
-
 	for _, on := range fe.OnGoing {
-		if at.After(on.At.Add(resendTimer)) {
+		if at.After(on.At.Add(fe.ResendTimer)) {
 			on.At = at
 			on.NumberOfTries++
 			event := lib.OutEvent{
@@ -127,9 +140,14 @@ func (fe *FrontEnd3) Tick(at time.Time) []lib.OutEvent {
 		}
 	}
 
-	return resend
-}
+	if len(resend) > 0 {
+		resend = append(resend, lib.OutEvent{
+			To: "frontend",
+			Args: &lib.Timer{
+				Duration: fe.ResendTimer,
+			},
+		})
+	}
 
-func (_ *FrontEnd3) Timer(at time.Time) []lib.OutEvent {
-	return nil
+	return resend
 }

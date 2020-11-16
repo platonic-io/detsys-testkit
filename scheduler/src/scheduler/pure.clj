@@ -253,15 +253,29 @@
 (s/def ::to string?)
 (s/def ::from string?)
 
-(def entry? (s/keys :req-un [::kind
-                             ::event
-                             ::args
-                             ::to
-                             ::from]))
+(def entry? (s/and (s/keys :req-un [::kind
+                                    ::event
+                                    ::args
+                                    ::to
+                                    ::from])
+                   #(not (#{"timer"} (:kind %)))))
 
 (def entries? (s/coll-of entry? :kind vector?))
 
-(s/def ::events entries?)
+(def timer?
+  (s/and (s/keys :req-un [::kind
+                          ::args
+                          ::from
+                          ::duration-ns])
+         #(= (:kind %) "timer")))
+
+(def event?
+  (s/or :entry entry?
+        :timer timer?))
+
+(def events? (s/coll-of event? :kind vector?))
+
+(s/def ::events events?)
 
 (defn error-state?
   [state]
@@ -335,22 +349,23 @@
             sent-logical-time (or (-> body :sent-logical-time)
                                   (and is-from-client?
                                        (:logical-clock data)))]
-        (db/append-trace! (:test-id data)
-                          (:run-id data)
-                          (-> body :event)
-                          (-> body :args json/write)
-                          (-> body :from)
-                          (-> body :to)
-                          sent-logical-time
-                          (-> data' :logical-clock)
-                          dropped?)
+        (when (not= (-> body :kind) "timer") ;; we don't store these because ldfi don't want them
+          (db/append-trace! (:test-id data)
+                            (:run-id data)
+                            (-> body :event)
+                            (-> body :args json/write)
+                            (-> body :from)
+                            (-> body :to)
+                            sent-logical-time
+                            (-> data' :logical-clock)
+                            dropped?))
         (if dropped?
           (do
             (log/debug :dropped? dropped? :clock (:clock data') :new-entries new-entries)
             [data' {:events new-entries}])
           (let ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
               ;; so that we don't end up executing the same command twice.
-              [events (-> (client/post (str url "event")
+              [events (-> (client/post (str url (if (= (:kind body) "timer") "timer" "event"))
                                        {:body (json/write body)
                                         :content-type "application/json; charset=utf-8"})
                           :body
@@ -373,7 +388,8 @@
                                   (-> body :from parse-client-id)))
 
             (let [[client-responses internal]
-                  (partition-haskell #(some? (re-matches #"^client:\d+$" (:to %)))
+                  (partition-haskell #(and (#{"ok"} (:kind %))
+                                           (some? (re-matches #"^client:\d+$" (:to %))))
                                      (:events events))
                   internal (mapv #(assoc % :sent-logical-time (:logical-clock data')) internal)
                   data'' (cond-> data'
@@ -458,14 +474,23 @@
 
 (>defn timestamp-entries
   [data entries timestamp]
-  [::data entries? time/instant?
+  [::data events? time/instant?
    => (s/tuple ::data (s/keys :req-un [::timestamped-entries]))]
   (with-bindings {#'gen/*rnd* (java.util.Random. (:seed data))}
     (let [new-seed (.nextLong gen/*rnd*)
           timestamps (->> (gen/vec #(random/exponential 20) (count entries))
-                          (mapv #(time/plus-millis timestamp %)))]
+                          (mapv #(time/plus-millis timestamp %)))
+          update-entry (fn [entry timestamp]
+                         (case (:kind entry)
+                           "timer" (-> entry
+                                       ;; Maybe these should have another probability distribution for how slow they are
+                                       (assoc :at (time/plus-nanos timestamp (double (:duration-ns entry)))
+                                              :to (:from entry)
+                                              :event :timer)
+                                       (dissoc :duration))
+                           (assoc entry :at timestamp)))]
       [(assoc data :seed new-seed)
-       {:timestamped-entries (mapv (fn [entry timestamp] (merge entry {:at timestamp})) entries timestamps)}])))
+       {:timestamped-entries (mapv update-entry entries timestamps)}])))
 
 (comment
   (-> (init-data)

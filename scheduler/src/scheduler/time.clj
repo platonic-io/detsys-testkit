@@ -21,6 +21,11 @@
   [instant? double? => instant?]
   (.plusNanos instant (* ms 1000000)))
 
+(defn plus-nanos ^java.time.Instant
+  [^java.time.Instant instant ^double ns]
+  [instant? double? => instant?]
+  (.plusNanos instant ns))
+
 (defn instant
   [s]
   (java.time.Instant/parse s))

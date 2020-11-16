@@ -13,6 +13,7 @@ import (
 type Reactor interface {
 	Receive(at time.Time, from string, event InEvent) []OutEvent
 	Tick(at time.Time) []OutEvent
+	Timer(at time.Time) []OutEvent
 }
 
 type Marshaler interface {
@@ -54,14 +55,6 @@ type Message interface{ Message() }
 
 func (_ InternalMessage) InEvent() {}
 
-type UnscheduledEvent struct {
-	To    string `json:"to"`
-	From  string `json:"from"`
-	Kind  string `json:"kind"`
-	Event string `json:"event"`
-	Args  Args   `json:"args"`
-}
-
 type Args interface{ Args() }
 
 type ClientResponse struct {
@@ -71,16 +64,17 @@ type ClientResponse struct {
 
 type Response interface{ Response() }
 
+type Timer struct {
+	Duration time.Duration `json:"duration"`
+}
+
 func (_ ClientResponse) Args()  {}
 func (_ InternalMessage) Args() {}
+func (_ Timer) Args()           {}
 
 type OutEvent struct {
 	To   string
 	Args Args
-}
-
-type Events struct {
-	Events []UnscheduledEvent `json:"events"`
 }
 
 // ---------------------------------------------------------------------

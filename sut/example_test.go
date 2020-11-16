@@ -9,7 +9,7 @@ import (
 	"github.com/symbiont-io/detsys/lib"
 )
 
-func once(newFrontEnd func()lib.Reactor, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
+func once(newFrontEnd func() lib.Reactor, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	topology := map[string]lib.Reactor{
 		"frontend":  newFrontEnd(),
 		"register1": NewRegister(),
@@ -34,7 +34,7 @@ func once(newFrontEnd func()lib.Reactor, testId lib.TestId, t *testing.T) (lib.R
 	return runId, result
 }
 
-func testRegisterWithFrontEnd(newFrontEnd func()lib.Reactor, tickFrequency float64,  t *testing.T) {
+func testRegisterWithFrontEnd(newFrontEnd func() lib.Reactor, tickFrequency float64, t *testing.T) {
 	testId := lib.GenerateTest()
 
 	var runIds []lib.RunId
@@ -64,13 +64,17 @@ func testRegisterWithFrontEnd(newFrontEnd func()lib.Reactor, tickFrequency float
 }
 
 func TestRegister1(t *testing.T) {
-	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd()}, 5000.0, t)
+	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd() }, 5000.0, t)
 }
 
 func TestRegister2(t *testing.T) {
-	testRegisterWithFrontEnd(func () lib.Reactor { return NewFrontEnd2()}, 1000.0, t)
+	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd2() }, 1000.0, t)
 }
 
 func TestRegister3(t *testing.T) {
-	testRegisterWithFrontEnd(func () lib.Reactor { return NewFrontEnd3()}, 1000.0, t)
+	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd3() }, 1000.0, t)
+}
+
+func TestRegister4(t *testing.T) {
+	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd4() }, 10*1000*1000.0, t)
 }

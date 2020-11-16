@@ -76,3 +76,7 @@ func (r *Register) Receive(_ time.Time, from string, event lib.InEvent) []lib.Ou
 func (r *Register) Tick(_ time.Time) []lib.OutEvent {
 	return nil
 }
+
+func (r *Register) Timer(_ time.Time) []lib.OutEvent {
+	return nil
+}
