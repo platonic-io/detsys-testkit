@@ -187,7 +187,6 @@
 (s/def ::timestamp time/instant?)
 (s/def ::body agenda/entry?)
 (s/def ::dropped boolean?)
-(s/def ::new-entries (s/coll-of agenda/entry?))
 
 ;; TODO(stevan): check if agenda is empty...
 (>defn fetch-new-entry!
@@ -196,8 +195,7 @@
                               (s/keys :req-un [::url
                                                ::timestamp
                                                ::body
-                                               ::dropped?
-                                               ::new-entries])))]
+                                               ::dropped?])))]
   (if-not (contains? #{:ready :requesting} (:state data))
     [(assoc data :state :error-cannot-execute-in-this-state) nil]
     (let [[agenda' entry] (agenda/dequeue (:agenda data))
@@ -215,16 +213,17 @@
           entry-from-client-with-current-request (some #(= (-> % :from)
                                                            (-> entry :from))
                                                        (:client-requests data'))
+          data' (assoc data' :agenda
+                    (if entry-from-client-with-current-request
+                      (agenda/enqueue agenda' (update entry :at #(time/plus-millis % (:client-delay-ms data'))))
+                      agenda'))
           executor-id (get (:topology data') (:to entry))]
       (assert executor-id (str "Target `" (:to entry) "' isn't in topology."))
       [data' {:url executor-id
               :timestamp (:at entry)
               :body entry
               :dropped? (or (should-drop? data' entry)
-                            entry-from-client-with-current-request)
-              :new-entries (if entry-from-client-with-current-request
-                             [(update entry :at #(time/plus-millis % (:client-delay-ms data')))]
-                             [])}])))
+                            entry-from-client-with-current-request)}])))
 
 (comment
   (-> (init-data)
@@ -334,7 +333,7 @@
 (>defn execute!
   [data]
   [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
-  (let [[data' {:keys [url timestamp body dropped? new-entries]}] (fetch-new-entry! data)]
+  (let [[data' {:keys [url timestamp body dropped?]}] (fetch-new-entry! data)]
     (if (error-state? (:state data'))
       [data nil]
       (let [[data' expired-clients] (expired-clients data' timestamp)
@@ -361,8 +360,8 @@
                             dropped?))
         (if dropped?
           (do
-            (log/debug :dropped? dropped? :clock (:clock data') :new-entries new-entries)
-            [data' {:events new-entries}])
+            (log/debug :dropped? dropped? :clock (:clock data'))
+            [data' {:events []}])
           (let ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
               ;; so that we don't end up executing the same command twice.
               [events (-> (client/post (str url (if (= (:kind body) "timer") "timer" "event"))
