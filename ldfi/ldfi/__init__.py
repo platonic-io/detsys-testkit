@@ -36,6 +36,7 @@ def main():
                      where test_id = (?)
                        and run_id = (?)
                        and dropped = 0
+                       and kind <> 'timer'
                        and not (`from` like 'client:%')
                        and not (`to`   like 'client:%')""",
                   (args.test_id, run_id))
