@@ -21,9 +21,6 @@
            :uberjar {:extra-deps {uberdeps/uberdeps {:mvn/version "0.1.11"}}
                      :main-opts  ["-m" "uberdeps.uberjar"
                                   "--target" "target/checker.jar"]}
-           ;; Currently broken, see
-           ;; https://github.com/taylorwood/clj.native-image/issues/15 for
-           ;; workaround. Proper fix seems to be coming in Clojure 1.10.2.
            :native-image {:main-opts ["-m clj.native-image checker.core"
                                       "--no-server"
                                       "--initialize-at-build-time"
@@ -35,7 +32,8 @@
                                       "--initialize-at-run-time=sun.java2d.SurfaceData"
                                       "--initialize-at-run-time=com.sun.imageio.plugins.jpeg.JPEG$JCS"
                                       "--initialize-at-run-time=sun.awt.dnd.SunDropTargetContextPeer$EventDispatcher"
-                                      "-H:Name=target/checker"
+                                      "-H:Path=target/"
+                                      "-H:Name=checker"
                                       "-H:+ReportExceptionStackTraces"]
                           :jvm-opts ["-Djava.awt.headless=true"
                                      "-Dclojure.spec.skip-macros=true"

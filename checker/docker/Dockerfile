@@ -34,6 +34,16 @@ RUN clojure -e ""
 RUN javac java/src/lockfix/LockFix.java -cp \
     /root/.m2/repository/org/clojure/clojure/1.10.2-alpha2/clojure-1.10.2-alpha2.jar
 
+# Add a non-root user.
+ARG user
+ARG uid
+ARG gid
+RUN addgroup --gid $gid $user \
+	  && adduser --uid $uid --ingroup $user --disabled-password $user
+
+RUN chown $user:$user -R /app
+USER $user
+
 # Compile the native image via GraalVM.
 RUN cd /app && \
     mkdir target && \
