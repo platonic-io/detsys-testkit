@@ -23,5 +23,9 @@ clj -A:native-image
 From the same directory as this README is in, do:
 
 ```bash
-docker build -t detsys/checker -f docker/Dockerfile .
+docker build \
+  --build-arg user=$(whoami) \
+  --build-arg uid=$(id -u) \
+  --build-arg gid=$(id -g) \
+  -t detsys/checker -f docker/Dockerfile .
 ```
