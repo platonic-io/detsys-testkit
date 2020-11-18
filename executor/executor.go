@@ -71,7 +71,7 @@ func handleTick(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFu
 	}
 }
 
-func handleTimer(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
+func handleTimer(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
 	type TimerRequest struct {
 		Component string    `json:"to"`
 		At        time.Time `json:"at"`
@@ -93,7 +93,11 @@ func handleTimer(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerF
 		if err := json.Unmarshal(body, &req); err != nil {
 			panic(err)
 		}
+		heapBefore := dumpHeapJson(topology[req.Component])
 		oevs := topology[req.Component].Timer(req.At)
+		heapAfter := dumpHeapJson(topology[req.Component])
+		heapDiff := jsonDiff(heapBefore, heapAfter)
+		appendHeapTrace(db, testId, req.Component, heapDiff, req.At)
 		bs := lib.MarshalUnscheduledEvents(m, req.Component, oevs)
 		fmt.Fprint(w, string(bs))
 	}
@@ -116,7 +120,7 @@ func Deploy(srv *http.Server, testId lib.TestId, topology map[string]lib.Reactor
 	db := lib.OpenDB()
 	mux.HandleFunc("/api/v1/event", handler(db, testId, topology, m))
 	mux.HandleFunc("/api/v1/tick", handleTick(topology, m))
-	mux.HandleFunc("/api/v1/timer", handleTimer(topology, m))
+	mux.HandleFunc("/api/v1/timer", handleTimer(db, testId, topology, m))
 	srv.Addr = ":3001"
 	srv.Handler = mux
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {

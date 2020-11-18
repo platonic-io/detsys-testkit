@@ -348,16 +348,16 @@
             sent-logical-time (or (-> body :sent-logical-time)
                                   (and is-from-client?
                                        (:logical-clock data)))]
-        (when (not= (-> body :kind) "timer") ;; we don't store these because ldfi don't want them
-          (db/append-trace! (:test-id data)
-                            (:run-id data)
-                            (-> body :event)
-                            (-> body :args json/write)
-                            (-> body :from)
-                            (-> body :to)
-                            sent-logical-time
-                            (-> data' :logical-clock)
-                            dropped?))
+        (db/append-trace! (:test-id data)
+                          (:run-id data)
+                          (-> body :event)
+                          (-> body :args json/write)
+                          (-> body :kind)
+                          (-> body :from)
+                          (-> body :to)
+                          sent-logical-time
+                          (-> data' :logical-clock)
+                          dropped?)
         (if dropped?
           (do
             (log/debug :dropped? dropped? :clock (:clock data'))
@@ -407,6 +407,7 @@
                                   (:run-id data)
                                   (-> client-response :event)
                                   (-> client-response :args json/write)
+                                  "ok"
                                   (-> client-response :from)
                                   (-> client-response :to)
                                   (-> data' :logical-clock) ;; should we advance clock for client responses?
