@@ -3,5 +3,5 @@ let
   pkgs = import sources.nixpkgs {};
 in
 pkgs.mkShell {
-  buildInputs = [ pkgs.go pkgs.niv ];
+  buildInputs = [ pkgs.go pkgs.niv pkgs.plantuml ];
 }
