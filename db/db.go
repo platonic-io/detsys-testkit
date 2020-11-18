@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/gobuffalo/packr"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/rubenv/sql-migrate"
 	"os"
@@ -30,15 +29,15 @@ func main() {
 		help()
 	}
 
-	migrations := &migrate.PackrMigrationSource{
-		Box: packr.NewBox("./migrations"),
+	migrations := &migrate.FileMigrationSource{
+		Dir: "./result/migrations",
 	}
 
 	db := lib.OpenDB()
 
 	n, err := migrate.Exec(db, "sqlite3", migrations, dir)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("%s\n%s", err, migrations))
 	}
 	fmt.Printf("Applied %d migrations!\n", n)
 }

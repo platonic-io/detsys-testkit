@@ -1,0 +1,3 @@
+# ignored higher up in the tree.
+!/vendor/
+result*

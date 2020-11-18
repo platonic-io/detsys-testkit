@@ -5,3 +5,4 @@ classes/
 reports/
 .eastwood
 *.class
+./.envrc-local
