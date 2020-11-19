@@ -91,6 +91,10 @@ func main() {
 			SetAlign(tview.AlignLeft)
 		table.SetCell(0, column, tableCell)
 	}
+	maxBody := 0
+	for _, event := range events {
+		maxBody = max(maxBody, len(string(event.Args)))
+	}
 	for row, event := range events {
 		for column, cell := range []string{"Message", "Body", "From", "To", "At", "Time"} {
 
@@ -99,7 +103,8 @@ func main() {
 			case "Message":
 				tableCell = tview.NewTableCell(event.Message)
 			case "Body":
-				tableCell = tview.NewTableCell(string(event.Args))
+				tableCell = tview.NewTableCell(fmt.Sprintf(fmt.Sprintf("%%-%ds", maxBody),
+					string(event.Args)))
 			case "From":
 				tableCell = tview.NewTableCell(event.From)
 			case "To":
