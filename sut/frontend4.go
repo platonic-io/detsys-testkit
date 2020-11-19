@@ -128,10 +128,10 @@ func (_ *FrontEnd4) Tick(at time.Time) []lib.OutEvent {
 func (fe *FrontEnd4) Timer(at time.Time) []lib.OutEvent {
 	resend := []lib.OutEvent{}
 
-	for _, on := range fe.OnGoing {
+	for i, on := range fe.OnGoing {
 		if at.After(on.At.Add(fe.ResendTimer)) {
-			on.At = at
-			on.NumberOfTries++
+			fe.OnGoing[i].At = at
+			fe.OnGoing[i].NumberOfTries++
 			event := lib.OutEvent{
 				To:   on.Register,
 				Args: translate(on.Request, on.SessionId),

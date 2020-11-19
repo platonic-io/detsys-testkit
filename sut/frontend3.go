@@ -115,10 +115,10 @@ func (fe *FrontEnd3) Tick(at time.Time) []lib.OutEvent {
 
 	resendTimer, _ := time.ParseDuration("5s")
 
-	for _, on := range fe.OnGoing {
+	for i, on := range fe.OnGoing {
 		if at.After(on.At.Add(resendTimer)) {
-			on.At = at
-			on.NumberOfTries++
+			fe.OnGoing[i].At = at
+			fe.OnGoing[i].NumberOfTries++
 			event := lib.OutEvent{
 				To:   on.Register,
 				Args: translate(on.Request, on.SessionId),
