@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/symbiont-io/detsys/debugger/internal"
 	"github.com/symbiont-io/detsys/lib"
@@ -83,7 +84,7 @@ func main() {
 	table := tview.NewTable().
 		SetFixed(1, 1)
 
-	for column, header := range []string{"Event", "Body", "From", "To", "At"} {
+	for column, header := range []string{"Event", "Body", "From", "To", "At", "Time"} {
 		tableCell := tview.NewTableCell(header).
 			SetSelectable(false).
 			SetTextColor(tcell.ColorYellow).
@@ -91,7 +92,7 @@ func main() {
 		table.SetCell(0, column, tableCell)
 	}
 	for row, event := range events {
-		for column, cell := range []string{"Message", "Body", "From", "To", "At"} {
+		for column, cell := range []string{"Message", "Body", "From", "To", "At", "Time"} {
 
 			var tableCell *tview.TableCell
 			switch cell {
@@ -105,6 +106,8 @@ func main() {
 				tableCell = tview.NewTableCell(event.To)
 			case "At":
 				tableCell = tview.NewTableCell(strconv.Itoa(event.At))
+			case "Time":
+				tableCell = tview.NewTableCell(event.Simulated.Format(time.StampNano))
 			}
 			if event.Dropped {
 				tableCell.SetTextColor(tcell.ColorGray)

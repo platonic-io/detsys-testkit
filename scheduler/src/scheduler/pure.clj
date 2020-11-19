@@ -358,6 +358,10 @@
                           sent-logical-time
                           (-> data' :logical-clock)
                           dropped?)
+        (db/append-time-mapping! (:test-id data)
+                                 (:run-id data)
+                                 (-> data' :logical-clock)
+                                 (-> data' :clock))
         (if dropped?
           (do
             (log/debug :dropped? dropped? :clock (:clock data'))
@@ -396,6 +400,11 @@
                            (not (empty? client-responses)) (update :logical-clock inc)
                            true (remove-client-requests (map :to client-responses)))]
               ;; TODO(stevan): use seed to shuffle client-responses?
+              (if (not (empty? client-responses))
+                (db/append-time-mapping! (:test-id data'')
+                                         (:run-id data'')
+                                         (-> data'' :logical-clock)
+                                         (-> data'' :clock)))
               (doseq [client-response client-responses]
                 (db/append-history! (:test-id data)
                                     (:run-id data)

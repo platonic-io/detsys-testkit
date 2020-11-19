@@ -75,3 +75,12 @@
      VALUES (?, ?, (SELECT IFNULL(MAX(id), -1) + 1 FROM network_trace WHERE test_id = ? AND run_id = ?), ?, ?, ?, ?, ?, ?, ?, ?)"
     test-id run-id test-id run-id message args kind from to sent-logical-time at (if dropped? 1 0)]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
+
+(defn append-time-mapping!
+  [test-id run-id logical-time simulated-time]
+  (jdbc/execute-one!
+   ds
+   ["INSERT INTO time_mapping (test_id, run_id, logical_time, simulated_time)
+      VALUES (?, ?, ?, ?)"
+    test-id run-id logical-time simulated-time]
+   {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
