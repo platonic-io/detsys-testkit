@@ -1,4 +1,5 @@
-{ pkgs ? import <nixpkgs> {} }:
+{ sources ? import ./nix/sources.nix
+, pkgs ? import sources.nixpkgs {} }:
 with pkgs;
 
 assert lib.versionAtLeast go.version "1.15";
