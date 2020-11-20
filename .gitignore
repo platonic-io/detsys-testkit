@@ -6,3 +6,5 @@ reports/
 .eastwood
 *.class
 ./.envrc-local
+vendor/
+result*
