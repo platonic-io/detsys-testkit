@@ -1,0 +1,57 @@
+[
+{
+  "name":"java.lang.ClassLoader",
+  "methods":[{"name":"getPlatformClassLoader","parameterTypes":[] }]
+},
+{
+  "name":"org.sqlite.core.NativeDB",
+  "methods":[{"name":"_open_utf8","parameterTypes":["byte[]", "int"] }]
+},
+{
+  "name":"org.sqlite.core.DB$ProgressObserver",
+  "methods":[{"name":"progress","parameterTypes":["int", "int"] }]
+},
+{
+  "name":"java.lang.NoSuchMethodError"
+},
+{
+  "name":"org.sqlite.core.NativeDB",
+  "fields":[
+    {"name":"pointer"},
+    {"name":"udfdatalist"}
+  ]
+},
+{
+  "name":"org.sqlite.Function",
+  "fields":[
+    {"name":"context"},
+    {"name":"value"},
+    {"name":"args"}
+  ]
+},
+{
+  "name":"org.sqlite.Function$Aggregate",
+  "fields":[]
+},
+{
+  "name":"org.sqlite.Function$Window",
+  "fields":[]
+},
+{
+  "name":"org.sqlite.ProgressHandler",
+  "fields":[]
+},
+{
+  "name":"sun.management.VMManagementImpl",
+  "fields":[
+    {"name":"compTimeMonitoringSupport"},
+    {"name":"currentThreadCpuTimeSupport"},
+    {"name":"objectMonitorUsageSupport"},
+    {"name":"otherThreadCpuTimeSupport"},
+    {"name":"remoteDiagnosticCommandsSupport"},
+    {"name":"synchronizerUsageSupport"},
+    {"name":"threadAllocatedMemorySupport"},
+    {"name":"threadContentionMonitoringSupport"}
+  ]
+}
+]
