@@ -6,7 +6,7 @@ import (
 	"github.com/rubenv/sql-migrate"
 	"os"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/lib"
 )
 
 func help() {
