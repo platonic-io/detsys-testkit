@@ -10,9 +10,24 @@ buildGoModule rec {
   version = "latest";
   goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
 
-  # TODO(stevan): This can be tighter, we only need the db and lib directories
-  # from `./..`.
-  src = lib.sourceFilesBySuffices ./.. [ ".go" ".mod" ".sum" ".sql" ];
+  src = lib.cleanSourceWith {
+    filter = lib.cleanSourceFilter;
+    src = lib.cleanSourceWith {
+      filter = with pkgs.stdenv;
+        name: type: let baseName = baseNameOf (toString name); in
+                    baseName == "db" ||
+                    baseName == "migrations" ||
+                    baseName == "lib" ||
+                    lib.hasSuffix ".go" name ||
+                    lib.hasSuffix ".mod" name ||
+                    lib.hasSuffix ".sum" name ||
+                    lib.hasSuffix ".sql" name;
+      src = ../.;
+    };
+  };
+
+  # NOTE: If this hash is wrong, we get a cryptic "go: cannot find main module"
+  # error...
   vendorSha256 = "00808wzgjb6jzb7kdjg209lzlqk2ipbqpbi87d4cc0iqnr37w9h1";
 
   preConfigure = "cd db";
