@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/symbiont-io/detsys/debugger/internal"
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/detsys-debug/internal"
+	"github.com/symbiont-io/detsys-testkit/lib"
 )
 
 func max(x, y int) int {

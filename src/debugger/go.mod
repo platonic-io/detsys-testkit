@@ -1,10 +1,8 @@
-module github.com/symbiont-io/detsys/debugger
+module github.com/symbiont-io/detsys-testkit/detsys-debug
 
 go 1.15
 
-replace github.com/symbiont-io/detsys/debugger => ./
-
-replace github.com/symbiont-io/detsys/lib => ../lib
+replace github.com/symbiont-io/detsys-testkit/lib => ../lib
 
 require (
 	github.com/evanphx/json-patch v4.9.0+incompatible
@@ -13,5 +11,5 @@ require (
 	github.com/nsf/jsondiff v0.0.0-20200515183724-f29ed568f4ce
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/rivo/tview v0.0.0-20201018122409-d551c850a743
-	github.com/symbiont-io/detsys/lib v0.0.0-00010101000000-000000000000
+	github.com/symbiont-io/detsys-testkit/lib v0.0.0-00010101000000-000000000000
 )
