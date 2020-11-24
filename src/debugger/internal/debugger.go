@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/lib"
 )
 
 type HeapDiff struct {

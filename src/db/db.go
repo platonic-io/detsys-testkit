@@ -29,8 +29,13 @@ func main() {
 		help()
 	}
 
+	home, ok := os.LookupEnv("HOME")
+	if !ok {
+		panic("HOME environment variable not set!")
+	}
+
 	migrations := &migrate.FileMigrationSource{
-		Dir: "./result/migrations",
+		Dir: fmt.Sprintf("%s/.nix-profile/migrations", home),
 	}
 
 	db := lib.OpenDB()

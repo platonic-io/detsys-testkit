@@ -1,4 +1,5 @@
-{ pkgs ? import <nixpkgs> {} }:
+{ sources ? import ./nix/sources.nix
+, pkgs ? import sources.nixpkgs {} }:
 with pkgs;
 
 assert lib.versionAtLeast go.version "1.15";
@@ -6,20 +7,26 @@ assert lib.versionAtLeast go.version "1.15";
 buildGoModule rec {
   pname = "detsys";
   version = "latest";
-  goPackagePath = "github.com/symbiont-io/detsys/cli";
-  src = ./.;
+  goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
 
-  debugger = callPackage ../debugger/default.nix {};
-  db = callPackage ../db/default.nix {};
+  src = lib.cleanSourceWith {
+    filter = lib.cleanSourceFilter;
+    src = lib.cleanSourceWith {
+      filter = with pkgs.stdenv;
+        name: type: let baseName = baseNameOf (toString name); in
+                    baseName == "cli" ||
+                    baseName == "cmd" ||
+                    baseName == "lib" ||
+                    lib.hasSuffix ".go" name ||
+                    lib.hasSuffix ".mod" name ||
+                    lib.hasSuffix ".sum" name;
+      src = ../.;
+    };
+  };
 
-  buildInput = [ debugger db ];
+  modRoot = "cli";
+  vendorSha256 = "1wr4ddjjclc7asbwxh9rlvvwx0dkzmd8azkm03c04s46a427fk4g";
 
-  # If vendorSha256 is null, then we won't fetch any dependencies and
-  # rely on the vendor folder within the source.
-  vendorSha256 = null;
-
-  # Statically linked.
-  preBuild = ''
-    export CGO_ENABLED=0
-  '';
+  # Static linking.
+  preBuild = "export CGO_ENABLED=0";
 }
