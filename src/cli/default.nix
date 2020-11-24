@@ -27,8 +27,6 @@ buildGoModule rec {
   modRoot = "cli";
   vendorSha256 = "1wr4ddjjclc7asbwxh9rlvvwx0dkzmd8azkm03c04s46a427fk4g";
 
-  # Statically linked.
-  preBuild = ''
-    export CGO_ENABLED=0
-  '';
+  # Static linking.
+  preBuild = "export CGO_ENABLED=0";
 }
