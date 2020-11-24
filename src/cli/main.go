@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/symbiont-io/detsys/detsys/cmd"
+	"github.com/symbiont-io/detsys-testkit/detsys/cmd"
 )
 
 func main() {
