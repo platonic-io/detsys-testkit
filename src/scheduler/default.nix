@@ -20,8 +20,6 @@ in mkDerivation rec {
     export CLASSPATH=$(find ${mavenRepository} -name "*.jar" -printf ':%h/%f')
     export builddir=$TMP/tmp_install
     mkdir -p $builddir
-    export res=$builddir/${name}/resources
-    mkdir -p $res
 
     javac java/src/lockfix/LockFix.java -cp $CLASSPATH -d $builddir
 
