@@ -21,7 +21,7 @@ in stdenv.mkDerivation rec {
 
     javac java/src/lockfix/LockFix.java -cp $CLASSPATH -d $builddir
 
-    java -cp src:classes:java/src:$CLASSPATH:$builddir \
+    java -cp src:$CLASSPATH:$builddir \
          -Dclojure.compile.path=$builddir \
          -Dclojure.compiler.direct-linking=true \
          -Dclojure.spec.skip-macros=true \
