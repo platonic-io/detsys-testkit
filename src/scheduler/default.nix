@@ -7,9 +7,7 @@ let
   mvn2nix = import (fetchTarball https://github.com/fzakaria/mvn2nix/archive/master.tar.gz) {};
   mavenRepository =
     mvn2nix.buildMavenRepositoryFromLockFile { file = ./mvn2nix-lock.json; };
-  inherit (pkgs) lib stdenv jdk11_headless maven makeWrapper;
-  inherit (stdenv) mkDerivation;
-in mkDerivation rec {
+in stdenv.mkDerivation rec {
   pname = "scheduler";
   version = "0.1.0";
   name = "${pname}-${version}";
