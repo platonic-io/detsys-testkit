@@ -15,7 +15,7 @@ in mkDerivation rec {
   name = "${pname}-${version}";
   src = lib.cleanSource ./.;
 
-  buildInputs = [ clojure jdk11_headless makeWrapper ];
+  buildInputs = [ jdk11_headless makeWrapper ];
   buildPhase = ''
     export CLASSPATH=$(find ${mavenRepository} -name "*.jar" -printf ':%h/%f')
     export builddir=$TMP/tmp_install
