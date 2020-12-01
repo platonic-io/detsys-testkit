@@ -22,6 +22,7 @@
 (s/def ::clock               time/instant?)
 (s/def ::next-tick           time/instant?)
 (s/def ::tick-frequency      double?)
+(s/def ::max-time-ns         double?)
 (s/def ::client-requests     (s/coll-of agenda/entry?))
 (s/def ::client-timeout-ms   double?)
 (s/def ::client-delay-ms     double?)
@@ -49,6 +50,7 @@
                                ::clock
                                ::next-tick
                                ::tick-frequency
+                               ::max-time-ns
                                ::client-requests
                                ::client-timeout-ms
                                ::client-delay-ms
@@ -70,6 +72,7 @@
    :clock               (time/init-clock)
    :next-tick           (time/init-clock)
    :tick-frequency      50.0
+   :max-time-ns         0.0
    :client-requests     []
    :client-timeout-ms   (* 30.0 1000)
    :client-delay-ms     (* 1.0 1000)
@@ -553,7 +556,11 @@
   [data {:keys [timestamped-entries]}]
   [::data (s/keys :req-un [::timestamped-entries])
    => (s/tuple ::data (s/keys :req-un [::queue-size]))]
-  (if (and (empty? timestamped-entries) (-> data :agenda empty?))
+  (if (or (and (empty? timestamped-entries) (-> data :agenda empty?))
+          (and (not= (-> data :max-time-ns) 0.0)
+               (time/before? (time/plus-nanos (time/init-clock)
+                                              (-> data :max-time-ns))
+                             (-> data :clock))))
     [(update data :state
              (fn [state]
                (case state
@@ -672,6 +679,14 @@
   [::data (s/keys :req-un [::new-tick-frequency]) => (s/tuple ::data double?)]
   (let [tick-frequency (double new-tick-frequency)]
     [(assoc data :tick-frequency tick-frequency) tick-frequency]))
+
+(s/def ::new-max-time-ns (s/or :integer integer? :double double?))
+
+(>defn set-max-time!
+  [data {new-max-time-ns :new-max-time-ns}]
+  [::data (s/keys :req-un [::new-max-time-ns]) => (s/tuple ::data double?)]
+  (let [max-time (double new-max-time-ns)]
+    [(assoc data :max-time-ns max-time) max-time]))
 
 (defn reset
   [_data]

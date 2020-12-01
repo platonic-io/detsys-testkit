@@ -76,6 +76,12 @@ func SetTickFrequency(tickFrequency float64) {
 	}{tickFrequency})
 }
 
+func SetMaxTimeNs(maxTime float64) {
+	Post("set-max-time!", struct {
+		MaxTime float64 `json:"new-max-time-ns"`
+	}{maxTime})
+}
+
 func Run() {
 	Post("run!", struct{}{})
 }
