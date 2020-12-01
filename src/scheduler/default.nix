@@ -13,28 +13,58 @@ in stdenv.mkDerivation rec {
   name = "${pname}-${version}";
   src = lib.cleanSource ./.;
 
-  buildInputs = [ clojure jdk11_headless makeWrapper ];
+  buildInputs = [ clojure jdk11_headless graalvm11-ce ];
   buildPhase = ''
     export CLASSPATH=$(find ${mavenRepository} -name "*.jar" -printf ':%h/%f')
     export builddir=$TMP/classes
     mkdir -p $builddir
 
+    echo "compiling lock fix workaround"
     javac java/src/lockfix/LockFix.java -cp $CLASSPATH -d $builddir
 
+    echo "compiling clojure sources"
     clj -Scp src:$CLASSPATH:$builddir \
       -J-Dclojure.compile.path=$builddir \
       -M -e "(compile (quote ${pname}.core))"
-  '';
 
-  installPhase = ''
+    echo "creating manifest file"
     echo "Main-Class: ${pname}.core" > manifest.txt
     echo "Class-Path: ." >> manifest.txt
     find ${mavenRepository} -name '*.jar' -printf '  %h/%f\n' >> manifest.txt
+    cat manifest.txt
 
-    mkdir -p $out/share/java
-    jar cvfm $out/share/java/$name.jar manifest.txt -C $builddir .
-    mkdir -p $out/bin
-    makeWrapper ${jre_headless}/bin/java $out/bin/${pname} \
-      --add-flags "-jar $out/share/java/$name.jar"
+    echo "creating fat/uber jar"
+    jar cvfm ${name}.jar manifest.txt -C $builddir .
+
+    echo "compiling native image"
+    native-image \
+      -jar ${name}.jar \
+      -H:Name=${pname} \
+      -H:+ReportExceptionStackTraces \
+      -H:EnableURLProtocols=http,https \
+      --enable-all-security-services \
+      -H:IncludeResources="db/.*|static/.*|templates/.*|.*.yml|.*.xml|.*/org/sqlite/.*|org/sqlite/.*" \
+      -H:JNIConfigurationFiles=${src}/native-image/jni-config.json \
+      -H:ReflectionConfigurationFiles=${src}/native-image/reflection-config.json \
+      -J-Dclojure.spec.skip-macros=true \
+      -J-Dclojure.compiler.direct-linking=true \
+      -J-Dfile.encoding=UTF-8 \
+      --initialize-at-build-time \
+      --initialize-at-build-time=org.sqlite.JDBC \
+      --initialize-at-build-time=org.sqlite.core.DB$ProgressObserver \
+      --initialize-at-build-time=org.sqlite.core.DB \
+      --initialize-at-build-time=org.sqlite.core.NativeDB \
+      --initialize-at-build-time=org.sqlite.ProgressHandler \
+      --initialize-at-build-time=org.sqlite.Function \
+      --initialize-at-build-time=org.sqlite.Function$Aggregate \
+      --initialize-at-build-time=org.sqlite.Function$Window \
+      --report-unsupported-elements-at-runtime \
+      --verbose \
+      --no-fallback \
+      --no-server
+  '';
+
+  installPhase = ''
+    install -Dm755 ${pname} $out/detsys-${pname}
   '';
 }
