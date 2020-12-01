@@ -19,7 +19,6 @@ type Reactor interface {
 type Marshaler interface {
 	UnmarshalRequest(request string, input json.RawMessage, output *Request) error
 	UnmarshalMessage(message string, input json.RawMessage, output *Message) error
-	MarshalEvent(_ Args) string
 }
 
 // ---------------------------------------------------------------------
@@ -39,7 +38,9 @@ type ClientRequest struct {
 	Request Request
 }
 
-type Request interface{ Request() }
+type Request interface {
+	RequestEvent() string
+}
 
 func (_ ClientRequest) InEvent() {}
 
@@ -47,11 +48,17 @@ type InternalMessage struct {
 	Message Message `json:"message"`
 }
 
+func (im InternalMessage) MessageEvent() string {
+	return im.Message.MessageEvent()
+}
+
 func (im InternalMessage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(im.Message)
 }
 
-type Message interface{ Message() }
+type Message interface {
+	MessageEvent() string
+}
 
 func (_ InternalMessage) InEvent() {}
 
@@ -62,7 +69,13 @@ type ClientResponse struct {
 	Response Response `json:"response"`
 }
 
-type Response interface{ Response() }
+func (c ClientResponse) ResponseEvent() string {
+	return c.Response.ResponseEvent()
+}
+
+type Response interface {
+	ResponseEvent() string
+}
 
 type Timer struct {
 	Duration time.Duration `json:"duration"`

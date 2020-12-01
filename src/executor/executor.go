@@ -39,7 +39,7 @@ func handler(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor, m l
 		heapAfter := dumpHeapJson(topology[sev.To])
 		heapDiff := jsonDiff(heapBefore, heapAfter)
 		appendHeapTrace(db, testId, sev.To, heapDiff, sev.At)
-		bs := lib.MarshalUnscheduledEvents(m, sev.To, oevs)
+		bs := lib.MarshalUnscheduledEvents(sev.To, oevs)
 		fmt.Fprint(w, string(bs))
 	}
 }
@@ -66,7 +66,7 @@ func handleTick(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFu
 			panic(err)
 		}
 		oevs := topology[req.Component].Tick(req.At)
-		bs := lib.MarshalUnscheduledEvents(m, req.Component, oevs)
+		bs := lib.MarshalUnscheduledEvents(req.Component, oevs)
 		fmt.Fprint(w, string(bs))
 	}
 }
@@ -97,8 +97,9 @@ func handleTimer(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor,
 		oevs := topology[req.Component].Timer(req.At)
 		heapAfter := dumpHeapJson(topology[req.Component])
 		heapDiff := jsonDiff(heapBefore, heapAfter)
+
 		appendHeapTrace(db, testId, req.Component, heapDiff, req.At)
-		bs := lib.MarshalUnscheduledEvents(m, req.Component, oevs)
+		bs := lib.MarshalUnscheduledEvents(req.Component, oevs)
 		fmt.Fprint(w, string(bs))
 	}
 }

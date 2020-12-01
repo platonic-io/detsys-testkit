@@ -104,8 +104,7 @@ type event interface{ IsEvent() }
 func (_ unscheduledEvent) IsEvent() {}
 func (_ timerEvent) IsEvent()       {}
 
-func MarshalUnscheduledEvents(m Marshaler, from string, oevs []OutEvent) json.RawMessage {
-
+func MarshalUnscheduledEvents(from string, oevs []OutEvent) json.RawMessage {
 	usevs := make([]event, len(oevs))
 	for index, oev := range oevs {
 		var event event
@@ -115,7 +114,7 @@ func MarshalUnscheduledEvents(m Marshaler, from string, oevs []OutEvent) json.Ra
 				From:  from,
 				To:    oev.To,
 				Kind:  "ok",
-				Event: m.MarshalEvent(oev.Args),
+				Event: kindT.ResponseEvent(),
 				Args:  oev.Args,
 			}
 		case *InternalMessage:
@@ -123,7 +122,7 @@ func MarshalUnscheduledEvents(m Marshaler, from string, oevs []OutEvent) json.Ra
 				From:  from,
 				To:    oev.To,
 				Kind:  "message",
-				Event: m.MarshalEvent(oev.Args),
+				Event: kindT.MessageEvent(),
 				Args:  oev.Args,
 			}
 		case *Timer:
