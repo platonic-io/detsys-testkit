@@ -13,27 +13,28 @@ in stdenv.mkDerivation rec {
   name = "${pname}-${version}";
   src = lib.cleanSource ./.;
 
-  buildInputs = [ jdk11_headless makeWrapper ];
+  buildInputs = [ clojure jdk11_headless makeWrapper ];
   buildPhase = ''
     export CLASSPATH=$(find ${mavenRepository} -name "*.jar" -printf ':%h/%f')
-    export builddir=$TMP/tmp_install
+    export builddir=$TMP/classes
     mkdir -p $builddir
 
     javac java/src/lockfix/LockFix.java -cp $CLASSPATH -d $builddir
 
-    java -cp src:$CLASSPATH:$builddir \
-         -Dclojure.compile.path=$builddir \
-         -Dclojure.compiler.direct-linking=true \
-         -Dclojure.spec.skip-macros=true \
-         clojure.lang.Compile ${pname}.core
+    clj -Scp src:$CLASSPATH:$builddir \
+      -J-Dclojure.compile.path=$builddir \
+      -M -e "(compile (quote ${pname}.core))"
   '';
 
   installPhase = ''
+    echo "Main-Class: ${pname}.core" > manifest.txt
+    echo "Class-Path: ." >> manifest.txt
+    find ${mavenRepository} -name '*.jar' -printf '  %h/%f\n' >> manifest.txt
+
     mkdir -p $out/share/java
-    (cd $builddir && jar -cvfe $out/share/java/$name.jar ${pname}.core .)
+    jar cvfm $out/share/java/$name.jar manifest.txt -C $builddir .
     mkdir -p $out/bin
-    makeWrapper ${jre_headless}/bin/java $out/bin/$name \
-        --add-flags "-cp $CLASSPATH:$out/share/java/$name.jar" \
-        --add-flags "${pname}.core"
+    makeWrapper ${jre_headless}/bin/java $out/bin/${pname} \
+      --add-flags "-jar $out/share/java/$name.jar"
   '';
 }
