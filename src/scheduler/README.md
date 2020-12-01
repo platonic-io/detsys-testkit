@@ -48,3 +48,22 @@ Check if any dependencies are outdated:
 ```bash
 clj -A:outdated
 ```
+
+### Building with `nix`
+
+If the dependencies have changed, then first run:
+
+```bash
+clj -Spom
+nix run -f https://github.com/fzakaria/mvn2nix/archive/master.tar.gz \
+    --command mvn2nix \
+    --repositories=https://repo1.maven.org/maven2/ https://repo.clojars.org \
+    > mvn2nix-lock.json
+```
+
+Otherwise, or afterwards, we can then build and run with:
+
+```bash
+nix-build
+./result/bin/scheduler-0.1.0
+```
