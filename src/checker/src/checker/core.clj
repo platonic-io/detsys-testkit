@@ -81,8 +81,8 @@
   (let [model   (nth args 0)
         test-id (nth args 1)
         run-id  (nth args 2)]
-  (case model
-    "rw-register" (analyse test-id run-id checker-rw-register)
-    "list-append" (analyse test-id run-id checker-list-append)
-    (println
-     "First argument should be a model, i.e. either \"rw-register\" or \"list-append\""))))
+    (case model
+      "rw-register" (analyse test-id run-id checker-rw-register)
+      "list-append" (analyse test-id run-id checker-list-append)
+      (println
+       "First argument should be a model, i.e. either \"rw-register\" or \"list-append\""))))
