@@ -159,10 +159,10 @@ let
                      }
                    }
                  ''} > HelloWorld.java
-          ${lib.optioalString stdenv.isLinux ''$out/bin/''}javac HelloWorld.java
+          ${lib.optionalString stdenv.isLinux ''$out/bin/''}javac HelloWorld.java
 
           # run on JVM with Graal Compiler
-          ${lib.optioalString stdenv.isLinux ''$out/bin/''}java -XX:+UnlockExperimentalVMOptions -XX:+EnableJVMCI -XX:+UseJVMCICompiler HelloWorld | fgrep 'Hello World'
+          ${lib.optionalString stdenv.isLinux ''$out/bin/''}java -XX:+UnlockExperimentalVMOptions -XX:+EnableJVMCI -XX:+UseJVMCICompiler HelloWorld | fgrep 'Hello World'
 
           # Ahead-Of-Time compilation
           $out/bin/native-image --no-server HelloWorld
