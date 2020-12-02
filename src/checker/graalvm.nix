@@ -83,7 +83,7 @@ let
         '';
 
         installPhase = {
-          "8" = ''
+          "8-linux-amd64" = ''
             # BUG workaround http://mail.openjdk.java.net/pipermail/graal-dev/2017-December/005141.html
             substituteInPlace $out/jre/lib/security/java.security \
               --replace file:/dev/random    file:/dev/./urandom \
@@ -97,7 +97,7 @@ let
             # allow using external truffle-api.jar and languages not included in the distrubution
             rm $out/jre/lib/jvmci/parentClassLoader.classpath
           '';
-          "11" = ''
+          "11-linux-amd64" = ''
             # BUG workaround http://mail.openjdk.java.net/pipermail/graal-dev/2017-December/005141.html
             substituteInPlace $out/conf/security/java.security \
               --replace file:/dev/random    file:/dev/./urandom \
@@ -107,8 +107,23 @@ let
             for f in ${glibc}/lib/* ${glibc.static}/lib/* ${zlib.static}/lib/*; do
               ln -s $f $out/lib/svm/clibraries/${platform}/$(basename $f)
             done
-           '';
-        }.${javaVersion};
+          '';
+          "8-darwin-amd64" = ''
+            # BUG workaround http://mail.openjdk.java.net/pipermail/graal-dev/2017-December/005141.html
+            substituteInPlace $out/jre/lib/security/java.security \
+              --replace file:/dev/random    file:/dev/./urandom \
+              --replace NativePRNGBlocking  SHA1PRNG
+
+            # allow using external truffle-api.jar and languages not included in the distrubution
+            rm $out/jre/lib/jvmci/parentClassLoader.classpath
+          '';
+          "11-darwin-amd64" = ''
+            # BUG workaround http://mail.openjdk.java.net/pipermail/graal-dev/2017-December/005141.html
+            substituteInPlace $out/conf/security/java.security \
+              --replace file:/dev/random    file:/dev/./urandom \
+              --replace NativePRNGBlocking  SHA1PRNG
+          '';
+        }.${javaVersionPlatform};
 
         dontStrip = true;
 
