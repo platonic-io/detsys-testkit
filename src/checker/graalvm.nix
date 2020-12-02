@@ -75,7 +75,7 @@ let
 
            mkdir -p $out
            arr=($srcs)
-           tar xf ''${arr[0]} ${lib.optionalString stdenv.isDarwin "graalvm-ce-java${javaVersion}-${version}/Contents/Home"} -C $out --strip-components=1
+           tar xf ''${arr[0]} -C $out --strip-components=1
            unpack_jar ''${arr[1]}
            unpack_jar ''${arr[2]}
            unpack_jar ''${arr[3]}
@@ -114,6 +114,7 @@ let
             rm $out/jre/lib/jvmci/parentClassLoader.classpath
           '';
           "11-darwin-amd64" = ''
+            mv $out/Contents/Home/bin/* $out/bin
             echo ""
           '';
         }.${javaVersionPlatform};
@@ -160,10 +161,10 @@ let
                      }
                    }
                  ''} > HelloWorld.java
-          ${lib.optionalString stdenv.isLinux ''$out/bin/''}javac HelloWorld.java
+          $out/bin/javac HelloWorld.java
 
           # run on JVM with Graal Compiler
-          ${lib.optionalString stdenv.isLinux ''$out/bin/''}java -XX:+UnlockExperimentalVMOptions -XX:+EnableJVMCI -XX:+UseJVMCICompiler HelloWorld | fgrep 'Hello World'
+          $out/bin/java -XX:+UnlockExperimentalVMOptions -XX:+EnableJVMCI -XX:+UseJVMCICompiler HelloWorld | fgrep 'Hello World'
 
           # Ahead-Of-Time compilation
           $out/bin/native-image --no-server HelloWorld
