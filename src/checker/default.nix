@@ -24,13 +24,12 @@ in stdenv.mkDerivation rec {
     echo "compiling lock fix workaround"
     javac java/src/lockfix/LockFix.java -cp $CLASSPATH -d $builddir
 
+    echo "compiling clojure sources"
     # On Darwin `clj` tries to create some folder in the home directory...
     ${lib.optionalString stdenv.isDarwin ''
     export HOME=$TMP/home
     mkdir -p $HOME
     ''}
-
-    echo "compiling clojure sources"
     clj -Scp src:$CLASSPATH:$builddir \
       -J-Djava.awt.headless=true \
       -J-Dclojure.compile.path=$builddir \

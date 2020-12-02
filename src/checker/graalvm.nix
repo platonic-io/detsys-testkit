@@ -80,6 +80,7 @@ let
            unpack_jar ''${arr[2]}
            unpack_jar ''${arr[3]}
            unpack_jar ''${arr[4]}
+           ls -R $out
         '';
 
         installPhase = {
@@ -149,7 +150,7 @@ let
 
         propagatedBuildInputs = [ setJavaClassPath zlib ]; # $out/bin/native-image needs zlib to build native executables
 
-        doInstallCheck = stdenv.isLinux;
+        doInstallCheck = true;
         installCheckPhase = ''
           echo ${stdenv.lib.escapeShellArg ''
                    public class HelloWorld {
