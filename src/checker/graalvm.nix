@@ -148,9 +148,8 @@ let
         '';
 
         propagatedBuildInputs = [ setJavaClassPath zlib ]; # $out/bin/native-image needs zlib to build native executables
-        buildInputs = [ jdk11_headless ];
 
-        doInstallCheck = true;
+        doInstallCheck = stdenv.isLinux;
         installCheckPhase = ''
           echo ${stdenv.lib.escapeShellArg ''
                    public class HelloWorld {
