@@ -75,7 +75,7 @@ let
 
            mkdir -p $out
            arr=($srcs)
-           tar xf ''${arr[0]}  ${lib.optionalString stdenv.isDarwin "Contents/Home"} -C $out --strip-components=1
+           tar xf ''${arr[0]} ${lib.optionalString stdenv.isDarwin "graalvm-ce-java${javaVersion}-${version}/Contents/Home"} -C $out --strip-components=1
            unpack_jar ''${arr[1]}
            unpack_jar ''${arr[2]}
            unpack_jar ''${arr[3]}
