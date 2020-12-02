@@ -26,6 +26,7 @@ in stdenv.mkDerivation rec {
 
     echo "compiling clojure sources"
     clj -Scp src:$CLASSPATH:$builddir \
+      -Srepro \
       -J-Djava.awt.headless=true \
       -J-Dclojure.compile.path=$builddir \
       -M -e "(compile (quote ${pname}.core))"
