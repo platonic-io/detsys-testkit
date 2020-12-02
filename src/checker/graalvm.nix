@@ -148,6 +148,7 @@ let
         '';
 
         propagatedBuildInputs = [ setJavaClassPath zlib ]; # $out/bin/native-image needs zlib to build native executables
+        checkInputs = [ lib.optionalString stdenv.isDarwin "jdk11_headless" ];
 
         doInstallCheck = true;
         installCheckPhase = ''
