@@ -113,6 +113,7 @@ let
             rm $out/jre/lib/jvmci/parentClassLoader.classpath
           '';
           "11-darwin-amd64" = ''
+            echo ""
           '';
         }.${javaVersionPlatform};
 
