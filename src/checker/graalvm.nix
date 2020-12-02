@@ -138,14 +138,13 @@ let
               zlib             # libz.so.1
             ]}"
 
-          for f in $(find $out -type f -perm -0100); do
           ${lib.optionalString stdenv.isLinux ''
+          for f in $(find $out -type f -perm -0100); do
             patchelf --interpreter "$(cat $NIX_CC/nix-support/dynamic-linker)" "$f" || true
             patchelf --set-rpath   "$rpath"                                    "$f" || true
-            ''}
-
             if ldd "$f" | fgrep 'not found'; then echo "in file $f"; fi
           done
+          ''}
         '';
 
         propagatedBuildInputs = [ setJavaClassPath zlib ]; # $out/bin/native-image needs zlib to build native executables
