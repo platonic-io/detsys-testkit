@@ -7,13 +7,14 @@ let
   mvn2nix = import (fetchTarball https://github.com/fzakaria/mvn2nix/archive/master.tar.gz) {};
   mavenRepository =
     mvn2nix.buildMavenRepositoryFromLockFile { file = ./mvn2nix-lock.json; };
+  graalvm = (callPackage ./../nix/graalvm.nix {}).graalvm11-ce;
 in stdenv.mkDerivation rec {
   pname = "scheduler";
   version = "0.1.0";
   name = "${pname}-${version}";
   src = lib.cleanSource ./.;
 
-  buildInputs = [ clojure jdk11_headless graalvm11-ce ];
+  buildInputs = [ clojure jdk11_headless graalvm ];
   buildPhase = ''
     export CLASSPATH=$(find ${mavenRepository} -name "*.jar" -printf ':%h/%f')
     export builddir=$TMP/classes
@@ -23,6 +24,11 @@ in stdenv.mkDerivation rec {
     javac java/src/lockfix/LockFix.java -cp $CLASSPATH -d $builddir
 
     echo "compiling clojure sources"
+    # On Darwin `clj` tries to create some folder in the home directory...
+    ${lib.optionalString stdenv.isDarwin ''
+    export HOME=$TMP/home
+    mkdir -p $HOME
+    ''}
     clj -Scp src:$CLASSPATH:$builddir \
       -J-Dclojure.compile.path=$builddir \
       -M -e "(compile (quote ${pname}.core))"
@@ -40,6 +46,7 @@ in stdenv.mkDerivation rec {
     native-image \
       -jar ${name}.jar \
       -H:Name=${pname} \
+      ${lib.optionalString stdenv.isDarwin ''-H:-CheckToolchain''} \
       -H:+ReportExceptionStackTraces \
       -H:EnableURLProtocols=http,https \
       --enable-all-security-services \

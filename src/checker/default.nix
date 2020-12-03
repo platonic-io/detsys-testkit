@@ -7,7 +7,7 @@ let
   mvn2nix = import (fetchTarball https://github.com/fzakaria/mvn2nix/archive/master.tar.gz) {};
   mavenRepository =
     mvn2nix.buildMavenRepositoryFromLockFile { file = ./mvn2nix-lock.json; };
-  graalvm = (callPackage ./graalvm.nix {}).graalvm11-ce;
+  graalvm = (callPackage ./../nix/graalvm.nix {}).graalvm11-ce;
 in stdenv.mkDerivation rec {
   pname = "checker";
   version = "0.1.0";
