@@ -91,6 +91,6 @@ Then follow the relevant language support section of the `nixpkgs`
 * General overview, in [writing](https://shopify.engineering/what-is-nix) or as
   a [presentation](https://www.youtube.com/watch?v=6iVXaqUfHi4);
 
-* Nix [Pills](https://nixos.org/guides/nix-pills/)
+* Nix [Pills](https://nixos.org/guides/nix-pills/);
 * `nixpkgs` [manual](https://nixos.org/manual/nixpkgs/unstable/);
-* `nix` [manual](https://nixos.org/manual/nix/unstable/);
+* `nix` [manual](https://nixos.org/manual/nix/unstable/).

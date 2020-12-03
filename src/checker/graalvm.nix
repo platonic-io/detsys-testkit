@@ -157,9 +157,12 @@ let
           ''}
         '';
 
-        propagatedBuildInputs = [ setJavaClassPath zlib ] ++  # $out/bin/native-image needs zlib to build native executables
-            lib.optionals stdenv.hostPlatform.isDarwin [ darwin.apple_sdk.frameworks.Foundation ];
-        buildInputs = [ jdk11_headless ];
+        # $out/bin/native-image needs zlib to build native executables.
+        propagatedBuildInputs = [ setJavaClassPath zlib ] ++
+                                # On Darwin native-image calls clang and it
+                                # tries to include <Foundation/Foundation.h>.
+                                lib.optionals stdenv.hostPlatform.isDarwin
+                                  [ darwin.apple_sdk.frameworks.Foundation ];
 
         doInstallCheck = true;
         installCheckPhase = ''
