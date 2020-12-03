@@ -57,7 +57,7 @@ let
         unpackPhase = ''
            unpack_jar() {
              jar=$1
-             unzip -o $jar -d $out
+             unzip -q -o $jar -d $out
              perl -ne 'use File::Path qw(make_path);
                        use File::Basename qw(dirname);
                        if (/^(.+) = (.+)$/) {
@@ -75,12 +75,11 @@ let
 
            mkdir -p $out
            arr=($srcs)
-           tar xf ''${arr[0]} -C $out --strip-components=1
+           tar xf ''${arr[0]} -C $out --strip-components=${if stdenv.isDarwin then "3" else "1"}
            unpack_jar ''${arr[1]}
            unpack_jar ''${arr[2]}
            unpack_jar ''${arr[3]}
            unpack_jar ''${arr[4]}
-           ls -R $out
         '';
 
         installPhase = {
@@ -114,7 +113,6 @@ let
             rm $out/jre/lib/jvmci/parentClassLoader.classpath
           '';
           "11-darwin-amd64" = ''
-            mv $out/Contents/Home/bin/* $out/bin
             echo ""
           '';
         }.${javaVersionPlatform};
@@ -147,6 +145,11 @@ let
             if ldd "$f" | fgrep 'not found'; then echo "in file $f"; fi
           done
           ''}
+          ${lib.optionalString stdenv.isDarwin ''
+          for f in $(find $out -type f -perm -0100); do
+            install_name_tool -change @rpath/libjli.dylib $out/lib/jli/libjli.dylib $f || true
+          done
+          ''}
         '';
 
         propagatedBuildInputs = [ setJavaClassPath zlib ]; # $out/bin/native-image needs zlib to build native executables
@@ -167,7 +170,7 @@ let
           $out/bin/java -XX:+UnlockExperimentalVMOptions -XX:+EnableJVMCI -XX:+UseJVMCICompiler HelloWorld | fgrep 'Hello World'
 
           # Ahead-Of-Time compilation
-          $out/bin/native-image --no-server HelloWorld
+          $out/bin/native-image -H:-CheckToolchain -H:+ReportExceptionStackTraces --no-server HelloWorld
           ./helloworld | fgrep 'Hello World'
 
           # Ahead-Of-Time compilation with --static
