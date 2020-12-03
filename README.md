@@ -4,6 +4,41 @@ A test kit for deterministic system tests.
 
 ### Nix
 
+#### Why `nix` over `docker`?
+
+* Just cd into the directory and it automatically makes all your tools available
+natively, `which go` ->
+`/nix/store/yqj2hbv541fsi1jflb9ay0yks3c0fi29-go-1.15.4/bin/go`;
+
+* the caching is better, on a per dependency level rather than layer level. For
+  example, in docker if you add a new dependency to your `apt-get install` list
+  then all dependencies get downloaded again (and all subsequent layers
+  rebuilt);
+
+* cache can be shared among team members (not tried yet, see https://cachix.org/);
+
+* it works on MacOS also, as opposed to being an afterthought like in docker;
+
+* no mounting of volumes;
+
+* no problem with all files being created as root;
+
+* actually reproducible as opposed to pretending to be (you can set versions to
+  :latest in docker, which isn't reproducible, you can download arbitrary files
+  using curl which isn't reproducible);
+
+* if you do pin all versions in docker, then keeping things up to date is a lot
+  of work (you need to manually go through and bumb versions in all your
+  Dockerfiles);
+
+* ever tried to start a docker container from a docker container? With mounted
+  volumes?
+
+* from a nix description you can derive a docker image, .deb, or .rpm (not tried
+  this yet);
+
+* something something CI (not looked into this yet).
+
 #### How to setup `nix` on your system
 
 The steps below are taken from the following [blog
