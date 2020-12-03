@@ -157,13 +157,15 @@ let
           ''}
           ${lib.optionalString stdenv.isDarwin ''
           for f in $(find $out -type f -perm -0100); do
-            install_name_tool -change @rpath/libjli.dylib $out/lib/jli/libjli.dylib $f || true
+            install_name_tool -add_rpath "$rpath" $f || true
           done
           ''}
         '';
 
-        propagatedBuildInputs = [ setJavaClassPath zlib ]; # $out/bin/native-image needs zlib to build native executables
+        propagatedBuildInputs = [ setJavaClassPath zlib ] ++  # $out/bin/native-image needs zlib to build native executables
+            lib.optionals stdenv.hostPlatform.isDarwin [ darwin.apple_sdk.frameworks.CoreFoundation ];
         buildInputs = [ jdk11_headless ];
+
 
         doInstallCheck = true;
         installCheckPhase = ''
