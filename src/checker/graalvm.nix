@@ -75,12 +75,11 @@ let
 
            mkdir -p $out
            arr=($srcs)
-           tar xf ''${arr[0]} -C $out --strip-components=1
+           tar xf ''${arr[0]} -C $out --strip-components=${if stdenv.isLinux then "1" else "3"}
            unpack_jar ''${arr[1]}
            unpack_jar ''${arr[2]}
            unpack_jar ''${arr[3]}
            unpack_jar ''${arr[4]}
-           ls -R $out
         '';
 
         installPhase = {
@@ -114,7 +113,6 @@ let
             rm $out/jre/lib/jvmci/parentClassLoader.classpath
           '';
           "11-darwin-amd64" = ''
-            mv $out/Contents/Home/bin/* $out/bin
             echo ""
           '';
         }.${javaVersionPlatform};
