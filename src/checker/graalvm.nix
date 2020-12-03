@@ -75,7 +75,17 @@ let
 
            mkdir -p $out
            arr=($srcs)
-           tar xf ''${arr[0]} -C $out --strip-components=${if stdenv.isDarwin then "3" else "1"}
+
+           # The tarball on Linux has the following directory structure:
+           #
+           #   graalvm-ce-java11-20.3.0/*
+           #
+           # while on Darwin it looks like this:
+           #
+           #   graalvm-ce-java11-20.3.0/Contents/Home/*
+           #
+           # We therefor use --strip-components=1 vs 3 depending on the platform.
+           tar xf ''${arr[0]} -C $out --strip-components=${if stdenv.isLinux then "1" else "3"}
            unpack_jar ''${arr[1]}
            unpack_jar ''${arr[2]}
            unpack_jar ''${arr[3]}
