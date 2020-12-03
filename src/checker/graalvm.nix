@@ -155,17 +155,11 @@ let
             if ldd "$f" | fgrep 'not found'; then echo "in file $f"; fi
           done
           ''}
-          ${lib.optionalString stdenv.isDarwin ''
-          for f in $(find $out -type f -perm -0100); do
-            install_name_tool -add_rpath "$rpath" $f || true
-          done
-          ''}
         '';
 
         propagatedBuildInputs = [ setJavaClassPath zlib ] ++  # $out/bin/native-image needs zlib to build native executables
-            lib.optionals stdenv.hostPlatform.isDarwin [ darwin.apple_sdk.frameworks.CoreFoundation ];
+            lib.optionals stdenv.hostPlatform.isDarwin [ darwin.apple_sdk.frameworks.Foundation ];
         buildInputs = [ jdk11_headless ];
-
 
         doInstallCheck = true;
         installCheckPhase = ''
@@ -185,9 +179,12 @@ let
           $out/bin/native-image -H:-CheckToolchain -H:+ReportExceptionStackTraces --no-server HelloWorld
           ./helloworld | fgrep 'Hello World'
 
-          # Ahead-Of-Time compilation with --static
-          $out/bin/native-image --no-server --static HelloWorld
-          ./helloworld | fgrep 'Hello World'
+          ${lib.optionalString stdenv.isLinux ''
+            # Ahead-Of-Time compilation with --static
+            # --static flag doesn't work for darwin
+            $out/bin/native-image --no-server --static HelloWorld
+            ./helloworld | fgrep 'Hello World'
+          ''}
         '';
 
         passthru.home = graalvmXXX-ce;

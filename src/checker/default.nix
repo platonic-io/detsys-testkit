@@ -48,6 +48,7 @@ in stdenv.mkDerivation rec {
     native-image \
       -jar ${name}.jar \
       -H:Name=${pname} \
+      ${lib.optionalString stdenv.isDarwin ''-H:-CheckToolchain''} \
       -H:+ReportExceptionStackTraces \
       -J-Dclojure.spec.skip-macros=true \
       -J-Dclojure.compiler.direct-linking=true \
