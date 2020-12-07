@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type FailSpec struct {
@@ -70,6 +71,7 @@ func (f *Fault) UnmarshalJSON(bs []byte) error {
 }
 
 func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
+	start := time.Now()
 	args := []string{
 		"--json",
 		"--eff", strconv.Itoa(fail.EFF),
@@ -94,6 +96,9 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 	if err != nil {
 		log.Panic(err)
 	}
+
+	elapsed := time.Since(start)
+	log.Printf("ldfi time: %v\n", elapsed)
 
 	return faults
 }
