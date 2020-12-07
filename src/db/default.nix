@@ -1,30 +1,21 @@
-{ sources ? import ./nix/sources.nix
+{ sources ? import ./../../nix/sources.nix
 , pkgs ? import sources.nixpkgs {} }:
 with pkgs;
 
 assert lib.versionAtLeast go.version "1.15";
 
+let
+  inherit (import sources.gitignore {}) gitignoreSource;
+in
+
 buildGoModule rec {
-  # TODO(stevan): Why can't we change pname to 'db'?!
   pname = "detsys-db";
   version = "latest";
   goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
 
-  src = lib.cleanSourceWith {
-    filter = lib.cleanSourceFilter;
-    src = lib.cleanSourceWith {
-      filter = with pkgs.stdenv;
-        name: type: let baseName = baseNameOf (toString name); in
-                    baseName == "db" ||
-                    baseName == "migrations" ||
-                    baseName == "lib" ||
-                    lib.hasSuffix ".go" name ||
-                    lib.hasSuffix ".mod" name ||
-                    lib.hasSuffix ".sum" name ||
-                    lib.hasSuffix ".sql" name;
-      src = ../.;
-    };
-  };
+  src = gitignoreSource ../.;
+
+  propagatedBuildInputs = [ sqlite-interactive ];
 
   # NOTE: If this hash is wrong, we get a cryptic "go: cannot find main module"
   # error...

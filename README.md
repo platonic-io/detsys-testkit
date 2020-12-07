@@ -1,96 +1,87 @@
 ## detsys-testkit
 
-A test kit for deterministic system tests.
+A test kit for fast and deterministic system tests.
 
-### Nix
+System tests are usually slow, non-deterministic and should therefor be used
+sparsely -- this project tries to turn this idea on its head.
 
-#### Why `nix` over `docker`?
+By abstracting out the non-deterministic parts of the programs we write, e.g.
+concurrency, and putting them behind interfaces we can then implement these
+interfaces twice:
 
-* Just cd into the directory and it automatically makes all your tools available
-natively, `which go` ->
-`/nix/store/yqj2hbv541fsi1jflb9ay0yks3c0fi29-go-1.15.4/bin/go`;
+1. using the non-determinstic primitives, e.g. send and receive over the
+   network, this gives you back the original program which you had before
+   introducing the abstraction;
+2. using functions that determinstically manipulate a pure datastructure, e.g.
+   queues representing incoming network messages, this gives you a *simulation*
+   of what your original program will do once you use the non-deterministic
+   interface.
 
-* the caching is better, on a per dependency level rather than layer level. For
-  example, in docker if you add a new dependency to your `apt-get install` list
-  then all dependencies get downloaded again (and all subsequent layers
-  rebuilt);
+This simulation forms the basis for our system tests. The two key aspects of
+this simulation is that it's determinstic (that doesn't mean there's no
+randomness) and that we can control the passage of time (which in turn means we
+don't have to wait for timeouts etc), which means we can get fast and
+determinstic tests.
 
-* cache can be shared among team members (not tried yet, see https://cachix.org/);
+For more about simulation testing see [this](doc/simulation_testing.md)
+document.
 
-* it works on MacOS also, as opposed to being an afterthought like in docker;
+### Getting started
 
-* no mounting of volumes;
+There are many parts that needs to be understood before we can explain how
+simulation testing works in detail. It's perhaps easier to start with a concrete
+example. The following steps gets you started using some of the tools on a
+simple distributed register example:
 
-* no problem with all files being created as root;
+0. Install [`nix`](https://nixos.org/download.html#nix-quick-install);
+1. Clone this repo;
+2. `cd` into the repo;
+3. Install all development tools and compile all components with `nix-shell`
+   (this can take a while the first time you do it);
+4. Prepare the database with `detsys db up`;
+5. Start the Scheduler with `detsys scheduler up`; XXX: make this work
+6. Generate a test case with `detsys generate $seed`; XXX: make this work
+7. `cd src/sut`
+8. `go test -run ...XXX`
+9. `detsys debug 1 0` XXX: fix so it's 0 0?
+10. Exit debugger with `q` or `Ctrl-c`.
 
-* actually reproducible as opposed to pretending to be (you can set versions to
-  :latest in docker, which isn't reproducible, you can download arbitrary files
-  using curl which isn't reproducible);
+TODO: have a look at the example
 
-* if you do pin all versions in docker, then keeping things up to date is a lot
-  of work (you need to manually go through and bumb versions in all your
-  Dockerfiles);
+More about `nix` can be found [here](doc/nix.md), including why it's preferbable
+to `docker` and how to overcome some weak points of `nix-shell`.
 
-* ever tried to start a docker container from a docker container? With mounted
-  volumes?
+### How it works on a higher-level
 
-* from a nix description you can derive a docker image, .deb, or .rpm (not tried
-  this yet);
+TODO: Now that we looked at a concrete example...
 
-* something something CI (not looked into this yet).
+* TODO: link to video presentation?
 
-#### How to setup `nix` on your system
+### More examples
 
-The steps below are taken from the following [blog
-post](https://christine.website/blog/how-i-start-nix-2020-03-08), please consult
-it or the documentation for the individual tools for an understanding of their
-purpose.
+* Reliable broadcast [example](TODO) from the *Lineage-driven fault injection*
+  [paper](https://dl.acm.org/doi/10.1145/2723372.2723711) (2015) by Peter Alvaro
+  et al.
 
-1. Install [`nix`](https://nixos.org/download.html#nix-verify-installation) with
-   `curl -L https://nixos.org/nix/install | sh`;
-2. Install [`lorri`](https://github.com/target/lorri/) with `nix-env --install
-   --file https://github.com/target/lorri/archive/master.tar.gz`;
-3. Enable starting `lorri` as a service following
-   [this](https://github.com/target/lorri/blob/master/contrib/daemon.md#how-to-start-the-lorri-daemon-as-a-service)
-   document;
-4. Install [`direnv`](https://direnv.net/) with `nix-env --install direnv`;
-5. [Configure](https://direnv.net/docs/hook.html) your shell to use `direnv`;
-6. Install [`niv`](https://github.com/nmattia/niv) with `nix-env --install niv`.
+### How it works on a lower-level
 
-#### How to setup `nix` for a software component
+* How each component works (see their respective `README.md`);
+* Database schema;
+* Interfaces between components (APIs):
+    * Scheduler (see also pseudo
+      [code](doc/pseudo_code_for_discrete-event_simulator.md) for discrete-event
+      simulation);
+    * Executor;
+    * SUT (see also [network normal form](doc/network_normal_form.md).
 
-```bash
-cd $component
-niv init
-niv update nixpkgs -b nixpkgs-unstable
-lorri init
-cat <<'EOF' > .envrc
-if type lorri &>/dev/null; then
-    echo "direnv: using lorri from PATH ($(type -p lorri))"
-    eval "$(lorri direnv)"
-else
-    # fall back to using direnv's builtin nix support
-    # to prevent bootstrapping problems.
-    use nix
-fi
-# source an additional user-specific .envrc in ./.envrc-local
-if [ -e .envrc-local ]; then
-   source .envrc-local
-fi
-EOF
-direnv allow
-sed -i -e 's|^{|{ sources ? import ./nix/sources.nix\n,|' \
-       -e 's/<nixpkgs>/sources.nixpkgs/' shell.nix
-```
+### How to contribute
 
-Then follow the relevant language support section of the `nixpkgs`
-[manual](https://nixos.org/manual/nixpkgs/unstable/#chap-language-support).
+See the file [CONTRIBUTING.md](CONTRIBUTING.md).
 
-#### Nix resources
+### See also
 
-* General overview, in [writing](https://shopify.engineering/what-is-nix) or as
-  a [presentation](https://www.youtube.com/watch?v=6iVXaqUfHi4);
+* The [P](https://github.com/p-org/P) programming language.
 
-* Nix [Pills](https://nixos.org/guides/nix-pills/);
-* `nixpkgs` [manual](https://nixos.org/manual/nixpkgs/unstable/);
-* `nix` [manual](https://nixos.org/manual/nix/unstable/).
+### License
+
+See the file [LICENSE](LICENSE).
