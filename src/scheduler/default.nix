@@ -1,4 +1,4 @@
-{ sources ? import ./nix/sources.nix
+{ sources ? import ./../../nix/sources.nix
 , pkgs ? import sources.nixpkgs {}
 }:
 with pkgs;
@@ -7,12 +7,13 @@ let
   mvn2nix = import (fetchTarball https://github.com/fzakaria/mvn2nix/archive/master.tar.gz) {};
   mavenRepository =
     mvn2nix.buildMavenRepositoryFromLockFile { file = ./mvn2nix-lock.json; };
-  graalvm = (callPackage ./../nix/graalvm.nix {}).graalvm11-ce;
+  graalvm = (callPackage ./../../nix/graalvm.nix {}).graalvm11-ce;
+  inherit (import sources.gitignore {}) gitignoreSource;
 in stdenv.mkDerivation rec {
   pname = "scheduler";
   version = "0.1.0";
   name = "${pname}-${version}";
-  src = lib.cleanSource ./.;
+  src = gitignoreSource ./.;
 
   buildInputs = [ clojure jdk11_headless graalvm ];
   buildPhase = ''
@@ -72,6 +73,7 @@ in stdenv.mkDerivation rec {
   '';
 
   installPhase = ''
-    install -Dm755 ${pname} $out/detsys-${pname}
+    mkdir -p $out/bin
+    install -Dm755 ${pname} $out/bin/detsys-${pname}
   '';
 }
