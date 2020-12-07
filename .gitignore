@@ -8,3 +8,4 @@ reports/
 ./.envrc-local
 vendor/
 result*
+__pycache__/
