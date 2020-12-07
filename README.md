@@ -39,10 +39,10 @@ simple distributed register example:
 3. Install all development tools and compile all components with `nix-shell`
    (this can take a while the first time you do it);
 4. Prepare the database with `detsys db up`;
-5. Start the Scheduler with `detsys scheduler up`; XXX: make this work
+5. Start the Scheduler with `detsys scheduler up`;
 6. Generate a test case with `detsys generate $seed`; XXX: make this work
 7. `cd src/sut`
-8. `go test -run ...XXX`
+8. `go test -run TestRegister1`
 9. `detsys debug 1 0` XXX: fix so it's 0 0?
 10. Exit debugger with `q` or `Ctrl-c`.
 
