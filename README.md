@@ -39,14 +39,26 @@ simple distributed register example:
 3. Install all development tools and compile all components with `nix-shell`
    (this can take a while the first time you do it);
 4. Prepare the database with `detsys db up`;
-5. Start the Scheduler with `detsys scheduler up`;
-6. Generate a test case with `detsys generate`;
-7. `cd src/sut`
-8. `go test -run TestRegister1`
-9. `detsys debug 1 0` XXX: fix so it's 0 0?
-10. Exit debugger with `q` or `Ctrl-c`.
+5. Start the scheduler component with `detsys scheduler up`;
+6. Change directory to where the distributed register example lives with `cd
+   src/sut`;
+7. Run the first test from the testsuite by typing `go test -run 1`;
+8. Notice how test id `1` and run id `2` doesn't pass the analysis. To debug
+   that run enter `detsys debug 1 2`;
+9. Navigate up and down through the messages with your arrow keys or `j` and
+   `k`, and finally exit the debugger with `q` or `Ctrl-c`.
 
-TODO: have a look at the example
+At this point it might make sense to have a look at the `go` testsuite in
+`example_test.go` and the actual implementation of the distributed register. The
+implementation consists of two parts: a frontend (see `frontend1.go`) which
+receives client requests and propagates them to two distributed registers
+(`register.go`). The client can be request a write to or a read from the
+registers, and the idea with there being two registers is that there is some
+form of reducancy. The implementation is flawed however, as you might have been
+able to guess from the fact that the test fails. Can you figure out what exactly
+the implementation does and why it's wrong by using the debugger alone? For
+further refinements of the implementation see `frontend{2,3,4}.go` and see if
+you can figure out why they do or don't work as well.
 
 More about `nix` can be found [here](doc/nix.md), including why it's preferbable
 to `docker` and how to overcome some weak points of `nix-shell`.

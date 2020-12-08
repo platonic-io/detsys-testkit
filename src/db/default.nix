@@ -26,5 +26,8 @@ buildGoModule rec {
   # We need CGO to include sqlite.
   preBuild = "export CGO_ENABLED=1";
 
-  postInstall = "cp -r $src/migrations $out";
+  postInstall = ''
+    echo "installing migrations"
+    cp -r $src/migrations $out
+  '';
 }
