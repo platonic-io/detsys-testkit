@@ -40,7 +40,7 @@ simple distributed register example:
    (this can take a while the first time you do it);
 4. Prepare the database with `detsys db up`;
 5. Start the Scheduler with `detsys scheduler up`;
-6. Generate a test case with `detsys generate $seed`; XXX: make this work
+6. Generate a test case with `detsys generate`;
 7. `cd src/sut`
 8. `go test -run TestRegister1`
 9. `detsys debug 1 0` XXX: fix so it's 0 0?
