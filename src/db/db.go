@@ -5,6 +5,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/rubenv/sql-migrate"
 	"os"
+	"path/filepath"
 
 	"github.com/symbiont-io/detsys-testkit/lib"
 )
@@ -29,13 +30,13 @@ func main() {
 		help()
 	}
 
-	home, ok := os.LookupEnv("HOME")
-	if !ok {
-		panic("HOME environment variable not set!")
+	path, err := os.Executable()
+	if err != nil {
+		panic(err)
 	}
 
 	migrations := &migrate.FileMigrationSource{
-		Dir: fmt.Sprintf("%s/.nix-profile/migrations", home),
+		Dir: fmt.Sprintf("%s/../migrations", filepath.Dir(path)),
 	}
 
 	db := lib.OpenDB()
