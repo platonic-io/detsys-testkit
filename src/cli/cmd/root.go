@@ -22,6 +22,7 @@ func init() {
 	dbCmd.AddCommand(dbShellCmd)
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(schedulerCmd)
+	rootCmd.AddCommand(generateCmd)
 }
 
 func Execute() {
