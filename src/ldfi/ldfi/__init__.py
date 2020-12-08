@@ -89,8 +89,13 @@ def main():
     else:
         m = s.model()
 
+        statistics = {}
+        for k, v in s.statistics():
+            statistics[k] = v
+
         if not(args.json):
             print(m)
+            print(statistics)
         else:
             faults = []
             for d in m.decls():
@@ -98,7 +103,9 @@ def main():
                     Dict = eval(d.name())
                     faults.append(Dict)
             faults = sorted(faults, key=order)
-            print(json.dumps({"faults": faults}))
+
+            print(json.dumps({"faults": faults,
+                              "statistics": statistics}))
 
 if __name__ == '__main__':
     main()

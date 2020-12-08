@@ -90,8 +90,11 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 		log.Panicf("%s\n%s\n", err, out)
 	}
 
-	var faults Faults
-	err = json.Unmarshal(out, &faults)
+	var result struct {
+		Faults     []Fault                `json:"faults"`
+		Statistics map[string]interface{} `json:"statistics"`
+	}
+	err = json.Unmarshal(out, &result)
 
 	if err != nil {
 		log.Panic(err)
@@ -99,6 +102,7 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 
 	elapsed := time.Since(start)
 	log.Printf("ldfi time: %v\n", elapsed)
+	log.Printf("z3 statistics: %+v\n", result.Statistics)
 
-	return faults
+	return Faults{result.Faults}
 }
