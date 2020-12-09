@@ -38,26 +38,87 @@ var diagram = tview.NewTextView().
 	SetDynamicColors(true)
 var w2 = tview.ANSIWriter(diagram)
 
-func selectionHandler(heaps []map[string][]byte, diagrams [][]byte, row int) {
+var componentsWidget = tview.NewList()
+
+var messageView = tview.NewTextView().
+	SetWrap(false).
+	SetDynamicColors(true)
+var wMessageView = tview.ANSIWriter(messageView)
+
+type DebugApplication struct {
+	heaps []map[string][]byte
+	diagrams [][]byte
+	events []debugger.NetworkEvent
+	components []string
+	activeRow int // should probably be logic time
+	activeComponent int
+}
+
+func (da *DebugApplication) setComponent(component string) {
+	for i, x := range da.components {
+		if x == component {
+			da.activeComponent = i
+			componentsWidget.SetCurrentItem(i)
+			break
+		}
+	}
+}
+
+func (da *DebugApplication) setRow(row int) {
+	nrow := max(1, row)
+	da.activeRow = nrow
+
+	to := da.events[nrow-1].To
+
+	da.setComponent(to)
+}
+
+func (da *DebugApplication) redraw() {
 	textView.Clear()
 	diagram.Clear()
-	fmt.Fprintf(w2, "%s", string(diagrams[row-1]))
-	// Debugging
-	// fmt.Fprintf(w, "ROW: %d\n", row)
-	// fmt.Fprintf(w, "LEN heaps: %d\n\n", (len(heaps)))
+	messageView.Clear()
+	row := da.activeRow
+	fmt.Fprintf(w2, "%s", string(da.diagrams[row-1]))
+	component := da.components[da.activeComponent]
+	old := da.heaps[row-1][component]
+	new := da.heaps[min(row, len(da.heaps))][component]
+
 	opts := jsondiff.DefaultConsoleOptions()
 	opts.Indent = "  "
-	components := make([]string, 0, len(heaps))
+	_, strdiff := jsondiff.Compare(old, new, &opts)
+	fmt.Fprintf(w, "%s", strdiff)
+
+	event := da.events[row-1]
+	fmt.Fprintf(wMessageView, "%s\n", string(event.Args))
+}
+
+func MakeDebugApplication(testId lib.TestId, runId lib.RunId) *DebugApplication {
+	heaps := debugger.Heaps(testId, runId)
+	events := debugger.GetNetworkTrace(testId, runId)
+	diagrams := debugger.SequenceDiagrams(testId, runId)
+
+	components := make([]string, 0, len(heaps[0])) // lol
 	for component := range heaps[0] {
 		components = append(components, component)
 	}
+
+	to := events[0].To
+	ac := 0
+	for i, x := range components {
+		if x == to {
+			ac = i
+			break
+		}
+	}
+
 	sort.Strings(components)
-	for _, component := range components {
-		old := heaps[row-1][component]
-		new := heaps[min(row, len(heaps))][component]
-		_, strdiff := jsondiff.Compare(old, new, &opts)
-		fmt.Fprintf(w, "%s ", component)
-		fmt.Fprintf(w, "%s\n\n", strdiff)
+	return &DebugApplication{
+		heaps: heaps,
+		diagrams: diagrams,
+		events: events,
+		components: components,
+		activeRow: 1,
+		activeComponent: ac,
 	}
 }
 
@@ -72,39 +133,32 @@ func main() {
 	}
 
 	app := tview.NewApplication()
-	heaps := debugger.Heaps(lib.TestId{testId}, lib.RunId{runId})
-	events := debugger.GetNetworkTrace(lib.TestId{testId}, lib.RunId{runId})
-	diagrams := debugger.SequenceDiagrams(lib.TestId{testId}, lib.RunId{runId})
 
-	textView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("System state")
+	da := MakeDebugApplication(lib.TestId{testId}, lib.RunId{runId})
+
+	textView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Component state")
+	messageView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Current Message")
 	diagram.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Sequence diagram")
 
-	selectionHandler(heaps, diagrams, 1)
+	da.redraw()
 
 	table := tview.NewTable().
 		SetFixed(1, 1)
 
-	for column, header := range []string{"Event", "Body", "From", "To", "At", "Time"} {
+	for column, header := range []string{"Event", "From", "To", "At", "Time"} {
 		tableCell := tview.NewTableCell(header).
 			SetSelectable(false).
 			SetTextColor(tcell.ColorYellow).
 			SetAlign(tview.AlignLeft)
 		table.SetCell(0, column, tableCell)
 	}
-	maxBody := 0
-	for _, event := range events {
-		maxBody = max(maxBody, len(string(event.Args)))
-	}
-	for row, event := range events {
-		for column, cell := range []string{"Message", "Body", "From", "To", "At", "Time"} {
+	for row, event := range da.events {
+		for column, cell := range []string{"Message", "From", "To", "At", "Time"} {
 
 			var tableCell *tview.TableCell
 			switch cell {
 			case "Message":
 				tableCell = tview.NewTableCell(event.Message)
-			case "Body":
-				tableCell = tview.NewTableCell(fmt.Sprintf(fmt.Sprintf("%%-%ds", maxBody),
-					string(event.Args)))
 			case "From":
 				tableCell = tview.NewTableCell(event.From)
 			case "To":
@@ -123,12 +177,35 @@ func main() {
 	table.SetBorder(true).SetTitle("Events")
 	table.SetSelectable(true, false)
 	table.SetSelectionChangedFunc(
-		func(row, column int) { selectionHandler(heaps, diagrams, max(1, row)) })
+		func(row, column int) {
+			da.setRow(row)
+			da.redraw()
+		})
+
+	componentsWidget.SetChangedFunc(func (index int, _mainText string, _secondaryText string, shortcut rune) {
+		da.activeComponent = index
+		da.redraw()
+	})
+
+	for i, c := range da.components {
+		theRune := ' '
+
+		if (i < 9) {
+			theRune = rune(i + 49) // 48 is '0', but we skip that one
+		}
+		componentsWidget.AddItem(c, "", theRune, nil)
+	}
+
+	stateWidget := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(componentsWidget,10, 0, false).
+		AddItem(textView, 0, 4, false)
 
 	layout := tview.NewFlex().
 		AddItem(tview.NewFlex().
 			SetDirection(tview.FlexRow).
-			AddItem(textView, 0, 1, false).
+			AddItem(stateWidget, 0, 1, false).
+			AddItem(messageView, 5, 2, false).
 			AddItem(table, 20, 1, false), 0, 1, false).
 		AddItem(diagram, 0, 1, false)
 
