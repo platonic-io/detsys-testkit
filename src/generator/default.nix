@@ -8,13 +8,13 @@ let
 in
 
 stdenv.mkDerivation rec {
-  pname = "generator";
+  pname = "detsys-generator";
   version = "0.0.0";
   name = "${pname}-${version}";
   src = gitignoreSource ./.;
 
   installPhase = ''
     mkdir -p $out/bin
-    install -Dm755 ${pname}.sh $out/bin/detsys-${pname}
+    install -Dm755 ${pname}.sh $out/bin/${pname}
   '';
 }

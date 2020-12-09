@@ -76,6 +76,12 @@ func SetTickFrequency(tickFrequency float64) {
 	}{tickFrequency})
 }
 
+func SetMinTimeNs(minTime float64) {
+	Post("set-min-time!", struct {
+		MinTime float64 `json:"new-min-time-ns"`
+	}{minTime})
+}
+
 func SetMaxTimeNs(maxTime float64) {
 	Post("set-max-time!", struct {
 		MaxTime float64 `json:"new-max-time-ns"`

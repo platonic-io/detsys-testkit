@@ -22,6 +22,7 @@
 (s/def ::clock               time/instant?)
 (s/def ::next-tick           time/instant?)
 (s/def ::tick-frequency      double?)
+(s/def ::min-time-ns         double?)
 (s/def ::max-time-ns         double?)
 (s/def ::client-requests     (s/coll-of agenda/entry?))
 (s/def ::client-timeout-ms   double?)
@@ -40,7 +41,6 @@
                                :error-cannot-enqueue-in-this-state
                                :error-cannot-execute-in-this-state})
 
-
 (s/def ::data (s/keys :req-un [::total-executors
                                ::connected-executors
                                ::topology
@@ -50,6 +50,7 @@
                                ::clock
                                ::next-tick
                                ::tick-frequency
+                               ::min-time-ns
                                ::max-time-ns
                                ::client-requests
                                ::client-timeout-ms
@@ -72,6 +73,7 @@
    :clock               (time/init-clock)
    :next-tick           (time/init-clock)
    :tick-frequency      50.0
+   :min-time-ns         0.0
    :max-time-ns         0.0
    :client-requests     []
    :client-timeout-ms   (* 30.0 1000)
@@ -191,7 +193,6 @@
 (s/def ::body agenda/entry?)
 (s/def ::drop? #{:keep :drop :delay})
 
-;; TODO(stevan): check if agenda is empty...
 (>defn fetch-new-entry!
   [data]
   [::data => (s/tuple ::data (s/nilable
@@ -430,41 +431,6 @@
                                         (-> data'' :logical-clock)
                                         false))
                     [data'' {:events internal}])))))))
-
-(>defn tick!
- [data]
- [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
- (assert (not (empty? (:agenda data))))
- (let [all-events (transient [])]
-   (doseq [[component url] (:topology data)]
-     (let [url (str url "tick")
-           events (-> (client/put url
-                                  {:body (json/write {:at (:next-tick data)
-                                                      :component component})
-                                   :content-type "application/json; charset=utf-8"})
-                      :body
-                      json/read)]
-       (assert (= (keys events) '(:events))
-               (str "execute!: unexpected response body: " events))
-       (doseq [event (:events events)]
-         (conj! all-events event))))
-   (let [events (->> all-events
-                     persistent!
-                     (mapv #(assoc % :sent-logical-time (-> data :logical-clock inc))))]
-     [(-> data
-          (update :next-tick (fn [c] (time/plus-millis c (:tick-frequency data))))
-          (update :logical-clock (if (empty? events) identity inc))
-          (assoc :state :responding) ;; probably??
-          (assoc :clock (:next-tick data)))
-      {:events events}])))
-
-(>defn execute-or-tick!
- [data entry]
- [::data agenda/entry? => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
- (if (time/before? (:next-tick data) (:at entry))
-   (tick! data)
-   (execute! data)))
-
 (comment
   (fake/with-fake-routes
     {"http://localhost:3001/api/v1/event"
@@ -552,21 +518,53 @@
       (enqueue-entry {:kind "invoke", :event :a, :args {}, :at (time/instant 0)
                       :from "f", :to "t"})))
 
+(defn min-time?
+  [data]
+  (time/before? (time/plus-nanos (time/init-clock)
+                                 (-> data :min-time-ns))
+                (-> data :clock)))
+
+(comment
+  (min-time? {:clock (time/init-clock), :min-time-ns 0.0})
+  ;; => false
+  (min-time? {:clock (time/init-clock), :min-time-ns 1.0})
+  ;; => false
+  (min-time? {:clock (time/plus-nanos (time/init-clock) 1.0), :min-time-ns 1.0})
+  ;; => false
+  (min-time? {:clock (time/plus-nanos (time/init-clock) 2.0), :min-time-ns 1.0})
+  ;; => true
+  )
+
+(defn max-time?
+  [data]
+  (and (not= (-> data :max-time-ns) 0.0)
+       (time/before? (time/plus-nanos (time/init-clock)
+                                      (-> data :max-time-ns))
+                     (-> data :clock))))
+
+(comment
+  (max-time? {:clock (time/init-clock), :max-time-ns 0.0})
+  ;; => false
+  (max-time? {:clock (time/init-clock), :max-time-ns 1.0})
+  ;; => false
+  (max-time? {:clock (time/plus-nanos (time/init-clock) 1.0), :max-time-ns 1.0})
+  ;; => false
+  (max-time? {:clock (time/plus-nanos (time/init-clock) 2.0), :max-time-ns 1.0})
+  ;; => true
+  )
+
 (>defn enqueue-timestamped-entries
   [data {:keys [timestamped-entries]}]
   [::data (s/keys :req-un [::timestamped-entries])
    => (s/tuple ::data (s/keys :req-un [::queue-size]))]
-  (if (or (and (empty? timestamped-entries) (-> data :agenda empty?))
-          (and (not= (-> data :max-time-ns) 0.0)
-               (time/before? (time/plus-nanos (time/init-clock)
-                                              (-> data :max-time-ns))
-                             (-> data :clock))))
+  (if (or (and (empty? timestamped-entries) (-> data :agenda empty?) (min-time? data))
+          (max-time? data))
     [(update data :state
              (fn [state]
                (case state
                  :responding :finished
                  :error-cannot-enqueue-in-this-state)))
-     {:queue-size 0}]
+     {:queue-size (-> data :agenda count)}]
     (let [data' (-> (reduce (fn [ih timestamped-entry]
                               (first (enqueue-entry ih timestamped-entry)))
                             data
@@ -600,16 +598,55 @@
         0)
        second)))
 
+(>defn tick!
+ [data]
+ [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
+ (assert (or (not (empty? (:agenda data)))
+             (not (min-time? data))))
+ (let [all-events (transient [])]
+   (doseq [[component url] (:topology data)]
+     (let [url (str url "tick")
+           events (-> (client/put url
+                                  {:body (json/write {:at (:next-tick data)
+                                                      :component component})
+                                   :content-type "application/json; charset=utf-8"})
+                      :body
+                      json/read)]
+       (assert (= (keys events) '(:events))
+               (str "execute!: unexpected response body: " events))
+       (doseq [event (:events events)]
+         (conj! all-events event))))
+   (let [events (->> all-events
+                     persistent!
+                     (mapv #(assoc % :sent-logical-time (-> data :logical-clock inc))))]
+     [(-> data
+          (update :next-tick (fn [c] (time/plus-millis c (:tick-frequency data))))
+          (update :logical-clock (if (empty? events) identity inc))
+          (assoc :state :responding) ;; probably??
+          (assoc :clock (:next-tick data)))
+      {:events events}])))
+
+(>defn execute-or-tick!
+  [data]
+  [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
+  (if-let [entry (-> data :agenda peek)]
+    (if (time/before? (:next-tick data) (:at entry))
+      (tick! data)
+      (execute! data))
+    (if (time/before? (:next-tick data) (time/plus-nanos (time/init-clock)
+                                                         (:min-time-ns data)))
+      (tick! data)
+      {:events []})))
+
 (>defn step!
   [data]
-  [::data => (s/tuple ::data (s/keys :req-un [::queue-size ::entry ::events]))]
-  (let [entry (-> data :agenda peek)
-        [data' events] (execute-or-tick! data entry)
+  [::data => (s/tuple ::data (s/keys :req-un [::events ::queue-size]))]
+  (let [[data' events] (execute-or-tick! data)
         [data'' timestamped-entries] (timestamp-entries data'
                                                         (:events events)
                                                         (-> data' :clock))
         [data''' queue-size] (enqueue-timestamped-entries data'' timestamped-entries)]
-    [data''' (merge {:entry entry} events queue-size)]))
+    [data''' (merge events queue-size)]))
 
 (comment
   (fake/with-fake-routes
@@ -680,7 +717,14 @@
   (let [tick-frequency (double new-tick-frequency)]
     [(assoc data :tick-frequency tick-frequency) tick-frequency]))
 
+(s/def ::new-min-time-ns (s/or :integer integer? :double double?))
 (s/def ::new-max-time-ns (s/or :integer integer? :double double?))
+
+(>defn set-min-time!
+  [data {new-min-time-ns :new-min-time-ns}]
+  [::data (s/keys :req-un [::new-min-time-ns]) => (s/tuple ::data double?)]
+  (let [min-time (double new-min-time-ns)]
+    [(assoc data :min-time-ns min-time) min-time]))
 
 (>defn set-max-time!
   [data {new-max-time-ns :new-max-time-ns}]
@@ -706,3 +750,17 @@
   [::data (s/keys :req-un [::faults]) => (s/tuple ::data map?)]
   [(update data :faults (fn [fs] (apply conj fs (:faults faults))))
    {:ok "added faults"}])
+
+;; Since the version is a constant GraalVM will evaluate it at compile-time, and
+;; it will stay fixed independent of run-time values of the environment
+;; variable.
+(def gitrev ^String
+  (or (System/getenv "DETSYS_SCHEDULER_VERSION")
+      "unknown"))
+
+(s/def ::gitrev string?)
+
+(>defn version
+  [data]
+  [::data => (s/tuple ::data (s/keys :req-un [::gitrev]))]
+  [data {:gitrev gitrev}])

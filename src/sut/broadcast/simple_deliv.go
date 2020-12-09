@@ -17,7 +17,7 @@ type Broadcast struct {
 }
 
 func (b Broadcast) MessageEvent() string {
-	return b.Data
+	return "Broadcast"
 }
 
 func NewNode() *Node {

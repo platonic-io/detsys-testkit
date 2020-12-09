@@ -11,12 +11,13 @@ let
   inherit (import sources.gitignore {}) gitignoreSource;
 in stdenv.mkDerivation rec {
   pname = "scheduler";
-  version = "0.1.0";
+  version = lib.commitIdFromGitRepo ./../../.git;
   name = "${pname}-${version}";
   src = gitignoreSource ./.;
 
   buildInputs = [ clojure jdk11_headless graalvm ];
   buildPhase = ''
+    export DETSYS_SCHEDULER_VERSION="${version}"
     export CLASSPATH=$(find ${mavenRepository} -name "*.jar" -printf ':%h/%f')
     export builddir=$TMP/classes
     mkdir -p $builddir
