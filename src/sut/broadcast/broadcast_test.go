@@ -25,10 +25,12 @@ func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 		executor.Deploy(&srv, testId, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
-	lib.SetSeed(lib.Seed{4})
+	lib.SetMinTimeNs(5*10 ^ 9)
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	executor.Register(topology)
+	log.Printf("Registered executor")
 	runId := lib.CreateRun(testId)
+	log.Printf("Created run id: %v", runId)
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)
 	lib.Teardown(&srv)
@@ -68,7 +70,3 @@ func TestSimpleDeliv(t *testing.T) {
 		}
 	}
 }
-
-// func TestRegister1(t *testing.T) {
-// 	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd() }, 5000.0, t)
-// }
