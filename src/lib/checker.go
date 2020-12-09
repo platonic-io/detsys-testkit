@@ -2,23 +2,14 @@ package lib
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 )
 
 func Check(model string, testId TestId, runId RunId) bool {
-	cmd := exec.Command("./checker", model,
+	cmd := exec.Command("detsys-checker", model,
 		strconv.Itoa(testId.TestId),
 		strconv.Itoa(runId.RunId))
-
-	path, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("Can't get current working directory:\n%v\n", err)
-		return false
-	}
-
-	cmd.Dir = path + "/../checker/target/"
 
 	out, err := cmd.CombinedOutput()
 

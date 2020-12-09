@@ -1,5 +1,6 @@
 ### Contributing
 
+* Issue reporting
 * Modular design, encourage rewrites/extensions
 * Semantic git commit message format + changelog generation?
   - https://github.com/github-changelog-generator/github-changelog-generator

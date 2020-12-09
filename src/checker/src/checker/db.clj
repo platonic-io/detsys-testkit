@@ -68,11 +68,13 @@
                                                     (op-value (get state (:process op))))))]
     :fail (throw "implement later")))
 
-(def db (or (System/getenv "DETSYS_DB")
-            (str (System/getenv "HOME") "/.detsys.db")))
+(defn db
+  []
+  (or (System/getenv "DETSYS_DB")
+      (str (System/getenv "HOME") "/.detsys.db")))
 
 (defn query [& args]
-  (apply shell/sh "sqlite3" db args))
+  (apply shell/sh "sqlite3" (db) args))
 
 (defn parse
   [test-id run-id id kind event args process]

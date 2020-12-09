@@ -2,24 +2,15 @@ package lib
 
 import (
 	"log"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 )
 
-func GenerateTest() TestId {
-	cmd := exec.Command("./generator.sh")
+func GenerateTest(test string) TestId {
 
-	path, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	cmd.Dir = path + "/../generator/"
-
+	cmd := exec.Command("detsys-generator", test)
 	out, err := cmd.Output()
-
 	if err != nil {
 		log.Fatal(err)
 	}

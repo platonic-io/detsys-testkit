@@ -1,7 +1,5 @@
 ## detsys-testkit
 
-A test kit for fast and deterministic system tests.
-
 System tests are usually slow, non-deterministic and should therefor be used
 sparsely -- this project tries to turn this idea on its head.
 
@@ -41,7 +39,7 @@ simple distributed register example:
 4. Prepare the database with `detsys db up`;
 5. Start the scheduler component with `detsys scheduler up`;
 6. Change directory to where the distributed register example lives with `cd
-   src/sut`;
+   src/sut/register`;
 7. Run the first test from the testsuite by typing `go test -run 1`;
 8. Notice how test id `1` and run id `2` doesn't pass the analysis. To debug
    that run enter `detsys debug 1 2`;
@@ -49,16 +47,18 @@ simple distributed register example:
    `k`, and finally exit the debugger with `q` or `Ctrl-c`.
 
 At this point it might make sense to have a look at the `go` testsuite in
-`example_test.go` and the actual implementation of the distributed register. The
-implementation consists of two parts: a frontend (see `frontend1.go`) which
+[`example_test.go`](src/sut/register/example_test.go) and the actual
+implementation of the distributed register. The implementation consists of two
+parts: a frontend (see [`frontend1.go`](src/sut/register/frontend1.go) which
 receives client requests and propagates them to two distributed registers
-(`register.go`). The client can be request a write to or a read from the
-registers, and the idea with there being two registers is that there is some
-form of reducancy. The implementation is flawed however, as you might have been
-able to guess from the fact that the test fails. Can you figure out what exactly
-the implementation does and why it's wrong by using the debugger alone? For
-further refinements of the implementation see `frontend{2,3,4}.go` and see if
-you can figure out why they do or don't work as well.
+([`register.go`](src/sut/register/register.go). The client can be request a
+write to or a read from the registers, and the idea with there being two
+registers is that there is some form of reducancy. The implementation is flawed
+however, as you might have been able to guess from the fact that the test fails.
+Can you figure out what exactly the implementation does and why it's wrong by
+using the debugger alone? For further refinements of the implementation see
+[`frontend{2,3,4}.go`](src/sut/register) and see if you can figure out why they
+do or don't work as well.
 
 More about `nix` can be found [here](doc/nix.md), including why it's preferbable
 to `docker` and how to overcome some weak points of `nix-shell`.
@@ -71,9 +71,9 @@ TODO: Now that we looked at a concrete example...
 
 ### More examples
 
-* Reliable broadcast [example](TODO) from the *Lineage-driven fault injection*
-  [paper](https://dl.acm.org/doi/10.1145/2723372.2723711) (2015) by Peter Alvaro
-  et al.
+* Reliable broadcast [example](src/sut/broadcast) from the *Lineage-driven fault
+  injection* [paper](https://dl.acm.org/doi/10.1145/2723372.2723711) (2015) by
+  Peter Alvaro et al.
 
 ### How it works on a lower-level
 

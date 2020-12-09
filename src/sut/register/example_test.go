@@ -35,7 +35,7 @@ func once(newFrontEnd func() lib.Reactor, testId lib.TestId, t *testing.T) (lib.
 }
 
 func testRegisterWithFrontEnd(newFrontEnd func() lib.Reactor, tickFrequency float64, t *testing.T) {
-	testId := lib.GenerateTest()
+	testId := lib.GenerateTest("register")
 
 	var runIds []lib.RunId
 	var faults []lib.Fault
