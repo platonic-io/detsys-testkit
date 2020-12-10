@@ -240,3 +240,37 @@ func SequenceDiagrams(testId lib.TestId, runId lib.RunId) [][]byte {
 
 	return diagrams
 }
+
+func GetLogMessages(testId lib.TestId, runId lib.RunId, component string, at int) [][]byte {
+	db := lib.OpenDB()
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT log
+                               FROM log_trace
+                               INNER JOIN time_mapping
+                                 ON log_trace.test_id = time_mapping.test_id
+                                 AND log_trace.run_id = time_mapping.run_id
+                                 AND log_trace.simulated_time = time_mapping.simulated_time
+                               WHERE log_trace.test_id = ?
+                               AND   log_trace.run_id = ?
+                               AND   log_trace.component = ?
+                               AND   time_mapping.logical_time = ? `,
+		testId.TestId, runId.RunId, component, at)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	var logs [][]byte
+	for rows.Next() {
+		var log []byte
+		err := rows.Scan(&log)
+
+		if err != nil {
+			panic(err)
+		}
+
+		logs = append(logs, log)
+	}
+
+	return logs
+}

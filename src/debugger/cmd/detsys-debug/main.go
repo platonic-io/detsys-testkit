@@ -45,12 +45,19 @@ var messageView = tview.NewTextView().
 	SetDynamicColors(true)
 var wMessageView = tview.ANSIWriter(messageView)
 
+var logView = tview.NewTextView().
+	SetWrap(false).
+	SetDynamicColors(true)
+var wLogView = tview.ANSIWriter(logView)
+
 type DebugApplication struct {
-	heaps []map[string][]byte
-	diagrams [][]byte
-	events []debugger.NetworkEvent
-	components []string
-	activeRow int // should probably be logic time
+	testId          lib.TestId
+	runId           lib.RunId
+	heaps           []map[string][]byte
+	diagrams        [][]byte
+	events          []debugger.NetworkEvent
+	components      []string
+	activeRow       int // should probably be logic time
 	activeComponent int
 }
 
@@ -77,6 +84,7 @@ func (da *DebugApplication) redraw() {
 	textView.Clear()
 	diagram.Clear()
 	messageView.Clear()
+	logView.Clear()
 	row := da.activeRow
 	fmt.Fprintf(w2, "%s", string(da.diagrams[row-1]))
 	component := da.components[da.activeComponent]
@@ -89,7 +97,12 @@ func (da *DebugApplication) redraw() {
 	fmt.Fprintf(w, "%s", strdiff)
 
 	event := da.events[row-1]
-	fmt.Fprintf(wMessageView, "%s\n", string(event.Args))
+	fmt.Fprintf(wMessageView, "%s", string(event.Args))
+
+	logs := debugger.GetLogMessages(da.testId, da.runId, component, event.At)
+	for _, log := range logs {
+		fmt.Fprintf(wLogView, "%s\n", string(log))
+	}
 }
 
 func MakeDebugApplication(testId lib.TestId, runId lib.RunId) *DebugApplication {
@@ -113,11 +126,13 @@ func MakeDebugApplication(testId lib.TestId, runId lib.RunId) *DebugApplication 
 
 	sort.Strings(components)
 	return &DebugApplication{
-		heaps: heaps,
-		diagrams: diagrams,
-		events: events,
-		components: components,
-		activeRow: 1,
+		testId:          testId,
+		runId:           runId,
+		heaps:           heaps,
+		diagrams:        diagrams,
+		events:          events,
+		components:      components,
+		activeRow:       1,
 		activeComponent: ac,
 	}
 }
@@ -139,6 +154,7 @@ func main() {
 	textView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Component state")
 	messageView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Current Message")
 	diagram.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Sequence diagram")
+	logView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Log")
 
 	da.redraw()
 
@@ -182,7 +198,7 @@ func main() {
 			da.redraw()
 		})
 
-	componentsWidget.SetChangedFunc(func (index int, _mainText string, _secondaryText string, shortcut rune) {
+	componentsWidget.SetChangedFunc(func(index int, _mainText string, _secondaryText string, shortcut rune) {
 		da.activeComponent = index
 		da.redraw()
 	})
@@ -190,7 +206,7 @@ func main() {
 	for i, c := range da.components {
 		theRune := ' '
 
-		if (i < 9) {
+		if i < 9 {
 			theRune = rune(i + 49) // 48 is '0', but we skip that one
 		}
 		componentsWidget.AddItem(c, "", theRune, nil)
@@ -198,16 +214,19 @@ func main() {
 
 	stateWidget := tview.NewFlex().
 		SetDirection(tview.FlexColumn).
-		AddItem(componentsWidget,10, 0, false).
+		AddItem(componentsWidget, 10, 0, false).
 		AddItem(textView, 0, 4, false)
 
 	layout := tview.NewFlex().
+		SetDirection(tview.FlexRow).
 		AddItem(tview.NewFlex().
-			SetDirection(tview.FlexRow).
-			AddItem(stateWidget, 0, 1, false).
-			AddItem(messageView, 5, 2, false).
-			AddItem(table, 20, 1, false), 0, 1, false).
-		AddItem(diagram, 0, 1, false)
+			AddItem(tview.NewFlex().
+				SetDirection(tview.FlexRow).
+				AddItem(stateWidget, 0, 1, false).
+				AddItem(table, 20, 1, false), 0, 1, false).
+			AddItem(diagram, 0, 1, false), 0, 20, false).
+		AddItem(messageView, 5, 1, false).
+		AddItem(logView, 10, 1, false)
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == 'q' {
