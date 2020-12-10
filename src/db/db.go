@@ -10,8 +10,14 @@ import (
 	"github.com/symbiont-io/detsys-testkit/lib"
 )
 
+var version = "unknown"
+
 func help() {
-	fmt.Printf("Usage: db [up|down]\n")
+	fmt.Printf(`
+Usage:
+  detsys-db [up|down]
+Flags:
+  -v, --version   version for detsys-db`)
 	os.Exit(1)
 }
 
@@ -26,6 +32,12 @@ func main() {
 		dir = migrate.Up
 	case "down":
 		dir = migrate.Down
+	case "-v":
+		fmt.Println(version)
+		os.Exit(0)
+	case "--version":
+		fmt.Println(version)
+		os.Exit(0)
 	default:
 		help()
 	}

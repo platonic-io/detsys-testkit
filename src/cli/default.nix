@@ -20,7 +20,9 @@ buildGoModule rec {
 
   # This hash should be the output of:
   #   go mod vendor && nix-hash --base32 --type sha256 vendor
-  vendorSha256 = "1pr2nscfhpb1m5hlf8rmbxsf60pk09g7byqn2rlai61a2iyy8l1p";
+  vendorSha256 = "0kn4mjj495s1596zi7f21sdz16j72rzz6wx3lgmf5ry4i9jnpiz6";
+
+  buildFlagsArray = [ "-ldflags=-X main.version=${version}" ];
 
   preBuild = ''
     # We need to put the source of the library in `../lib`, because

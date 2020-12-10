@@ -18,7 +18,7 @@ buildGoModule rec {
   buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ plantuml ];
 
-  vendorSha256 = "09wxnxv5dbzrsjqzhrg06dlbj6n5kp4xjvvmr8k8i6zy0jcd6yw0";
+  vendorSha256 = "1m0f0gxsky5yxj4di94lpd4wjbmc9aqr2kkv2r9dyq72zixbbcl4";
 
   subPackages = [ "cmd/detsys-debug" ];
 
