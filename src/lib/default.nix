@@ -9,9 +9,14 @@ let
 in
 
 buildGoModule rec {
-  pname = "detsys-lib";
-  version = "latest";
+  pname = "lib";
+  version = lib.commitIdFromGitRepo ./../../.git;
   goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
   src = gitignoreSource ./.;
   vendorSha256 = null;
+
+  postInstall = ''
+    mkdir -p $out
+    cp -R $src $out/src
+  '';
 }

@@ -23,6 +23,7 @@ func init() {
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(schedulerCmd)
 	rootCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(versionCmd)
 }
 
 func Execute() {

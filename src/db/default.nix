@@ -6,25 +6,29 @@ assert lib.versionAtLeast go.version "1.15";
 
 let
   inherit (import sources.gitignore {}) gitignoreSource;
-  lib = callPackage ../lib/default.nix {};
+  detsysLib = callPackage ../lib/default.nix {};
 in
 
 buildGoModule rec {
   pname = "detsys-db";
-  version = "latest";
+  version = lib.commitIdFromGitRepo ./../../.git;
   goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
 
   src = gitignoreSource ./.;
 
-  buildInputs = [ lib ];
+  buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ sqlite-interactive ];
 
-  # NOTE: If this hash is wrong, we get a cryptic "go: cannot find main module"
-  # error...
-  vendorSha256 = "00808wzgjb6jzb7kdjg209lzlqk2ipbqpbi87d4cc0iqnr37w9h1";
+  vendorSha256 = "0zwqn8k6i9idhp2q8ggmqrs84q7bx108r2031gd7zzjgvfy1na40";
 
-  # We need CGO to include sqlite.
-  preBuild = "export CGO_ENABLED=1";
+  preBuild = ''
+    # We need to put the source of the library in `../lib`, because
+    # that's where `go.mod` says to go look for it.
+    cp -R ${detsysLib}/src ../lib
+
+    # We need CGO to include sqlite.
+    export CGO_ENABLED=1
+  '';
 
   postInstall = ''
     echo "installing migrations"
