@@ -6,25 +6,28 @@ assert lib.versionAtLeast go.version "1.15";
 
 let
   inherit (import sources.gitignore {}) gitignoreSource;
-  lib = callPackage ../lib/default.nix {};
+  detsysLib = callPackage ../lib/default.nix {};
 in
 
 buildGoModule rec {
   pname = "detsys-debug";
-  version = "latest";
+  version = lib.commitIdFromGitRepo ./../../.git;
   goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
 
   src = gitignoreSource ./.;
-  buildInputs = [ lib ];
+  buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ plantuml ];
 
-  # NOTE: `nix-hash --base32 --type sha256 vendor`
-  vendorSha256 = "14g97i7ykxrxwdmdg51kfbfdp6z4r1ng9pk75hncns45cf94p67j";
+  vendorSha256 = "09wxnxv5dbzrsjqzhrg06dlbj6n5kp4xjvvmr8k8i6zy0jcd6yw0";
 
   subPackages = [ "cmd/detsys-debug" ];
 
-  # We need CGO to include sqlite.
   preBuild = ''
+    # We need to put the source of the library in `../lib`, because
+    # that's where `go.mod` says to go look for it.
+    cp -R ${detsysLib}/src ../lib
+
+    # We need CGO to include sqlite.
     export CGO_ENABLED=1
   '';
 }
