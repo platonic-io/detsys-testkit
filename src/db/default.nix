@@ -19,7 +19,9 @@ buildGoModule rec {
   buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ sqlite-interactive ];
 
-  vendorSha256 = "0zwqn8k6i9idhp2q8ggmqrs84q7bx108r2031gd7zzjgvfy1na40";
+  vendorSha256 = "1qiw90f58yn9fid0p9zch1l91c2n81xxvdzcdqc3ci3qgqkyijja";
+
+  buildFlagsArray = [ "-ldflags=-X main.version=${version}" ];
 
   preBuild = ''
     # We need to put the source of the library in `../lib`, because

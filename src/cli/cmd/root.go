@@ -23,10 +23,10 @@ func init() {
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(schedulerCmd)
 	rootCmd.AddCommand(generateCmd)
-	rootCmd.AddCommand(versionCmd)
 }
 
-func Execute() {
+func Execute(version string) {
+	rootCmd.Version = version
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
