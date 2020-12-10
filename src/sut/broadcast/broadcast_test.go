@@ -34,14 +34,14 @@ func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)
 	lib.Teardown(&srv)
-	model := "list-append"
-	log.Printf("Analysing model %s for %+v and %+v\n", model, testId, runId)
-	result := lib.Check(model, testId, runId)
+	log.Printf("Checking\n")
+	nodeB := topology["B"].(*Node)
+	result := nodeB.Log == "Hello world!"
 	return runId, result
 }
 
 func TestSimpleDeliv(t *testing.T) {
-	tickFrequency := 1.0
+	tickFrequency := 1000.0 // One tick per second.
 
 	testId := lib.GenerateTest("broadcast")
 
