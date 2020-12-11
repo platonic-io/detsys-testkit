@@ -11,14 +11,14 @@ in
 
 buildGoModule rec {
   pname = "detsys-debug";
-  version = lib.commitIdFromGitRepo ./../../.git;
+  version = "latest";
   goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
 
   src = gitignoreSource ./.;
   buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ plantuml ];
 
-  vendorSha256 = "1m0f0gxsky5yxj4di94lpd4wjbmc9aqr2kkv2r9dyq72zixbbcl4";
+  vendorSha256 = "0p4kpc3srbby7l1nv3n8szaqm0m28m44qd56zw2nhfyg3430x8ci";
 
   subPackages = [ "cmd/detsys-debug" ];
 

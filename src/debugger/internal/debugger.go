@@ -139,6 +139,13 @@ func traceHeap(testId lib.TestId, runId lib.RunId) {
 	}
 }
 
+func Max(x, y int) int {
+	if x < y {
+		return y
+	}
+	return x
+}
+
 func Heaps(testId lib.TestId, runId lib.RunId) []map[string][]byte {
 	inits := GetInitHeap(testId)
 	changes := GetHeapTrace(testId, runId)
@@ -157,13 +164,17 @@ func Heaps(testId lib.TestId, runId lib.RunId) []map[string][]byte {
 		if event.Dropped || strings.HasPrefix(event.To, "client") {
 			dropped++
 		}
-		old := heaps[i][changes[i-dropped].Component]
-		new := applyDiff(old, changes[i-dropped].Diff)
+		// The `Max` below is needed in case the first message is
+		// dropped.
+		j := Max(0, i-dropped)
+
+		old := heaps[i][changes[j].Component]
+		new := applyDiff(old, changes[j].Diff)
 		m2 := make(map[string][]byte)
-		m2[changes[i-dropped].Component] = []byte(new)
+		m2[changes[j].Component] = []byte(new)
 		heaps[i+1] = m2
 		for component, heap := range heaps[i] {
-			if component != changes[i-dropped].Component {
+			if component != changes[j].Component {
 				heaps[i+1][component] = heap
 			}
 		}

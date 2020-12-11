@@ -10,7 +10,7 @@ in
 
 buildGoModule rec {
   pname = "lib";
-  version = lib.commitIdFromGitRepo ./../../.git;
+  version = "latest";
   goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
   src = gitignoreSource ./.;
   vendorSha256 = null;

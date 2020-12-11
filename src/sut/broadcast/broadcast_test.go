@@ -9,15 +9,11 @@ import (
 	"github.com/symbiont-io/detsys/lib"
 )
 
-func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
-	nodeA := &Node{
-		Log:       "Hello world!",
-		Broadcast: true,
-	}
+func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	topology := map[string]lib.Reactor{
-		"A": nodeA,
-		"B": NewNode(),
-		"C": NewNode(),
+		"A": NewNodeA(round),
+		"B": NewNode(round, "C"),
+		"C": NewNode(round, "B"),
 	}
 	marshaler := NewMarshaler()
 	var srv http.Server
@@ -25,7 +21,7 @@ func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 		executor.Deploy(&srv, testId, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
-	lib.SetMinTimeNs(5*10 ^ 9)
+	lib.SetMinTimeNs(10*10 ^ 9)
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	executor.Register(topology)
 	log.Printf("Registered executor")
@@ -40,7 +36,7 @@ func once(testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	return runId, result
 }
 
-func TestSimpleDeliv(t *testing.T) {
+func many(round Round, t *testing.T) {
 	tickFrequency := 1000.0 // One tick per second.
 
 	testId := lib.GenerateTest("broadcast")
@@ -57,7 +53,7 @@ func TestSimpleDeliv(t *testing.T) {
 		lib.InjectFaults(lib.Faults{faults})
 		lib.SetTickFrequency(tickFrequency)
 		log.Printf("Injecting faults: %#v\n", faults)
-		runId, result := once(testId, t)
+		runId, result := once(round, testId, t)
 		if !result {
 			t.Errorf("%+v and %+v doesn't pass analysis", testId, runId)
 			t.Errorf("faults: %#v\n", faults)
@@ -69,4 +65,24 @@ func TestSimpleDeliv(t *testing.T) {
 			break
 		}
 	}
+}
+
+func TestSimpleDeliv(t *testing.T) {
+	many(SimpleDeliv, t)
+}
+
+func TestRetryDeliv(t *testing.T) {
+	many(RetryDeliv, t)
+}
+
+func TestRedunDeliv(t *testing.T) {
+	many(RedunDeliv, t)
+}
+
+func TestAckDeliv(t *testing.T) {
+	many(AckDeliv, t)
+}
+
+func TestClassicDeliv(t *testing.T) {
+	many(ClassicDeliv, t)
 }
