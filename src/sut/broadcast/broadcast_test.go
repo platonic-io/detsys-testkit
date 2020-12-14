@@ -2,6 +2,7 @@ package broadcast
 
 import (
 	"log"
+	"math"
 	"net/http"
 	"testing"
 
@@ -21,7 +22,7 @@ func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 		executor.Deploy(&srv, testId, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
-	lib.SetMinTimeNs(10*10 ^ 9)
+	lib.SetMinTimeNs(5 * math.Pow(10, 9))
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	executor.Register(topology)
 	log.Printf("Registered executor")
@@ -67,22 +68,22 @@ func many(round Round, t *testing.T) {
 	}
 }
 
-func TestSimpleDeliv(t *testing.T) {
+func TestSimpleDelivRound1(t *testing.T) {
 	many(SimpleDeliv, t)
 }
 
-func TestRetryDeliv(t *testing.T) {
+func TestRetryDelivRound2(t *testing.T) {
 	many(RetryDeliv, t)
 }
 
-func TestRedunDeliv(t *testing.T) {
+func TestRedunDelivRound3(t *testing.T) {
 	many(RedunDeliv, t)
 }
 
-func TestAckDeliv(t *testing.T) {
+func TestAckDelivRound4(t *testing.T) {
 	many(AckDeliv, t)
 }
 
-func TestClassicDeliv(t *testing.T) {
+func TestClassicDelivRound5(t *testing.T) {
 	many(ClassicDeliv, t)
 }
