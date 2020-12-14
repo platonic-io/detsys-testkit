@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"time"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/symbiont-io/detsys/lib"
 )
 
@@ -15,7 +18,10 @@ func jsonError(s string) string {
 	return fmt.Sprintf("{\"error\":\"%s\"}", s)
 }
 
-func handler(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
+type ComponentUpdate = func(component string, at time.Time)
+type Topology = map[string]lib.Reactor
+
+func handler(db *sql.DB, testId lib.TestId, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "POST" {
@@ -34,6 +40,7 @@ func handler(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor, m l
 		if err := lib.UnmarshalScheduledEvent(m, body, &sev); err != nil {
 			panic(err)
 		}
+		cu(sev.To, sev.At)
 		heapBefore := dumpHeapJson(topology[sev.To])
 		oevs := topology[sev.To].Receive(sev.At, sev.From, sev.Event)
 		heapAfter := dumpHeapJson(topology[sev.To])
@@ -44,7 +51,7 @@ func handler(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor, m l
 	}
 }
 
-func handleTick(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
+func handleTick(topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	type TickRequest struct {
 		Component string    `json:"component"`
 		At        time.Time `json:"at"`
@@ -65,13 +72,14 @@ func handleTick(topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFu
 		if err := json.Unmarshal(body, &req); err != nil {
 			panic(err)
 		}
+		cu(req.Component, req.At)
 		oevs := topology[req.Component].Tick(req.At)
 		bs := lib.MarshalUnscheduledEvents(req.Component, oevs)
 		fmt.Fprint(w, string(bs))
 	}
 }
 
-func handleTimer(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler) http.HandlerFunc {
+func handleTimer(db *sql.DB, testId lib.TestId, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	type TimerRequest struct {
 		Component string    `json:"to"`
 		At        time.Time `json:"at"`
@@ -93,6 +101,7 @@ func handleTimer(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor,
 		if err := json.Unmarshal(body, &req); err != nil {
 			panic(err)
 		}
+		cu(req.Component, req.At)
 		heapBefore := dumpHeapJson(topology[req.Component])
 		oevs := topology[req.Component].Timer(req.At)
 		heapAfter := dumpHeapJson(topology[req.Component])
@@ -104,7 +113,7 @@ func handleTimer(db *sql.DB, testId lib.TestId, topology map[string]lib.Reactor,
 	}
 }
 
-func Register(topology map[string]lib.Reactor) {
+func Register(topology Topology) {
 	// TODO(stevan): Make executorUrl part of topology.
 	const executorUrl string = "http://localhost:3001/api/v1/"
 
@@ -115,13 +124,13 @@ func Register(topology map[string]lib.Reactor) {
 	lib.RegisterExecutor(executorUrl, components)
 }
 
-func Deploy(srv *http.Server, testId lib.TestId, topology map[string]lib.Reactor, m lib.Marshaler) {
+func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, topology Topology, m lib.Marshaler, cu ComponentUpdate) {
 	mux := http.NewServeMux()
 
 	db := lib.OpenDB()
-	mux.HandleFunc("/api/v1/event", handler(db, testId, topology, m))
-	mux.HandleFunc("/api/v1/tick", handleTick(topology, m))
-	mux.HandleFunc("/api/v1/timer", handleTimer(db, testId, topology, m))
+	mux.HandleFunc("/api/v1/event", handler(db, testId, topology, m, cu))
+	mux.HandleFunc("/api/v1/tick", handleTick(topology, m, cu))
+	mux.HandleFunc("/api/v1/timer", handleTimer(db, testId, topology, m, cu))
 	srv.Addr = ":3001"
 	srv.Handler = mux
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
@@ -130,11 +139,116 @@ func Deploy(srv *http.Server, testId lib.TestId, topology map[string]lib.Reactor
 	defer db.Close()
 }
 
+func Deploy(srv *http.Server, testId lib.TestId, topology Topology, m lib.Marshaler) {
+	DeployWithComponentUpdate(srv, testId, topology, m, func(string, time.Time) {})
+}
+
 func DeployRaw(srv *http.Server, testId lib.TestId, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {
-	topologyCooked := make(map[string]lib.Reactor, len(topology))
+	topologyCooked := make(Topology, len(topology))
 	for name, component := range topology {
 		topologyCooked[name] = constructor(component)
 	}
 
 	Deploy(srv, testId, topologyCooked, m)
+}
+
+type LogWriter struct {
+	testId    lib.TestId
+	runId     lib.RunId
+	component string
+	at        time.Time
+}
+
+func (_ *LogWriter) Sync() error {
+	return nil
+}
+
+func (lw *LogWriter) Write(p []byte) (n int, err error) {
+	if len(p) > 0 {
+		// we remove last byte since it is an newline
+		lib.AddLogStamp(lw.testId, lw.runId, lw.component, p[:len(p)-1], lw.at)
+	}
+	return len(p), nil
+}
+
+func (lw *LogWriter) AppendToLogger(logger *zap.Logger) *zap.Logger {
+	return logger.WithOptions(zap.WrapCore(func(c zapcore.Core) zapcore.Core {
+		config := zap.NewDevelopmentEncoderConfig()
+		config.TimeKey = ""
+		config.LineEnding = ""
+		dbLogger := zapcore.NewCore(zapcore.NewConsoleEncoder(config), lw, c)
+		return zapcore.NewTee(c, dbLogger)
+	}))
+}
+
+type Executor struct {
+	topology    Topology
+	buffers     map[string]*LogWriter
+	marshaler   lib.Marshaler
+	testId      lib.TestId
+	runId       lib.RunId
+	constructor func(name string, logger *zap.Logger) lib.Reactor
+	logger      *zap.Logger
+}
+
+func (e *Executor) ReactorTopology() Topology {
+	return e.topology
+}
+
+func (e *Executor) SetTestId(testId lib.TestId) {
+	e.testId = testId
+	for _, buffer := range e.buffers {
+		buffer.testId = testId
+	}
+}
+
+func NewExecutor(testId lib.TestId, marshaler lib.Marshaler, logger *zap.Logger, components []string, constructor func(name string, logger *zap.Logger) lib.Reactor) *Executor {
+
+	runId := lib.RunId{0}
+
+	topology := make(map[string]lib.Reactor)
+	buffers := make(map[string]*LogWriter)
+
+	for _, component := range components {
+		buffer := &LogWriter{
+			testId:    testId,
+			runId:     runId,
+			component: component,
+			at:        time.Time{},
+		}
+		topology[component] = constructor(component, buffer.AppendToLogger(logger))
+		buffers[component] = buffer
+	}
+
+	return &Executor{
+		topology:    topology,
+		buffers:     buffers,
+		marshaler:   marshaler,
+		testId:      testId,
+		runId:       runId,
+		constructor: constructor,
+		logger:      logger,
+	}
+}
+
+func (e *Executor) Deploy(srv *http.Server) {
+	DeployWithComponentUpdate(srv, e.testId, e.topology, e.marshaler, func(name string, at time.Time) {
+		buffer, ok := e.buffers[name]
+
+		if ok {
+			buffer.at = at
+		}
+	})
+}
+
+func (e *Executor) Register() {
+	Register(e.topology)
+}
+
+func (e *Executor) Reset(runId lib.RunId) {
+	for c, b := range e.buffers {
+		b.runId = runId
+		b.at = time.Time{}
+		e.topology[c] = e.constructor(c, b.AppendToLogger(e.logger))
+	}
 }
