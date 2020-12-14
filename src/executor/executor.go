@@ -237,6 +237,8 @@ func (e *Executor) Deploy(srv *http.Server) {
 
 		if ok {
 			buffer.at = at
+		} else {
+			panic(fmt.Sprintf("Couldn't find buffer for %s", name))
 		}
 	})
 }
