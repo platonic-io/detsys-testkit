@@ -2,9 +2,9 @@ package broadcast
 
 import (
 	"log"
-	"math"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/symbiont-io/detsys/executor"
 	"github.com/symbiont-io/detsys/lib"
@@ -22,7 +22,7 @@ func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 		executor.Deploy(&srv, testId, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
-	lib.SetMinTimeNs(5 * math.Pow(10, 9))
+	lib.SetMinTimeNs(time.Duration(5) * time.Second)
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	executor.Register(topology)
 	log.Printf("Registered executor")
