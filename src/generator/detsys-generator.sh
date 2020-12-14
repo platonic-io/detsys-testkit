@@ -23,9 +23,9 @@ INSERT INTO deployment VALUES(${TEST_ID}, "register2", '{"value":[]}');
 EOF
 elif [ "${TEST}" == "broadcast" ]; then
     sqlite3 "${DETSYS_DB}" <<EOF
-INSERT INTO deployment VALUES(${TEST_ID}, "A", '{"log":"Hello world!","broadcast":true}');
-INSERT INTO deployment VALUES(${TEST_ID}, "B", '{"log":"","broadcast":false}');
-INSERT INTO deployment VALUES(${TEST_ID}, "C", '{"log":"","broadcast":false}');
+INSERT INTO deployment VALUES(${TEST_ID}, "A", '{"log":"Hello world!","neighbours":{}}');
+INSERT INTO deployment VALUES(${TEST_ID}, "B", '{"log":"","neighbours":{}}');
+INSERT INTO deployment VALUES(${TEST_ID}, "C", '{"log":"","neighbours":{}}');
 EOF
 fi
 

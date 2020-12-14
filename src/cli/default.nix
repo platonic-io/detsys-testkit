@@ -12,7 +12,7 @@ in
 
 buildGoModule rec {
   pname = "detsys";
-  version = lib.commitIdFromGitRepo ./../../.git;
+  version = "latest";
   goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
 
   src = gitignoreSource ./.;
@@ -20,9 +20,10 @@ buildGoModule rec {
 
   # This hash should be the output of:
   #   go mod vendor && nix-hash --base32 --type sha256 vendor
-  vendorSha256 = "0kn4mjj495s1596zi7f21sdz16j72rzz6wx3lgmf5ry4i9jnpiz6";
+  vendorSha256 = "1m82hpkj3krndjq7jgb334768m9n9a489rn01mvr6y3s107gdckb";
 
-  buildFlagsArray = [ "-ldflags=-X main.version=${version}" ];
+  buildFlagsArray =
+    [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
 
   preBuild = ''
     # We need to put the source of the library in `../lib`, because

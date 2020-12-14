@@ -11,7 +11,7 @@ let
   inherit (import sources.gitignore {}) gitignoreSource;
 in stdenv.mkDerivation rec {
   pname = "checker";
-  version = "0.1.0";
+  version = "latest";
   name = "${pname}-${version}";
   src = gitignoreSource ./.;
 

@@ -14,13 +14,6 @@ import (
 	"github.com/symbiont-io/detsys-testkit/lib"
 )
 
-func max(x, y int) int {
-	if x < y {
-		return y
-	}
-	return x
-}
-
 func min(x, y int) int {
 	if x > y {
 		return y
@@ -72,7 +65,7 @@ func (da *DebugApplication) setComponent(component string) {
 }
 
 func (da *DebugApplication) setRow(row int) {
-	nrow := max(1, row)
+	nrow := debugger.Max(1, row)
 	da.activeRow = nrow
 
 	to := da.events[nrow-1].To

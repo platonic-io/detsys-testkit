@@ -9,7 +9,7 @@ in
 
 stdenv.mkDerivation rec {
   pname = "detsys-generator";
-  version = "0.0.0";
+  version = "latest";
   name = "${pname}-${version}";
   src = gitignoreSource ./.;
 

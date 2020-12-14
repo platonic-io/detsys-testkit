@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"time"
 )
 
 type RunId struct {
@@ -76,16 +77,16 @@ func SetTickFrequency(tickFrequency float64) {
 	}{tickFrequency})
 }
 
-func SetMinTimeNs(minTime float64) {
+func SetMinTimeNs(minTime time.Duration) {
 	Post("set-min-time!", struct {
-		MinTime float64 `json:"new-min-time-ns"`
-	}{minTime})
+		MinTime int64 `json:"new-min-time-ns"`
+	}{minTime.Nanoseconds()})
 }
 
-func SetMaxTimeNs(maxTime float64) {
+func SetMaxTimeNs(maxTime time.Duration) {
 	Post("set-max-time!", struct {
-		MaxTime float64 `json:"new-max-time-ns"`
-	}{maxTime})
+		MaxTime int64 `json:"new-max-time-ns"`
+	}{maxTime.Nanoseconds()})
 }
 
 func Run() {

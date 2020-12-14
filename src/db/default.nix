@@ -11,7 +11,7 @@ in
 
 buildGoModule rec {
   pname = "detsys-db";
-  version = lib.commitIdFromGitRepo ./../../.git;
+  version = "latest";
   goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
 
   src = gitignoreSource ./.;
@@ -19,9 +19,10 @@ buildGoModule rec {
   buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ sqlite-interactive ];
 
-  vendorSha256 = "1qiw90f58yn9fid0p9zch1l91c2n81xxvdzcdqc3ci3qgqkyijja";
+  vendorSha256 = "1fh4y0x7ssr8d9xm5wjfipcmr2rb3iwnp5h0ljhwv3fa8063z9qf";
 
-  buildFlagsArray = [ "-ldflags=-X main.version=${version}" ];
+  buildFlagsArray =
+    [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
 
   preBuild = ''
     # We need to put the source of the library in `../lib`, because
