@@ -4,17 +4,22 @@ import (
 	"log"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/symbiont-io/detsys/executor"
 	"github.com/symbiont-io/detsys/lib"
 )
 
-func once(newFrontEnd func() lib.Reactor, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
-	topology := map[string]lib.Reactor{
+func createTopology(newFrontEnd func() lib.Reactor) map[string]lib.Reactor {
+	return map[string]lib.Reactor{
 		"frontend":  newFrontEnd(),
 		"register1": NewRegister(),
 		"register2": NewRegister(),
 	}
+}
+
+func once(newFrontEnd func() lib.Reactor, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
+	topology := createTopology(newFrontEnd)
 	marshaler := NewMarshaler()
 	var srv http.Server
 	lib.Setup(func() {
@@ -35,7 +40,28 @@ func once(newFrontEnd func() lib.Reactor, testId lib.TestId, t *testing.T) (lib.
 }
 
 func testRegisterWithFrontEnd(newFrontEnd func() lib.Reactor, tickFrequency float64, t *testing.T) {
-	testId := lib.GenerateTest("register")
+	agenda := []lib.ScheduledEvent{
+		lib.ScheduledEvent{
+			At:   time.Unix(0, 0).UTC(),
+			From: "client:0",
+			To:   "frontend",
+			Event: lib.ClientRequest{
+				Id:      0,
+				Request: Write{1},
+			},
+		},
+		lib.ScheduledEvent{
+			At:   time.Unix(0, 0).UTC().Add(time.Duration(10) * time.Second),
+			From: "client:0",
+			To:   "frontend",
+			Event: lib.ClientRequest{
+				Id:      0,
+				Request: Read{},
+			},
+		},
+	}
+
+	testId := lib.GenerateTestFromTopologyAndAgenda(createTopology(newFrontEnd), agenda)
 
 	var runIds []lib.RunId
 	var faults []lib.Fault
