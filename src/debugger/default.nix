@@ -20,6 +20,9 @@ buildGoModule rec {
 
   vendorSha256 = "0p4kpc3srbby7l1nv3n8szaqm0m28m44qd56zw2nhfyg3430x8ci";
 
+  buildFlagsArray =
+    [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
+
   subPackages = [ "cmd/detsys-debug" ];
 
   preBuild = ''
