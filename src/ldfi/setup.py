@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name='ldfi',
-    version='0.0.0',
+    use_scm_version=True,
     description='Lineage-driven fault injection',
     url='https://github.com/symbiont-io/symbiont-node',
     author='Stevan Andjelkovic',

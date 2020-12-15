@@ -17,7 +17,8 @@ func help() {
 Usage:
   detsys-db [up|down]
 Flags:
-  -v, --version   version for detsys-db`)
+  -v, --version   version for detsys-db
+`)
 	os.Exit(1)
 }
 

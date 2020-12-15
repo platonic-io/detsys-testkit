@@ -76,12 +76,23 @@
         (pprint result)
         (System/exit 1)))))
 
+;; Since the version is a constant GraalVM will evaluate it at compile-time, and
+;; it will stay fixed independent of run-time values of the environment
+;; variable.
+(def gitrev ^String
+  (or (System/getenv "DETSYS_CHECKER_VERSION")
+      "unknown"))
+
 (defn -main
   [& args]
-  (let [model   (nth args 0)
-        test-id (nth args 1)
-        run-id  (nth args 2)]
-    (case model
+  (let [arg0    (nth args 0 nil)
+        test-id (nth args 1 nil)
+        run-id  (nth args 2 nil)]
+    (when (or (= arg0 "--version")
+              (= arg0 "-v"))
+      (do (println gitrev)
+          (System/exit 0)))
+    (case arg0
       "rw-register" (analyse test-id run-id checker-rw-register)
       "list-append" (analyse test-id run-id checker-list-append)
       (println

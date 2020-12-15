@@ -6,6 +6,7 @@ with pkgs;
 let
   inherit (import sources.gitignore {}) gitignoreSource;
   ldfi = callPackage ./release.nix {
+    lib = lib;
     pythonPackages = python38Packages;
     gitignoreSource = gitignoreSource;
   };

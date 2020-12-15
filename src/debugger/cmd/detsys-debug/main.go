@@ -130,14 +130,30 @@ func MakeDebugApplication(testId lib.TestId, runId lib.RunId) *DebugApplication 
 	}
 }
 
+var version = "unknown"
+
+func help() {
+	fmt.Printf(`
+Usage:
+  detsys-debug [test-id] [run-id]
+Flags:
+  -v, --version   version for detsys-debug
+`)
+	os.Exit(1)
+}
+
 func main() {
+	if os.Args[1] == "--version" || os.Args[1] == "-v" {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 	testId, err := strconv.Atoi(os.Args[1])
 	if err != nil {
-		panic(err)
+		help()
 	}
 	runId, err := strconv.Atoi(os.Args[2])
 	if err != nil {
-		panic(err)
+		help()
 	}
 
 	app := tview.NewApplication()
