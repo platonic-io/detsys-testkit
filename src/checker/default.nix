@@ -18,6 +18,7 @@ in stdenv.mkDerivation rec {
   buildInputs = [ clojure jdk11_headless graalvm ];
 
   buildPhase = ''
+    export DETSYS_CHECKER_VERSION="${lib.commitIdFromGitRepo ./../../.git}"
     export CLASSPATH=$(find ${mavenRepository} -name "*.jar" -printf ':%h/%f')
     export builddir=$TMP/classes
     mkdir -p $builddir

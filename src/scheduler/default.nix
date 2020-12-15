@@ -16,6 +16,7 @@ in stdenv.mkDerivation rec {
   src = gitignoreSource ./.;
 
   buildInputs = [ clojure jdk11_headless graalvm ];
+
   buildPhase = ''
     export DETSYS_SCHEDULER_VERSION="${lib.commitIdFromGitRepo ./../../.git}"
     export CLASSPATH=$(find ${mavenRepository} -name "*.jar" -printf ':%h/%f')
