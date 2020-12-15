@@ -1,4 +1,4 @@
-{ pythonPackages, gitignoreSource }:
+{ lib, pythonPackages, gitignoreSource }:
 
 let
   z3-solver = pythonPackages.buildPythonPackage rec {
@@ -16,6 +16,11 @@ pythonPackages.buildPythonApplication rec {
   pname = "detsys-ldfi";
   version = "latest";
   src = gitignoreSource ./.;
+
+  preBuild = ''
+    export SETUPTOOLS_SCM_PRETEND_VERSION="${lib.commitIdFromGitRepo ./../../.git}"
+  '';
+
   checkInputs = with pythonPackages; [ pytest pytestrunner ];
-  propagatedBuildInputs = with pythonPackages; [ z3-solver setuptools ];
+  propagatedBuildInputs = with pythonPackages; [ z3-solver setuptools setuptools_scm ];
 }

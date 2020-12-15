@@ -3,6 +3,7 @@ import os
 import sqlite3
 import z3
 import json
+from pkg_resources import get_distribution
 
 def order(d):
     return("%s %s %s %d" % (d['kind'], d['from'], d.get('to', ""), d['at']))
@@ -19,6 +20,9 @@ def main():
     parser.add_argument('--run-ids', metavar='RUN_ID', type=int, nargs='+', required=True,
                         help='the run ids')
     parser.add_argument('--json', action='store_true', help='output in JSON format?')
+    parser.add_argument('--version', '-v', action='version',
+                        version=get_distribution(__name__).version)
+
     args = parser.parse_args()
 
     # Load network traces from the database.
