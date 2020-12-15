@@ -80,8 +80,13 @@
   (start-server))
 
 (defn -main
-  [& _args]
-  (let [port (Integer/parseInt (or (System/getenv "DETSYS_SCHEDULER_PORT") "3000"))]
+  [& args]
+  (let [port (Integer/parseInt (or (System/getenv "DETSYS_SCHEDULER_PORT") "3000"))
+        arg (first args)]
+    (when (or (= arg "--version")
+              (= arg "-v"))
+      (do (println pure/gitrev)
+          (System/exit 0)))
     (start-server false port)
     (println (str "Running webserver at http:/127.0.0.1:" port "/"))))
 
