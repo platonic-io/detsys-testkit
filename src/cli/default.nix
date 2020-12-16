@@ -20,7 +20,7 @@ buildGoModule rec {
 
   # This hash should be the output of:
   #   go mod vendor && nix-hash --base32 --type sha256 vendor
-  vendorSha256 = "1m82hpkj3krndjq7jgb334768m9n9a489rn01mvr6y3s107gdckb";
+  vendorSha256 = "1xs4xqaa96kziwijczikkrg4acicd5lm7blgxcd54w4ykx0m6dsa";
 
   buildFlagsArray =
     [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
