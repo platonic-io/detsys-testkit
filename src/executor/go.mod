@@ -1,4 +1,4 @@
-module github.com/symbiont-io/detsys/executor
+module github.com/symbiont-io/detsys-detsys/src/executor
 
 go 1.15
 
