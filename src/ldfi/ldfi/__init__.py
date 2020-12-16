@@ -39,18 +39,18 @@ def main():
         c.execute("""select * from network_trace
                      where test_id = (?)
                        and run_id = (?)
-                       and dropped = 0
                        and kind <> 'timer'
                        and not (`from` like 'client:%')
                        and not (`to`   like 'client:%')""",
                   (args.test_id, run_id))
         for r in c:
             if r['at'] < args.eff:
-                sums.append("{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}" %
-                            (r['from'], r['to'], r['at']))
+                sums.append({"var":"{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}" %
+                             (r['from'], r['to'], r['at']),
+                             "dropped": r['dropped']})
             crash = "{'kind':'crash', 'from':'%s', 'at':%d}" % (r['from'], r['at'])
-            sums.append(crash)
-            crashes.add(crash)
+            #sums.append(crash)
+            #crashes.add(crash)
         products.append(sums)
 
     c.close()
@@ -64,7 +64,11 @@ def main():
 
     # Create and solve SAT formula.
     for i, sum in enumerate(products):
-        products[i] = z3.Or(z3.Bools(sum))
+        kept = [x["var"] for x in sum if x["dropped"] == 0]
+        drop = [x["var"] for x in sum if x["dropped"] == 1]
+        kept = z3.Bools(kept)
+        drop = z3.Bools(drop)
+        products[i] = z3.Or(z3.Or(kept), z3.Not(z3.And(drop)))
 
     crashes = z3.Bools(list(crashes))
 
