@@ -19,7 +19,7 @@ buildGoModule rec {
   buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ sqlite-interactive ];
 
-  vendorSha256 = "01njf82w0cary4bnm723l6nrw4nyzkm77vc6q119744b9kpj004d";
+  vendorSha256 = "1a2yg8jv2ayspxpcjs3fjw62bhxvjj6accpgx42js2pqcgqpk3wx";
 
   buildFlagsArray =
     [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
