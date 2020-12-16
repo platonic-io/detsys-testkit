@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 func jsonError(s string) string {
