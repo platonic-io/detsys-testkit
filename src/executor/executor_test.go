@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 // ---------------------------------------------------------------------
