@@ -60,8 +60,8 @@ using the debugger alone? For further refinements of the implementation see
 [`frontend{2,3,4}.go`](src/sut/register) and see if you can figure out why they
 do or don't work as well.
 
-More about `nix` can be found [here](doc/nix.md), including why it's preferbable
-to `docker` and how to overcome some weak points of `nix-shell`.
+More about `nix` can be found [here](doc/nix.md), including a recommended
+developer workflow and why it's preferbable to `docker`.
 
 ### How it works on a higher-level
 

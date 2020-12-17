@@ -1,5 +1,36 @@
 ### Nix
 
+#### Development workflow
+
+Once you got `nix` installed, it should be a matter of typing
+`nix-shell` at the root of the repo to get the development environment
+setup as well as access to all binaries, in particular the `detsys`
+command-line interface tool.
+
+If you change some detsys component, you can exit the`nix-shell` and
+reenter it again, this should only rebuild the change component and any
+dependencies of it.
+
+If you find `nix-shell` rebuilding more than necessary, then you can
+also try to run `nix-env --install --file default.nix` from within the
+directory of the component that gets unnecessarily rebuilt. This is the
+`nix` equivalent of `make install`, you can also do `nix-build` from
+within the directory of a component to see if the `default.nix` builds
+(equivalent to `make`).
+
+If you want to more iteratively develop your component, you can also use
+whatever language specific compiler or build tool the component uses.
+Note however that `detsys` will use whatever binary it finds first in
+your `PATH`, which could be old versions installed by `nix-env`. All
+`detsys` components come with a `--version` flag and the `detsys`
+command-line interface tool also has a `versions` subcommand to help you
+ensure that you are using the intended versions of the components.
+
+This entering `nix-shell`, leaving and reentering it again is obviously
+annoying. `lorri` is beefed up version of `nix-shell` that is supposed
+to address some of these shortcomings, but we've still not figured out
+how to use it.
+
 #### Why `nix` over `docker`?
 
 * Just `cd` into the directory and it automatically makes all your tools
@@ -61,6 +92,9 @@ purpose.
 6. Install [`niv`](https://github.com/nmattia/niv) with `nix-env --install niv`.
 
 #### How to setup `nix` for a software component
+
+TODO(stevan): the following is slightly outdated, we currently have a
+single `niv init` at the top-level which all components use.
 
 ```bash
 cd $component
