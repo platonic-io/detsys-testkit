@@ -24,6 +24,7 @@ pkgs.mkShell {
     ldfi
     scheduler
 
+    bazel
     go
     clojure
     python38

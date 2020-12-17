@@ -9,3 +9,4 @@ reports/
 vendor/
 result*
 __pycache__/
+bazel-*
