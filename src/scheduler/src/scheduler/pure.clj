@@ -521,8 +521,8 @@
 (defn min-time?
   [data]
   (time/before? (time/plus-nanos (time/init-clock)
-                                 (-> data :min-time-ns))
-                (-> data :clock)))
+                                 (:min-time-ns data))
+                (:clock data)))
 
 (comment
   (min-time? {:clock (time/init-clock), :min-time-ns 0.0})
@@ -537,10 +537,10 @@
 
 (defn max-time?
   [data]
-  (and (not= (-> data :max-time-ns) 0.0)
+  (and (not= (:max-time-ns data) 0.0)
        (time/before? (time/plus-nanos (time/init-clock)
-                                      (-> data :max-time-ns))
-                     (-> data :clock))))
+                                      (:max-time-ns data))
+                     (:clock data))))
 
 (comment
   (max-time? {:clock (time/init-clock), :max-time-ns 0.0})
@@ -636,7 +636,9 @@
     (if (time/before? (:next-tick data) (time/plus-nanos (time/init-clock)
                                                          (:min-time-ns data)))
       (tick! data)
-      {:events []})))
+      (do
+        (Thread/sleep 10000)
+        [data {:events []}]))))
 
 (>defn step!
   [data]
