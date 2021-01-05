@@ -128,6 +128,8 @@ func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, topology Top
 	mux := http.NewServeMux()
 
 	db := lib.OpenDB()
+	defer db.Close()
+
 	mux.HandleFunc("/api/v1/event", handler(db, testId, topology, m, cu))
 	mux.HandleFunc("/api/v1/tick", handleTick(topology, m, cu))
 	mux.HandleFunc("/api/v1/timer", handleTimer(db, testId, topology, m, cu))
@@ -136,21 +138,22 @@ func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, topology Top
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		panic(err)
 	}
-	defer db.Close()
-}
 
-func Deploy(srv *http.Server, testId lib.TestId, topology Topology, m lib.Marshaler) {
-	DeployWithComponentUpdate(srv, testId, topology, m, func(string, time.Time) {})
 	var inits [][]lib.OutEvent
 	for _, reactor := range topology {
 		oevs := reactor.Init()
 		inits = append(inits, oevs)
 	}
 	// TODO(stevan): Randomise the order of the init events for better
-	// coverage?
+	// coverage? This should be done in the Scheduler using the seed to
+	// avoid making the Executor non-deterministic.
 	for _, oevs := range inits {
 		lib.EnqueueInitEvents(oevs)
 	}
+}
+
+func Deploy(srv *http.Server, testId lib.TestId, topology Topology, m lib.Marshaler) {
+	DeployWithComponentUpdate(srv, testId, topology, m, func(string, time.Time) {})
 }
 
 func DeployRaw(srv *http.Server, testId lib.TestId, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {
