@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/symbiont-io/detsys/executor"
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/executor"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 func createTopology(newFrontEnd func() lib.Reactor) map[string]lib.Reactor {

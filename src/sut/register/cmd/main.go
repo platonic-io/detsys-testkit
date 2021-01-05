@@ -7,9 +7,9 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/symbiont-io/detsys/executor"
-	"github.com/symbiont-io/detsys/lib"
-	"github.com/symbiont-io/detsys/sut"
+	"github.com/symbiont-io/detsys-testkit/src/executor"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
+	"github.com/symbiont-io/detsys-testkit/src/sut/register"
 )
 
 func constructor(name string) lib.Reactor {

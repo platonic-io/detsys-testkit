@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 type Register struct {

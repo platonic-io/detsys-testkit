@@ -3,7 +3,7 @@ package sut
 import (
 	"strconv"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 type SessionId struct {
