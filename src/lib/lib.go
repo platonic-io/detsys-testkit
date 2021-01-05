@@ -14,6 +14,7 @@ type Reactor interface {
 	Receive(at time.Time, from string, event InEvent) []OutEvent
 	Tick(at time.Time) []OutEvent
 	Timer(at time.Time) []OutEvent
+	Init() []OutEvent
 }
 
 type Marshaler interface {

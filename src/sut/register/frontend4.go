@@ -151,3 +151,7 @@ func (fe *FrontEnd4) Timer(at time.Time) []lib.OutEvent {
 
 	return resend
 }
+
+func (_ *FrontEnd4) Init() []lib.OutEvent {
+	return nil
+}

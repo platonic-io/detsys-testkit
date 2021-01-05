@@ -141,3 +141,7 @@ func (fe *FrontEnd2) Tick(at time.Time) []lib.OutEvent {
 func (_ *FrontEnd2) Timer(at time.Time) []lib.OutEvent {
 	return nil
 }
+
+func (_ *FrontEnd2) Init() []lib.OutEvent {
+	return nil
+}

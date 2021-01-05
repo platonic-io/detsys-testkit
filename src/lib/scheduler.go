@@ -102,3 +102,9 @@ func Status() map[string]interface{} {
 func Reset() {
 	Post("reset", struct{}{})
 }
+
+func EnqueueInitEvents(oevs []OutEvent) {
+	Post("enqueue-init-events!", struct {
+		Events []OutEvent `json:"events"`
+	}{oevs})
+}

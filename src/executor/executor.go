@@ -141,6 +141,16 @@ func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, topology Top
 
 func Deploy(srv *http.Server, testId lib.TestId, topology Topology, m lib.Marshaler) {
 	DeployWithComponentUpdate(srv, testId, topology, m, func(string, time.Time) {})
+	var inits [][]lib.OutEvent
+	for _, reactor := range topology {
+		oevs := reactor.Init()
+		inits = append(inits, oevs)
+	}
+	// TODO(stevan): Randomise the order of the init events for better
+	// coverage?
+	for _, oevs := range inits {
+		lib.EnqueueInitEvents(oevs)
+	}
 }
 
 func DeployRaw(srv *http.Server, testId lib.TestId, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {

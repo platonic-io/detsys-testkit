@@ -88,16 +88,6 @@
 (s/def ::test-id nat-int?)
 (s/def ::queue-size nat-int?)
 
-;; (if-let [{:keys [message value]} (:error {:error {:message :cannot-load-test-in-this-state, :value :test-prepared}})]
-;;  [message value])
-
-(defn precondition
-  [data event]
-  (case event
-    :load-test (if (= (:state data) :started)
-                 :ok
-                 :error-cannot-load-test-in-this-state)))
-
 ;; TODO(stevan): test needs to contain executor topology, so we know how many
 ;; executors to wait for.
 (>defn load-test!
@@ -694,6 +684,14 @@
         (create-run! {:test-id 1})
         first
         run!)))
+
+(>defn enqueue-init-events!
+  [data {:keys [events]}]
+  [::data (s/keys :req-un [::events])
+   => (s/tuple ::data (s/keys :req-un [::queue-size]))]
+  (let [[data' timestamped-entries] (timestamp-entries data events (:clock data))
+        [data'' queue-size] (enqueue-timestamped-entries data' timestamped-entries)]
+    [data'' queue-size]))
 
 (>defn status
   [data]

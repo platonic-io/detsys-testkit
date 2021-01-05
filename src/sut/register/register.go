@@ -80,3 +80,7 @@ func (r *Register) Tick(_ time.Time) []lib.OutEvent {
 func (r *Register) Timer(_ time.Time) []lib.OutEvent {
 	return nil
 }
+
+func (_ *Register) Init() []lib.OutEvent {
+	return nil
+}
