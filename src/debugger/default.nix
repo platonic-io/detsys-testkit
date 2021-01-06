@@ -18,7 +18,7 @@ buildGoModule rec {
   buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ plantuml ];
 
-  vendorSha256 = "1ar210dpgf1j9kprzbi8ff4p07kb40qmvdyilzk5aakd1hzxll9p";
+  vendorSha256 = "0s0gzn39sdqf77jykmixp7zbj994qhzsasd0l166wp2mg6nnljqz";
 
   buildFlagsArray =
     [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
