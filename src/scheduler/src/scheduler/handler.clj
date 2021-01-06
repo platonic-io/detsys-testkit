@@ -23,6 +23,7 @@
                 :body
                 (json/read))]
     (log/debug :body edn)
+    (log/debug :handler-state (:state @data))
     (if (s/valid? command? edn)
       (let [parameters (:parameters edn)
             [data' output] (call (:command edn) (if (empty? parameters)

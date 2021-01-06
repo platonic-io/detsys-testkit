@@ -104,7 +104,7 @@ type event interface{ IsEvent() }
 func (_ unscheduledEvent) IsEvent() {}
 func (_ timerEvent) IsEvent()       {}
 
-func MarshalUnscheduledEvents(from string, oevs []OutEvent) json.RawMessage {
+func OutEventsToEvents(from string, oevs []OutEvent) []event {
 	usevs := make([]event, len(oevs))
 	for index, oev := range oevs {
 		var event event
@@ -137,6 +137,11 @@ func MarshalUnscheduledEvents(from string, oevs []OutEvent) json.RawMessage {
 		}
 		usevs[index] = event
 	}
+	return usevs
+}
+
+func MarshalUnscheduledEvents(from string, oevs []OutEvent) json.RawMessage {
+	usevs := OutEventsToEvents(from, oevs)
 	bs, err := json.Marshal(struct {
 		Events []event `json:"events"`
 	}{usevs})

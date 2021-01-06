@@ -24,6 +24,11 @@ func constructor(name string) lib.Reactor {
 }
 
 func main() {
+	testId, err := lib.ParseTestId(os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+
 	var srv http.Server
 
 	idleConnsClosed := make(chan struct{})
@@ -40,15 +45,8 @@ func main() {
 		close(idleConnsClosed)
 	}()
 
-	// TODO(stevan): parse topology from file, db or cmd args...
-	topology := map[string]string{
-		"frontend":  "frontend",
-		"register1": "register",
-		"register2": "register",
-	}
 	marshaler := sut.NewMarshaler()
-	log.Printf("Deploying topology: %v", topology)
-	executor.DeployRaw(&srv, topology, marshaler, constructor)
+	executor.DeployRaw(&srv, testId, marshaler, constructor)
 
 	<-idleConnsClosed
 }

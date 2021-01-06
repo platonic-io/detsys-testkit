@@ -4,7 +4,6 @@ import (
 	"log"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/symbiont-io/detsys-testkit/src/executor"
 	"github.com/symbiont-io/detsys-testkit/src/lib"
@@ -22,7 +21,6 @@ func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 		executor.Deploy(&srv, testId, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
-	lib.SetMinTimeNs(time.Duration(5) * time.Second)
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	executor.Register(topology)
 	log.Printf("Registered executor")

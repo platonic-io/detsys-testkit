@@ -30,6 +30,7 @@
 (s/def ::logical-clock       nat-int?)
 (s/def ::state               #{:started
                                :test-prepared
+                               :inits-prepared
                                :executors-prepared
                                :ready
                                :requesting
@@ -129,7 +130,7 @@
                                 0  :executors-prepared
                                 1  :error-too-many-executors)]
                    (case state
-                     :test-prepared state'
+                     :inits-prepared state'
                      :waiting-for-executors state'
                      :error-cannot-register-in-this-state))))
       (ap (fn [data']
@@ -553,6 +554,7 @@
              (fn [state]
                (case state
                  :responding :finished
+                 :test-prepared :inits-prepared
                  :error-cannot-enqueue-in-this-state)))
      {:queue-size (-> data :agenda count)}]
     (let [data' (-> (reduce (fn [ih timestamped-entry]
@@ -562,6 +564,7 @@
                     (update :state
                             (fn [state] (case state
                                           :responding :requesting
+                                          :test-prepared :inits-prepared
                                           :error-cannot-enqueue-in-this-state))))]
       [data' {:queue-size (count (:agenda data'))}])))
 
@@ -689,6 +692,7 @@
   [data {:keys [events]}]
   [::data (s/keys :req-un [::events])
    => (s/tuple ::data (s/keys :req-un [::queue-size]))]
+  (log/debug :enqueue-init-events (:state data))
   (let [[data' timestamped-entries] (timestamp-entries data events (:clock data))
         [data'' queue-size] (enqueue-timestamped-entries data' timestamped-entries)]
     [data'' queue-size]))

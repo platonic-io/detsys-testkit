@@ -153,6 +153,6 @@ func (n *Node) Timer(_ time.Time) []lib.OutEvent {
 	return nil
 }
 
-func (_ *Node) Init() []lib.OutEvent {
+func (n *Node) Init() []lib.OutEvent {
 	return nil
 }

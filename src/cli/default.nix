@@ -20,7 +20,7 @@ buildGoModule rec {
 
   # This hash should be the output of:
   #   go mod vendor && nix-hash --base32 --type sha256 vendor
-  vendorSha256 = "0d7nwxx0i834w0kvixl4map8wb6kw4cz30ckvk394cxm4sblzipd";
+  vendorSha256 = "12bc4m3pqn8x6r2kik5sawgdncjj6sz9yfsjqi2sp6w098qw51ky";
 
   buildFlagsArray =
     [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
@@ -30,8 +30,8 @@ buildGoModule rec {
     # that's where `go.mod` says to go look for it.
     cp -R ${detsysLib}/src ../lib
 
-    # Static linking.
-    export CGO_ENABLED=0
+    # Need cgo for sqlite3.
+    export CGO_ENABLED=1
   '';
 
   # Rename the resulting binary. (We can't use buildFlags with `-o`, because

@@ -24,6 +24,11 @@ func init() {
 	schedulerCmd.AddCommand(schedulerUpCmd)
 	schedulerCmd.AddCommand(schedulerDownCmd)
 	schedulerCmd.AddCommand(schedulerStatusCmd)
+	schedulerCmd.AddCommand(schedulerResetCmd)
+	schedulerCmd.AddCommand(schedulerLoadCmd)
+	schedulerCmd.AddCommand(schedulerRegisterCmd)
+	schedulerCmd.AddCommand(schedulerCreateRunCmd)
+	schedulerCmd.AddCommand(schedulerStepCmd)
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(versionsCmd)
 }

@@ -1,7 +1,10 @@
 package lib
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"time"
 )
 
@@ -103,8 +106,75 @@ func Reset() {
 	Post("reset", struct{}{})
 }
 
-func EnqueueInitEvents(oevs []OutEvent) {
-	Post("enqueue-init-events!", struct {
-		Events []OutEvent `json:"events"`
-	}{oevs})
+func EnqueueInitEvents(evs json.RawMessage) {
+	Post("enqueue-init-events!", evs)
+}
+
+func componentsFromDeployment(testId TestId) ([]string, error) {
+	query := fmt.Sprintf(`SELECT component
+                              FROM deployment
+                              WHERE test_id = %d`, testId.TestId)
+
+	db := OpenDB()
+	defer db.Close()
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var components []string
+	type Column struct {
+		Component string
+	}
+	for rows.Next() {
+		column := Column{}
+		err := rows.Scan(&column.Component)
+		if err != nil {
+			return nil, err
+		}
+		components = append(components, column.Component)
+	}
+	return components, nil
+}
+
+func Register(testId TestId) {
+	// TODO(stevan): Make executorUrl part of topology/deployment.
+	const executorUrl string = "http://localhost:3001/api/v1/"
+
+	components, err := componentsFromDeployment(testId)
+	if err != nil {
+		panic(err)
+	}
+
+	// TODO(stevan): perhaps the scheduler should ask for the inits itself
+	// directly....
+	inits := getInits(executorUrl)
+	EnqueueInitEvents(inits)
+	RegisterExecutor(executorUrl, components)
+}
+
+func getInits(executorUrl string) json.RawMessage {
+	resp, err := http.Get(executorUrl + "inits")
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	if resp.StatusCode != 200 {
+		panic(string(body))
+	}
+
+	return body
+}
+
+func Step() json.RawMessage {
+	var result json.RawMessage
+	PostParse("step!", struct{}{}, &result)
+	return result
 }

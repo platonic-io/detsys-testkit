@@ -112,3 +112,70 @@ var schedulerStatusCmd = &cobra.Command{
 		fmt.Println(string(json))
 	},
 }
+
+var schedulerResetCmd = &cobra.Command{
+	Use:   "reset",
+	Short: "Reset the state of the scheduler",
+	Long:  ``,
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		lib.Reset()
+	},
+}
+
+var schedulerLoadCmd = &cobra.Command{
+	Use:   "load",
+	Short: "Load a test case into the scheduler",
+	Long:  ``,
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		testId, err := lib.ParseTestId(args[0])
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		queueSize := lib.LoadTest(testId)
+		fmt.Printf("Test case loaded, current queue size: %d\n", queueSize)
+	},
+}
+
+var schedulerRegisterCmd = &cobra.Command{
+	Use:   "register",
+	Short: "Register the executor in the scheduler",
+	Long:  ``,
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		testId, err := lib.ParseTestId(args[0])
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		lib.Register(testId)
+	},
+}
+
+var schedulerCreateRunCmd = &cobra.Command{
+	Use:   "create-run",
+	Short: "Create a new run id",
+	Long:  ``,
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		testId, err := lib.ParseTestId(args[0])
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		runId := lib.CreateRun(testId)
+		fmt.Printf("Created run id: %v\n", runId)
+	},
+}
+
+var schedulerStepCmd = &cobra.Command{
+	Use:   "step",
+	Short: "Execute a single step of the currently loaded test case",
+	Long:  ``,
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println(string(lib.Step()))
+	},
+}
