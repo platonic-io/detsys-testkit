@@ -11,16 +11,16 @@ let
 in
 
 buildGoModule rec {
-  pname = "detsys";
+  pname = "cli";
   version = "latest";
-  goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
+  goPackagePath = "github.com/symbiont-io/detsys-testkit/src/${pname}";
 
   src = gitignoreSource ./.;
   buildInputs = [ detsysLib ];
 
   # This hash should be the output of:
   #   go mod vendor && nix-hash --base32 --type sha256 vendor
-  vendorSha256 = "1yirdqkwnaz0iikcipn1nxcgv2ywrg0zhwjklzf6xns8w038bylp";
+  vendorSha256 = "0d7nwxx0i834w0kvixl4map8wb6kw4cz30ckvk394cxm4sblzipd";
 
   buildFlagsArray =
     [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
@@ -32,5 +32,11 @@ buildGoModule rec {
 
     # Static linking.
     export CGO_ENABLED=0
+  '';
+
+  # Rename the resulting binary. (We can't use buildFlags with `-o`, because
+  # that also gets passed to `go install` which does not recognise that flag.)
+  postBuild = ''
+    mv $GOPATH/bin/cli $GOPATH/bin/detsys
   '';
 }

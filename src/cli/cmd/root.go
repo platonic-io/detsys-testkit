@@ -14,7 +14,6 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(dbCmd)
 	dbCmd.AddCommand(dbInitCmd)
 	dbCmd.AddCommand(dbDropTablesCmd)
@@ -24,6 +23,7 @@ func init() {
 	rootCmd.AddCommand(schedulerCmd)
 	schedulerCmd.AddCommand(schedulerUpCmd)
 	schedulerCmd.AddCommand(schedulerDownCmd)
+	schedulerCmd.AddCommand(schedulerStatusCmd)
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(versionsCmd)
 }

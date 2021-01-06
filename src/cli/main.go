@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/symbiont-io/detsys-testkit/detsys/cmd"
+	"github.com/symbiont-io/detsys-testkit/src/cli/cmd"
 )
 
 var version = "unknown"

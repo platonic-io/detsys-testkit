@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 var schedulerCmd = &cobra.Command{
@@ -93,5 +95,20 @@ var schedulerDownCmd = &cobra.Command{
 			fmt.Printf("%s\n", err)
 			os.Exit(1)
 		}
+	},
+}
+
+var schedulerStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show the status of the scheduler",
+	Long:  ``,
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		json, err := json.Marshal(lib.Status())
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		fmt.Println(string(json))
 	},
 }
