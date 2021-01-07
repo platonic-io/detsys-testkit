@@ -1,5 +1,6 @@
 (ns scheduler.handler
   (:require [taoensso.timbre :as log]
+            [scheduler.db :as db]
             [scheduler.json :as json]
             [scheduler.pure :as pure]
             [clojure.spec.alpha :as s]))
@@ -24,10 +25,20 @@
                 (json/read))]
     (log/debug :body edn)
     (if (s/valid? command? edn)
-      (let [parameters (:parameters edn)
+      (let [_ (db/append-event! (:test-id data)
+                                (:run-id data)
+                                (:command edn)
+                                "Start"
+                                (:parameters edn))
+            parameters (:parameters edn)
             [data' output] (call (:command edn) (if (empty? parameters)
                                                   [@data]
                                                   [@data parameters]))]
+        (db/append-event! (:test-id data)
+                          (:run-id data)
+                          (:command edn)
+                          "End"
+                          (:parameters edn))
         (if (pure/error-state? (:state data'))
           {:status 400
            :headers {"Content-Type" "application/json; charset=utf-8"}
