@@ -59,6 +59,7 @@
                                ::logical-clock
                                ::state]))
 
+(s/def ::executor-id string?)
 (s/def ::components (s/coll-of component-id? :kind vector?))
 (s/def ::remaining-executors nat-int?)
 
@@ -109,46 +110,10 @@
   [m k f]
   (update m k #(f m %)))
 
-(s/def ::executor-id string?)
-(s/def ::components (s/coll-of string? :kind vector?))
-
-(>defn register-executor
-  [data {:keys [executor-id components]}]
-  [::data (s/keys :req-un [::executor-id ::components])
-   => (s/tuple ::data (s/keys :req-un [::remaining-executors]))]
-  (-> data
-      (update :connected-executors inc)
-      (update :topology #(merge % (apply hash-map
-                                         (interleave components
-                                                     (replicate (count components)
-                                                                executor-id)))))
-      (update+ :state
-               (fn [data' state]
-                 (let [state' (case (compare (:connected-executors data')
-                                             (:total-executors data'))
-                                -1 :waiting-for-executors
-                                0  :executors-prepared
-                                1  :error-too-many-executors)]
-                   (case state
-                     :inits-prepared state'
-                     :waiting-for-executors state'
-                     :error-cannot-register-in-this-state))))
-      (ap (fn [data']
-            {:remaining-executors (max 0 (- (:total-executors data')
-                                            (:connected-executors data')))}))))
-
-(comment
-  (let [executor-id "http://localhost:3001"
-        components ["components0"]]
-    (apply hash-map
-           (interleave components
-                       (replicate (count components)
-                                  executor-id)))))
-
 (defn create-run!
   [data {:keys [test-id]}]
   (case (:state data)
-    :executors-prepared
+    :inits-prepared
     (let [run-id (db/create-run! test-id (:seed data))]
       (log/info :run-id run-id)
       [(-> data
@@ -162,7 +127,7 @@
   (-> (init-data)
       (load-test! {:test-id 1})
       first
-      (register-executor {:executor-id "http://localhost:3000" :components ["component0"]})
+      (register-executor! {:executor-id "http://localhost:3000" :components ["component0"]})
       first
       (create-run! {:test-id 1})))
 
@@ -235,7 +200,7 @@
   (-> (init-data)
       (load-test! {:test-id 1})
       first
-      (register-executor {:executor-id "http://localhost:3000/api/v1/event"
+      (register-executor! {:executor-id "http://localhost:3000/api/v1/event"
                           :components ["node1" "node2"]})
       first
       (create-run! {:test-id 1})
@@ -436,7 +401,7 @@
     (-> (init-data)
         (load-test! {:test-id 1})
         first
-        (register-executor {:executor-id "http://localhost:3001/api/v1/event"
+        (register-executor! {:executor-id "http://localhost:3001/api/v1/event"
                             :components ["node1" "node2"]})
         first
         (create-run! {:test-id 1})
@@ -500,7 +465,7 @@
   (-> (init-data)
       (load-test! {:test-id 1})
       first
-      (register-executor {:executor-id "http://localhost:3001" :components ["node1" "node2"]})
+      (register-executor! {:executor-id "http://localhost:3001" :components ["node1" "node2"]})
       first
       (create-run! {:test-id 1})
       first
@@ -554,7 +519,7 @@
              (fn [state]
                (case state
                  :responding :finished
-                 :test-prepared :inits-prepared
+                 :executors-prepared :inits-prepared
                  :error-cannot-enqueue-in-this-state)))
      {:queue-size (-> data :agenda count)}]
     (let [data' (-> (reduce (fn [ih timestamped-entry]
@@ -564,7 +529,7 @@
                     (update :state
                             (fn [state] (case state
                                           :responding :requesting
-                                          :test-prepared :inits-prepared
+                                          :executors-prepared :inits-prepared
                                           :error-cannot-enqueue-in-this-state))))]
       [data' {:queue-size (count (:agenda data'))}])))
 
@@ -573,7 +538,7 @@
    (-> (init-data)
        (load-test! {:test-id 1})
        first
-       (register-executor {:executor-id "http://localhost:3001" :components ["inc" "store"]})
+       (register-executor! {:executor-id "http://localhost:3001" :components ["inc" "store"]})
        first)
    (-> (init-data)
        (timestamp-entries
@@ -590,6 +555,57 @@
         (time/instant (time/init-clock))
         0)
        second)))
+
+(>defn get-initial-events!
+  "Get all the initial events for each component that run on an executor."
+  [data {:keys [executor-id]}]
+  [::data (s/keys :req-un [::executor-id])
+   => (s/tuple ::data (s/keys :req-un [::queue-size]))]
+  (let [events (-> (client/get (str executor-id "/inits"))
+                   :body
+                   json/read
+                   :events)
+        _ (log/debug :get-initial-events executor-id events (:state data))
+        [data' timestamped-entries] (timestamp-entries data events (:clock data))
+        [data'' queue-size] (enqueue-timestamped-entries data' timestamped-entries)]
+    (log/debug :get-initial-events executor-id (count events))
+    [data'' queue-size]))
+
+(>defn register-executor!
+  [data {:keys [executor-id components]}]
+  [::data (s/keys :req-un [::executor-id ::components])
+   => (s/tuple ::data (s/keys :req-un [::remaining-executors]))]
+  (-> data
+      (update :connected-executors inc)
+      (update :topology #(merge % (apply hash-map
+                                         (interleave components
+                                                     (replicate (count components)
+                                                                executor-id)))))
+      (update+ :state
+               (fn [data' state]
+                 (let [state' (case (compare (:connected-executors data')
+                                             (:total-executors data'))
+                                -1 :waiting-for-executors
+                                0  :executors-prepared
+                                1  :error-too-many-executors)]
+                   (case state
+                     :test-prepared state'
+                     :waiting-for-executors state'
+                     :error-cannot-register-in-this-state))))
+      (get-initial-events! {:executor-id executor-id})
+      first
+      (ap (fn [data']
+            {:remaining-executors (max 0 (- (:total-executors data')
+                                            (:connected-executors data')))}))))
+
+(comment
+  (let [executor-id "http://localhost:3001"
+        components ["components0"]]
+    (apply hash-map
+           (interleave components
+                       (replicate (count components)
+                                  executor-id)))))
+
 
 (>defn tick!
  [data]
@@ -656,7 +672,7 @@
     (-> (init-data)
         (load-test! {:test-id 1})
         first
-        (register-executor {:executor-id "http://localhost:3001/api/v1/event"
+        (register-executor! {:executor-id "http://localhost:3001/api/v1/event"
                             :components ["node1"]})
         first
         (create-run! {:test-id 1})
@@ -681,21 +697,12 @@
     (-> (init-data)
         (load-test! {:test-id 1})
         first
-        (register-executor {:executor-id "http://localhost:3001/api/v1/event"
+        (register-executor! {:executor-id "http://localhost:3001/api/v1/event"
                             :components ["node1"]})
         first
         (create-run! {:test-id 1})
         first
         run!)))
-
-(>defn enqueue-init-events!
-  [data {:keys [events]}]
-  [::data (s/keys :req-un [::events])
-   => (s/tuple ::data (s/keys :req-un [::queue-size]))]
-  (log/debug :enqueue-init-events (:state data))
-  (let [[data' timestamped-entries] (timestamp-entries data events (:clock data))
-        [data'' queue-size] (enqueue-timestamped-entries data' timestamped-entries)]
-    [data'' queue-size]))
 
 (>defn status
   [data]

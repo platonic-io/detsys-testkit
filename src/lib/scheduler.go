@@ -3,8 +3,6 @@ package lib
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"time"
 )
 
@@ -27,7 +25,7 @@ func LoadTest(testId TestId) QueueSize {
 }
 
 func RegisterExecutor(executorId string, components []string) {
-	Post("register-executor", struct {
+	Post("register-executor!", struct {
 		ExecutorId string   `json:"executor-id"`
 		Components []string `json:"components"`
 	}{
@@ -106,10 +104,6 @@ func Reset() {
 	Post("reset", struct{}{})
 }
 
-func EnqueueInitEvents(evs json.RawMessage) {
-	Post("enqueue-init-events!", evs)
-}
-
 func componentsFromDeployment(testId TestId) ([]string, error) {
 	query := fmt.Sprintf(`SELECT component
                               FROM deployment
@@ -148,29 +142,7 @@ func Register(testId TestId) {
 		panic(err)
 	}
 
-	// TODO(stevan): perhaps the scheduler should ask for the inits itself
-	// directly....
-	inits := getInits(executorUrl)
-	EnqueueInitEvents(inits)
 	RegisterExecutor(executorUrl, components)
-}
-
-func getInits(executorUrl string) json.RawMessage {
-	resp, err := http.Get(executorUrl + "inits")
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	if resp.StatusCode != 200 {
-		panic(string(body))
-	}
-
-	return body
 }
 
 func Step() json.RawMessage {
