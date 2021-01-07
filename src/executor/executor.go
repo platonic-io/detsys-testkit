@@ -209,6 +209,47 @@ func DeployRaw(srv *http.Server, testId lib.TestId, m lib.Marshaler, constructor
 	Deploy(srv, testId, topologyCooked, m)
 }
 
+func componentsFromDeployment(testId lib.TestId) ([]string, error) {
+	query := fmt.Sprintf(`SELECT component
+                              FROM deployment
+                              WHERE test_id = %d`, testId.TestId)
+
+	db := lib.OpenDB()
+	defer db.Close()
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var components []string
+	type Column struct {
+		Component string
+	}
+	for rows.Next() {
+		column := Column{}
+		err := rows.Scan(&column.Component)
+		if err != nil {
+			return nil, err
+		}
+		components = append(components, column.Component)
+	}
+	return components, nil
+}
+
+func Register(testId lib.TestId) {
+	// TODO(stevan): Make executorUrl part of topology/deployment.
+	const executorUrl string = "http://localhost:3001/api/v1/"
+
+	components, err := componentsFromDeployment(testId)
+	if err != nil {
+		panic(err)
+	}
+
+	lib.RegisterExecutor(executorUrl, components)
+}
+
 type LogWriter struct {
 	testId    lib.TestId
 	runId     lib.RunId
@@ -301,7 +342,7 @@ func (e *Executor) Deploy(srv *http.Server) {
 }
 
 func (e *Executor) Register() {
-	lib.Register(e.testId)
+	Register(e.testId)
 }
 
 func (e *Executor) Reset(runId lib.RunId) {
