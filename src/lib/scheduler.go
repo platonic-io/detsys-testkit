@@ -109,3 +109,46 @@ func Step() json.RawMessage {
 	PostParse("step!", struct{}{}, &result)
 	return result
 }
+
+func componentsFromDeployment(testId TestId) ([]string, error) {
+	query := fmt.Sprintf(`SELECT component
+                              FROM deployment
+                              WHERE test_id = %d`, testId.TestId)
+
+	db := OpenDB()
+	defer db.Close()
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var components []string
+	type Column struct {
+		Component string
+	}
+	for rows.Next() {
+		column := Column{}
+		err := rows.Scan(&column.Component)
+		if err != nil {
+			return nil, err
+		}
+		components = append(components, column.Component)
+	}
+	return components, nil
+}
+
+func Register(eventLog EventLogEmitter, testId TestId) {
+	eventLog.Emit("Register Executor", "Start")
+	defer eventLog.Emit("Register Executor", "End")
+	// TODO(stevan): Make executorUrl part of topology/deployment.
+	const executorUrl string = "http://localhost:3001/api/v1/"
+
+	components, err := componentsFromDeployment(testId)
+	if err != nil {
+		panic(err)
+	}
+
+	RegisterExecutor(executorUrl, components)
+}

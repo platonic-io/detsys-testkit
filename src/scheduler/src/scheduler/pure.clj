@@ -455,6 +455,7 @@
       (update :agenda #(agenda/enqueue % timestamped-entry))
       (update :state (fn [state]
                        (case state
+                         :executors-prepared :executors-prepared ;; Loading initial messages.
                          :responding :responding
                          :error-cannot-enqueue-in-this-state)))
       (ap (fn [data'] {:queue-size (count (:agenda data'))}))))

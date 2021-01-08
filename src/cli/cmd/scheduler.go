@@ -150,7 +150,12 @@ var schedulerRegisterCmd = &cobra.Command{
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		lib.Register(testId)
+		eventLog := lib.EventLogEmitter{
+			Component: "cli",
+			TestId:    &testId,
+			RunId:     nil,
+		}
+		lib.Register(eventLog, testId)
 	},
 }
 

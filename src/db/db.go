@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/symbiont-io/detsys-testkit/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 var version = "unknown"

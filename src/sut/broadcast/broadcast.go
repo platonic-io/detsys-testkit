@@ -149,10 +149,22 @@ func (n *Node) Tick(_ time.Time) []lib.OutEvent {
 	return oevs
 }
 
-func (n *Node) Timer(_ time.Time) []lib.OutEvent {
-	return nil
+func (n *Node) Timer(at time.Time) []lib.OutEvent {
+	return n.Tick(at)
 }
 
 func (n *Node) Init() []lib.OutEvent {
-	return nil
+	var oevs []lib.OutEvent
+	duration, err := time.ParseDuration("5s")
+	if err != nil {
+		panic(err)
+	}
+	oev := lib.OutEvent{
+		To: "scheduler",
+		Args: &lib.Timer{
+			Duration: duration,
+		},
+	}
+	oevs = append(oevs, oev)
+	return oevs
 }

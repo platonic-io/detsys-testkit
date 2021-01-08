@@ -151,20 +151,6 @@ func handleInits(topology Topology, m lib.Marshaler) http.HandlerFunc {
 	}
 }
 
-func Register(eventLog lib.EventLogEmitter, testId lib.TestId) {
-	eventLog.Emit("Register Executor", "Start")
-	defer eventLog.Emit("Register Executor", "End")
-	// TODO(stevan): Make executorUrl part of topology/deployment.
-	const executorUrl string = "http://localhost:3001/api/v1/"
-
-	components, err := componentsFromDeployment(testId)
-	if err != nil {
-		panic(err)
-	}
-
-	lib.RegisterExecutor(executorUrl, components)
-}
-
 func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) {
 	eventLog.Emit("Deploy Executor", "Start")
 	defer eventLog.Emit("Deploy Executor", "End")
@@ -231,35 +217,6 @@ func DeployRaw(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter
 	}
 	fmt.Printf("Deploying topology: %+v\n", topologyCooked)
 	Deploy(srv, testId, eventLog, topologyCooked, m)
-}
-
-func componentsFromDeployment(testId lib.TestId) ([]string, error) {
-	query := fmt.Sprintf(`SELECT component
-                              FROM deployment
-                              WHERE test_id = %d`, testId.TestId)
-
-	db := lib.OpenDB()
-	defer db.Close()
-
-	rows, err := db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var components []string
-	type Column struct {
-		Component string
-	}
-	for rows.Next() {
-		column := Column{}
-		err := rows.Scan(&column.Component)
-		if err != nil {
-			return nil, err
-		}
-		components = append(components, column.Component)
-	}
-	return components, nil
 }
 
 type LogWriter struct {
@@ -364,7 +321,7 @@ func (e *Executor) Deploy(srv *http.Server) {
 }
 
 func (e *Executor) Register() {
-	Register(e.eventLog, e.testId)
+	lib.Register(e.eventLog, e.testId)
 }
 
 func (e *Executor) Reset(runId lib.RunId) {
