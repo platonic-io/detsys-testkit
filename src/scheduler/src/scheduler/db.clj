@@ -84,3 +84,18 @@
       VALUES (?, ?, ?, ?)"
     test-id run-id logical-time simulated-time]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
+
+(defn append-event!
+  ([test-id run-id event state]
+   (append-event! test-id run-id event state {}))
+  ([test-id run-id event state data]
+   (jdbc/execute-one!
+    ds
+    ["INSERT INTO event_log (event, meta, data) VALUES (?,?,?)"
+     event
+     (json/write {:component "scheduler"
+                  :state state
+                  :test-id test-id
+                  :run-id run-id})
+     (json/write data)]
+    {:return-keys true :builder-fn rs/as-unqualified-lower-maps})))

@@ -21,8 +21,10 @@ func jsonError(s string) string {
 type ComponentUpdate = func(component string, at time.Time)
 type Topology = map[string]lib.Reactor
 
-func handler(db *sql.DB, testId lib.TestId, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
+func handler(db *sql.DB, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		eventLog.Emit("handleReceive", "Start")
+		defer eventLog.Emit("handleReceive", "End")
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "POST" {
 			http.Error(w, jsonError("Method is not supported."),
@@ -41,6 +43,7 @@ func handler(db *sql.DB, testId lib.TestId, topology Topology, m lib.Marshaler, 
 			panic(err)
 		}
 		cu(sev.To, sev.At)
+		// TODO(danne) these should also be events
 		heapBefore := dumpHeapJson(topology[sev.To])
 		oevs := topology[sev.To].Receive(sev.At, sev.From, sev.Event)
 		heapAfter := dumpHeapJson(topology[sev.To])
@@ -51,12 +54,14 @@ func handler(db *sql.DB, testId lib.TestId, topology Topology, m lib.Marshaler, 
 	}
 }
 
-func handleTick(topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
+func handleTick(eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	type TickRequest struct {
 		Component string    `json:"component"`
 		At        time.Time `json:"at"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
+		eventLog.Emit("handleTick", "Start")
+		defer eventLog.Emit("handleTick", "End")
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "PUT" {
 			http.Error(w, jsonError("Method is not supported."),
@@ -79,13 +84,15 @@ func handleTick(topology Topology, m lib.Marshaler, cu ComponentUpdate) http.Han
 	}
 }
 
-func handleTimer(db *sql.DB, testId lib.TestId, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
+func handleTimer(db *sql.DB, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	type TimerRequest struct {
 		Component string    `json:"to"`
 		At        time.Time `json:"at"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		eventLog.Emit("handleTimer", "Start")
+		defer eventLog.Emit("handleTimer", "End")
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "POST" {
 			http.Error(w, jsonError("Method is not supported."),
@@ -113,7 +120,9 @@ func handleTimer(db *sql.DB, testId lib.TestId, topology Topology, m lib.Marshal
 	}
 }
 
-func Register(topology Topology) {
+func Register(eventLog lib.EventLogEmitter, topology Topology) {
+	eventLog.Emit("Register Executor", "Start")
+	defer eventLog.Emit("Register Executor", "End")
 	// TODO(stevan): Make executorUrl part of topology.
 	const executorUrl string = "http://localhost:3001/api/v1/"
 
@@ -124,32 +133,34 @@ func Register(topology Topology) {
 	lib.RegisterExecutor(executorUrl, components)
 }
 
-func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, topology Topology, m lib.Marshaler, cu ComponentUpdate) {
+func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) {
+	eventLog.Emit("Deploy Executor", "Start")
+	defer eventLog.Emit("Deploy Executor", "End")
 	mux := http.NewServeMux()
 
 	db := lib.OpenDB()
-	mux.HandleFunc("/api/v1/event", handler(db, testId, topology, m, cu))
-	mux.HandleFunc("/api/v1/tick", handleTick(topology, m, cu))
-	mux.HandleFunc("/api/v1/timer", handleTimer(db, testId, topology, m, cu))
+	defer db.Close()
+	mux.HandleFunc("/api/v1/event", handler(db, testId, eventLog, topology, m, cu))
+	mux.HandleFunc("/api/v1/tick", handleTick(eventLog, topology, m, cu))
+	mux.HandleFunc("/api/v1/timer", handleTimer(db, testId, eventLog, topology, m, cu))
 	srv.Addr = ":3001"
 	srv.Handler = mux
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		panic(err)
 	}
-	defer db.Close()
 }
 
-func Deploy(srv *http.Server, testId lib.TestId, topology Topology, m lib.Marshaler) {
-	DeployWithComponentUpdate(srv, testId, topology, m, func(string, time.Time) {})
+func Deploy(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler) {
+	DeployWithComponentUpdate(srv, testId, eventLog, topology, m, func(string, time.Time) {})
 }
 
-func DeployRaw(srv *http.Server, testId lib.TestId, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {
+func DeployRaw(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {
 	topologyCooked := make(Topology, len(topology))
 	for name, component := range topology {
 		topologyCooked[name] = constructor(component)
 	}
 
-	Deploy(srv, testId, topologyCooked, m)
+	Deploy(srv, testId, eventLog, topologyCooked, m)
 }
 
 type LogWriter struct {
@@ -188,6 +199,7 @@ type Executor struct {
 	testId      lib.TestId
 	runId       lib.RunId
 	constructor func(name string, logger *zap.Logger) lib.Reactor
+	eventLog    lib.EventLogEmitter
 	logger      *zap.Logger
 }
 
@@ -203,7 +215,6 @@ func (e *Executor) SetTestId(testId lib.TestId) {
 }
 
 func NewExecutor(testId lib.TestId, marshaler lib.Marshaler, logger *zap.Logger, components []string, constructor func(name string, logger *zap.Logger) lib.Reactor) *Executor {
-
 	runId := lib.RunId{0}
 
 	topology := make(map[string]lib.Reactor)
@@ -220,19 +231,29 @@ func NewExecutor(testId lib.TestId, marshaler lib.Marshaler, logger *zap.Logger,
 		buffers[component] = buffer
 	}
 
-	return &Executor{
+	executor := &Executor{
 		topology:    topology,
 		buffers:     buffers,
 		marshaler:   marshaler,
 		testId:      testId,
 		runId:       runId,
 		constructor: constructor,
-		logger:      logger,
+		eventLog: lib.EventLogEmitter{
+			Component: "Executor",
+			TestId:    nil,
+			RunId:     nil,
+		},
+		logger: logger,
 	}
+
+	executor.eventLog.TestId = &executor.testId
+	executor.eventLog.RunId = &executor.runId
+
+	return executor
 }
 
 func (e *Executor) Deploy(srv *http.Server) {
-	DeployWithComponentUpdate(srv, e.testId, e.topology, e.marshaler, func(name string, at time.Time) {
+	DeployWithComponentUpdate(srv, e.testId, e.eventLog, e.topology, e.marshaler, func(name string, at time.Time) {
 		buffer, ok := e.buffers[name]
 
 		if ok {
@@ -244,10 +265,11 @@ func (e *Executor) Deploy(srv *http.Server) {
 }
 
 func (e *Executor) Register() {
-	Register(e.topology)
+	Register(e.eventLog, e.topology)
 }
 
 func (e *Executor) Reset(runId lib.RunId) {
+	e.runId = runId
 	for c, b := range e.buffers {
 		b.runId = runId
 		b.at = time.Time{}

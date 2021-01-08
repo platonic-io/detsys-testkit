@@ -22,6 +22,8 @@ func init() {
 	dbCmd.AddCommand(dbShellCmd)
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(schedulerCmd)
+	schedulerCmd.AddCommand(schedulerUpCmd)
+	schedulerCmd.AddCommand(schedulerDownCmd)
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(versionsCmd)
 }
