@@ -333,10 +333,12 @@
                   [data' {:events []}])
                 (let ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
                     ;; so that we don't end up executing the same command twice.
-                    [events (-> (client/post (str url (if (= (:kind body) "timer") "timer" "event"))
+                    [_ (db/append-event! (:test-id data) (:run-id data) "Send message to executor" "Start")
+                     events (-> (client/post (str url (if (= (:kind body) "timer") "timer" "event"))
                                              {:body (json/write body) :content-type "application/json; charset=utf-8"})
                                 :body
-                          json/read)]
+                                json/read)
+                     _ (db/append-event! (:test-id data) (:run-id data) "Send message to executor" "End")]
                   ;; TODO(stevan): go into error state if response body is of form {"error": ...}
                   ;; (if (:error events) true false)
 
@@ -652,11 +654,13 @@
 (>defn step!
   [data]
   [::data => (s/tuple ::data (s/keys :req-un [::events ::queue-size]))]
+  (db/append-event! (:test-id data) (:run-id data) "step!" "Start")
   (let [[data' events] (execute-or-tick! data)
         [data'' timestamped-entries] (timestamp-entries data'
                                                         (:events events)
                                                         (-> data' :clock))
         [data''' queue-size] (enqueue-timestamped-entries data'' timestamped-entries)]
+    (db/append-event! (:test-id data) (:run-id data) "step!" "End")
     [data''' (merge events queue-size)]))
 
 (comment
