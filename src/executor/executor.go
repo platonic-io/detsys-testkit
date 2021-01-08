@@ -151,7 +151,7 @@ func handleInits(topology Topology, m lib.Marshaler) http.HandlerFunc {
 	}
 }
 
-func Register(eventLog lib.EventLogEmitter, topology Topology) {
+func Register(eventLog lib.EventLogEmitter, testId lib.TestId) {
 	eventLog.Emit("Register Executor", "Start")
 	defer eventLog.Emit("Register Executor", "End")
 	// TODO(stevan): Make executorUrl part of topology/deployment.
@@ -364,7 +364,7 @@ func (e *Executor) Deploy(srv *http.Server) {
 }
 
 func (e *Executor) Register() {
-	Register(e.eventLog, e.topology)
+	Register(e.eventLog, e.testId)
 }
 
 func (e *Executor) Reset(runId lib.RunId) {
