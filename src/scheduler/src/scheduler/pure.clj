@@ -310,6 +310,7 @@
                                           (-> client :from parse-client-id)))
                   is-from-client? (re-matches #"^client:\d+$" (:from body))
                   dropped? (= drop? :drop)
+                  _ (log/debug :sent-logical-time body)
                   sent-logical-time (or (-> body :sent-logical-time)
                                         (and is-from-client?
                                              (:logical-clock data)))]
@@ -564,10 +565,11 @@
   [data {:keys [executor-id]}]
   [::data (s/keys :req-un [::executor-id])
    => (s/tuple ::data (s/keys :req-un [::queue-size]))]
-  (let [events (-> (client/get (str executor-id "/inits"))
-                   :body
-                   json/read
-                   :events)
+  (let [events (mapv #(assoc % :sent-logical-time (:logical-clock data))
+                     (-> (client/get (str executor-id "/inits"))
+                         :body
+                         json/read
+                         :events))
         _ (log/debug :get-initial-events executor-id events (:state data))
         [data' timestamped-entries] (timestamp-entries data events (:clock data))
         [data'' queue-size] (enqueue-timestamped-entries data' timestamped-entries)]
