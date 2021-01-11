@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 type OnGoingInternalRequest struct {
@@ -139,5 +139,9 @@ func (fe *FrontEnd2) Tick(at time.Time) []lib.OutEvent {
 }
 
 func (_ *FrontEnd2) Timer(at time.Time) []lib.OutEvent {
+	return nil
+}
+
+func (_ *FrontEnd2) Init() []lib.OutEvent {
 	return nil
 }

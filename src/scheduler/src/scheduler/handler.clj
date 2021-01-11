@@ -24,6 +24,7 @@
                 :body
                 (json/read))]
     (log/debug :body edn)
+    (log/debug :handler-state (:state @data))
     (if (s/valid? command? edn)
       (let [_ (db/append-event! (:test-id data)
                                 (:run-id data)

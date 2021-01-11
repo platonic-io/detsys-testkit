@@ -17,15 +17,15 @@ INSERT INTO agenda (test_id, id, kind, event, args, \`from\`, \`to\`, at)
 VALUES
   (${TEST_ID}, 0, "invoke", "write", '{"value": 1}', "client:0", "frontend", "1970-01-01T00:00:00Z"),
   (${TEST_ID}, 1, "invoke", "read",  "{}",           "client:0", "frontend", "1970-01-01T00:00:10Z");
-INSERT INTO deployment VALUES(${TEST_ID}, "frontend", '{"inFlight":{},"inFlightSessionToClient":{},"nextSessionId":0}');
-INSERT INTO deployment VALUES(${TEST_ID}, "register1", '{"value":[]}');
-INSERT INTO deployment VALUES(${TEST_ID}, "register2", '{"value":[]}');
+INSERT INTO deployment VALUES(${TEST_ID}, "frontend", "frontend", '{"inFlight":{},"inFlightSessionToClient":{},"nextSessionId":0}');
+INSERT INTO deployment VALUES(${TEST_ID}, "register1", "register", '{"value":[]}');
+INSERT INTO deployment VALUES(${TEST_ID}, "register2", "register", '{"value":[]}');
 EOF
 elif [ "${TEST}" == "broadcast" ]; then
     sqlite3 "${DETSYS_DB}" <<EOF
-INSERT INTO deployment VALUES(${TEST_ID}, "A", '{"log":"Hello world!","neighbours":{}}');
-INSERT INTO deployment VALUES(${TEST_ID}, "B", '{"log":"","neighbours":{}}');
-INSERT INTO deployment VALUES(${TEST_ID}, "C", '{"log":"","neighbours":{}}');
+INSERT INTO deployment VALUES(${TEST_ID}, "A", "node", '{"log":"Hello world!","neighbours":{}}');
+INSERT INTO deployment VALUES(${TEST_ID}, "B", "node", '{"log":"","neighbours":{}}');
+INSERT INTO deployment VALUES(${TEST_ID}, "C", "node", '{"log":"","neighbours":{}}');
 EOF
 fi
 

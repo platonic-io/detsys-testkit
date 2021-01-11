@@ -12,9 +12,9 @@ var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate a test case",
 	Long:  ``,
-	Args:  cobra.NoArgs,
+	Args:  cobra.ExactArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		cmd := exec.Command("detsys-generator")
+		cmd := exec.Command("detsys-generator", args[0])
 
 		err := cmd.Run()
 

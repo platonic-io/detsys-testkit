@@ -4,10 +4,9 @@ import (
 	"log"
 	"net/http"
 	"testing"
-	"time"
 
-	"github.com/symbiont-io/detsys/executor"
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/executor"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
@@ -17,16 +16,21 @@ func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 		"C": NewNode(round, "B"),
 	}
 	marshaler := NewMarshaler()
+	eventLog := lib.EventLogEmitter{
+		Component: "Broadcast test",
+		TestId:    &testId,
+		RunId:     nil,
+	}
 	var srv http.Server
 	lib.Setup(func() {
-		executor.Deploy(&srv, testId, topology, marshaler)
+		executor.Deploy(&srv, testId, eventLog, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
-	lib.SetMinTimeNs(time.Duration(5) * time.Second)
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
-	executor.Register(topology)
+	lib.Register(eventLog, testId)
 	log.Printf("Registered executor")
 	runId := lib.CreateRun(testId)
+	eventLog.RunId = &runId
 	log.Printf("Created run id: %v", runId)
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)
