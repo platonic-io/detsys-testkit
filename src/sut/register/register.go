@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 type Register struct {
@@ -78,5 +78,9 @@ func (r *Register) Tick(_ time.Time) []lib.OutEvent {
 }
 
 func (r *Register) Timer(_ time.Time) []lib.OutEvent {
+	return nil
+}
+
+func (_ *Register) Init() []lib.OutEvent {
 	return nil
 }

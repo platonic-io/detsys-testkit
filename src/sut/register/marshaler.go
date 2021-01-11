@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 type Marshaler struct{}

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type TestId struct {

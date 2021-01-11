@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS heap_trace (
 CREATE TABLE IF NOT EXISTS deployment (
   test_id      INTEGER   NOT NULL,
   component    TEXT      NOT NULL,
+  type         TEXT      NOT NULL,
   args         JSON      NOT NULL,
   PRIMARY KEY(test_id, component),
   FOREIGN KEY(test_id) REFERENCES test(id));

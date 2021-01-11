@@ -120,17 +120,35 @@ func handleTimer(db *sql.DB, testId lib.TestId, eventLog lib.EventLogEmitter, to
 	}
 }
 
-func Register(eventLog lib.EventLogEmitter, topology Topology) {
-	eventLog.Emit("Register Executor", "Start")
-	defer eventLog.Emit("Register Executor", "End")
-	// TODO(stevan): Make executorUrl part of topology.
-	const executorUrl string = "http://localhost:3001/api/v1/"
+func handleInits(topology Topology, m lib.Marshaler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		if r.Method != "GET" {
+			http.Error(w, jsonError("Method is not supported."),
+				http.StatusNotFound)
+			return
+		}
 
-	components := make([]string, 0, len(topology))
-	for component, _ := range topology {
-		components = append(components, component)
+		var inits []lib.Event
+		for component, reactor := range topology {
+			inits = append(inits,
+				lib.OutEventsToEvents(component, reactor.Init())...)
+		}
+
+		// Use `[]` for no events, rather than `null`, in the JSON encoding.
+		if inits == nil {
+			inits = []lib.Event{}
+		}
+
+		bs, err := json.Marshal(struct {
+			Events []lib.Event `json:"events"`
+		}{inits})
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Fprint(w, string(bs))
 	}
-	lib.RegisterExecutor(executorUrl, components)
 }
 
 func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) {
@@ -140,9 +158,12 @@ func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, eventLog lib
 
 	db := lib.OpenDB()
 	defer db.Close()
+
 	mux.HandleFunc("/api/v1/event", handler(db, testId, eventLog, topology, m, cu))
 	mux.HandleFunc("/api/v1/tick", handleTick(eventLog, topology, m, cu))
 	mux.HandleFunc("/api/v1/timer", handleTimer(db, testId, eventLog, topology, m, cu))
+	mux.HandleFunc("/api/v1/inits", handleInits(topology, m))
+
 	srv.Addr = ":3001"
 	srv.Handler = mux
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
@@ -154,12 +175,47 @@ func Deploy(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, t
 	DeployWithComponentUpdate(srv, testId, eventLog, topology, m, func(string, time.Time) {})
 }
 
-func DeployRaw(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {
-	topologyCooked := make(Topology, len(topology))
-	for name, component := range topology {
-		topologyCooked[name] = constructor(component)
+func topologyFromDeployment(testId lib.TestId, constructor func(string) lib.Reactor) (Topology, error) {
+	query := fmt.Sprintf(`SELECT component,type
+                              FROM deployment
+                              WHERE test_id = %d`, testId.TestId)
+
+	db := lib.OpenDB()
+	defer db.Close()
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	topologyRaw := make(map[string]string)
+	type Column struct {
+		Component string
+		Type      string
+	}
+	for rows.Next() {
+		column := Column{}
+		err := rows.Scan(&column.Component, &column.Type)
+		if err != nil {
+			return nil, err
+		}
+		topologyRaw[column.Component] = column.Type
 	}
 
+	topologyCooked := make(Topology)
+	for component, typ := range topologyRaw {
+		topologyCooked[component] = constructor(typ)
+	}
+	return topologyCooked, nil
+}
+
+func DeployRaw(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {
+	topologyCooked, err := topologyFromDeployment(testId, constructor)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Deploying topology: %+v\n", topologyCooked)
 	Deploy(srv, testId, eventLog, topologyCooked, m)
 }
 
@@ -265,7 +321,7 @@ func (e *Executor) Deploy(srv *http.Server) {
 }
 
 func (e *Executor) Register() {
-	Register(e.eventLog, e.topology)
+	lib.Register(e.eventLog, e.testId)
 }
 
 func (e *Executor) Reset(runId lib.RunId) {

@@ -99,15 +99,15 @@ type timerEvent struct {
 	From     string        `json:"from"`
 	Duration time.Duration `json:"duration-ns"`
 }
-type event interface{ IsEvent() }
+type Event interface{ IsEvent() }
 
 func (_ unscheduledEvent) IsEvent() {}
 func (_ timerEvent) IsEvent()       {}
 
-func MarshalUnscheduledEvents(from string, oevs []OutEvent) json.RawMessage {
-	usevs := make([]event, len(oevs))
+func OutEventsToEvents(from string, oevs []OutEvent) []Event {
+	usevs := make([]Event, len(oevs))
 	for index, oev := range oevs {
-		var event event
+		var event Event
 		switch kindT := oev.Args.(type) {
 		case *ClientResponse:
 			event = unscheduledEvent{
@@ -137,8 +137,13 @@ func MarshalUnscheduledEvents(from string, oevs []OutEvent) json.RawMessage {
 		}
 		usevs[index] = event
 	}
+	return usevs
+}
+
+func MarshalUnscheduledEvents(from string, oevs []OutEvent) json.RawMessage {
+	usevs := OutEventsToEvents(from, oevs)
 	bs, err := json.Marshal(struct {
-		Events []event `json:"events"`
+		Events []Event `json:"events"`
 	}{usevs})
 	if err != nil {
 		panic(err)

@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 type FrontEnd3 struct {
@@ -131,5 +131,9 @@ func (fe *FrontEnd3) Tick(at time.Time) []lib.OutEvent {
 }
 
 func (_ *FrontEnd3) Timer(at time.Time) []lib.OutEvent {
+	return nil
+}
+
+func (_ *FrontEnd3) Init() []lib.OutEvent {
 	return nil
 }

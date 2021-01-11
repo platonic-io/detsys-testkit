@@ -49,9 +49,9 @@ simple distributed register example:
 At this point it might make sense to have a look at the `go` test-suite in
 [`example_test.go`](src/sut/register/example_test.go) and the actual
 implementation of the distributed register. The implementation consists of two
-parts: a front-end (see [`frontend1.go`](src/sut/register/frontend1.go) which
+parts: a front-end (see [`frontend1.go`](src/sut/register/frontend1.go)) which
 receives client requests and propagates them to two distributed registers
-([`register.go`](src/sut/register/register.go). The client can be request a
+([`register.go`](src/sut/register/register.go)). The client can be request a
 write to or a read from the registers, and the idea with there being two
 registers is that there is some form of redundancy. The implementation is flawed
 however, as you might have been able to guess from the fact that the test fails.

@@ -5,30 +5,36 @@ with pkgs;
 assert lib.versionAtLeast go.version "1.15";
 
 let
-  inherit (import sources.gitignore {}) gitignoreSource;
-  detsysLib = callPackage ../lib/default.nix {};
+  inherit (import sources.gitignore {}) gitignoreFilter;
+  customFilter = src:
+    let
+      # IMPORTANT: use a let binding like this to memoize info about the git directories.
+      srcIgnored = gitignoreFilter src;
+    in
+      path: type:
+         srcIgnored path type
+         || lib.hasInfix "vendor" path;
 in
 
 buildGoModule rec {
-  pname = "detsys-db";
+  pname = "db";
   version = "latest";
-  goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
+  goPackagePath = "github.com/symbiont-io/detsys-testkit/src/${pname}";
 
-  src = gitignoreSource ./.;
+  src = lib.cleanSourceWith {
+    filter = customFilter ./.;
+    src = ./.;
+    name = pname + "-source";
+  };
 
-  buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ sqlite-interactive ];
 
-  vendorSha256 = "1a2yg8jv2ayspxpcjs3fjw62bhxvjj6accpgx42js2pqcgqpk3wx";
+  vendorSha256 = null;
 
   buildFlagsArray =
     [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
 
   preBuild = ''
-    # We need to put the source of the library in `../lib`, because
-    # that's where `go.mod` says to go look for it.
-    cp -R ${detsysLib}/src ../lib
-
     # We need CGO to include sqlite.
     export CGO_ENABLED=1
   '';
@@ -36,5 +42,10 @@ buildGoModule rec {
   postInstall = ''
     echo "installing migrations"
     cp -r $src/migrations $out
+
+    # We can't just use -o in buildFlags, because they get passed to both `go
+    # build` and `go install` and the latter doesn't accept the -o flag.
+    echo "renaming executable"
+    mv $out/bin/db $out/bin/detsys-db
   '';
 }

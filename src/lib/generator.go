@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -63,7 +64,8 @@ func setDeploymentHeap(testId TestId, topology Topology) {
 	db := OpenDB()
 	defer db.Close()
 
-	stmt, err := db.Prepare(`INSERT INTO deployment(test_id, component, args) VALUES(?,?,?)`)
+	stmt, err := db.Prepare(`INSERT INTO deployment(test_id, component, type, args)
+                                 VALUES(?,?,?,?)`)
 	if err != nil {
 		panic(err)
 	}
@@ -74,7 +76,8 @@ func setDeploymentHeap(testId TestId, topology Topology) {
 		if err != nil {
 			panic(err)
 		}
-		_, err = stmt.Exec(testId.TestId, k, j)
+		typ := strings.ToLower(strings.Split(reflect.TypeOf(r).String(), ".")[1])
+		_, err = stmt.Exec(testId.TestId, k, typ, j)
 		if err != nil {
 			panic(err)
 		}

@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 type FrontEnd4 struct {
@@ -150,4 +150,8 @@ func (fe *FrontEnd4) Timer(at time.Time) []lib.OutEvent {
 	}
 
 	return resend
+}
+
+func (_ *FrontEnd4) Init() []lib.OutEvent {
+	return nil
 }

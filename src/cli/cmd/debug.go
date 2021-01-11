@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	"github.com/symbiont-io/detsys-testkit/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 var debugCmd = &cobra.Command{

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/symbiont-io/detsys/executor"
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/executor"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 func createTopology(newFrontEnd func() lib.Reactor) map[string]lib.Reactor {
@@ -21,14 +21,19 @@ func createTopology(newFrontEnd func() lib.Reactor) map[string]lib.Reactor {
 func once(newFrontEnd func() lib.Reactor, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	topology := createTopology(newFrontEnd)
 	marshaler := NewMarshaler()
+	eventLog := lib.EventLogEmitter{
+		Component: "Broadcast test",
+		TestId:    &testId,
+		RunId:     nil,
+	}
 	var srv http.Server
 	lib.Setup(func() {
-		executor.Deploy(&srv, testId, topology, marshaler)
+		executor.Deploy(&srv, testId, eventLog, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
 	lib.SetSeed(lib.Seed{4})
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
-	executor.Register(topology)
+	lib.Register(eventLog, testId)
 	runId := lib.CreateRun(testId)
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)

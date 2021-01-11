@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/symbiont-io/detsys/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 type SessionIdWithContext struct {
@@ -132,5 +132,9 @@ func (fe *FrontEnd) Tick(at time.Time) []lib.OutEvent {
 }
 
 func (fe *FrontEnd) Timer(at time.Time) []lib.OutEvent {
+	return nil
+}
+
+func (_ *FrontEnd) Init() []lib.OutEvent {
 	return nil
 }
