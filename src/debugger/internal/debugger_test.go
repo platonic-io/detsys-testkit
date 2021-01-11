@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/symbiont-io/detsys-testkit/lib"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 type FrontEnd struct {

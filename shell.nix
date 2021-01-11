@@ -6,7 +6,11 @@ pkgs.mkShell {
   name = "dev-shell";
 
   buildInputs = [
-    bazel
+    # PR to update bazel to 3.7.2: https://github.com/NixOS/nixpkgs/pull/105439
+    # there seems to be a problem on MacOS though, so for now install bazel
+    # 3.7.2 manually outside of nix.
+
+    # bazel
     go
     clojure
     python38

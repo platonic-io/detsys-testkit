@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "broadcast",
+    srcs = [
+        "broadcast.go",
+        "marshaler.go",
+    ],
+    importpath = "github.com/symbiont-io/detsys-testkit/src/sut/broadcast",
+    visibility = ["//visibility:public"],
+    deps = ["//src/sut/broadcast/vendor/github.com/symbiont-io/detsys-testkit/src/lib"],
+)
+
+go_test(
+    name = "lib_test",
+    srcs = ["broadcast_test.go"],
+    embed = [":broadcast"],
+)
+
+go_test(
+    name = "broadcast_test",
+    srcs = ["broadcast_test.go"],
+    embed = [":broadcast"],
+    deps = [
+        "//src/sut/broadcast/vendor/github.com/symbiont-io/detsys-testkit/src/executor",
+        "//src/sut/broadcast/vendor/github.com/symbiont-io/detsys-testkit/src/lib",
+    ],
+)
