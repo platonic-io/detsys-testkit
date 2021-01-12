@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/symbiont-io/detsys-testkit/src/executor"
 	"github.com/symbiont-io/detsys-testkit/src/lib"
@@ -42,21 +43,26 @@ func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 }
 
 func many(round Round, t *testing.T) {
-	tickFrequency := 1000.0 // One tick per second.
+	tickFrequency := 100000000000.0 // Make ticks infrequent.
 
 	testId := lib.GenerateTest("broadcast")
 
 	var runIds []lib.RunId
 	var faults []lib.Fault
 	failSpec := lib.FailSpec{
-		EFF:     10,
-		Crashes: 0,
-		EOT:     0,
+		EFF:     5,
+		Crashes: 1,
+		EOT:     10,
 	}
 	for {
 		lib.Reset()
 		lib.InjectFaults(lib.Faults{faults})
 		lib.SetTickFrequency(tickFrequency)
+		maxTime, err := time.ParseDuration("5s")
+		if err != nil {
+			panic(err)
+		}
+		lib.SetMaxTimeNs(maxTime)
 		log.Printf("Injecting faults: %#v\n", faults)
 		runId, result := once(round, testId, t)
 		if !result {

@@ -93,6 +93,7 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 	var result struct {
 		Faults     []Fault                `json:"faults"`
 		Statistics map[string]interface{} `json:"statistics"`
+		Version    string                 `json:"version"`
 	}
 	err = json.Unmarshal(out, &result)
 
@@ -103,6 +104,7 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 	elapsed := time.Since(start)
 	log.Printf("ldfi time: %v\n", elapsed)
 	log.Printf("z3 statistics: %+v\n", result.Statistics)
+	log.Printf("version: %+v\n", result.Version)
 
 	return Faults{result.Faults}
 }

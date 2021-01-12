@@ -130,6 +130,10 @@ func (n *Node) Receive(_ time.Time, from string, event lib.InEvent) []lib.OutEve
 }
 
 func (n *Node) Tick(_ time.Time) []lib.OutEvent {
+	return nil
+}
+
+func (n *Node) Timer(at time.Time) []lib.OutEvent {
 	var oevs []lib.OutEvent
 	for neighbour, broadcast := range n.Neighbours {
 		if broadcast && n.Log != "" {
@@ -146,16 +150,26 @@ func (n *Node) Tick(_ time.Time) []lib.OutEvent {
 			}
 		}
 	}
-	return oevs
-}
 
-func (n *Node) Timer(at time.Time) []lib.OutEvent {
-	return n.Tick(at)
+	// Renew the timer.
+	duration, err := time.ParseDuration("500ms")
+	if err != nil {
+		panic(err)
+	}
+	oev := lib.OutEvent{
+		To: "scheduler",
+		Args: &lib.Timer{
+			Duration: duration,
+		},
+	}
+	oevs = append(oevs, oev)
+
+	return oevs
 }
 
 func (n *Node) Init() []lib.OutEvent {
 	var oevs []lib.OutEvent
-	duration, err := time.ParseDuration("5s")
+	duration, err := time.ParseDuration("500ms")
 	if err != nil {
 		panic(err)
 	}

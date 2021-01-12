@@ -50,7 +50,6 @@ def main():
                              "dropped": r['dropped']})
             if args.crashes > 0:
                 crash = "{'kind':'crash', 'from':'%s', 'at':%d}" % (r['from'], r['at'])
-                sums.append(crash)
                 crashes.add(crash)
         products.append(sums)
 
@@ -58,7 +57,7 @@ def main():
 
     # Sanity check.
     for i, run_id in enumerate(args.run_ids):
-        if not products[i]:
+        if not products[i] and not crashes:
             print("Error: couldn't find a network trace for test id: %d, and run id: %d." %
                   (args.test_id, run_id))
             exit(1)
@@ -114,7 +113,8 @@ def main():
             faults = sorted(faults, key=order)
 
             print(json.dumps({"faults": faults,
-                              "statistics": statistics}))
+                              "statistics": statistics,
+                              "version": get_distribution(__name__).version}))
 
 if __name__ == '__main__':
     main()
