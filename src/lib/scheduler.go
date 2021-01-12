@@ -56,10 +56,14 @@ func InjectFaults(faults Faults) {
 		var schedulerFault SchedulerFault
 		switch ev := fault.Args.(type) {
 		case Omission:
-			//assert fault.Kind?
 			schedulerFault.Kind = fault.Kind
 			schedulerFault.From = ev.From
 			schedulerFault.To = ev.To
+			schedulerFault.At = ev.At // convert?
+		case Crash:
+			schedulerFault.Kind = fault.Kind
+			schedulerFault.From = ev.From
+			schedulerFault.To = ""    // Not used.
 			schedulerFault.At = ev.At // convert?
 		default:
 			panic(fmt.Sprintf("Unknown fault type: %#v\n", fault))

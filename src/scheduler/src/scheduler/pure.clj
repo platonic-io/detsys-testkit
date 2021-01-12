@@ -131,6 +131,17 @@
       first
       (create-run! {:test-id 1})))
 
+(def not-empty? (complement empty?))
+
+(defn component-crashed?
+  [data entry]
+  (->> data
+       :faults
+       (filter #(and (= (:kind %) "crash")
+                     (= (:from %) (:to entry))
+                     (<= (:at %) (:at entry))))
+       not-empty?))
+
 (defn should-drop?
   [data entry]
   (let [faults (:faults data)
@@ -138,7 +149,42 @@
                    (select-keys [:to :from])
                    (assoc :kind "omission"
                           :at (:logical-clock data)))]
-    ((set faults) entry')))
+    (or (some? ((set faults) entry'))
+        (component-crashed? data entry')
+        )))
+
+(comment
+  (should-drop? {:faults [{:from "a", :to "b", :kind "omission", :at 0}]
+                 :logical-clock 0}
+                {:from "a", :to "b"})
+  ;; => true
+
+  (should-drop? {:faults [{:from "a", :to "b", :kind "omission", :at 1}]
+                 :logical-clock 0}
+                {:from "a", :to "b"})
+  ;; => false
+
+  (should-drop? {:faults [{:from "b", :kind "crash", :at 1}]
+                 :logical-clock 0}
+                {:from "a", :to "b"})
+  ;; => false
+
+  (should-drop? {:faults [{:from "b", :kind "crash", :at 0}]
+                 :logical-clock 1}
+                {:from "a", :to "b"})
+  ;; => true
+
+  (should-drop? {:faults [{:from "b", :kind "crash", :at 1}]
+                 :logical-clock 1}
+                {:from "a", :to "b"})
+  ;; => true
+
+  (should-drop? {:faults [{:from "b", :kind "crash", :at 2}
+                          {:from "b", :kind "crash", :at 1}]
+                 :logical-clock 1}
+                {:from "a", :to "b"})
+  ;; => true
+)
 
 (defn from-client?
   [body]

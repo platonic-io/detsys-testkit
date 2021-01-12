@@ -48,9 +48,10 @@ def main():
                 sums.append({"var":"{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}" %
                              (r['from'], r['to'], r['at']),
                              "dropped": r['dropped']})
-            crash = "{'kind':'crash', 'from':'%s', 'at':%d}" % (r['from'], r['at'])
-            #sums.append(crash)
-            #crashes.add(crash)
+            if args.crashes > 0:
+                crash = "{'kind':'crash', 'from':'%s', 'at':%d}" % (r['from'], r['at'])
+                sums.append(crash)
+                crashes.add(crash)
         products.append(sums)
 
     c.close()
