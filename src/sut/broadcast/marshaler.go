@@ -34,6 +34,8 @@ func (_ *Marshaler) UnmarshalMessage(message string, raw json.RawMessage, msg *l
 		*msg = Broadcast{
 			Data: op.Data,
 		}
+	case "ack":
+		*msg = Ack{}
 	default:
 		panic(fmt.Errorf("Unknown message type: %s\n%s", message, raw))
 	}
