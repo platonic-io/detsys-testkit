@@ -9,6 +9,7 @@ pkgs.mkShell {
     go
     clojure
     python38
+    mypy
 
     plantuml
     git
