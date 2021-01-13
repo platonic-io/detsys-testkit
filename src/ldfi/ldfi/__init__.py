@@ -1,8 +1,8 @@
 import argparse
+import json
 import os
 import sqlite3
 import z3
-import json
 from pkg_resources import get_distribution
 
 def order(d):
@@ -33,27 +33,36 @@ def main():
 
     products = []
     crashes = set()
+    previous_faults = set()
 
     for run_id in args.run_ids:
+        c.execute("""SELECT faults FROM faults
+                     WHERE test_id = (?)
+                       AND run_id = (?)""", (args.test_id, run_id))
+        for r in c:
+            for fault in eval(r['faults']):
+                # NOTE: eval introduces a space after the colon in a
+                # dict, we need to remove this otherwise the variables
+                # of the SAT expression will differ.
+                previous_faults.add(str(fault).replace(": ", ":"))
+
         sums = []
-        c.execute("""select * from network_trace
-                     where test_id = (?)
-                       and run_id = (?)
-                       and kind <> 'timer'
-                       and not (`from` like 'client:%')
-                       and not (`to`   like 'client:%')""",
+        c.execute("""SELECT * FROM network_trace
+                     WHERE test_id = (?)
+                       AND run_id = (?)
+                       AND kind <> 'timer'
+                       AND NOT (`from` LIKE 'client:%')
+                       AND NOT (`to`   LIKE 'client:%')""",
                   (args.test_id, run_id))
         for r in c:
             if r['at'] < args.eff:
-                sums.append({"var":"{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}" %
-                             (r['from'], r['to'], r['at']),
-                             "dropped": r['dropped']})
+                sums.append("{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}" %
+                             (r['from'], r['to'], r['at']))
             if args.crashes > 0:
                 crash = "{'kind':'crash', 'from':'%s', 'at':%d}" % (r['from'], r['at'])
+                sums.append(crash)
                 crashes.add(crash)
         products.append(sums)
-
-    c.close()
 
     # Sanity check.
     for i, run_id in enumerate(args.run_ids):
@@ -64,16 +73,19 @@ def main():
 
     # Create and solve SAT formula.
     for i, sum in enumerate(products):
-        kept = [x["var"] for x in sum if x["dropped"] == 0]
-        drop = [x["var"] for x in sum if x["dropped"] == 1]
-        kept = z3.Bools(kept)
-        drop = z3.Bools(drop)
-        products[i] = z3.Or(z3.Or(kept), z3.Not(z3.And(drop)))
+        products[i] = z3.Or(z3.Bools(sum))
 
     crashes = z3.Bools(list(crashes))
+    previous_faults = z3.Bools(list(previous_faults))
 
     s = z3.Solver()
     s.add(z3.And(products))
+
+    # We don't want to injects faults that we already tried injecting in previous runs.
+    if previous_faults:
+        s.add(z3.Not(z3.Or(previous_faults)))
+
+    # There can be at most --crashes many crashes.
     if crashes:
         crashes.append(args.crashes)
         s.add(z3.AtMost(crashes))
@@ -111,6 +123,15 @@ def main():
                     Dict = eval(d.name())
                     faults.append(Dict)
             faults = sorted(faults, key=order)
+
+            c.execute("""INSERT INTO faults(test_id, run_id, faults, version, statistics)
+                         VALUES(?, ?, ?, ?, ?)""",
+                      (args.test_id, args.run_ids[-1], json.dumps(faults),
+                       get_distribution(__name__).version, str(statistics)))
+
+            conn.commit()
+
+            c.close()
 
             print(json.dumps({"faults": faults,
                               "statistics": statistics,
