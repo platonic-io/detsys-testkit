@@ -1,9 +1,15 @@
 import argparse
 import json
+import logging
 import os
 import sqlite3
 import z3
 from pkg_resources import get_distribution
+
+# Logging
+logging.basicConfig(filename='/tmp/ldfi.log',
+                    filemode='w',
+                    level=logging.DEBUG)
 
 def order(d):
     return("%s %s %s %d" % (d['kind'], d['from'], d.get('to', ""), d['at']))
@@ -33,9 +39,10 @@ def main():
 
     products = []
     crashes = set()
-    previous_faults = set()
+    previous_faults = []
 
     for run_id in args.run_ids:
+        prods = []
         c.execute("""SELECT faults FROM faults
                      WHERE test_id = (?)
                        AND run_id = (?)""", (args.test_id, run_id))
@@ -44,7 +51,8 @@ def main():
                 # NOTE: eval introduces a space after the colon in a
                 # dict, we need to remove this otherwise the variables
                 # of the SAT expression will differ.
-                previous_faults.add(str(fault).replace(": ", ":"))
+                prods.append(str(fault).replace(": ", ":"))
+        previous_faults.append(prods)
 
         sums = []
         c.execute("""SELECT * FROM network_trace
@@ -75,15 +83,20 @@ def main():
     for i, sum in enumerate(products):
         products[i] = z3.Or(z3.Bools(sum))
 
+    for i, prod in enumerate(previous_faults):
+        if prod:
+            previous_faults[i] = z3.And(z3.Bools(prod))
+        else:
+            previous_faults[i] = False
+
     crashes = z3.Bools(list(crashes))
-    previous_faults = z3.Bools(list(previous_faults))
 
     s = z3.Solver()
     s.add(z3.And(products))
 
     # We don't want to injects faults that we already tried injecting in previous runs.
-    if previous_faults:
-        s.add(z3.Not(z3.Or(previous_faults)))
+    logging.debug(str(z3.Not(z3.Or(previous_faults))))
+    s.add(z3.Not(z3.Or(previous_faults)))
 
     # There can be at most --crashes many crashes.
     if crashes:
