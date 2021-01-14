@@ -33,8 +33,9 @@ func once(newFrontEnd func() lib.Reactor, testId lib.TestId, t *testing.T) (lib.
 	qs := lib.LoadTest(testId)
 	lib.SetSeed(lib.Seed{4})
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
-	lib.Register(eventLog, testId)
+	lib.Register(testId)
 	runId := lib.CreateRun(testId)
+	eventLog.RunId = &runId
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)
 	lib.Teardown(&srv)
