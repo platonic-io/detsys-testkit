@@ -4,23 +4,67 @@ import logging
 import os
 import sqlite3
 import z3
-from typing import (List, Set, Tuple)
+from typing import (List, Set)
 from pkg_resources import get_distribution
 
-# Logging
-logging.basicConfig(filename='/tmp/ldfi.log',
-                    filemode='w',
-                    level=logging.DEBUG)
+class Config:
+    def __init__(self,
+                 test_id: int,
+                 run_ids: List[int],
+                 eff: int,
+                 max_crashes: int):
+      self.test_id = test_id
+      self.run_ids = run_ids
+      self.eff = eff
+      self.max_crashes = max_crashes
+
+      # TODO(stevan): make logging configurable.
+      logging.basicConfig(level=logging.DEBUG)
+
+def create_config() -> Config:
+    parser = argparse.ArgumentParser(description='Lineage-driven fault injection.')
+    parser.add_argument('--eff', metavar='TIME', type=int, required=True,
+                        help='the time when finite failures end')
+    parser.add_argument('--crashes', metavar='INT', type=int, required=True,
+                        help='the max amount of node crashes')
+    parser.add_argument('--test-id', metavar='TEST_ID', type=int, required=True,
+                        help='the test id')
+    parser.add_argument('--run-ids', metavar='RUN_ID', type=int, nargs='+', required=True,
+                        help='the run ids')
+    parser.add_argument('--version', '-v', action='version',
+                        version=get_distribution(__name__).version)
+
+    args = parser.parse_args()
+
+    return Config(args.test_id, args.run_ids, args.eff, args.crashes)
+
+class Data:
+    def __init__(self,
+                 previous_faults: List[List[str]],
+                 potential_faults: List[List[str]],
+                 crashes: Set[str]):
+        self.previous_faults = previous_faults
+        self.potential_faults = potential_faults
+        self.crashes = crashes
+
+class Event:
+    def __init__(self,
+                 test_id: int,
+                 run_id: int,
+                 faults: str,
+                 version: str,
+                 statistics: str):
+        self.test_id = test_id
+        self.run_id = run_id
+        self.faults = faults
+        self.version = version
+        self.statistics = statistics
 
 class Storage:
-    def load_previous_faults(self, test_id: int, run_ids: List[int]) -> List[List[str]]:
+    def load(self, config: Config) -> Data:
         pass
-    def load_potential_faults(self, test_id: int, run_ids: List[int],
-                              eff: int, max_crashes: int,
-                              previous_faults: List[List[str]]) -> Tuple[List[List[str]], Set[str]]:
-        pass
-    def store_faults(self, test_id: int, run_id: int, faults: str,
-                     version: str, statistics: str):
+
+    def store(self, event: Event):
         pass
 
 class SqliteStorage(Storage):
@@ -31,16 +75,18 @@ class SqliteStorage(Storage):
         self.conn.row_factory = sqlite3.Row
         self.c = self.conn.cursor()
 
-    def load_previous_faults(self, test_id: int, run_ids: List[int]) -> List[List[str]]:
+    def load(self, config: Config) -> Data:
         previous_faults = []
+        potential_faults = []
+        crashes = set()
 
-        for run_id in run_ids:
+        for run_id in config.run_ids:
             prods = []
             self.c.execute("""SELECT faults FROM faults
                               WHERE test_id = (?)
-                              AND run_id = (?)""", (test_id, run_id))
+                              AND run_id = (?)""", (config.test_id, run_id))
             for r in self.c:
-                for fault in eval(r['faults']):
+                for fault in eval(r['faults'])['faults']:
                     # NOTE: eval introduces a space after the colon in a
                     # dict, we need to remove this otherwise the variables
                     # of the SAT expression will differ.
@@ -48,15 +94,6 @@ class SqliteStorage(Storage):
                     logging.debug("fault: '%s'", str(fault).replace(": ", ":"))
             previous_faults.append(prods)
 
-        return previous_faults
-
-    def load_potential_faults(self, test_id: int, run_ids: List[int],
-                              eff: int, max_crashes: int,
-                              previous_faults: List[List[str]]) -> Tuple[List[List[str]], Set[str]]:
-        potential_faults = []
-        crashes = set()
-
-        for run_id in run_ids:
             sums = []
             self.c.execute("""SELECT * FROM network_trace
                               WHERE test_id = (?)
@@ -64,14 +101,16 @@ class SqliteStorage(Storage):
                                 AND kind <> 'timer'
                                 AND NOT (`from` LIKE 'client:%')
                                 AND NOT (`to`   LIKE 'client:%')""",
-                           (test_id, run_id))
+                           (config.test_id, run_id))
             for r in self.c:
-                if r['at'] < eff:
+                logging.debug("network trace: {'kind': %s, 'from': %s, 'to': %s, 'at': %s}",
+                              r['kind'], r['from'], r['to'], r['at'])
+                if r['at'] < config.eff:
                     omission = ("{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}"
                                 % (r['from'], r['to'], r['at']))
                     if omission not in previous_faults:
                         sums.append(omission)
-                if max_crashes > 0:
+                if config.max_crashes > 0:
                     crash = ("{'kind':'crash', 'from':'%s', 'at':%d}"
                              % (r['from'], r['sent_logical_time']))
                     if crash not in previous_faults:
@@ -79,113 +118,104 @@ class SqliteStorage(Storage):
                         crashes.add(crash)
             potential_faults.append(sums)
 
-        return (potential_faults, crashes)
+        return Data(previous_faults, potential_faults, crashes)
 
-    def store_faults(self, test_id: int, run_id: int, faults: str,
-                     version: str, statistics: str):
-            self.c.execute("""INSERT INTO faults(test_id, run_id, faults, version, statistics)
-                         VALUES(?, ?, ?, ?, ?)""",
-                      (test_id, run_id, faults, version, statistics))
+    def store(self, event: Event):
+        self.c.execute("""INSERT INTO faults(test_id, run_id, faults, version, statistics)
+                          VALUES(?, ?, ?, ?, ?)""",
+                       (event.test_id, event.run_id, event.faults, event.version,
+                        event.statistics))
+        self.conn.commit()
 
-            self.conn.commit()
-            self.c.close()
+def sanity_check(data):
+    if data.previous_faults == [[]]:
+        len_previous_faults = 0
+    else:
+        len_previous_faults = len(data.previous_faults)
 
-def order(d):
+    assert(len(data.potential_faults) == len_previous_faults + 1)
+
+def create_sat_formula(config, data):
+    potential_faults = []
+    for i, sum in enumerate(data.potential_faults):
+        kept = z3.Bools(sum)
+        logging.debug("kept: " + str(kept))
+        drop = []
+        if data.previous_faults[i-1]:
+            drop = z3.Bools(data.previous_faults[i-1])
+            logging.debug("drop: " + str(drop))
+        if drop:
+            potential_faults.append(z3.Or(z3.Or(kept), z3.Not(z3.And(drop))))
+        else:
+            potential_faults.append(z3.Or(kept))
+
+    formula = z3.And(potential_faults)
+
+    crashes = z3.Bools(list(data.crashes))
+
+    if crashes:
+        crashes.append(config.max_crashes)
+        formula = z3.And(formula, z3.AtMost(crashes))
+    logging.debug("formula: %s", str(formula))
+    return formula
+
+def sat_solve(formula):
+    solver = z3.Solver()
+    solver.add(formula)
+    result = solver.check()
+    model = solver.model()
+    statistics = solver.statistics()
+    return (result, model, statistics)
+
+def order(d: dict) -> str:
     return("%s %s %s %d" % (d['kind'], d['from'], d.get('to', ""), d['at']))
 
-def main():
-    # Command-line argument parsing.
-    parser = argparse.ArgumentParser(description='Lineage-driven fault injection.')
-    parser.add_argument('--eff', metavar='TIME', type=int, required=True,
-                        help='the time when finite failures end')
-    parser.add_argument('--crashes', metavar='INT', type=int, required=True,
-                        help='the max amount of node crashes')
-    parser.add_argument('--test-id', metavar='TEST_ID', type=int, required=True,
-                        help='the test id')
-    parser.add_argument('--run-ids', metavar='RUN_ID', type=int, nargs='+', required=True,
-                        help='the run ids')
-    parser.add_argument('--json', action='store_true', help='output in JSON format?')
-    parser.add_argument('--version', '-v', action='version',
-                        version=get_distribution(__name__).version)
+def create_log_event(config, result, model, statistics) -> Event:
+    statistics_dict = {}
+    for k, v in statistics:
+        statistics_dict[k] = v
 
-    args = parser.parse_args()
+    event = Event(config.test_id, config.run_ids[-1], json.dumps({"faults": []}),
+                  get_distribution(__name__).version, str(statistics_dict))
 
-    # Load network traces from the database.
-    storage = SqliteStorage()
-    previous_faults = storage.load_previous_faults(args.test_id, args.run_ids)
-    logging.debug(str(previous_faults))
-    (products, crashes) = storage.load_potential_faults(args.test_id, args.run_ids, args.eff,
-                                                        args.crashes, previous_faults)
-
-    # Sanity check.
-    for i, run_id in enumerate(args.run_ids):
-        if not products[i] and not crashes:
-            print("Error: couldn't find a network trace for test id: %d, and run id: %d." %
-                  (args.test_id, run_id))
-            exit(1)
-
-    # Create and solve SAT formula.
-    for i, sum in enumerate(products):
-        kept = z3.Bools(sum)
-        logging.debug("i: %d", i)
-        logging.debug("kept: " + str(kept))
-        if previous_faults[i]:
-            drop = z3.Bools(previous_faults[i])
-            logging.debug("drop: " + str(drop))
-        else:
-            drop = False
-        products[i] = z3.Or(z3.Or(kept), z3.Not(z3.And(drop)))
-
-    crashes = z3.Bools(list(crashes))
-
-    s = z3.Solver()
-    s.add(z3.And(products))
-
-    # There can be at most --crashes many crashes.
-    if crashes:
-        crashes.append(args.crashes)
-        s.add(z3.AtMost(crashes))
-    r = s.check()
-
-    # Output the result.
-    if r == z3.unsat:
-        if not(args.json):
-            print("No further faults can be injected at this point, the test case is")
-            print("certified for this particular failure specification!")
-        else:
-            print(json.dumps({"faults": []}))
-    elif r == z3.unknown:
-             print("Impossible: the SAT solver returned 'unknown'")
-             try:
-                 print(s.model())
-             except Z3Exception:
-                 pass
-             finally:
-                 exit(2)
+    if result == z3.unsat:
+        # No further faults can be injected at this point, the test case is
+        # certified for this particular failure specification!
+        return event
+    elif result == z3.unknown:
+        logging.critical("Impossible: the SAT solver returned 'unknown'")
+        try:
+            logging.critical(model)
+        except z3.Z3Exception:
+            pass
+        finally:
+            exit(2)
     else:
-        m = s.model()
+        faults = []
+        for d in model.decls():
+            if model[d]:
+                Dict = eval(d.name())
+                faults.append(Dict)
+        faults = sorted(faults, key=order)
+        event.faults = json.dumps({"faults": faults})
 
-        statistics = {}
-        for k, v in s.statistics():
-            statistics[k] = v
+        return event
 
-        if not(args.json):
-            print(m)
-            print(statistics)
-        else:
-            faults = []
-            for d in m.decls():
-                if m[d]:
-                    Dict = eval(d.name())
-                    faults.append(Dict)
-            faults = sorted(faults, key=order)
+def main():
+    config = create_config()
+    storage = SqliteStorage()
 
-            storage.store_faults(args.test_id, args.run_ids[-1], json.dumps(faults),
-                                 get_distribution(__name__).version, str(statistics))
+    data = storage.load(config)
+    sanity_check(data)
 
-            print(json.dumps({"faults": faults,
-                              "statistics": statistics,
-                              "version": get_distribution(__name__).version}))
+    formula = create_sat_formula(config, data)
+
+    (result, model, statistics) = sat_solve(formula)
+
+    event = create_log_event(config, result, model, statistics)
+    storage.store(event)
+    logging.debug(event.faults)
+    print(event.faults)
 
 if __name__ == '__main__':
     main()

@@ -58,7 +58,7 @@ func many(round Round, t *testing.T) {
 		lib.Reset()
 		lib.InjectFaults(lib.Faults{faults})
 		lib.SetTickFrequency(tickFrequency)
-		maxTime, err := time.ParseDuration("10s")
+		maxTime, err := time.ParseDuration("5s")
 		if err != nil {
 			panic(err)
 		}

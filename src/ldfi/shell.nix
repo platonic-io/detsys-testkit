@@ -3,11 +3,15 @@
 }:
 with pkgs;
 
-( let
-    inherit (import sources.gitignore {}) gitignoreSource;
-    ldfi = callPackage ./release.nix {
-      pythonPackages = python38Packages;
-      gitignoreSource = gitignoreSource;
-    };
-  in python38.withPackages (ps: [ ldfi ])
-).env
+let
+  inherit (import sources.gitignore {}) gitignoreSource;
+  ldfi = callPackage ./release.nix {
+    pythonPackages = python38Packages;
+    gitignoreSource = gitignoreSource;
+  };
+  pythonEnv = python38.withPackages (ps: [ ldfi ]);
+in
+
+mkShell {
+  buildInputs = [ pythonEnv mypy black ];
+}
