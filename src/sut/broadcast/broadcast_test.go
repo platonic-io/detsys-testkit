@@ -28,7 +28,7 @@ func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	})
 	qs := lib.LoadTest(testId)
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
-	lib.Register(eventLog, testId)
+	lib.Register(testId)
 	log.Printf("Registered executor")
 	runId := lib.CreateRun(testId)
 	eventLog.RunId = &runId

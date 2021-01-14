@@ -23,8 +23,6 @@ type Topology = map[string]lib.Reactor
 
 func handler(db *sql.DB, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		eventLog.Emit("handleReceive", "Start")
-		defer eventLog.Emit("handleReceive", "End")
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "POST" {
 			http.Error(w, jsonError("Method is not supported."),
@@ -60,8 +58,6 @@ func handleTick(eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler
 		At        time.Time `json:"at"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		eventLog.Emit("handleTick", "Start")
-		defer eventLog.Emit("handleTick", "End")
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "PUT" {
 			http.Error(w, jsonError("Method is not supported."),
@@ -91,8 +87,6 @@ func handleTimer(db *sql.DB, testId lib.TestId, eventLog lib.EventLogEmitter, to
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		eventLog.Emit("handleTimer", "Start")
-		defer eventLog.Emit("handleTimer", "End")
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "POST" {
 			http.Error(w, jsonError("Method is not supported."),
@@ -152,8 +146,6 @@ func handleInits(topology Topology, m lib.Marshaler) http.HandlerFunc {
 }
 
 func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) {
-	eventLog.Emit("Deploy Executor", "Start")
-	defer eventLog.Emit("Deploy Executor", "End")
 	mux := http.NewServeMux()
 
 	db := lib.OpenDB()
@@ -321,7 +313,7 @@ func (e *Executor) Deploy(srv *http.Server) {
 }
 
 func (e *Executor) Register() {
-	lib.Register(e.eventLog, e.testId)
+	lib.Register(e.testId)
 }
 
 func (e *Executor) Reset(runId lib.RunId) {

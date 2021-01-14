@@ -143,9 +143,7 @@ func componentsFromDeployment(testId TestId) ([]string, error) {
 	return components, nil
 }
 
-func Register(eventLog EventLogEmitter, testId TestId) {
-	eventLog.Emit("Register Executor", "Start")
-	defer eventLog.Emit("Register Executor", "End")
+func Register(testId TestId) {
 	// TODO(stevan): Make executorUrl part of topology/deployment.
 	const executorUrl string = "http://localhost:3001/api/v1/"
 

@@ -26,20 +26,10 @@
     (log/debug :body edn)
     (log/debug :handler-state (:state @data))
     (if (s/valid? command? edn)
-      (let [_ (db/append-event! (:test-id data)
-                                (:run-id data)
-                                (:command edn)
-                                "Start"
-                                (:parameters edn))
-            parameters (:parameters edn)
+      (let [parameters (:parameters edn)
             [data' output] (call (:command edn) (if (empty? parameters)
                                                   [@data]
                                                   [@data parameters]))]
-        (db/append-event! (:test-id data)
-                          (:run-id data)
-                          (:command edn)
-                          "End"
-                          (:parameters edn))
         (if (pure/error-state? (:state data'))
           {:status 400
            :headers {"Content-Type" "application/json; charset=utf-8"}
