@@ -81,20 +81,23 @@ class SqliteStorage(Storage):
         crashes = set()
 
         for run_id in config.run_ids:
-            prods = []
-            self.c.execute("""SELECT faults FROM faults
-                              WHERE test_id = (?)
-                              AND run_id = (?)""", (config.test_id, run_id))
-            for r in self.c:
-                for fault in eval(r['faults'])['faults']:
-                    # NOTE: eval introduces a space after the colon in a
-                    # dict, we need to remove this otherwise the variables
-                    # of the SAT expression will differ.
-                    prods.append(str(fault).replace(": ", ":"))
-                    logging.debug("fault: '%s'", str(fault).replace(": ", ":"))
-            previous_faults.append(prods)
+            # The last run id will not have any previous faults.
+            if run_id != config.run_ids[-1]:
+                prods = []
+                self.c.execute("""SELECT faults FROM faults
+                                  WHERE test_id = (?)
+                                  AND run_id = (?)""", (config.test_id, run_id))
+                for r in self.c:
+                    for fault in eval(r['faults'])['faults']:
+                        # NOTE: eval introduces a space after the colon in a
+                        # dict, we need to remove this otherwise the variables
+                        # of the SAT expression will differ.
+                        prods.append(str(fault).replace(": ", ":"))
+                        logging.debug("fault: '%s'", str(fault).replace(": ", ":"))
+                        previous_faults.append(prods)
 
             sums = []
+            logging.debug("previous_faults: %s", previous_faults)
             self.c.execute("""SELECT * FROM network_trace
                               WHERE test_id = (?)
                                 AND run_id = (?)
@@ -109,6 +112,7 @@ class SqliteStorage(Storage):
                     omission = ("{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}"
                                 % (r['from'], r['to'], r['at']))
                     if omission not in previous_faults:
+                        logging.debug("added: %s", omission)
                         sums.append(omission)
                 if config.max_crashes > 0:
                     crash = ("{'kind':'crash', 'from':'%s', 'at':%d}"
@@ -118,6 +122,7 @@ class SqliteStorage(Storage):
                         crashes.add(crash)
             potential_faults.append(sums)
 
+        logging.debug("potential_faults: %s", potential_faults)
         return Data(previous_faults, potential_faults, crashes)
 
     def store(self, event: Event):
@@ -133,19 +138,30 @@ def sanity_check(data):
     else:
         len_previous_faults = len(data.previous_faults)
 
+    logging.debug("data.previous_faults: %s (len: %d)",
+                  data.previous_faults, len_previous_faults)
+    logging.debug("data.potential_faults: %s (len: %d)",
+                  data.potential_faults, len(data.potential_faults) + 1)
+
     assert(len(data.potential_faults) == len_previous_faults + 1)
+
+    # previous_faults = [[oab1]]
+    # potential_faults = [[oab1, oac1], [oac1]]
+    # data.potential_faults[-1] + data.previous_faults[-1] = data.potential_faults[-2]
 
 def create_sat_formula(config, data):
     potential_faults = []
     for i, sum in enumerate(data.potential_faults):
+        logging.debug("i: %d", i)
         kept = z3.Bools(sum)
         logging.debug("kept: " + str(kept))
         drop = []
-        if data.previous_faults[i-1]:
+        if i != 0 and data.previous_faults[i-1]:
             drop = z3.Bools(data.previous_faults[i-1])
             logging.debug("drop: " + str(drop))
         if drop:
-            potential_faults.append(z3.Or(z3.Or(kept), z3.Not(z3.And(drop))))
+            potential_faults.append(z3.Or(z3.Or(kept),
+                                          z3.Not(z3.And(drop))))
         else:
             potential_faults.append(z3.Or(kept))
 
@@ -163,9 +179,14 @@ def sat_solve(formula):
     solver = z3.Solver()
     solver.add(formula)
     result = solver.check()
-    model = solver.model()
-    statistics = solver.statistics()
+    if result == z3.sat:
+        model = solver.model()
+        statistics = solver.statistics()
+    else:
+        model = None
+        statistics = None
     return (result, model, statistics)
+
 
 def order(d: dict) -> str:
     return("%s %s %s %d" % (d['kind'], d['from'], d.get('to', ""), d['at']))
