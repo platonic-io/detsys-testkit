@@ -24,7 +24,7 @@ func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	}
 	var srv http.Server
 	lib.Setup(func() {
-		executor.Deploy(&srv, testId, eventLog, topology, marshaler)
+		executor.Deploy(&srv, eventLog, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)

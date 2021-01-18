@@ -14,7 +14,20 @@ import (
 )
 
 type TestId struct {
-	TestId int `json:"test-id"`
+	TestId int
+}
+
+func (testId *TestId) UnmarshalJSON(b []byte) error {
+	var i int
+	if err := json.Unmarshal(b, &i); err != nil {
+		return err
+	}
+	testId.TestId = i
+	return nil
+}
+
+func (testId TestId) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.Itoa(testId.TestId)), nil
 }
 
 const schedulerUrl string = "http://localhost:3000"
