@@ -222,11 +222,14 @@
                                        :error-cannot-execute-in-this-state))))
           ;; TODO(stevan): handle case when executor-id doesn't exist... Perhaps
           ;; this should be checked when commands are enqueued?
+          meta {:test-id (:test-id data')
+                :run-id (:run-id data')
+                :logical-time (:logical-clock data')}
           executor-id (get (:topology data') (:to entry))]
       (assert executor-id (str "Target `" (:to entry) "' isn't in topology."))
       [data' {:url executor-id
               :timestamp (:at entry)
-              :body entry
+              :body (assoc entry :meta meta)
               :drop? (cond
                        (should-drop? data' entry) :drop
                        entry-from-client-with-current-request :delay

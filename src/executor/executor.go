@@ -18,10 +18,10 @@ func jsonError(s string) string {
 	return fmt.Sprintf("{\"error\":\"%s\"}", s)
 }
 
-type ComponentUpdate = func(component string, at time.Time)
+type ComponentUpdate = func(component string, at time.Time) // TODO(danne) Add lib.MetaInfo here
 type Topology = map[string]lib.Reactor
 
-func handler(db *sql.DB, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
+func handler(db *sql.DB, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "POST" {
@@ -41,12 +41,11 @@ func handler(db *sql.DB, testId lib.TestId, eventLog lib.EventLogEmitter, topolo
 			panic(err)
 		}
 		cu(sev.To, sev.At)
-		// TODO(danne) these should also be events
 		heapBefore := dumpHeapJson(topology[sev.To])
 		oevs := topology[sev.To].Receive(sev.At, sev.From, sev.Event)
 		heapAfter := dumpHeapJson(topology[sev.To])
 		heapDiff := jsonDiff(heapBefore, heapAfter)
-		appendHeapTrace(db, testId, sev.To, heapDiff, sev.At)
+		appendHeapTrace(db, sev.Meta.TestId, sev.Meta.RunId, sev.To, heapDiff, sev.At)
 		bs := lib.MarshalUnscheduledEvents(sev.To, oevs)
 		fmt.Fprint(w, string(bs))
 	}
@@ -80,10 +79,11 @@ func handleTick(eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler
 	}
 }
 
-func handleTimer(db *sql.DB, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
+func handleTimer(db *sql.DB, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	type TimerRequest struct {
-		Component string    `json:"to"`
-		At        time.Time `json:"at"`
+		Component string       `json:"to"`
+		At        time.Time    `json:"at"`
+		Meta      lib.MetaInfo `json:"meta"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +108,7 @@ func handleTimer(db *sql.DB, testId lib.TestId, eventLog lib.EventLogEmitter, to
 		heapAfter := dumpHeapJson(topology[req.Component])
 		heapDiff := jsonDiff(heapBefore, heapAfter)
 
-		appendHeapTrace(db, testId, req.Component, heapDiff, req.At)
+		appendHeapTrace(db, req.Meta.TestId, req.Meta.RunId, req.Component, heapDiff, req.At)
 		bs := lib.MarshalUnscheduledEvents(req.Component, oevs)
 		fmt.Fprint(w, string(bs))
 	}
@@ -145,15 +145,15 @@ func handleInits(topology Topology, m lib.Marshaler) http.HandlerFunc {
 	}
 }
 
-func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) {
+func DeployWithComponentUpdate(srv *http.Server, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) {
 	mux := http.NewServeMux()
 
 	db := lib.OpenDB()
 	defer db.Close()
 
-	mux.HandleFunc("/api/v1/event", handler(db, testId, eventLog, topology, m, cu))
+	mux.HandleFunc("/api/v1/event", handler(db, eventLog, topology, m, cu))
 	mux.HandleFunc("/api/v1/tick", handleTick(eventLog, topology, m, cu))
-	mux.HandleFunc("/api/v1/timer", handleTimer(db, testId, eventLog, topology, m, cu))
+	mux.HandleFunc("/api/v1/timer", handleTimer(db, eventLog, topology, m, cu))
 	mux.HandleFunc("/api/v1/inits", handleInits(topology, m))
 
 	srv.Addr = ":3001"
@@ -163,8 +163,8 @@ func DeployWithComponentUpdate(srv *http.Server, testId lib.TestId, eventLog lib
 	}
 }
 
-func Deploy(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler) {
-	DeployWithComponentUpdate(srv, testId, eventLog, topology, m, func(string, time.Time) {})
+func Deploy(srv *http.Server, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler) {
+	DeployWithComponentUpdate(srv, eventLog, topology, m, func(string, time.Time) {})
 }
 
 func topologyFromDeployment(testId lib.TestId, constructor func(string) lib.Reactor) (Topology, error) {
@@ -208,7 +208,7 @@ func DeployRaw(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter
 		panic(err)
 	}
 	fmt.Printf("Deploying topology: %+v\n", topologyCooked)
-	Deploy(srv, testId, eventLog, topologyCooked, m)
+	Deploy(srv, eventLog, topologyCooked, m)
 }
 
 type LogWriter struct {
@@ -301,7 +301,7 @@ func NewExecutor(testId lib.TestId, marshaler lib.Marshaler, logger *zap.Logger,
 }
 
 func (e *Executor) Deploy(srv *http.Server) {
-	DeployWithComponentUpdate(srv, e.testId, e.eventLog, e.topology, e.marshaler, func(name string, at time.Time) {
+	DeployWithComponentUpdate(srv, e.eventLog, e.topology, e.marshaler, func(name string, at time.Time) {
 		buffer, ok := e.buffers[name]
 
 		if ok {

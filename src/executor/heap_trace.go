@@ -26,20 +26,7 @@ func jsonDiff(original []byte, modified []byte) []byte {
 	return diff
 }
 
-func appendHeapTrace(db *sql.DB, testId lib.TestId, component string, diff []byte, at time.Time) {
-	var runId lib.RunId
-	{
-		stmt, err := db.Prepare("SELECT MAX(id) FROM run WHERE test_id = ?")
-		if err != nil {
-			panic(err)
-		}
-		defer stmt.Close()
-
-		if err := stmt.QueryRow(testId.TestId).Scan(&runId.RunId); err != nil {
-			panic(err)
-		}
-	}
-
+func appendHeapTrace(db *sql.DB, testId lib.TestId, runId lib.RunId, component string, diff []byte, at time.Time) {
 	stmt, err := db.Prepare(`INSERT INTO heap_trace(test_id, run_id, id, component, heap, at)
                                 VALUES(?, ?,
                                   (SELECT IFNULL(MAX(id), -1) + 1 FROM heap_trace

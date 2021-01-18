@@ -25,11 +25,18 @@ type Marshaler interface {
 // ---------------------------------------------------------------------
 // Types
 
+type MetaInfo struct {
+	TestId      TestId `json:"test-id"`
+	RunId       RunId  `json:"run-id"`
+	LogicalTime int    `json:"logical-time"`
+}
+
 type ScheduledEvent struct {
 	At    time.Time `json:"at"`
 	From  string    `json:"from"`
 	To    string    `json:"to"`
 	Event InEvent   `json:"event"`
+	Meta  MetaInfo  `json:"meta"`
 }
 
 type InEvent interface{ InEvent() }

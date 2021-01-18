@@ -3,11 +3,25 @@ package lib
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 )
 
 type RunId struct {
-	RunId int `json:"run-id"`
+	RunId int
+}
+
+func (runId *RunId) UnmarshalJSON(b []byte) error {
+	var i int
+	if err := json.Unmarshal(b, &i); err != nil {
+		return err
+	}
+	runId.RunId = i
+	return nil
+}
+
+func (runId RunId) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.Itoa(runId.RunId)), nil
 }
 
 type QueueSize struct {
@@ -20,7 +34,9 @@ type Seed struct {
 
 func LoadTest(testId TestId) QueueSize {
 	var queueSize QueueSize
-	PostParse("load-test!", testId, &queueSize)
+	PostParse("load-test!", struct {
+		TestId TestId `json:"test-id"`
+	}{testId}, &queueSize)
 	return queueSize
 }
 
@@ -39,9 +55,13 @@ func SetSeed(seed Seed) {
 }
 
 func CreateRun(testId TestId) RunId {
-	var runId RunId
-	PostParse("create-run!", testId, &runId)
-	return runId
+	var runId struct {
+		RunId RunId `json:"run-id"`
+	}
+	PostParse("create-run!", struct {
+		TestId TestId `json:"test-id"`
+	}{testId}, &runId)
+	return runId.RunId
 }
 
 func InjectFaults(faults Faults) {
