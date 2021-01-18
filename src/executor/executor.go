@@ -18,8 +18,19 @@ func jsonError(s string) string {
 	return fmt.Sprintf("{\"error\":\"%s\"}", s)
 }
 
-type ComponentUpdate = func(component string, at time.Time) // TODO(danne) Add lib.MetaInfo here
+type StepInfo struct {
+	LogLines [][]byte
+}
+
+type ComponentUpdate = func(component string) StepInfo
 type Topology = map[string]lib.Reactor
+
+func flushLog(si StepInfo, component string, at time.Time, mi lib.MetaInfo) {
+	// Inefficient for now, but this will be removed later
+	for _, p := range si.LogLines {
+		lib.AddLogStamp(mi.TestId, mi.RunId, component, p, at)
+	}
+}
 
 func handler(db *sql.DB, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -40,12 +51,13 @@ func handler(db *sql.DB, eventLog lib.EventLogEmitter, topology Topology, m lib.
 		if err := lib.UnmarshalScheduledEvent(m, body, &sev); err != nil {
 			panic(err)
 		}
-		cu(sev.To, sev.At)
+		si := cu(sev.To)
 		heapBefore := dumpHeapJson(topology[sev.To])
 		oevs := topology[sev.To].Receive(sev.At, sev.From, sev.Event)
 		heapAfter := dumpHeapJson(topology[sev.To])
 		heapDiff := jsonDiff(heapBefore, heapAfter)
 		appendHeapTrace(db, sev.Meta.TestId, sev.Meta.RunId, sev.To, heapDiff, sev.At)
+		flushLog(si, sev.To, sev.At, sev.Meta)
 		bs := lib.MarshalUnscheduledEvents(sev.To, oevs)
 		fmt.Fprint(w, string(bs))
 	}
@@ -72,7 +84,7 @@ func handleTick(eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler
 		if err := json.Unmarshal(body, &req); err != nil {
 			panic(err)
 		}
-		cu(req.Component, req.At)
+		cu(req.Component) // we should flushLog, but we should also just remove tick
 		oevs := topology[req.Component].Tick(req.At)
 		bs := lib.MarshalUnscheduledEvents(req.Component, oevs)
 		fmt.Fprint(w, string(bs))
@@ -102,13 +114,14 @@ func handleTimer(db *sql.DB, eventLog lib.EventLogEmitter, topology Topology, m 
 		if err := json.Unmarshal(body, &req); err != nil {
 			panic(err)
 		}
-		cu(req.Component, req.At)
+		si := cu(req.Component)
 		heapBefore := dumpHeapJson(topology[req.Component])
 		oevs := topology[req.Component].Timer(req.At)
 		heapAfter := dumpHeapJson(topology[req.Component])
 		heapDiff := jsonDiff(heapBefore, heapAfter)
 
 		appendHeapTrace(db, req.Meta.TestId, req.Meta.RunId, req.Component, heapDiff, req.At)
+		flushLog(si, req.Component, req.At, req.Meta)
 		bs := lib.MarshalUnscheduledEvents(req.Component, oevs)
 		fmt.Fprint(w, string(bs))
 	}
@@ -164,7 +177,7 @@ func DeployWithComponentUpdate(srv *http.Server, eventLog lib.EventLogEmitter, t
 }
 
 func Deploy(srv *http.Server, eventLog lib.EventLogEmitter, topology Topology, m lib.Marshaler) {
-	DeployWithComponentUpdate(srv, eventLog, topology, m, func(string, time.Time) {})
+	DeployWithComponentUpdate(srv, eventLog, topology, m, func(string) StepInfo { return StepInfo{} })
 }
 
 func topologyFromDeployment(testId lib.TestId, constructor func(string) lib.Reactor) (Topology, error) {
@@ -212,10 +225,7 @@ func DeployRaw(srv *http.Server, testId lib.TestId, eventLog lib.EventLogEmitter
 }
 
 type LogWriter struct {
-	testId    lib.TestId
-	runId     lib.RunId
-	component string
-	at        time.Time
+	current [][]byte
 }
 
 func (_ *LogWriter) Sync() error {
@@ -225,7 +235,7 @@ func (_ *LogWriter) Sync() error {
 func (lw *LogWriter) Write(p []byte) (n int, err error) {
 	if len(p) > 0 {
 		// we remove last byte since it is an newline
-		lib.AddLogStamp(lw.testId, lw.runId, lw.component, p[:len(p)-1], lw.at)
+		lw.current = append(lw.current, p[:len(p)-1])
 	}
 	return len(p), nil
 }
@@ -257,9 +267,6 @@ func (e *Executor) ReactorTopology() Topology {
 
 func (e *Executor) SetTestId(testId lib.TestId) {
 	e.testId = testId
-	for _, buffer := range e.buffers {
-		buffer.testId = testId
-	}
 }
 
 func NewExecutor(testId lib.TestId, marshaler lib.Marshaler, logger *zap.Logger, components []string, constructor func(name string, logger *zap.Logger) lib.Reactor) *Executor {
@@ -270,10 +277,7 @@ func NewExecutor(testId lib.TestId, marshaler lib.Marshaler, logger *zap.Logger,
 
 	for _, component := range components {
 		buffer := &LogWriter{
-			testId:    testId,
-			runId:     runId,
-			component: component,
-			at:        time.Time{},
+			current: [][]byte{},
 		}
 		topology[component] = constructor(component, buffer.AppendToLogger(logger))
 		buffers[component] = buffer
@@ -301,13 +305,19 @@ func NewExecutor(testId lib.TestId, marshaler lib.Marshaler, logger *zap.Logger,
 }
 
 func (e *Executor) Deploy(srv *http.Server) {
-	DeployWithComponentUpdate(srv, e.eventLog, e.topology, e.marshaler, func(name string, at time.Time) {
+	DeployWithComponentUpdate(srv, e.eventLog, e.topology, e.marshaler, func(name string) StepInfo {
 		buffer, ok := e.buffers[name]
-
+		logs := make([][]byte, 0)
 		if ok {
-			buffer.at = at
+			for _, l := range buffer.current {
+				logs = append(logs, l)
+			}
+			buffer.current = make([][]byte, 0)
 		} else {
 			panic(fmt.Sprintf("Couldn't find buffer for %s", name))
+		}
+		return StepInfo{
+			LogLines: logs,
 		}
 	})
 }
@@ -319,8 +329,6 @@ func (e *Executor) Register() {
 func (e *Executor) Reset(runId lib.RunId) {
 	e.runId = runId
 	for c, b := range e.buffers {
-		b.runId = runId
-		b.at = time.Time{}
 		e.topology[c] = e.constructor(c, b.AppendToLogger(e.logger))
 	}
 }
