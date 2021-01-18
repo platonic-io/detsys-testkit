@@ -16,6 +16,7 @@ func UnmarshalScheduledEvent(m Marshaler, input []byte, output *ScheduledEvent) 
 		Kind  string          `json:"kind"`
 		Event string          `json:"event"`
 		Args  json.RawMessage `json:"args"`
+		Meta  MetaInfo        `json:"meta"`
 	}
 	if err := json.Unmarshal(input, &s); err != nil {
 		return err
@@ -30,6 +31,7 @@ func UnmarshalScheduledEvent(m Marshaler, input []byte, output *ScheduledEvent) 
 		From:  s.From,
 		To:    s.To,
 		Event: iev,
+		Meta:  s.Meta,
 	}
 	return nil
 }
