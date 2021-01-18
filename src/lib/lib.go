@@ -32,11 +32,11 @@ type MetaInfo struct {
 }
 
 type ScheduledEvent struct {
-	At    time.Time `json:"at"`
-	From  string    `json:"from"`
-	To    string    `json:"to"`
-	Event InEvent   `json:"event"`
-	Meta  MetaInfo  `json:"meta"`
+	At    time.Time
+	From  string
+	To    string
+	Event InEvent
+	Meta  MetaInfo
 }
 
 type InEvent interface{ InEvent() }
