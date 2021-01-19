@@ -17,15 +17,6 @@ type ExecutionStepEvent struct {
 	HeapDiff      json.RawMessage
 }
 
-// This should be removed when are not using the old events anymore
-func emitOldEvents(db *sql.DB, event ExecutionStepEvent) {
-	appendHeapTrace(db, event.Meta.TestId, event.Meta.RunId, event.Reactor, event.HeapDiff, event.SimulatedTime)
-
-	for _, p := range event.LogLines {
-		lib.AddLogStamp(db, event.Meta.TestId, event.Meta.RunId, event.Reactor, []byte(p), event.SimulatedTime)
-	}
-}
-
 func EmitExecutionStepEvent(db *sql.DB, event ExecutionStepEvent) {
 	metaBlob, err := json.Marshal(struct {
 		Component string     `json:"component"`
@@ -68,7 +59,4 @@ func EmitExecutionStepEvent(db *sql.DB, event ExecutionStepEvent) {
 	if err != nil {
 		panic(err)
 	}
-
-	// Remove when we no longer use old events
-	emitOldEvents(db, event)
 }
