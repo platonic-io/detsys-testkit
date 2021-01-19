@@ -31,7 +31,7 @@ var diagram = tview.NewTextView().
 	SetDynamicColors(true)
 var w2 = tview.ANSIWriter(diagram)
 
-var componentsWidget = tview.NewList()
+var reactorsWidget = tview.NewList()
 
 var messageView = tview.NewTextView().
 	SetWrap(false).
@@ -44,21 +44,21 @@ var logView = tview.NewTextView().
 var wLogView = tview.ANSIWriter(logView)
 
 type DebugApplication struct {
-	testId          lib.TestId
-	runId           lib.RunId
-	heaps           []map[string][]byte
-	diagrams        [][]byte
-	events          []debugger.NetworkEvent
-	components      []string
-	activeRow       int // should probably be logic time
-	activeComponent int
+	testId        lib.TestId
+	runId         lib.RunId
+	heaps         []map[string][]byte
+	diagrams      [][]byte
+	events        []debugger.NetworkEvent
+	reactors      []string
+	activeRow     int // should probably be logic time
+	activeReactor int
 }
 
-func (da *DebugApplication) setComponent(component string) {
-	for i, x := range da.components {
-		if x == component {
-			da.activeComponent = i
-			componentsWidget.SetCurrentItem(i)
+func (da *DebugApplication) setReactor(reactor string) {
+	for i, x := range da.reactors {
+		if x == reactor {
+			da.activeReactor = i
+			reactorsWidget.SetCurrentItem(i)
 			break
 		}
 	}
@@ -70,7 +70,7 @@ func (da *DebugApplication) setRow(row int) {
 
 	to := da.events[nrow-1].To
 
-	da.setComponent(to)
+	da.setReactor(to)
 }
 
 func (da *DebugApplication) redraw() {
@@ -80,9 +80,9 @@ func (da *DebugApplication) redraw() {
 	logView.Clear()
 	row := da.activeRow
 	fmt.Fprintf(w2, "%s", string(da.diagrams[row-1]))
-	component := da.components[da.activeComponent]
-	old := da.heaps[row-1][component]
-	new := da.heaps[min(row, len(da.heaps))][component]
+	reactor := da.reactors[da.activeReactor]
+	old := da.heaps[row-1][reactor]
+	new := da.heaps[min(row, len(da.heaps))][reactor]
 
 	opts := jsondiff.DefaultConsoleOptions()
 	opts.Indent = "  "
@@ -92,7 +92,7 @@ func (da *DebugApplication) redraw() {
 	event := da.events[row-1]
 	fmt.Fprintf(wMessageView, "%s", string(event.Args))
 
-	logs := debugger.GetLogMessages(da.testId, da.runId, component, event.At)
+	logs := debugger.GetLogMessages(da.testId, da.runId, reactor, event.At)
 	for _, log := range logs {
 		fmt.Fprintf(wLogView, "%s\n", string(log))
 	}
@@ -103,30 +103,30 @@ func MakeDebugApplication(testId lib.TestId, runId lib.RunId) *DebugApplication 
 	events := debugger.GetNetworkTrace(testId, runId)
 	diagrams := debugger.SequenceDiagrams(testId, runId)
 
-	components := make([]string, 0, len(heaps[0])) // lol
-	for component := range heaps[0] {
-		components = append(components, component)
+	reactors := make([]string, 0, len(heaps[0]))
+	for reactor := range heaps[0] {
+		reactors = append(reactors, reactor)
 	}
 
 	to := events[0].To
 	ac := 0
-	for i, x := range components {
+	for i, x := range reactors {
 		if x == to {
 			ac = i
 			break
 		}
 	}
 
-	sort.Strings(components)
+	sort.Strings(reactors)
 	return &DebugApplication{
-		testId:          testId,
-		runId:           runId,
-		heaps:           heaps,
-		diagrams:        diagrams,
-		events:          events,
-		components:      components,
-		activeRow:       1,
-		activeComponent: ac,
+		testId:        testId,
+		runId:         runId,
+		heaps:         heaps,
+		diagrams:      diagrams,
+		events:        events,
+		reactors:      reactors,
+		activeRow:     1,
+		activeReactor: ac,
 	}
 }
 
@@ -160,10 +160,10 @@ func main() {
 
 	da := MakeDebugApplication(lib.TestId{testId}, lib.RunId{runId})
 
-	textView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Component state")
+	textView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Reactor State")
 	messageView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Current Message")
-	diagram.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Sequence diagram")
-	logView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Log")
+	diagram.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Sequence Diagram")
+	logView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Reactor Log")
 
 	da.redraw()
 
@@ -207,23 +207,23 @@ func main() {
 			da.redraw()
 		})
 
-	componentsWidget.SetChangedFunc(func(index int, _mainText string, _secondaryText string, shortcut rune) {
-		da.activeComponent = index
+	reactorsWidget.SetChangedFunc(func(index int, _mainText string, _secondaryText string, shortcut rune) {
+		da.activeReactor = index
 		da.redraw()
 	})
 
-	for i, c := range da.components {
+	for i, c := range da.reactors {
 		theRune := ' '
 
 		if i < 9 {
 			theRune = rune(i + 49) // 48 is '0', but we skip that one
 		}
-		componentsWidget.AddItem(c, "", theRune, nil)
+		reactorsWidget.AddItem(c, "", theRune, nil)
 	}
 
 	stateWidget := tview.NewFlex().
 		SetDirection(tview.FlexColumn).
-		AddItem(componentsWidget, 10, 0, false).
+		AddItem(reactorsWidget, 10, 0, false).
 		AddItem(textView, 0, 4, false)
 
 	layout := tview.NewFlex().
