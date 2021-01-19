@@ -17,21 +17,15 @@ func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 		"C": NewNode(round, "B"),
 	}
 	marshaler := NewMarshaler()
-	eventLog := lib.EventLogEmitter{
-		Component: "Broadcast test",
-		TestId:    &testId,
-		RunId:     nil,
-	}
 	var srv http.Server
 	lib.Setup(func() {
-		executor.Deploy(&srv, eventLog, topology, marshaler)
+		executor.Deploy(&srv, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	lib.Register(testId)
 	log.Printf("Registered executor")
 	runId := lib.CreateRun(testId)
-	eventLog.RunId = &runId
 	log.Printf("Created run id: %v", runId)
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)
