@@ -4,7 +4,7 @@ import logging
 import os
 import sqlite3
 import z3
-from typing import (List, Set)
+from typing import (List, Set, Dict)
 from pkg_resources import get_distribution
 
 class Config:
@@ -64,6 +64,11 @@ class Storage:
     def load(self, config: Config) -> Data:
         pass
 
+    def load_previous_faults(self, config: Config) -> List[List[Dict]]:
+        pass
+    def load_potential_faults(self, config: Config) -> List[List[Dict]]:
+        pass
+
     def store(self, event: Event):
         pass
 
@@ -74,6 +79,32 @@ class SqliteStorage(Storage):
         self.conn = sqlite3.connect(self.db)
         self.conn.row_factory = sqlite3.Row
         self.c = self.conn.cursor()
+
+    def load_previous_faults(self, config: Config) -> List[List[Dict]]:
+        self.c.execute("""SELECT faults FROM faults
+                          WHERE test_id = '%s'
+                          ORDER BY run_id ASC""" % config.test_id)
+
+        return [ json.loads(row["faults"]) for row in self.c.fetchall() ]
+
+    def load_potential_faults(self, config: Config) -> List[List[Dict]]:
+        potential_faults: List[List[Dict]] = [ [] for _ in range(len(config.run_ids)) ]
+        self.c.execute("""SELECT run_id,`from`,`to`,at FROM network_trace
+                          WHERE test_id = %d
+                          AND kind <> 'timer'
+                          AND NOT (`from` LIKE 'client:%%')
+                          AND NOT (`to`   LIKE 'client:%%')
+                          ORDER BY run_id ASC""" % config.test_id)
+        i = 0
+        run_id = config.run_ids[0]
+        for row in self.c.fetchall():
+            if row["run_id"] != run_id:
+                run_id = row["run_id"]
+                i += 1
+            potential_faults[i].append(
+                {"from": row["from"], "to": row["to"], "at": row["at"]})
+
+        return potential_faults
 
     def load(self, config: Config) -> Data:
         previous_faults = []

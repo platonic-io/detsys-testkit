@@ -9,7 +9,7 @@ let
     pythonPackages = python38Packages;
     gitignoreSource = gitignoreSource;
   };
-  pythonEnv = python38.withPackages (ps: [ ldfi ]);
+  pythonEnv = python38.withPackages (ps: [ ldfi ps.pytest ]);
 in
 
 mkShell {
