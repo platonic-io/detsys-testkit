@@ -54,27 +54,28 @@ def test_load_potential_faults(caplog):
     # TODO(stevan): add contract test in db component saying ldfi expects the
     # following table and fields.
     storage.c.execute("""CREATE TABLE IF NOT EXISTS network_trace (
-                           test_id  INT  NOT NULL,
-                           run_id   INT  NOT NULL,
-                           kind     TEXT NOT NULL,
-                           `from`   TEXT NOT NULL,
-                           `to`     TEXT NOT NULL,
-                           at       INT  NOT NULL)""")
+                           test_id           INT  NOT NULL,
+                           run_id            INT  NOT NULL,
+                           kind              TEXT NOT NULL,
+                           `from`            TEXT NOT NULL,
+                           `to`              TEXT NOT NULL,
+                           at                INT  NOT NULL,
+                           sent_logical_time INT  NOT NULL)""")
     storage.conn.commit()
     config = ldfi.Config(1, [0, 1], 2, 0)
     assert storage.load_potential_faults(config) == [[], []]
 
-    storage.c.execute("INSERT INTO network_trace VALUES(?, ?, ?, ?, ?, ?)",
-                      (1, 0, "message", "A", "B", 1))
-    storage.c.execute("INSERT INTO network_trace VALUES(?, ?, ?, ?, ?, ?)",
-                      (1, 0, "message", "A", "C", 1))
-    storage.c.execute("INSERT INTO network_trace VALUES(?, ?, ?, ?, ?, ?)",
-                      (1, 1, "message", "A", "C", 2))
+    storage.c.execute("INSERT INTO network_trace VALUES(?, ?, ?, ?, ?, ?, ?)",
+                      (1, 0, "message", "A", "B", 1, 1))
+    storage.c.execute("INSERT INTO network_trace VALUES(?, ?, ?, ?, ?, ?, ?)",
+                      (1, 0, "message", "A", "C", 1, 1))
+    storage.c.execute("INSERT INTO network_trace VALUES(?, ?, ?, ?, ?, ?, ?)",
+                      (1, 1, "message", "A", "C", 2, 3))
     storage.conn.commit()
     assert storage.load_potential_faults(config) == [
-        [{"from": "A", "to": "B", "at": 1},
-         {"from": "A", "to": "C", "at": 1}],
-        [{"from": "A", "to": "C", "at": 2}]]
+        [{"from": "A", "to": "B", "at": 1, "sent_logical_time": 1},
+         {"from": "A", "to": "C", "at": 1, "sent_logical_time": 1}],
+        [{"from": "A", "to": "C", "at": 2, "sent_logical_time": 3}]]
 
 def test_create_formula(caplog):
     caplog.set_level(logging.DEBUG)

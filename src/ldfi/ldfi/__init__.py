@@ -89,7 +89,7 @@ class SqliteStorage(Storage):
 
     def load_potential_faults(self, config: Config) -> List[List[Dict]]:
         potential_faults: List[List[Dict]] = [ [] for _ in range(len(config.run_ids)) ]
-        self.c.execute("""SELECT run_id,`from`,`to`,at FROM network_trace
+        self.c.execute("""SELECT run_id,`from`,`to`,at,sent_logical_time FROM network_trace
                           WHERE test_id = %d
                           AND kind <> 'timer'
                           AND NOT (`from` LIKE 'client:%%')
@@ -102,7 +102,10 @@ class SqliteStorage(Storage):
                 run_id = row["run_id"]
                 i += 1
             potential_faults[i].append(
-                {"from": row["from"], "to": row["to"], "at": row["at"]})
+                {"from": row["from"],
+                 "to": row["to"],
+                 "at": row["at"],
+                 "sent_logical_time": row["sent_logical_time"]})
 
         return potential_faults
 
@@ -179,6 +182,58 @@ def sanity_check(data):
     # previous_faults = [[oab1]]
     # potential_faults = [[oab1, oac1], [oac1]]
     # data.potential_faults[-1] + data.previous_faults[-1] = data.potential_faults[-2]
+
+def create_sat_formula2(config, previous_faults, potential_faults):
+    crashes = set()
+    relevant_faults = []
+    set_previous_faults = set(previous_faults)
+
+    for faults in potential_faults:
+        relevent_faults_in_run = []
+        for fault in faults:
+            if fault['at'] < config.eff:
+                omission = {'kind': 'omission',
+                            'from': fault['from'],
+                            'to': fault['to'],
+                            'at': fault['at']}
+                if omission not in set_previous_faults:
+                    logging.debug("found relevant fault: %s", omission)
+                    relevant_faults_in_run.append(omission)
+
+                if config.max_crashes > 0:
+                    crash = {'kind': 'crash',
+                             'from': fault['from'],
+                             'at': fault['sent_logical_time']}
+                if crash not in set_previous_faults:
+                    relevant_faults_in_run.append(crash)
+                    crashes.add(crash)
+        relevant_faults.append(relevant_faults_in_run)
+
+    formula_for_run = []
+
+    for i, relevant_faults_in_run in enumerate(relevant_faults):
+        logging.debug("i: %d", i)
+        kept = z3.Bools(relevent_faults_in_run)
+        logging.debug("kept: " + str(kept))
+        drop = []
+        if i != 0 and previous_faults[i-1]:
+            drop = z3.Bools(previous_faults[i-1])
+            logging.debug("drop: " + str(drop))
+        if drop:
+            formula_for_run.append(z3.Or(z3.Or(kept),
+                                         z3.Not(z3.And(drop))))
+        else:
+            formula_for_run.append(z3.Or(kept))
+
+    formula = z3.And(formula_for_run)
+
+    crashes = z3.Bools(list(data.crashes))
+
+    if crashes:
+        crashes.append(config.max_crashes)
+        formula = z3.And(formula, z3.AtMost(crashes))
+    logging.debug("formula: %s", str(formula))
+    return formula
 
 def create_sat_formula(config, data):
     potential_faults = []
