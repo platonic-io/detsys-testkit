@@ -240,8 +240,12 @@ func (_ *LogWriter) Sync() error {
 
 func (lw *LogWriter) Write(p []byte) (n int, err error) {
 	if len(p) > 0 {
+		// make a copy of the line so that it doesn't get changed later
+		line := make([]byte, len(p))
+		copy(line, p)
+
 		// we remove last byte since it is an newline
-		lw.current = append(lw.current, p[:len(p)-1])
+		lw.current = append(lw.current, line[:len(line)-1])
 	}
 	return len(p), nil
 }
@@ -300,18 +304,18 @@ func NewExecutor(testId lib.TestId, marshaler lib.Marshaler, logger *zap.Logger,
 func (e *Executor) Deploy(srv *http.Server) {
 	DeployWithComponentUpdate(srv, e.topology, e.marshaler, func(name string) StepInfo {
 		buffer, ok := e.buffers[name]
-		logs := make([]string, 0)
 		if ok {
+			logs := make([]string, 0, len(buffer.current))
 			for _, l := range buffer.current {
 				logs = append(logs, string(l))
 			}
 			buffer.current = make([][]byte, 0)
-		} else {
-			panic(fmt.Sprintf("Couldn't find buffer for %s", name))
+			return StepInfo{
+				LogLines: logs,
+			}
 		}
-		return StepInfo{
-			LogLines: logs,
-		}
+
+		panic(fmt.Sprintf("Couldn't find buffer for %s", name))
 	})
 }
 

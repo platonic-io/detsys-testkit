@@ -17,8 +17,8 @@ import (
 )
 
 type HeapDiff struct {
-	Component string
-	Diff      []byte
+	Reactor string
+	Diff    []byte
 }
 
 func GetInitHeap(testId lib.TestId) []HeapDiff {
@@ -29,8 +29,8 @@ func GetInitHeap(testId lib.TestId) []HeapDiff {
 }
 
 func GetHeapTrace(testId lib.TestId, runId lib.RunId) []HeapDiff {
-	query := fmt.Sprintf(`SELECT component,heap
-                              FROM heap_trace
+	query := fmt.Sprintf(`SELECT reactor,heap_diff
+                              FROM execution_step
                               WHERE test_id = %d
                                 AND run_id = %d`, testId.TestId, runId.RunId)
 	return helper(query)
@@ -50,7 +50,7 @@ func helper(query string) []HeapDiff {
 	var diffs []HeapDiff
 	for rows.Next() {
 		diff := HeapDiff{}
-		err := rows.Scan(&diff.Component, &diff.Diff)
+		err := rows.Scan(&diff.Reactor, &diff.Diff)
 		if err != nil {
 			panic(err)
 		}
@@ -123,19 +123,19 @@ func traceHeap(testId lib.TestId, runId lib.RunId) {
 	heap := make(map[string][]byte)
 
 	for _, init := range inits {
-		heap[init.Component] = []byte(init.Diff)
-		fmt.Printf("%s %s\n", init.Component, PrettyJson(heap[init.Component]))
+		heap[init.Reactor] = []byte(init.Diff)
+		fmt.Printf("%s %s\n", init.Reactor, PrettyJson(heap[init.Reactor]))
 	}
 	for i, change := range changes {
 		fmt.Printf("\n%s === %s %s ===> %s\n\n", network[i].From, network[i].Message,
 			string(network[i].Args), network[i].To)
-		old := heap[change.Component]
+		old := heap[change.Reactor]
 		new := applyDiff(old, change.Diff)
-		heap[change.Component] = []byte(new)
+		heap[change.Reactor] = []byte(new)
 		opts := jsondiff.DefaultConsoleOptions()
 		opts.Indent = "  "
 		_, strdiff := jsondiff.Compare(old, new, &opts)
-		fmt.Printf("%s %s\n", change.Component, strdiff)
+		fmt.Printf("%s %s\n", change.Reactor, strdiff)
 	}
 }
 
@@ -155,7 +155,7 @@ func Heaps(testId lib.TestId, runId lib.RunId) []map[string][]byte {
 
 	m := make(map[string][]byte)
 	for _, init := range inits {
-		m[init.Component] = []byte(init.Diff)
+		m[init.Reactor] = []byte(init.Diff)
 	}
 	heaps[0] = m
 
@@ -168,14 +168,14 @@ func Heaps(testId lib.TestId, runId lib.RunId) []map[string][]byte {
 		// dropped.
 		j := Max(0, i-dropped)
 
-		old := heaps[i][changes[j].Component]
+		old := heaps[i][changes[j].Reactor]
 		new := applyDiff(old, changes[j].Diff)
 		m2 := make(map[string][]byte)
-		m2[changes[j].Component] = []byte(new)
+		m2[changes[j].Reactor] = []byte(new)
 		heaps[i+1] = m2
-		for component, heap := range heaps[i] {
-			if component != changes[j].Component {
-				heaps[i+1][component] = heap
+		for reactor, heap := range heaps[i] {
+			if reactor != changes[j].Reactor {
+				heaps[i+1][reactor] = heap
 			}
 		}
 	}
@@ -252,35 +252,41 @@ func SequenceDiagrams(testId lib.TestId, runId lib.RunId) [][]byte {
 	return diagrams
 }
 
-func GetLogMessages(testId lib.TestId, runId lib.RunId, component string, at int) [][]byte {
+func GetLogMessages(testId lib.TestId, runId lib.RunId, reactor string, at int) [][]byte {
 	db := lib.OpenDB()
 	defer db.Close()
 
-	rows, err := db.Query(`SELECT log
-                               FROM log_trace
-                               INNER JOIN time_mapping
-                                 ON log_trace.test_id = time_mapping.test_id
-                                 AND log_trace.run_id = time_mapping.run_id
-                                 AND log_trace.simulated_time = time_mapping.simulated_time
-                               WHERE log_trace.test_id = ?
-                               AND   log_trace.run_id = ?
-                               AND   log_trace.component = ?
-                               AND   time_mapping.logical_time = ? `,
-		testId.TestId, runId.RunId, component, at)
+	rows, err := db.Query(`SELECT log_lines
+                               FROM execution_step
+                               WHERE test_id = ?
+                               AND   run_id = ?
+                               AND   reactor = ?
+                               AND   logical_time = ? `,
+		testId.TestId, runId.RunId, reactor, at)
 	if err != nil {
 		panic(err)
 	}
 	defer rows.Close()
 	var logs [][]byte
 	for rows.Next() {
-		var log []byte
-		err := rows.Scan(&log)
+		var jsonlog []byte
+		err := rows.Scan(&jsonlog)
 
 		if err != nil {
 			panic(err)
 		}
 
-		logs = append(logs, log)
+		var log []string
+		err = json.Unmarshal(jsonlog, &log)
+
+		if err != nil {
+			panic(err)
+		}
+
+		for _, entry := range log {
+			logs = append(logs, []byte(entry))
+		}
+
 	}
 
 	return logs

@@ -32,5 +32,8 @@ buildGoModule rec {
 
     # We need CGO to include sqlite.
     export CGO_ENABLED=1
+
+    # enable json support for sqlite
+    export CGO_CFLAGS="-DSQLITE_ENABLE_JSON1"
   '';
 }
