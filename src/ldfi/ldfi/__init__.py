@@ -1,15 +1,27 @@
 import argparse
+import json
+import logging
 import os
 import sqlite3
 import z3
-import json
+from typing import (List, Set, Dict)
 from pkg_resources import get_distribution
 
-def order(d):
-    return("%s %s %s %d" % (d['kind'], d['from'], d.get('to', ""), d['at']))
+class Config:
+    def __init__(self,
+                 test_id: int,
+                 run_ids: List[int],
+                 eff: int,
+                 max_crashes: int):
+      self.test_id = test_id
+      self.run_ids = run_ids
+      self.eff = eff
+      self.max_crashes = max_crashes
 
-def main():
-    # Command-line argument parsing.
+      # TODO(stevan): make logging configurable.
+      #logging.basicConfig(level=logging.DEBUG)
+
+def create_config() -> Config:
     parser = argparse.ArgumentParser(description='Lineage-driven fault injection.')
     parser.add_argument('--eff', metavar='TIME', type=int, required=True,
                         help='the time when finite failures end')
@@ -19,102 +31,194 @@ def main():
                         help='the test id')
     parser.add_argument('--run-ids', metavar='RUN_ID', type=int, nargs='+', required=True,
                         help='the run ids')
-    parser.add_argument('--json', action='store_true', help='output in JSON format?')
     parser.add_argument('--version', '-v', action='version',
                         version=get_distribution(__name__).version)
 
     args = parser.parse_args()
 
-    # Load network traces from the database.
-    db = os.getenv("DETSYS_DB", os.getenv("HOME") + "/.detsys.db")
-    conn = sqlite3.connect(db)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
+    return Config(args.test_id, args.run_ids, args.eff, args.crashes)
 
-    products = []
+class Event:
+    def __init__(self,
+                 test_id: int,
+                 run_id: int,
+                 faults: str,
+                 version: str,
+                 statistics: str):
+        self.test_id = test_id
+        self.run_id = run_id
+        self.faults = faults
+        self.version = version
+        self.statistics = statistics
+
+class Storage:
+    def load_previous_faults(self, config: Config) -> List[List[Dict]]:
+        pass
+    def load_potential_faults(self, config: Config) -> List[List[Dict]]:
+        pass
+    def store(self, event: Event):
+        pass
+
+class SqliteStorage(Storage):
+
+    def __init__(self):
+        self.db = os.getenv("DETSYS_DB", os.getenv("HOME") + "/.detsys.db")
+        self.conn = sqlite3.connect(self.db)
+        self.conn.row_factory = sqlite3.Row
+        self.c = self.conn.cursor()
+
+    def load_previous_faults(self, config: Config) -> List[List[Dict]]:
+        self.c.execute("""SELECT faults FROM faults
+                          WHERE test_id = '%s'
+                          ORDER BY run_id ASC""" % config.test_id)
+
+        return [ json.loads(row["faults"])["faults"] for row in self.c.fetchall() ]
+
+    def load_potential_faults(self, config: Config) -> List[List[Dict]]:
+        potential_faults: List[List[Dict]] = [ [] for _ in range(len(config.run_ids)) ]
+        self.c.execute("""SELECT run_id,`from`,`to`,at,sent_logical_time FROM network_trace
+                          WHERE test_id = %d
+                          AND kind <> 'timer'
+                          AND NOT (`from` LIKE 'client:%%')
+                          AND NOT (`to`   LIKE 'client:%%')
+                          ORDER BY run_id ASC""" % config.test_id)
+        i = 0
+        run_id = config.run_ids[0]
+        for row in self.c.fetchall():
+            if row["run_id"] != run_id:
+                run_id = row["run_id"]
+                i += 1
+            potential_faults[i].append(
+                {"from": row["from"],
+                 "to": row["to"],
+                 "at": int(row["at"]),
+                 "sent_logical_time": int(row["sent_logical_time"])})
+
+        return potential_faults
+
+    def store(self, event: Event):
+        self.c.execute("""INSERT INTO faults(test_id, run_id, faults, version, statistics)
+                          VALUES(?, ?, ?, ?, ?)""",
+                       (event.test_id, event.run_id, event.faults, event.version,
+                        event.statistics))
+        self.conn.commit()
+
+def create_sat_formula(config, previous_faults, potential_faults):
     crashes = set()
+    relevant_faults = []
 
-    for run_id in args.run_ids:
-        sums = []
-        c.execute("""select * from network_trace
-                     where test_id = (?)
-                       and run_id = (?)
-                       and kind <> 'timer'
-                       and not (`from` like 'client:%')
-                       and not (`to`   like 'client:%')""",
-                  (args.test_id, run_id))
-        for r in c:
-            if r['at'] < args.eff:
-                sums.append({"var":"{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}" %
-                             (r['from'], r['to'], r['at']),
-                             "dropped": r['dropped']})
-            if args.crashes > 0:
-                crash = "{'kind':'crash', 'from':'%s', 'at':%d}" % (r['from'], r['at'])
-                crashes.add(crash)
-        products.append(sums)
+    logging.debug("previous_faults: %s", str(previous_faults))
 
-    c.close()
+    for i, faults in enumerate(potential_faults):
+        relevant_faults_in_run = []
+        for fault in faults:
+            logging.debug("fault: %s", str(fault))
+            if fault['at'] < config.eff:
+                omission = {'kind': 'omission',
+                            'from': fault['from'],
+                            'to': fault['to'],
+                            'at': fault['at']}
+                if i == 0 or omission not in previous_faults[i-1]:
+                    logging.debug("found relevant fault: %s", omission)
+                    relevant_faults_in_run.append(omission)
 
-    # Sanity check.
-    for i, run_id in enumerate(args.run_ids):
-        if not products[i] and not crashes:
-            print("Error: couldn't find a network trace for test id: %d, and run id: %d." %
-                  (args.test_id, run_id))
-            exit(1)
+                if config.max_crashes > 0:
+                    crash = {'kind': 'crash',
+                             'from': fault['from'],
+                             'at': fault['at']} # TODO(stevan): or sent_logical_time?
+                    if i == 0 or crash not in previous_faults[i-1]:
+                        relevant_faults_in_run.append(crash)
+                        crashes.add(str(crash))
+        relevant_faults.append(relevant_faults_in_run)
 
-    # Create and solve SAT formula.
-    for i, sum in enumerate(products):
-        kept = [x["var"] for x in sum if x["dropped"] == 0]
-        drop = [x["var"] for x in sum if x["dropped"] == 1]
-        kept = z3.Bools(kept)
-        drop = z3.Bools(drop)
-        products[i] = z3.Or(z3.Or(kept), z3.Not(z3.And(drop)))
+    formula_for_run = []
+
+    for i, relevant_faults_in_run in enumerate(relevant_faults):
+        logging.debug("i: %d", i)
+        kept = z3.Bools(map(str, relevant_faults_in_run))
+        logging.debug("kept: %s", str(kept))
+        drop = []
+        if i != 0 and previous_faults[i-1]:
+            drop = z3.Bools(map(str, previous_faults[i-1]))
+            logging.debug("drop: %s", str(drop))
+        if drop:
+            formula_for_run.append(z3.Or(z3.Or(kept),
+                                         z3.Not(z3.And(drop))))
+        else:
+            formula_for_run.append(z3.Or(kept))
+
+    formula = z3.And(formula_for_run)
 
     crashes = z3.Bools(list(crashes))
 
-    s = z3.Solver()
-    s.add(z3.And(products))
     if crashes:
-        crashes.append(args.crashes)
-        s.add(z3.AtMost(crashes))
-    r = s.check()
+        crashes.append(config.max_crashes)
+        formula = z3.And(formula, z3.AtMost(crashes))
+    logging.debug("formula: %s", str(formula))
+    return formula
 
-    # Output the result.
-    if r == z3.unsat:
-        if not(args.json):
-            print("No further faults can be injected at this point, the test case is")
-            print("certified for this particular failure specification!")
-        else:
-            print(json.dumps({"faults": []}))
-    elif r == z3.unknown:
-             print("Impossible: the SAT solver returned 'unknown'")
-             try:
-                 print(s.model())
-             except Z3Exception:
-                 pass
-             finally:
-                 exit(2)
+def sat_solve(formula):
+    solver = z3.Solver()
+    solver.add(formula)
+    result = solver.check()
+    if result == z3.sat:
+        model = solver.model()
+        statistics = solver.statistics()
     else:
-        m = s.model()
+        model = None
+        statistics = None
+    return (result, model, statistics)
 
-        statistics = {}
-        for k, v in s.statistics():
-            statistics[k] = v
+def order(d: dict) -> str:
+    return("%s %s %s %d" % (d['kind'], d['from'], d.get('to', ""), d['at']))
 
-        if not(args.json):
-            print(m)
-            print(statistics)
-        else:
-            faults = []
-            for d in m.decls():
-                if m[d]:
-                    Dict = eval(d.name())
-                    faults.append(Dict)
-            faults = sorted(faults, key=order)
+def create_log_event(config, result, model, statistics) -> Event:
+    statistics_dict = {}
+    if statistics:
+        for k, v in statistics:
+            statistics_dict[k] = v
 
-            print(json.dumps({"faults": faults,
-                              "statistics": statistics,
-                              "version": get_distribution(__name__).version}))
+    event = Event(config.test_id, config.run_ids[-1], json.dumps({"faults": []}),
+                  get_distribution(__name__).version, str(statistics_dict))
+
+    if result == z3.unsat:
+        # No further faults can be injected at this point, the test case is
+        # certified for this particular failure specification!
+        return event
+    elif result == z3.unknown:
+        logging.critical("Impossible: the SAT solver returned 'unknown'")
+        try:
+            logging.critical(model)
+        except z3.Z3Exception:
+            pass
+        finally:
+            exit(2)
+    else:
+        faults = []
+        for d in model.decls():
+            if model[d]:
+                dictionary = eval(d.name()) # TODO(stevan): can we just keep the str here?
+                faults.append(dictionary)
+        faults = sorted(faults, key=order)
+        event.faults = json.dumps({"faults": faults})
+
+        return event
+
+def main():
+    config = create_config()
+    storage = SqliteStorage()
+
+    previous_faults = storage.load_previous_faults(config)
+    potential_faults = storage.load_potential_faults(config)
+
+    formula = create_sat_formula(config, previous_faults, potential_faults)
+
+    (result, model, statistics) = sat_solve(formula)
+
+    event = create_log_event(config, result, model, statistics)
+    storage.store(event)
+    logging.debug(event.faults)
+    print(event.faults)
 
 if __name__ == '__main__':
     main()

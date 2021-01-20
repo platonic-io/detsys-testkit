@@ -4,7 +4,7 @@ setuptools.setup(
     name='ldfi',
     use_scm_version=True,
     description='Lineage-driven fault injection',
-    url='https://github.com/symbiont-io/symbiont-node',
+    url='https://github.com/symbiont-io/detsys-testkit/src/ldfi',
     author='Stevan Andjelkovic',
     author_email='stevan.andjelkovic@symbiont.io',
     license='BSD 2-clause',

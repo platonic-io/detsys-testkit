@@ -3,6 +3,7 @@ package lib
 import (
 	"encoding/json"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -73,7 +74,6 @@ func (f *Fault) UnmarshalJSON(bs []byte) error {
 func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 	start := time.Now()
 	args := []string{
-		"--json",
 		"--eff", strconv.Itoa(fail.EFF),
 		"--crashes", strconv.Itoa(fail.Crashes),
 		"--test-id", strconv.Itoa(testId.TestId),
@@ -83,17 +83,16 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 		args = append(args, strconv.Itoa(runId.RunId))
 	}
 	cmd := exec.Command("detsys-ldfi", args...)
+	cmd.Stderr = os.Stderr
 
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 
 	if err != nil {
 		log.Panicf("%s\n%s\n", err, out)
 	}
 
 	var result struct {
-		Faults     []Fault                `json:"faults"`
-		Statistics map[string]interface{} `json:"statistics"`
-		Version    string                 `json:"version"`
+		Faults []Fault `json:"faults"`
 	}
 	err = json.Unmarshal(out, &result)
 
@@ -103,8 +102,6 @@ func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 
 	elapsed := time.Since(start)
 	log.Printf("ldfi time: %v\n", elapsed)
-	log.Printf("z3 statistics: %+v\n", result.Statistics)
-	log.Printf("version: %+v\n", result.Version)
 
 	return Faults{result.Faults}
 }
