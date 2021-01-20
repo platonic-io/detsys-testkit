@@ -19,7 +19,7 @@ class Config:
       self.max_crashes = max_crashes
 
       # TODO(stevan): make logging configurable.
-      logging.basicConfig(level=logging.DEBUG)
+      #logging.basicConfig(level=logging.DEBUG)
 
 def create_config() -> Config:
     parser = argparse.ArgumentParser(description='Lineage-driven fault injection.')
@@ -72,7 +72,7 @@ class SqliteStorage(Storage):
                           WHERE test_id = '%s'
                           ORDER BY run_id ASC""" % config.test_id)
 
-        return [ json.loads(row["faults"]) for row in self.c.fetchall() ]
+        return [ json.loads(row["faults"])["faults"] for row in self.c.fetchall() ]
 
     def load_potential_faults(self, config: Config) -> List[List[Dict]]:
         potential_faults: List[List[Dict]] = [ [] for _ in range(len(config.run_ids)) ]
@@ -106,10 +106,10 @@ class SqliteStorage(Storage):
 def create_sat_formula(config, previous_faults, potential_faults):
     crashes = set()
     relevant_faults = []
-    # TODO(stevan): see below todo...
-    # set_previous_faults = set(previous_faults)
 
-    for faults in potential_faults:
+    logging.debug("previous_faults: %s", str(previous_faults))
+
+    for i, faults in enumerate(potential_faults):
         relevant_faults_in_run = []
         for fault in faults:
             logging.debug("fault: %s", str(fault))
@@ -118,21 +118,17 @@ def create_sat_formula(config, previous_faults, potential_faults):
                             'from': fault['from'],
                             'to': fault['to'],
                             'at': fault['at']}
-                if omission not in previous_faults: # TODO(stevan): more
-                                                    # efficient lookup?
-                                                    # set_previous_faults
-                                                    # requires omission to be
-                                                    # hashable...
+                if i == 0 or omission not in previous_faults[i-1]:
                     logging.debug("found relevant fault: %s", omission)
                     relevant_faults_in_run.append(omission)
 
                 if config.max_crashes > 0:
                     crash = {'kind': 'crash',
                              'from': fault['from'],
-                             'at': fault['sent_logical_time']}
-                    if crash not in set_previous_faults:
+                             'at': fault['at']} # TODO(stevan): or sent_logical_time?
+                    if i == 0 or crash not in previous_faults[i-1]:
                         relevant_faults_in_run.append(crash)
-                        crashes.add(crash)
+                        crashes.add(str(crash))
         relevant_faults.append(relevant_faults_in_run)
 
     formula_for_run = []
@@ -153,7 +149,7 @@ def create_sat_formula(config, previous_faults, potential_faults):
 
     formula = z3.And(formula_for_run)
 
-    crashes = z3.Bools(map(str, list(crashes)))
+    crashes = z3.Bools(list(crashes))
 
     if crashes:
         crashes.append(config.max_crashes)
@@ -178,8 +174,9 @@ def order(d: dict) -> str:
 
 def create_log_event(config, result, model, statistics) -> Event:
     statistics_dict = {}
-    for k, v in statistics:
-        statistics_dict[k] = v
+    if statistics:
+        for k, v in statistics:
+            statistics_dict[k] = v
 
     event = Event(config.test_id, config.run_ids[-1], json.dumps({"faults": []}),
                   get_distribution(__name__).version, str(statistics_dict))

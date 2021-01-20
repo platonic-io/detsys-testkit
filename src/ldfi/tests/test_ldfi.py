@@ -39,9 +39,9 @@ def test_load_previous_faults():
     storage.c.execute("INSERT INTO faults VALUES(?, ?, ?)", (1, 1, faults2))
     storage.conn.commit()
     assert storage.load_previous_faults(config) == [
-        {"faults": [{"kind": "omission", "from": "A", "to": "B", "at": 1}]},
-        {"faults": [{"kind": "omission", "from": "A", "to": "B", "at": 1},
-                    {"kind": "omission", "from": "A", "to": "C", "at": 2}]}]
+        [{"kind": "omission", "from": "A", "to": "B", "at": 1}],
+        [{"kind": "omission", "from": "A", "to": "B", "at": 1},
+         {"kind": "omission", "from": "A", "to": "C", "at": 2}]]
 
 def test_load_potential_faults(caplog):
     caplog.set_level(logging.DEBUG)
@@ -80,9 +80,10 @@ def o(f, t, at):
 def msg(f, t, at):
     return {"from": f, "to": t, "at": at, "sent_logical_time": at - 1}
 
-def test_create_formula2(caplog):
+def test_create_formula(caplog):
     caplog.set_level(logging.DEBUG)
 
+    # TODO(stevan): test with crashes
     config = ldfi.Config(-1, [-1], 3, 0)
     oab1 = o("A", "B", 1)
     oac1 = o("A", "C", 1)
