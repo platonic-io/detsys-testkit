@@ -19,9 +19,6 @@ def test_sorted_faults():
             {"kind": "omission", "from": "frontend", "to": "register2", "at": 1},
             {"kind": "omission", "from": "frontend", "to": "register2", "at": 2}])
 
-def o(f, t, at):
-    return ('{"kind": "omission", "from": "%s", "to": "%s", "at": %d}' % (f, t, at))
-
 def test_load_previous_faults():
     db = os.path.join(tempfile.gettempdir(), "detsys_pytest.sqlite3")
     os.environ["DETSYS_DB"] = db
@@ -36,8 +33,8 @@ def test_load_previous_faults():
     config = ldfi.Config(1, [0, 1], 2, 0)
     assert storage.load_previous_faults(config) == []
 
-    faults1 = '{"faults": [%s]}' % o("A", "B", 1)
-    faults2 = '{"faults": [%s, %s]}' % (o("A", "B", 1), o("A", "C", 2))
+    faults1 = json.dumps({"faults": [o("A", "B", 1)]})
+    faults2 = json.dumps({"faults": [o("A", "B", 1), o("A", "C", 2)]})
     storage.c.execute("INSERT INTO faults VALUES(?, ?, ?)", (1, 0, faults1))
     storage.c.execute("INSERT INTO faults VALUES(?, ?, ?)", (1, 1, faults2))
     storage.conn.commit()
@@ -77,87 +74,88 @@ def test_load_potential_faults(caplog):
          {"from": "A", "to": "C", "at": 1, "sent_logical_time": 1}],
         [{"from": "A", "to": "C", "at": 2, "sent_logical_time": 3}]]
 
-def test_create_formula(caplog):
+def o(f, t, at):
+    return {"kind": "omission", "from": f, "to": t, "at": at}
+
+def msg(f, t, at):
+    return {"from": f, "to": t, "at": at, "sent_logical_time": at - 1}
+
+def test_create_formula2(caplog):
     caplog.set_level(logging.DEBUG)
 
-    config = ldfi.Config(-1, [-1], 2, 0)
+    config = ldfi.Config(-1, [-1], 3, 0)
     oab1 = o("A", "B", 1)
     oac1 = o("A", "C", 1)
-    ab1 = z3.Bool(oab1)
-    ac1 = z3.Bool(oac1)
-
-    crashes = set()
+    ab1 = z3.Bool(str(oab1))
+    ac1 = z3.Bool(str(oac1))
 
     # First run
-    previous_faults = [[]]
-    potential_faults = [[oab1, oac1]]
-    data = ldfi.Data(previous_faults, potential_faults, crashes)
-    ldfi.sanity_check(data)
-    formula = ldfi.create_sat_formula(config, data)
-    assert(formula == And(Or(ab1, ac1)))
+    previous_faults = []
+    potential_faults = [[msg("A", "B", 1), msg("A", "C", 1)]]
+    formula = ldfi.create_sat_formula(config, previous_faults, potential_faults)
+    assert formula == And(Or(ab1, ac1))
     (result, model, statistics) = ldfi.sat_solve(formula)
     assert result == z3.sat
     event = ldfi.create_log_event(config, result, model, statistics)
-    assert event.faults == ('{"faults": [%s]}' % oab1)
+    expected_faults = json.dumps({"faults": [oab1]})
+    assert event.faults == expected_faults
 
     # Second run
-    previous_faults = [[oab1]]
-    potential_faults = [[oab1, oac1], [oac1]]
-    data = ldfi.Data(previous_faults, potential_faults, crashes)
-    ldfi.sanity_check(data)
-    formula = ldfi.create_sat_formula(config, data)
+    previous_faults.append([oab1])
+    potential_faults.append([msg("A", "C", 1)])
+    formula = ldfi.create_sat_formula(config, previous_faults, potential_faults)
     expected_formula = And(Or(ab1, ac1),
                            Or(Or(ac1),
                               Not(And(ab1))))
-    assert(formula == expected_formula)
+    assert formula == expected_formula
     (result, model, statistics) = ldfi.sat_solve(formula)
     assert result == z3.sat
     event = ldfi.create_log_event(config, result, model, statistics)
-    assert event.faults == ('{"faults": [%s]}' % oac1)
+    expected_faults = json.dumps({"faults": [oac1]})
+    assert event.faults == expected_faults
 
     # Third run
-    previous_faults = [[oab1], [oac1]]
-    potential_faults = [[oab1, oac1], [oac1], [oab1]]
-    data = ldfi.Data(previous_faults, potential_faults, crashes)
-    ldfi.sanity_check(data)
-    formula = ldfi.create_sat_formula(config, data)
+    previous_faults.append([oac1])
+    potential_faults.append([msg("A", "B", 1)])
+    formula = ldfi.create_sat_formula(config, previous_faults, potential_faults)
     expected_formula = And(Or(ab1, ac1),
                            Or(Or(ac1),
                               Not(And(ab1))),
                            Or(Or(ab1),
                               Not(And(ac1))))
-    assert(formula == expected_formula)
+    assert formula == expected_formula
     (result, model, statistics) = ldfi.sat_solve(formula)
     assert result == z3.sat
     event = ldfi.create_log_event(config, result, model, statistics)
-    assert event.faults == ('{"faults": [%s, %s]}' % (oab1, oac1))
+    expected_faults = json.dumps({"faults": [oab1, oac1]})
+    assert event.faults == expected_faults
 
     # Forth run
     oab2 = o("A", "B", 2) # newly discovered edge
-    ab2 = z3.Bool(oab2)
-    previous_faults = [[oab1], [oac1], [oab1, oac1]]
-    potential_faults = [[oab1, oac1], [oac1], [oab1], [oab2]] # solver finds: oab2
-    data = ldfi.Data(previous_faults, potential_faults, crashes)
-    ldfi.sanity_check(data)
-    formula = ldfi.create_sat_formula(config, data)
+    oac3 = o("A", "C", 3) # also new, but not less than EFF...
+    ab2 = z3.Bool(str(oab2))
+    ac3 = z3.Bool(str(oac3))
+    previous_faults.append([oab1, oac1])
+    potential_faults.append([msg("A", "B", 2), msg("A", "C", 3)])
+    formula = ldfi.create_sat_formula(config, previous_faults, potential_faults)
     expected_formula = And(Or(ab1, ac1),
                            Or(Or(ac1),
                               Not(And(ab1))),
                            Or(Or(ab1),
                               Not(And(ac1))),
-                           Or(Or(ab2),
+                           Or(Or(ab2), # Note that ac3 is not here because EFF = 3.
                               Not(And(ab1, ac1))))
+    assert formula == expected_formula
     (result, model, statistics) = ldfi.sat_solve(formula)
     assert result == z3.sat
     event = ldfi.create_log_event(config, result, model, statistics)
-    assert event.faults == ('{"faults": [%s, %s, %s]}' % (oab1, oab2, oac1))
+    expected_faults = json.dumps({"faults": [oab1, oab2, oac1]})
+    assert event.faults == expected_faults
 
     # Fifth run
-    previous_faults = [[oab1], [oac1], [oab1, oac1], [oab2]]
-    potential_faults = [[oab1, oac1], [oac1], [oab1], [oab2], []] # done
-    data = ldfi.Data(previous_faults, potential_faults, crashes)
-    ldfi.sanity_check(data)
-    formula = ldfi.create_sat_formula(config, data)
+    previous_faults.append([oab1, oab2, oac1])
+    potential_faults.append([])
+    formula = ldfi.create_sat_formula(config, previous_faults, potential_faults)
     expected_formula = And(Or(ab1, ac1),
                            Or(Or(ac1),
                               Not(And(ab1))),
@@ -166,6 +164,5 @@ def test_create_formula(caplog):
                            Or(Or(ab2),
                               Not(And(ab1, ac1))),
                            Or(Not(And(ab1, ab2, ac1))))
-
     (result, model, statistics) = ldfi.sat_solve(formula)
     assert result == z3.unsat

@@ -38,15 +38,6 @@ def create_config() -> Config:
 
     return Config(args.test_id, args.run_ids, args.eff, args.crashes)
 
-class Data:
-    def __init__(self,
-                 previous_faults: List[List[str]],
-                 potential_faults: List[List[str]],
-                 crashes: Set[str]):
-        self.previous_faults = previous_faults
-        self.potential_faults = potential_faults
-        self.crashes = crashes
-
 class Event:
     def __init__(self,
                  test_id: int,
@@ -61,14 +52,10 @@ class Event:
         self.statistics = statistics
 
 class Storage:
-    def load(self, config: Config) -> Data:
-        pass
-
     def load_previous_faults(self, config: Config) -> List[List[Dict]]:
         pass
     def load_potential_faults(self, config: Config) -> List[List[Dict]]:
         pass
-
     def store(self, event: Event):
         pass
 
@@ -104,60 +91,10 @@ class SqliteStorage(Storage):
             potential_faults[i].append(
                 {"from": row["from"],
                  "to": row["to"],
-                 "at": row["at"],
-                 "sent_logical_time": row["sent_logical_time"]})
+                 "at": int(row["at"]),
+                 "sent_logical_time": int(row["sent_logical_time"])})
 
         return potential_faults
-
-    def load(self, config: Config) -> Data:
-        previous_faults = []
-        potential_faults = []
-        crashes = set()
-
-        for run_id in config.run_ids:
-            # The last run id will not have any previous faults.
-            if run_id != config.run_ids[-1]:
-                prods = []
-                self.c.execute("""SELECT faults FROM faults
-                                  WHERE test_id = (?)
-                                  AND run_id = (?)""", (config.test_id, run_id))
-                for r in self.c:
-                    for fault in eval(r['faults'])['faults']:
-                        # NOTE: eval introduces a space after the colon in a
-                        # dict, we need to remove this otherwise the variables
-                        # of the SAT expression will differ.
-                        prods.append(str(fault).replace(": ", ":"))
-                        logging.debug("fault: '%s'", str(fault).replace(": ", ":"))
-                        previous_faults.append(prods)
-
-            sums = []
-            logging.debug("previous_faults: %s", previous_faults)
-            self.c.execute("""SELECT * FROM network_trace
-                              WHERE test_id = (?)
-                                AND run_id = (?)
-                                AND kind <> 'timer'
-                                AND NOT (`from` LIKE 'client:%')
-                                AND NOT (`to`   LIKE 'client:%')""",
-                           (config.test_id, run_id))
-            for r in self.c:
-                logging.debug("network trace: {'kind': %s, 'from': %s, 'to': %s, 'at': %s}",
-                              r['kind'], r['from'], r['to'], r['at'])
-                if r['at'] < config.eff:
-                    omission = ("{'kind':'omission', 'from':'%s', 'to':'%s', 'at':%d}"
-                                % (r['from'], r['to'], r['at']))
-                    if omission not in previous_faults:
-                        logging.debug("added: %s", omission)
-                        sums.append(omission)
-                if config.max_crashes > 0:
-                    crash = ("{'kind':'crash', 'from':'%s', 'at':%d}"
-                             % (r['from'], r['sent_logical_time']))
-                    if crash not in previous_faults:
-                        sums.append(crash)
-                        crashes.add(crash)
-            potential_faults.append(sums)
-
-        logging.debug("potential_faults: %s", potential_faults)
-        return Data(previous_faults, potential_faults, crashes)
 
     def store(self, event: Event):
         self.c.execute("""INSERT INTO faults(test_id, run_id, faults, version, statistics)
@@ -166,37 +103,26 @@ class SqliteStorage(Storage):
                         event.statistics))
         self.conn.commit()
 
-def sanity_check(data):
-    if data.previous_faults == [[]]:
-        len_previous_faults = 0
-    else:
-        len_previous_faults = len(data.previous_faults)
-
-    logging.debug("data.previous_faults: %s (len: %d)",
-                  data.previous_faults, len_previous_faults)
-    logging.debug("data.potential_faults: %s (len: %d)",
-                  data.potential_faults, len(data.potential_faults) + 1)
-
-    assert(len(data.potential_faults) == len_previous_faults + 1)
-
-    # previous_faults = [[oab1]]
-    # potential_faults = [[oab1, oac1], [oac1]]
-    # data.potential_faults[-1] + data.previous_faults[-1] = data.potential_faults[-2]
-
-def create_sat_formula2(config, previous_faults, potential_faults):
+def create_sat_formula(config, previous_faults, potential_faults):
     crashes = set()
     relevant_faults = []
-    set_previous_faults = set(previous_faults)
+    # TODO(stevan): see below todo...
+    # set_previous_faults = set(previous_faults)
 
     for faults in potential_faults:
-        relevent_faults_in_run = []
+        relevant_faults_in_run = []
         for fault in faults:
+            logging.debug("fault: %s", str(fault))
             if fault['at'] < config.eff:
                 omission = {'kind': 'omission',
                             'from': fault['from'],
                             'to': fault['to'],
                             'at': fault['at']}
-                if omission not in set_previous_faults:
+                if omission not in previous_faults: # TODO(stevan): more
+                                                    # efficient lookup?
+                                                    # set_previous_faults
+                                                    # requires omission to be
+                                                    # hashable...
                     logging.debug("found relevant fault: %s", omission)
                     relevant_faults_in_run.append(omission)
 
@@ -204,21 +130,21 @@ def create_sat_formula2(config, previous_faults, potential_faults):
                     crash = {'kind': 'crash',
                              'from': fault['from'],
                              'at': fault['sent_logical_time']}
-                if crash not in set_previous_faults:
-                    relevant_faults_in_run.append(crash)
-                    crashes.add(crash)
+                    if crash not in set_previous_faults:
+                        relevant_faults_in_run.append(crash)
+                        crashes.add(crash)
         relevant_faults.append(relevant_faults_in_run)
 
     formula_for_run = []
 
     for i, relevant_faults_in_run in enumerate(relevant_faults):
         logging.debug("i: %d", i)
-        kept = z3.Bools(relevent_faults_in_run)
-        logging.debug("kept: " + str(kept))
+        kept = z3.Bools(map(str, relevant_faults_in_run))
+        logging.debug("kept: %s", str(kept))
         drop = []
         if i != 0 and previous_faults[i-1]:
-            drop = z3.Bools(previous_faults[i-1])
-            logging.debug("drop: " + str(drop))
+            drop = z3.Bools(map(str, previous_faults[i-1]))
+            logging.debug("drop: %s", str(drop))
         if drop:
             formula_for_run.append(z3.Or(z3.Or(kept),
                                          z3.Not(z3.And(drop))))
@@ -227,33 +153,7 @@ def create_sat_formula2(config, previous_faults, potential_faults):
 
     formula = z3.And(formula_for_run)
 
-    crashes = z3.Bools(list(data.crashes))
-
-    if crashes:
-        crashes.append(config.max_crashes)
-        formula = z3.And(formula, z3.AtMost(crashes))
-    logging.debug("formula: %s", str(formula))
-    return formula
-
-def create_sat_formula(config, data):
-    potential_faults = []
-    for i, sum in enumerate(data.potential_faults):
-        logging.debug("i: %d", i)
-        kept = z3.Bools(sum)
-        logging.debug("kept: " + str(kept))
-        drop = []
-        if i != 0 and data.previous_faults[i-1]:
-            drop = z3.Bools(data.previous_faults[i-1])
-            logging.debug("drop: " + str(drop))
-        if drop:
-            potential_faults.append(z3.Or(z3.Or(kept),
-                                          z3.Not(z3.And(drop))))
-        else:
-            potential_faults.append(z3.Or(kept))
-
-    formula = z3.And(potential_faults)
-
-    crashes = z3.Bools(list(data.crashes))
+    crashes = z3.Bools(map(str, list(crashes)))
 
     if crashes:
         crashes.append(config.max_crashes)
@@ -272,7 +172,6 @@ def sat_solve(formula):
         model = None
         statistics = None
     return (result, model, statistics)
-
 
 def order(d: dict) -> str:
     return("%s %s %s %d" % (d['kind'], d['from'], d.get('to', ""), d['at']))
@@ -301,8 +200,8 @@ def create_log_event(config, result, model, statistics) -> Event:
         faults = []
         for d in model.decls():
             if model[d]:
-                Dict = eval(d.name())
-                faults.append(Dict)
+                dictionary = eval(d.name()) # TODO(stevan): can we just keep the str here?
+                faults.append(dictionary)
         faults = sorted(faults, key=order)
         event.faults = json.dumps({"faults": faults})
 
@@ -312,10 +211,10 @@ def main():
     config = create_config()
     storage = SqliteStorage()
 
-    data = storage.load(config)
-    sanity_check(data)
+    previous_faults = storage.load_previous_faults(config)
+    potential_faults = storage.load_potential_faults(config)
 
-    formula = create_sat_formula(config, data)
+    formula = create_sat_formula(config, previous_faults, potential_faults)
 
     (result, model, statistics) = sat_solve(formula)
 
