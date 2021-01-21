@@ -5,15 +5,8 @@ with pkgs;
 assert lib.versionAtLeast go.version "1.15";
 
 let
-  inherit (import sources.gitignore {}) gitignoreFilter;
-  customFilter = src:
-    let
-      # IMPORTANT: use a let binding like this to memoize info about the git directories.
-      srcIgnored = gitignoreFilter src;
-    in
-      path: type:
-         srcIgnored path type
-         || lib.hasInfix "vendor" path;
+  inherit (import sources.gitignore {}) gitignoreSource;
+  detsysLib = callPackage ../lib/default.nix {};
 in
 
 buildGoModule rec {
@@ -21,15 +14,11 @@ buildGoModule rec {
   version = "latest";
   goPackagePath = "github.com/symbiont-io/detsys-testkit/src/${pname}";
 
+  src = gitignoreSource ./.;
+  buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ plantuml ];
 
-  src = lib.cleanSourceWith {
-    filter = customFilter ./.;
-    src = ./.;
-    name = pname + "-source";
-  };
-
-  vendorSha256 = null;
+  vendorSha256 = "0a6766499c6ahgsaq7b62rds2ygxwfmh28lbbf9629m8fsdkq5k5";
 
   buildFlagsArray =
     [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
@@ -37,6 +26,10 @@ buildGoModule rec {
   subPackages = [ "cmd/detsys-debug" ];
 
   preBuild = ''
+    # We need to put the source of the library in `../lib`, because
+    # that's where `go.mod` says to go look for it.
+    cp -R ${detsysLib}/src ../lib
+
     # We need CGO to include sqlite.
     export CGO_ENABLED=1
   '';
