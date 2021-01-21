@@ -86,16 +86,30 @@
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (defn append-event!
-  ([test-id run-id event state]
-   (append-event! test-id run-id event state {}))
-  ([test-id run-id event state data]
+  [test-id run-id event data]
    (jdbc/execute-one!
     ds
     ["INSERT INTO event_log (event, meta, data) VALUES (?,?,?)"
      event
      (json/write {:component "scheduler"
-                  :state state
                   :test-id test-id
                   :run-id run-id})
      (json/write data)]
-    {:return-keys true :builder-fn rs/as-unqualified-lower-maps})))
+    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
+
+;; Remove this when we no longer use the old events
+(defn append-old-network-history-events!
+  [test-id run-id data]
+  (when (:jepsen-type data)
+    (let ;; The args don't is only using the `:response` field if it was a
+         ;; response in the history..
+        [args (if (= (:jepsen-type data) :ok) (:response (:args data)) (:args data))]
+      (append-history! test-id run-id (:jepsen-type data) (:message data) (json/write args) (:jepsen-process data))))
+  (append-trace! test-id run-id (:message data) (json/write (:args data)) (:kind data) (:from data) (:to data) (:sent-logical-time data) (:recv-logical-time data) (:dropped data)))
+
+(defn append-network-trace!
+  [test-id run-id data]
+  (append-event! test-id run-id "NetworkTrace" data)
+  ;; This should be removed when everything has been refactored to new
+  ;; events.
+  (append-old-network-history-events! test-id run-id data))
