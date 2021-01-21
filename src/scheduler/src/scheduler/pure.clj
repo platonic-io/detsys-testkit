@@ -337,6 +337,7 @@
     [(assoc data :client-requests to-keep)
      to-drop]))
 
+
 ;; TODO(stevan): move to other module, since isn't pure?
 ;; TODO(stevan): can we avoid using nilable here? Return `Error + Data *
 ;; Response` instead of always `Data * Response`? Or `Data * Error + Data * Response`?
@@ -351,28 +352,41 @@
                          [data' {:events []}])
       :else (let [[data' expired-clients] (expired-clients data' timestamp)
                   _ (doseq [client expired-clients]
-                      (db/append-history! (:test-id data')
-                                          (:run-id data')
-                                          :info
-                                          (:event client)
-                                          (-> client :args json/write)
-                                          (-> client :from parse-client-id)))
+                      (db/append-network-trace! (:test-id data')
+                                                (:run-id data')
+                                                {:message (:event client)
+                                                 :args (:args client)
+                                                 :from (:to client)
+                                                 :to (:from client)
+                                                 :kind (:kind client)
+                                                 :sent-logical-time (:logical-time data')
+                                                 :recv-logical-time (:logical-time data')
+                                                 :recv-simulated-time (:clock data')
+                                                 :dropped false
+                                                 :jepsen-type :info
+                                                 :jepsen-process (-> client :from parse-client-id)}))
                   is-from-client? (re-matches #"^client:\d+$" (:from body))
                   dropped? (= drop? :drop)
                   _ (log/debug :sent-logical-time body)
                   sent-logical-time (or (-> body :sent-logical-time)
                                         (and is-from-client?
                                              (:logical-clock data)))]
-              (db/append-trace! (:test-id data)
-                                (:run-id data)
-                                (-> body :event)
-                                (-> body :args json/write)
-                                (-> body :kind)
-                                (-> body :from)
-                                (-> body :to)
-                                sent-logical-time
-                                (-> data' :logical-clock)
-                                dropped?)
+              (let [obj (cond-> {:message (:event body)
+                                 :args (:args body)
+                                 :from (:from body)
+                                 :to (:to body)
+                                 :kind (:kind body)
+                                 :sent-logical-time sent-logical-time
+                                 :recv-logical-time (:logical-clock data')
+                                 :recv-simulated-time (:clock data')
+                                 :dropped dropped?}
+                          is-from-client? (merge  {:jepsen-type :invoke
+                                                   :jepsen-process (-> body
+                                                                       :from
+                                                                       parse-client-id)}))]
+                (db/append-network-trace! (:test-id data)
+                                          (:run-id data)
+                                          obj))
               (db/append-time-mapping! (:test-id data)
                                        (:run-id data)
                                        (-> data' :logical-clock)
@@ -396,13 +410,6 @@
                   (log/debug :events events)
 
                   (assert (:run-id data) "execute!: no run-id set...")
-                  (when is-from-client?
-                    (db/append-history! (:test-id data)
-                                        (:run-id data)
-                                        :invoke
-                                        (:event body)
-                                        (-> body :args json/write)
-                                        (-> body :from parse-client-id)))
 
                   (let [[client-responses internal]
                         (partition-haskell #(and (#{"ok"} (:kind %))
@@ -420,22 +427,19 @@
                                                (-> data'' :logical-clock)
                                                (-> data'' :clock)))
                     (doseq [client-response client-responses]
-                      (db/append-history! (:test-id data)
-                                          (:run-id data)
-                                          :ok ;; TODO(stevan): have SUT decide this?
-                                          (:event client-response)
-                                          (-> client-response :args :response json/write)
-                                          (-> client-response :to parse-client-id))
-                      (db/append-trace! (:test-id data)
-                                        (:run-id data)
-                                        (-> client-response :event)
-                                        (-> client-response :args json/write)
-                                        "ok"
-                                        (-> client-response :from)
-                                        (-> client-response :to)
-                                        (-> data' :logical-clock) ;; should we advance clock for client responses?
-                                        (-> data'' :logical-clock)
-                                        false))
+                      (db/append-network-trace! (:test-id data)
+                                                (:run-id data)
+                                                {:message (:event client-response)
+                                                 :args (:args client-response)
+                                                 :from (:from client-response)
+                                                 :to (:to client-response)
+                                                 :kind "ok" ;; ??
+                                                 :sent-logical-time (:logical-clock data')
+                                                 :recv-logical-time (:logical-clock data'')
+                                                 :recv-simulated-time (:clock data'')
+                                                 :dropped false
+                                                 :jepsen-type :ok
+                                                 :jepsen-process (-> client-response :to parse-client-id)}))
                     [data'' {:events internal}])))))))
 (comment
   (fake/with-fake-routes
