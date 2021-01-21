@@ -100,11 +100,6 @@
 ;; Remove this when we no longer use the old events
 (defn append-old-network-history-events!
   [test-id run-id data]
-  (when (:jepsen-type data)
-    (let ;; The args don't is only using the `:response` field if it was a
-         ;; response in the history..
-        [args (if (= (:jepsen-type data) :ok) (:response (:args data)) (:args data))]
-      (append-history! test-id run-id (:jepsen-type data) (:message data) (json/write args) (:jepsen-process data))))
   (append-trace! test-id run-id (:message data) (json/write (:args data)) (:kind data) (:from data) (:to data) (:sent-logical-time data) (:recv-logical-time data) (:dropped data)))
 
 (defn append-network-trace!

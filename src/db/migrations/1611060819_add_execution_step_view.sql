@@ -1,5 +1,4 @@
 -- +migrate Up
-
 CREATE VIEW IF NOT EXISTS execution_step AS
   SELECT
     json_extract(meta, '$.test-id') as test_id,
