@@ -1,27 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "sut",
-    srcs = [
-        "frontend1.go",
-        "frontend2.go",
-        "frontend3.go",
-        "frontend4.go",
-        "marshaler.go",
-        "messages.go",
-        "register.go",
-    ],
-    importpath = "",
-    visibility = ["//visibility:public"],
-)
-
-go_test(
-    name = "lib_test",
-    srcs = ["example_test.go"],
-    embed = [":sut"],
-)
-
-go_library(
     name = "register",
     srcs = [
         "frontend1.go",
@@ -34,7 +13,7 @@ go_library(
     ],
     importpath = "github.com/symbiont-io/detsys-testkit/src/sut/register",
     visibility = ["//visibility:public"],
-    deps = ["//src/sut/register/vendor/github.com/symbiont-io/detsys-testkit/src/lib"],
+    deps = ["//src/lib"],
 )
 
 go_test(
@@ -42,7 +21,7 @@ go_test(
     srcs = ["example_test.go"],
     embed = [":register"],
     deps = [
-        "//src/sut/register/vendor/github.com/symbiont-io/detsys-testkit/src/executor",
-        "//src/sut/register/vendor/github.com/symbiont-io/detsys-testkit/src/lib",
+        "//src/executor",
+        "//src/lib",
     ],
 )

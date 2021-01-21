@@ -1,16 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
-go_library(
-    name = "lib",
-    srcs = ["db.go"],
-    importpath = "",
-    visibility = ["//visibility:private"],
-    deps = [
-        "@com_github_mattn_go_sqlite3//:go_default_library",
-        "@com_github_rubenv_sql_migrate//:go_default_library",
-    ],
-)
-
 go_binary(
     name = "db",
     embed = [":db_lib"],

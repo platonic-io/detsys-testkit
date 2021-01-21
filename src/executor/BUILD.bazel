@@ -9,11 +9,11 @@ go_library(
     importpath = "github.com/symbiont-io/detsys-testkit/src/executor",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/executor/vendor/github.com/evanphx/json-patch",
-        "//src/executor/vendor/github.com/mattn/go-sqlite3",
-        "//src/executor/vendor/github.com/symbiont-io/detsys-testkit/src/lib",
-        "//src/executor/vendor/go.uber.org/zap",
-        "//src/executor/vendor/go.uber.org/zap/zapcore",
+        "//src/lib",
+        "@com_github_evanphx_json_patch//:json-patch",
+        "@com_github_mattn_go_sqlite3//:go-sqlite3",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
     ],
 )
 
@@ -27,5 +27,5 @@ go_test(
     name = "executor_test",
     srcs = ["executor_test.go"],
     embed = [":executor"],
-    deps = ["//src/executor/vendor/github.com/symbiont-io/detsys-testkit/src/lib"],
+    deps = ["//src/lib"],
 )

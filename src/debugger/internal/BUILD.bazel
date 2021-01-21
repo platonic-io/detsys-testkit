@@ -1,24 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "debugger",
-    srcs = ["debugger.go"],
-    importpath = "",
-    visibility = ["//src/debugger:__subpackages__"],
-    deps = [
-        "@com_github_evanphx_json_patch//:go_default_library",
-        "@com_github_mattn_go_sqlite3//:go_default_library",
-        "@com_github_nsf_jsondiff//:go_default_library",
-    ],
-)
-
-go_test(
-    name = "lib_test",
-    srcs = ["debugger_test.go"],
-    embed = [":debugger"],
-)
-
-go_library(
     name = "internal",
     srcs = ["debugger.go"],
     importpath = "github.com/symbiont-io/detsys-testkit/src/debugger/internal",

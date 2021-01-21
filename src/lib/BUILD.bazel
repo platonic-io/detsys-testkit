@@ -15,7 +15,7 @@ go_library(
     ],
     importpath = "github.com/symbiont-io/detsys-testkit/src/lib",
     visibility = ["//visibility:public"],
-    deps = ["//src/lib/vendor/github.com/mattn/go-sqlite3"],
+    deps = ["@com_github_mattn_go_sqlite3//:go-sqlite3"],
 )
 
 go_test(

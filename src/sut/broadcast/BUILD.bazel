@@ -12,12 +12,6 @@ go_library(
 )
 
 go_test(
-    name = "lib_test",
-    srcs = ["broadcast_test.go"],
-    embed = [":broadcast"],
-)
-
-go_test(
     name = "broadcast_test",
     srcs = ["broadcast_test.go"],
     embed = [":broadcast"],

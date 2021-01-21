@@ -18,15 +18,21 @@ type Write struct {
 
 func (_ Write) Request() {}
 
+func (_ Write) RequestEvent() string { return "write" }
+
 type Ack struct{}
 
 func (_ Ack) Message() {}
+
+func (_ Ack) MessageEvent() string { return "ack" }
 
 type Value struct {
 	Value int `json:"value"`
 }
 
 func (_ Value) Response() {}
+
+func (_ Value) ResponseEvent() string { return "value" }
 
 type Marshaler struct{}
 
@@ -175,12 +181,12 @@ func TestSchedulerContractOutput(t *testing.T) {
 		// InternalMessage
 		// TODO(stevan): Is that all outgoing events from the executor?
 	}
-	got := lib.MarshalUnscheduledEvents(m, "node", output)
+	got := lib.MarshalUnscheduledEvents("node", output)
 	expected := []byte(`{"events":
                               [{"from": "node",
 		                "to":   "client:0",
 		                "kind": "ok",
-	                        "event":"write",
+	                        "event":"value",
 		                "args": {"id": 0,
                                          "response": {"value": 1}}}]}`)
 
