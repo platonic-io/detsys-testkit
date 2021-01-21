@@ -430,7 +430,7 @@
                       (db/append-network-trace! (:test-id data)
                                                 (:run-id data)
                                                 {:message (:event client-response)
-                                                 :args (:args client-response)
+                                                 :args (:response (:args client-response))
                                                  :from (:from client-response)
                                                  :to (:to client-response)
                                                  :kind "ok" ;; ??

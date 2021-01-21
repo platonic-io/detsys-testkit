@@ -77,10 +77,9 @@
   (apply shell/sh "sqlite3" (db) args))
 
 (defn parse
-  [test-id run-id id kind event args process]
+  [test-id run-id kind event args process]
   {:test-id (edn/read-string test-id)
    :run-id  (edn/read-string run-id)
-   :id      (edn/read-string id)
    :kind    kind
    :event   event
    :args    (json/read args)
@@ -88,7 +87,7 @@
 
 (defn get-history
   [model test-id run-id]
-  (let [out (query (str "SELECT * FROM history where test_id = "
+  (let [out (query (str "SELECT * FROM jepsen_history where test_id = "
                         test-id " AND run_id = " run-id))]
     (when (not= 0 (:exit out))
       (println out))
@@ -98,6 +97,7 @@
            str/split-lines
            (map #(str/split % #"\|"))
            (map (partial apply parse))
+           (map-indexed (fn [ix x] (assoc x :index ix)))
            (reduce (partial rewrite model) [{} []])
            second)
       (catch Exception e
