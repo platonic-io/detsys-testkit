@@ -13,9 +13,9 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//src/debugger/internal",
-        "//src/debugger/vendor/github.com/gdamore/tcell/v2:tcell",
-        "//src/debugger/vendor/github.com/nsf/jsondiff",
-        "//src/debugger/vendor/github.com/rivo/tview",
-        "//src/debugger/vendor/github.com/symbiont-io/detsys-testkit/src/lib",
+        "//src/lib",
+        "@com_github_gdamore_tcell_v2//:tcell",
+        "@com_github_nsf_jsondiff//:jsondiff",
+        "@com_github_rivo_tview//:tview",
     ],
 )
