@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_binary(
+    name = "db",
+    embed = [":db_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "db_lib",
+    srcs = ["db.go"],
+    importpath = "github.com/symbiont-io/detsys-testkit/src/db",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//src/lib",
+        "@com_github_mattn_go_sqlite3//:go-sqlite3",
+        "@com_github_rubenv_sql_migrate//:sql-migrate",
+    ],
+)

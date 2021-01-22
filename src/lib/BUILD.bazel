@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "lib",
+    srcs = [
+        "checker.go",
+        "event.go",
+        "generator.go",
+        "ldfi.go",
+        "lib.go",
+        "log.go",
+        "marshaler.go",
+        "scheduler.go",
+        "util.go",
+    ],
+    importpath = "github.com/symbiont-io/detsys-testkit/src/lib",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_mattn_go_sqlite3//:go-sqlite3"],
+)
+
+go_test(
+    name = "lib_test",
+    srcs = ["ldfi_test.go"],
+    embed = [":lib"],
+)

@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/symbiont-io/detsys-testkit/detsys-debug/internal"
-	"github.com/symbiont-io/detsys-testkit/lib"
+	"github.com/symbiont-io/detsys-testkit/src/debugger/internal"
+	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
 func min(x, y int) int {

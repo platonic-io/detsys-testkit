@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_binary(
+    name = "detsys-debug",
+    embed = [":detsys-debug_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "detsys-debug_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/symbiont-io/detsys-testkit/src/debugger/cmd/detsys-debug",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//src/debugger/internal",
+        "//src/lib",
+        "@com_github_gdamore_tcell_v2//:tcell",
+        "@com_github_nsf_jsondiff//:jsondiff",
+        "@com_github_rivo_tview//:tview",
+    ],
+)

@@ -10,15 +10,15 @@ let
 in
 
 buildGoModule rec {
-  pname = "detsys-debug";
+  pname = "debugger";
   version = "latest";
-  goPackagePath = "github.com/symbiont-io/detsys-testkit/${pname}";
+  goPackagePath = "github.com/symbiont-io/detsys-testkit/src/${pname}";
 
   src = gitignoreSource ./.;
   buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ plantuml ];
 
-  vendorSha256 = "0s0gzn39sdqf77jykmixp7zbj994qhzsasd0l166wp2mg6nnljqz";
+  vendorSha256 = "0a6766499c6ahgsaq7b62rds2ygxwfmh28lbbf9629m8fsdkq5k5";
 
   buildFlagsArray =
     [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];

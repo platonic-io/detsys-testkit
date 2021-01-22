@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "executor",
+    srcs = [
+        "executor.go",
+        "heap_trace.go",
+    ],
+    importpath = "github.com/symbiont-io/detsys-testkit/src/executor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/lib",
+        "@com_github_evanphx_json_patch//:json-patch",
+        "@com_github_mattn_go_sqlite3//:go-sqlite3",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
+    ],
+)
+
+go_test(
+    name = "lib_test",
+    srcs = ["executor_test.go"],
+    embed = [":executor"],
+)
+
+go_test(
+    name = "executor_test",
+    srcs = ["executor_test.go"],
+    embed = [":executor"],
+    deps = ["//src/lib"],
+)

@@ -1,0 +1,2 @@
+build --action_env=GOPRIVATE=github.com/symbiont-io
+run --action_env=GOPRIVATE=github.com/symbiont-io
