@@ -276,6 +276,10 @@ func GetLogMessages(testId lib.TestId, runId lib.RunId, reactor string, at int) 
 			panic(err)
 		}
 
+		if jsonlog == nil {
+			continue
+		}
+
 		var log []string
 		err = json.Unmarshal(jsonlog, &log)
 
