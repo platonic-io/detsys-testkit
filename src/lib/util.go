@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -97,4 +100,30 @@ func OpenDB() *sql.DB {
 		panic(err)
 	}
 	return db
+}
+
+type TimeFromString time.Time
+
+func (tf *TimeFromString) Scan(src interface{}) error {
+	switch t := src.(type) {
+	case string:
+		tp, err := time.Parse(time.RFC3339Nano, t)
+		if err != nil {
+			return err
+		}
+		*tf = TimeFromString(tp)
+		return err
+	case []byte:
+		tp, err := time.Parse(time.RFC3339Nano, string(t))
+		if err != nil {
+			return err
+		}
+		*tf = TimeFromString(tp)
+		return err
+	case *time.Time:
+		*tf = (TimeFromString)(*t)
+		return nil
+	default:
+		return errors.New(fmt.Sprintf("Invalid type %T can't be parses to a TimeFromString", t))
+	}
 }
