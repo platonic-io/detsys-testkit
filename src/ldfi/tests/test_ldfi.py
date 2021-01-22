@@ -54,9 +54,9 @@ def test_load_potential_faults(caplog):
                            test_id           INT  NOT NULL,
                            run_id            INT  NOT NULL,
                            kind              TEXT NOT NULL,
-                           `from`            TEXT NOT NULL,
-                           `to`              TEXT NOT NULL,
-                           at                INT  NOT NULL,
+                           sender            TEXT NOT NULL,
+                           receiver          TEXT NOT NULL,
+                           recv_logical_time INT  NOT NULL,
                            sent_logical_time INT  NOT NULL)""")
     storage.conn.commit()
     config = ldfi.Config(1, [0, 1], 2, 0)

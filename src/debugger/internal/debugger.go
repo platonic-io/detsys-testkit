@@ -73,14 +73,16 @@ func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
 	db := lib.OpenDB()
 	defer db.Close()
 
-	rows, err := db.Query("SELECT message,args,`from`,`to`,dropped,at,simulated_time "+
-		"FROM network_trace "+
-		"LEFT JOIN time_mapping "+
-		"ON network_trace.test_id = time_mapping.test_id "+
-		"AND network_trace.run_id = time_mapping.run_id "+
-		"AND network_trace.AT = time_mapping.logical_time "+
-		"WHERE network_trace.test_id = ? "+
-		"AND network_trace.run_id = ?", testId.TestId, runId.RunId)
+	rows, err := db.Query(`SELECT message,
+                                      args,
+                                      sender,
+                                      receiver,
+                                      dropped,
+                                      recv_logical_time,
+                                      recv_simulated_time
+		               FROM network_trace
+		               WHERE test_id = ?
+		                 AND run_id = ?`, testId.TestId, runId.RunId)
 	if err != nil {
 		panic(err)
 	}
@@ -89,7 +91,7 @@ func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
 	var trace []NetworkEvent
 	for rows.Next() {
 		event := NetworkEvent{}
-		err := rows.Scan(&event.Message, &event.Args, &event.From, &event.To, &event.Dropped, &event.At, &event.Simulated)
+		err := rows.Scan(&event.Message, &event.Args, &event.From, &event.To, &event.Dropped, &event.At, (*lib.TimeFromString)(&event.Simulated))
 		if err != nil {
 			panic(err)
 		}
@@ -274,6 +276,10 @@ func GetLogMessages(testId lib.TestId, runId lib.RunId, reactor string, at int) 
 
 		if err != nil {
 			panic(err)
+		}
+
+		if jsonlog == nil {
+			continue
 		}
 
 		var log []string

@@ -76,11 +76,11 @@ class SqliteStorage(Storage):
 
     def load_potential_faults(self, config: Config) -> List[List[Dict]]:
         potential_faults: List[List[Dict]] = [ [] for _ in range(len(config.run_ids)) ]
-        self.c.execute("""SELECT run_id,`from`,`to`,at,sent_logical_time FROM network_trace
+        self.c.execute("""SELECT run_id,sender,receiver,recv_logical_time,sent_logical_time FROM network_trace
                           WHERE test_id = %d
                           AND kind <> 'timer'
-                          AND NOT (`from` LIKE 'client:%%')
-                          AND NOT (`to`   LIKE 'client:%%')
+                          AND NOT (sender LIKE 'client:%%')
+                          AND NOT (receiver   LIKE 'client:%%')
                           ORDER BY run_id ASC""" % config.test_id)
         i = 0
         run_id = config.run_ids[0]
@@ -89,9 +89,9 @@ class SqliteStorage(Storage):
                 run_id = row["run_id"]
                 i += 1
             potential_faults[i].append(
-                {"from": row["from"],
-                 "to": row["to"],
-                 "at": int(row["at"]),
+                {"from": row["sender"],
+                 "to": row["receiver"],
+                 "at": int(row["recv_logical_time"]),
                  "sent_logical_time": int(row["sent_logical_time"])})
 
         return potential_faults

@@ -47,15 +47,6 @@
    ["SELECT MAX(id) as `run-id` FROM run WHERE test_id = ?" test-id]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
-(defn append-history!
-  [test-id run-id kind event args process]
-  (jdbc/execute-one!
-   ds
-   ["INSERT INTO history (test_id, run_id, id, kind, event, args, process)
-     VALUES (?, ?, (SELECT IFNULL(MAX(id), -1) + 1 FROM history WHERE run_id = ?), ?, ?, ?, ?)"
-    test-id run-id run-id (name kind) event args process]
-   {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
-
 (comment
   (setup-db "/tmp/test.sqlite3")
   (destroy-db!)
@@ -66,24 +57,6 @@
   (load-test! 1)
   (create-run! 0 123)
   (append-history! 1 :invoke "a" "{\"id\": 1}" 0))
-
-(defn append-trace!
-  [test-id run-id message args kind from to sent-logical-time at dropped?]
-  (jdbc/execute-one!
-   ds
-   ["INSERT INTO network_trace (test_id, run_id, id, message, args, kind, `from`, `to`, sent_logical_time, at, dropped)
-     VALUES (?, ?, (SELECT IFNULL(MAX(id), -1) + 1 FROM network_trace WHERE test_id = ? AND run_id = ?), ?, ?, ?, ?, ?, ?, ?, ?)"
-    test-id run-id test-id run-id message args kind from to sent-logical-time at (if dropped? 1 0)]
-   {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
-
-(defn append-time-mapping!
-  [test-id run-id logical-time simulated-time]
-  (jdbc/execute-one!
-   ds
-   ["INSERT INTO time_mapping (test_id, run_id, logical_time, simulated_time)
-      VALUES (?, ?, ?, ?)"
-    test-id run-id logical-time simulated-time]
-   {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (defn append-event!
   [test-id run-id event data]
@@ -97,14 +70,6 @@
      (json/write data)]
     {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
-;; Remove this when we no longer use the old events
-(defn append-old-network-history-events!
-  [test-id run-id data]
-  (append-trace! test-id run-id (:message data) (json/write (:args data)) (:kind data) (:from data) (:to data) (:sent-logical-time data) (:recv-logical-time data) (:dropped data)))
-
 (defn append-network-trace!
   [test-id run-id data]
-  (append-event! test-id run-id "NetworkTrace" data)
-  ;; This should be removed when everything has been refactored to new
-  ;; events.
-  (append-old-network-history-events! test-id run-id data))
+  (append-event! test-id run-id "NetworkTrace" data))
