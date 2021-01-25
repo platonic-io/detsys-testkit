@@ -59,6 +59,7 @@ in stdenv.mkDerivation rec {
       -J-Dclojure.compiler.direct-linking=true \
       -J-Dfile.encoding=UTF-8 \
       -J-Djava.awt.headless=true \
+      -J-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory \
       --initialize-at-build-time \
       --initialize-at-build-time=org.sqlite.JDBC \
       --initialize-at-build-time=org.sqlite.core.DB$ProgressObserver \
