@@ -1,15 +1,32 @@
 (ns checker.db
   (:require
-   [clojure.java.shell :as shell]
    [checker.json :as json]
    [clojure.pprint :as pp]
    [clojure.set :as set]
    [clojure.string :as str]
-   [clojure.edn :as edn]))
+   [clojure.edn :as edn]
+   [next.jdbc :as jdbc]
+   [next.jdbc.sql :as sql]
+   [next.jdbc.result-set :as rs]))
 
 (set! *warn-on-reflection* true)
 
 ;; ---------------------------------------------------------------------
+
+(def db nil)
+(def ds nil)
+
+(defn setup-db
+  [db-file]
+  (alter-var-root #'db
+                  (constantly {:dbtype "sqlite" :dbname db-file}))
+  (alter-var-root #'ds
+                  (constantly (jdbc/get-datasource db))))
+
+(defn db
+  []
+  (or (System/getenv "DETSYS_DB")
+      (str (System/getenv "HOME") "/.detsys.db")))
 
 (defn reg-op
   [model op]
@@ -41,8 +58,7 @@
 (defn rewrite-op
   [model op value]
   (-> op
-      (dissoc :event :test_id :run_id :kind :args)
-      (set/rename-keys {:id :index})
+      (dissoc :event :kind :args)
       (assoc :type (op-type op)
              :f :txn
              :value [(conj (reg-op model op) value)])))
@@ -68,61 +84,34 @@
                                                     (op-value (get state (:process op))))))]
     :fail (throw "implement later")))
 
-(defn db
-  []
-  (or (System/getenv "DETSYS_DB")
-      (str (System/getenv "HOME") "/.detsys.db")))
-
-(defn query [& args]
-  (apply shell/sh "sqlite3" (db) args))
-
-(defn parse
-  [test-id run-id kind event args process]
-  {:test-id (edn/read-string test-id)
-   :run-id  (edn/read-string run-id)
-   :kind    kind
-   :event   event
-   :args    (json/read args)
-   :process (edn/read-string process)})
-
 (defn get-history
   [model test-id run-id]
-  (let [out (query (str "SELECT * FROM jepsen_history where test_id = "
-                        test-id " AND run_id = " run-id))]
-    (when (not= 0 (:exit out))
-      (println out))
-    (try
-      (->> out
-           :out
-           str/split-lines
-           (map #(str/split % #"\|"))
-           (map (partial apply parse))
-           (map-indexed (fn [ix x] (assoc x :index ix)))
-           (reduce (partial rewrite model) [{} []])
-           second)
-      (catch Exception e
-        (println out)
-        (println model)
-        (println test-id)
-        (println run-id)
-        (println e)
-        (System/exit 1)))))
+  (->> (jdbc/execute!
+        ds
+        ["SELECT kind,event,args,process FROM jepsen_history
+          WHERE test_id = ? AND run_id = ?"
+         test-id run-id]
+        {:return-keys true :builder-fn rs/as-unqualified-lower-maps})
+       (mapv #(update % :args json/read))
+       (map-indexed (fn [ix x] (assoc x :index ix)))
+       (reduce (partial rewrite model) [{} []])
+       second))
 
 (defn store-result
-  [test-id run-id valid? result]
-  (let [q (str "INSERT INTO analysis (test_id, run_id, id, valid, result) "
-               "VALUES(" test-id ", " run-id ", "
-               "(SELECT IFNULL(MAX(id), - 1) + 1 FROM analysis WHERE test_id = "
-               test-id " AND run_id = " run-id "), " (if valid? 1 0) ", '"
-               (str/replace (json/write result) #"'" "''")
-               "')")
-        out (query q)]
-
-    (when (not= 0 (:exit out))
-      (println q)
-      (println out)
-      (System/exit 1))))
+  [test-id run-id valid? result gitrev]
+  (jdbc/execute-one!
+   ds
+   ["INSERT INTO analysis (test_id, run_id, id, valid, result, checker_version)
+     VALUES(?,
+            ?,
+            (SELECT IFNULL(MAX(id), - 1) + 1 FROM analysis WHERE test_id = ? AND run_id = ?),
+            ?,
+            ?,
+            ?)"
+   test-id run-id test-id run-id (if valid? 1 0) (json/write result) gitrev]))
 
 (comment
-  (pp/pprint (get-history :rw-register 6 0))
-  (store-result 1 0 1 "{}"))
+  (setup-db (db))
+  (pp/pprint (get-history :register 2 0) )
+  (pp/pprint (get-history :list-append 1 0) )
+  (store-result 1 0 1 "{}" "00000") )
