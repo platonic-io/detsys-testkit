@@ -18,7 +18,7 @@ func createTopology(newFrontEnd func() lib.Reactor) map[string]lib.Reactor {
 	}
 }
 
-func once(newFrontEnd func() lib.Reactor, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
+func once(newFrontEnd func() lib.Reactor, testId lib.TestId, runEvent lib.CreateRunEvent, t *testing.T) (lib.RunId, bool) {
 	topology := createTopology(newFrontEnd)
 	marshaler := NewMarshaler()
 	var srv http.Server
@@ -26,10 +26,9 @@ func once(newFrontEnd func() lib.Reactor, testId lib.TestId, t *testing.T) (lib.
 		executor.Deploy(&srv, topology, marshaler)
 	})
 	qs := lib.LoadTest(testId)
-	lib.SetSeed(lib.Seed{4})
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	lib.Register(testId)
-	runId := lib.CreateRun(testId)
+	runId := lib.CreateRun(testId, runEvent)
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)
 	lib.Teardown(&srv)
@@ -72,10 +71,15 @@ func testRegisterWithFrontEnd(newFrontEnd func() lib.Reactor, tickFrequency floa
 	}
 	for {
 		lib.Reset()
-		lib.InjectFaults(lib.Faults{faults})
-		lib.SetTickFrequency(tickFrequency)
+		runEvent := lib.CreateRunEvent{
+			Seed:          lib.Seed{4},
+			Faults:        lib.Faults{faults},
+			TickFrequency: tickFrequency,
+			MinTimeNs:     0,
+			MaxTimeNs:     0,
+		}
 		log.Printf("Injecting faults: %#v\n", faults)
-		runId, result := once(newFrontEnd, testId, t)
+		runId, result := once(newFrontEnd, testId, runEvent, t)
 		if !result {
 			t.Errorf("%+v and %+v doesn't pass analysis", testId, runId)
 			t.Errorf("faults: %#v\n", faults)

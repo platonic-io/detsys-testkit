@@ -10,7 +10,7 @@ import (
 	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
-func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
+func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testing.T) (lib.RunId, bool) {
 	topology := map[string]lib.Reactor{
 		"A": NewNodeA(round),
 		"B": NewNode(round, "C"),
@@ -25,7 +25,7 @@ func once(round Round, testId lib.TestId, t *testing.T) (lib.RunId, bool) {
 	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
 	lib.Register(testId)
 	log.Printf("Registered executor")
-	runId := lib.CreateRun(testId)
+	runId := lib.CreateRun(testId, runEvent)
 	log.Printf("Created run id: %v", runId)
 	lib.Run()
 	log.Printf("Finished run id: %d\n", runId.RunId)
@@ -50,15 +50,15 @@ func many(round Round, t *testing.T) {
 	}
 	for {
 		lib.Reset()
-		lib.InjectFaults(lib.Faults{faults})
-		lib.SetTickFrequency(tickFrequency)
-		maxTime, err := time.ParseDuration("5s")
-		if err != nil {
-			panic(err)
+		maxTime := time.Duration(5) * time.Second
+		runEvent := lib.CreateRunEvent{
+			Seed:          lib.Seed{1},
+			Faults:        lib.Faults{faults},
+			TickFrequency: tickFrequency,
+			MaxTimeNs:     maxTime,
+			MinTimeNs:     0,
 		}
-		lib.SetMaxTimeNs(maxTime)
-		log.Printf("Injecting faults: %#v\n", faults)
-		runId, result := once(round, testId, t)
+		runId, result := once(round, testId, runEvent, t)
 		if !result {
 			t.Errorf("%+v and %+v doesn't pass analysis", testId, runId)
 			t.Errorf("faults: %#v\n", faults)
