@@ -70,11 +70,12 @@ CREATE TABLE IF NOT EXISTS deployment (
   FOREIGN KEY(test_id) REFERENCES test(id));
 
 CREATE TABLE IF NOT EXISTS analysis (
-  test_id      INTEGER   NOT NULL,
-  run_id       INTEGER   NOT NULL,
-  id           INTEGER   NOT NULL,
-  valid        INT2      NOT NULL,
-  result       JSON      NOT NULL,
+  test_id         INTEGER   NOT NULL,
+  run_id          INTEGER   NOT NULL,
+  id              INTEGER   NOT NULL,
+  valid           INT2      NOT NULL,
+  result          JSON      NOT NULL,
+  checker_version TEXT      NOT NULL,
   PRIMARY KEY(test_id, run_id, id),
   FOREIGN KEY(test_id) REFERENCES test(id),
   FOREIGN KEY(run_id)  REFERENCES run(id));

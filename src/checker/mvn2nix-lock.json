@@ -335,6 +335,11 @@
       "sha256": "df10657745e39010954fd009276b65b75198bdc40d0adb9916f9697c71fcd986",
       "url": "https://repo1.maven.org/maven2/org/apache/maven/maven-repository-metadata/2.0.6/maven-repository-metadata-2.0.6.pom"
     },
+    "org.clojure:java.data:jar:1.0.78": {
+      "layout": "org/clojure/java.data/1.0.78/java.data-1.0.78.jar",
+      "sha256": "7bc99f98265449f6d1b16801cf417f4900303fa5d274e29f68ce3213591ee35b",
+      "url": "https://repo1.maven.org/maven2/org/clojure/java.data/1.0.78/java.data-1.0.78.jar"
+    },
     "org.codehaus.plexus:plexus-utils:jar:2.0.5": {
       "layout": "org/codehaus/plexus/plexus-utils/2.0.5/plexus-utils-2.0.5.jar",
       "sha256": "b4c51a337078b934ad656ee78a2d3a805a507129dc034692c67db0f94b659d3e",
@@ -410,6 +415,11 @@
       "sha256": "91b0a0d016b8c0cba1ddd8a5c59e5bf5c2a9b49b95577e8e38927a7fdff55ce8",
       "url": "https://repo1.maven.org/maven2/org/slf4j/slf4j-api/1.5.6/slf4j-api-1.5.6.pom"
     },
+    "seancorfield:next.jdbc:pom:1.1.582": {
+      "layout": "seancorfield/next.jdbc/1.1.582/next.jdbc-1.1.582.pom",
+      "sha256": "6dc560582872580acdcf32932f6d823b41b16fa02c88a92a34aadef5badf5fc5",
+      "url": "https://repo.clojars.org/seancorfield/next.jdbc/1.1.582/next.jdbc-1.1.582.pom"
+    },
     "org.apache.maven:maven-artifact:pom:2.2.1": {
       "layout": "org/apache/maven/maven-artifact/2.2.1/maven-artifact-2.2.1.pom",
       "sha256": "f658a628efd6e0efe416b977638ba144af660fe6413f3637a4d03feb6a1ce806",
@@ -419,6 +429,11 @@
       "layout": "dom-top/dom-top/1.0.5/dom-top-1.0.5.jar",
       "sha256": "1d23460ed27aad1a35377cc5da5eebd0ea8c78bb97a0907dbf86c537e195934c",
       "url": "https://repo.clojars.org/dom-top/dom-top/1.0.5/dom-top-1.0.5.jar"
+    },
+    "org.xerial:sqlite-jdbc:pom:3.32.3.2": {
+      "layout": "org/xerial/sqlite-jdbc/3.32.3.2/sqlite-jdbc-3.32.3.2.pom",
+      "sha256": "b0ddba91d4df1097e90ac0edef07a9a5b6b463ff48f31062bbb6f6baea224e1a",
+      "url": "https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.32.3.2/sqlite-jdbc-3.32.3.2.pom"
     },
     "com.boundary:high-scale-lib:jar:1.0.6": {
       "layout": "com/boundary/high-scale-lib/1.0.6/high-scale-lib-1.0.6.jar",
@@ -610,6 +625,11 @@
       "sha256": "f6e9a39caa672f7ec9f20c2983cbfe5672291831f5de2cb8c551f012a720aef6",
       "url": "https://repo1.maven.org/maven2/org/clojure/clojure/1.10.2-alpha4/clojure-1.10.2-alpha4.jar"
     },
+    "seancorfield:next.jdbc:jar:1.1.582": {
+      "layout": "seancorfield/next.jdbc/1.1.582/next.jdbc-1.1.582.jar",
+      "sha256": "10443516c91f7bb592353799a2b27cb47ced202632e67c6135c16aa28317dea3",
+      "url": "https://repo.clojars.org/seancorfield/next.jdbc/1.1.582/next.jdbc-1.1.582.jar"
+    },
     "org.codehaus.plexus:plexus-archiver:pom:2.1": {
       "layout": "org/codehaus/plexus/plexus-archiver/2.1/plexus-archiver-2.1.pom",
       "sha256": "d2e14a5c6bed6ac4fc27d57f6ba227bb64a96742f71ee3fbafd2c019fa9d4449",
@@ -714,6 +734,11 @@
       "layout": "org/codehaus/plexus/plexus-compiler-manager/2.2/plexus-compiler-manager-2.2.jar",
       "sha256": "e5e201f06eca14b5268ec58003926552aea36b27492da20134c1a00ded6759bb",
       "url": "https://repo1.maven.org/maven2/org/codehaus/plexus/plexus-compiler-manager/2.2/plexus-compiler-manager-2.2.jar"
+    },
+    "org.xerial:sqlite-jdbc:jar:3.32.3.2": {
+      "layout": "org/xerial/sqlite-jdbc/3.32.3.2/sqlite-jdbc-3.32.3.2.jar",
+      "sha256": "ec22f4ee8a44b5c962011c68ece72ee537a88ebbe7cad70d3f87c816aea53357",
+      "url": "https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.32.3.2/sqlite-jdbc-3.32.3.2.jar"
     },
     "com.fasterxml.jackson:jackson-parent:pom:2.11": {
       "layout": "com/fasterxml/jackson/jackson-parent/2.11/jackson-parent-2.11.pom",
@@ -1155,6 +1180,11 @@
       "sha256": "c99cc0477b584cc8b76a9cd66a03e5bfc90b19d439757f1832103b6af820b292",
       "url": "https://repo1.maven.org/maven2/org/clojure/spec.alpha/0.2.176/spec.alpha-0.2.176.pom"
     },
+    "org.sonatype.oss:oss-parent:pom:9": {
+      "layout": "org/sonatype/oss/oss-parent/9/oss-parent-9.pom",
+      "sha256": "fb40265f982548212ff82e362e59732b2187ec6f0d80182885c14ef1f982827a",
+      "url": "https://repo1.maven.org/maven2/org/sonatype/oss/oss-parent/9/oss-parent-9.pom"
+    },
     "org.apache.maven.plugins:maven-surefire-plugin:jar:2.12.4": {
       "layout": "org/apache/maven/plugins/maven-surefire-plugin/2.12.4/maven-surefire-plugin-2.12.4.jar",
       "sha256": "da14e7c9643cd3991355730455324a46ac83d633da6446cde96ef8356afa42f4",
@@ -1529,6 +1559,11 @@
       "layout": "org/apache/maven/plugins/maven-plugins/23/maven-plugins-23.pom",
       "sha256": "e07710c7d516a873c8fcafe85840d8a1a78f460c9a364d1c57b1d9e4554639ce",
       "url": "https://repo1.maven.org/maven2/org/apache/maven/plugins/maven-plugins/23/maven-plugins-23.pom"
+    },
+    "org.clojure:java.data:pom:1.0.78": {
+      "layout": "org/clojure/java.data/1.0.78/java.data-1.0.78.pom",
+      "sha256": "4c57287a115237a27f4ef2719c84fe296d29882de1ae1313f982d44acc486aca",
+      "url": "https://repo1.maven.org/maven2/org/clojure/java.data/1.0.78/java.data-1.0.78.pom"
     },
     "org.apache.maven.plugins:maven-plugins:pom:22": {
       "layout": "org/apache/maven/plugins/maven-plugins/22/maven-plugins-22.pom",

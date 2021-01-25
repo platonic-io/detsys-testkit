@@ -52,11 +52,23 @@ in stdenv.mkDerivation rec {
       -H:Name=${pname} \
       ${lib.optionalString stdenv.isDarwin ''-H:-CheckToolchain''} \
       -H:+ReportExceptionStackTraces \
+      -H:IncludeResources="db/.*|static/.*|templates/.*|.*.yml|.*.xml|.*/org/sqlite/.*|org/sqlite/.*" \
+      -H:JNIConfigurationFiles=${src}/native-image/jni-config.json \
+      -H:ReflectionConfigurationFiles=${src}/native-image/reflection-config.json \
       -J-Dclojure.spec.skip-macros=true \
       -J-Dclojure.compiler.direct-linking=true \
+      -J-Dfile.encoding=UTF-8 \
       -J-Djava.awt.headless=true \
       -J-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory \
       --initialize-at-build-time \
+      --initialize-at-build-time=org.sqlite.JDBC \
+      --initialize-at-build-time=org.sqlite.core.DB$ProgressObserver \
+      --initialize-at-build-time=org.sqlite.core.DB \
+      --initialize-at-build-time=org.sqlite.core.NativeDB \
+      --initialize-at-build-time=org.sqlite.ProgressHandler \
+      --initialize-at-build-time=org.sqlite.Function \
+      --initialize-at-build-time=org.sqlite.Function$Aggregate \
+      --initialize-at-build-time=org.sqlite.Function$Window \
       --initialize-at-run-time=sun.font.SunFontManager \
       --initialize-at-run-time=sun.font.StrikeCache \
       --initialize-at-run-time=sun.font.SunLayoutEngine \

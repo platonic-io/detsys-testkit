@@ -57,24 +57,14 @@
 
 (defn checker-list-append
   [test-id run-id]
-  (let [dir (fs/temp-dir "detsys-elle")]
+  (let [dir (fs/temp-dir "detsys-elle")
+        history (db/get-history :list-append test-id run-id)]
     (-> (list-append/check
          {:consistency-models [:strict-serializable]
           :directory dir}
-         (db/get-history :list-append test-id run-id))
+         history)
         (dissoc :also-not)
         (assoc :elle-output (str dir)))))
-
-(defn analyse
-  [test-id run-id checker]
-  (let [result (checker test-id run-id)
-        valid? (:valid? result)]
-    (db/store-result test-id run-id valid? result)
-    (if valid?
-      (System/exit 0)
-      (do
-        (pprint result)
-        (System/exit 1)))))
 
 ;; Since the version is a constant GraalVM will evaluate it at compile-time, and
 ;; it will stay fixed independent of run-time values of the environment
@@ -82,6 +72,17 @@
 (def gitrev ^String
   (or (System/getenv "DETSYS_CHECKER_VERSION")
       "unknown"))
+
+(defn analyse
+  [test-id run-id checker]
+  (let [result (checker test-id run-id)
+        valid? (:valid? result)]
+    (db/store-result test-id run-id valid? result gitrev)
+    (if valid?
+      (System/exit 0)
+      (do
+        (pprint result)
+        (System/exit 1)))))
 
 (defn -main
   [& args]
@@ -92,8 +93,11 @@
               (= arg0 "-v"))
       (do (println gitrev)
           (System/exit 0)))
+    (db/setup-db (db/db))
     (case arg0
-      "rw-register" (analyse test-id run-id checker-rw-register)
-      "list-append" (analyse test-id run-id checker-list-append)
+      "rw-register" (analyse (Integer/parseInt test-id) (Integer/parseInt run-id)
+                             checker-rw-register)
+      "list-append" (analyse (Integer/parseInt test-id) (Integer/parseInt run-id)
+                             checker-list-append)
       (println
        "First argument should be a model, i.e. either \"rw-register\" or \"list-append\""))))
