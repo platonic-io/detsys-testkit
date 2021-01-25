@@ -322,7 +322,11 @@ func (e *Executor) Deploy(srv *http.Server) {
 func (e *Executor) Register() {
 	// Should probably separate the loading of the database to get deployment and register
 	// if so we could remove the need for `Executor` to know the test-id
-	lib.Register(e.testId)
+	components := make([]string, 0, len(e.topology))
+	for c, _ := range e.topology {
+		components = append(components, c)
+	}
+	lib.RegisterExecutor("http://localhost:3001/api/v1/", components)
 }
 
 func (e *Executor) Reset() {

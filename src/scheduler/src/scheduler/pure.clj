@@ -730,10 +730,11 @@
 
 (defn run!
   [data]
-  (loop [data data steps 0]
-    (if (= :finished (:state data))
-      [data {:steps steps}]
-      (recur (-> data step! first) (inc steps)))))
+  (client/with-connection-pool {:timeout 30 :threads 4 :insecure? true}
+    (loop [data data steps 0]
+      (if (= :finished (:state data))
+        [data {:steps steps}]
+        (recur (-> data step! first) (inc steps))))))
 
 (comment
   (fake/with-fake-routes
