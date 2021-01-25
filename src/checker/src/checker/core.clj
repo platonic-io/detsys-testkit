@@ -59,8 +59,6 @@
   [test-id run-id]
   (let [dir (fs/temp-dir "detsys-elle")
         history (db/get-history :list-append test-id run-id)]
-    (pprint "HISTORY")
-    (pprint history)
     (-> (list-append/check
          {:consistency-models [:strict-serializable]
           :directory dir}
@@ -97,11 +95,12 @@
           (System/exit 0)))
     (db/setup-db (db/db))
     (case arg0
-      "rw-register" (analyse test-id run-id checker-rw-register)
-      "list-append" (analyse test-id run-id checker-list-append)
+      "rw-register" (analyse (Integer/parseInt test-id) (Integer/parseInt run-id)
+                             checker-rw-register)
+      "list-append" (analyse (Integer/parseInt test-id) (Integer/parseInt run-id)
+                             checker-list-append)
       (println
        "First argument should be a model, i.e. either \"rw-register\" or \"list-append\""))))
-
 
 (comment
   (db/setup-db (db/db))

@@ -52,8 +52,6 @@ in stdenv.mkDerivation rec {
       -H:Name=${pname} \
       ${lib.optionalString stdenv.isDarwin ''-H:-CheckToolchain''} \
       -H:+ReportExceptionStackTraces \
-      -H:EnableURLProtocols=http,https \ # TODO(stevan): shouldn't be needed?
-      --enable-all-security-services \   # TODO(stevan): shouldn't be needed?
       -H:IncludeResources="db/.*|static/.*|templates/.*|.*.yml|.*.xml|.*/org/sqlite/.*|org/sqlite/.*" \
       -H:JNIConfigurationFiles=${src}/native-image/jni-config.json \
       -H:ReflectionConfigurationFiles=${src}/native-image/reflection-config.json \
