@@ -50,11 +50,11 @@ func RegisterExecutor(executorId string, components []string) {
 	})
 }
 
-func SetSeed(seed Seed) {
+func setSeed(seed Seed) {
 	Post("set-seed!", seed)
 }
 
-func CreateRun(testId TestId) RunId {
+func createRun(testId TestId) RunId {
 	var runId struct {
 		RunId RunId `json:"run-id"`
 	}
@@ -64,7 +64,7 @@ func CreateRun(testId TestId) RunId {
 	return runId.RunId
 }
 
-func InjectFaults(faults Faults) {
+func injectFaults(faults Faults) {
 	type SchedulerFault struct {
 		Kind string `json:"kind"`
 		From string `json:"from"`
@@ -96,22 +96,40 @@ func InjectFaults(faults Faults) {
 	}{schedulerFaults})
 }
 
-func SetTickFrequency(tickFrequency float64) {
+func setTickFrequency(tickFrequency float64) {
 	Post("set-tick-frequency!", struct {
 		TickFrequency float64 `json:"new-tick-frequency"`
 	}{tickFrequency})
 }
 
-func SetMinTimeNs(minTime time.Duration) {
+func setMinTimeNs(minTime time.Duration) {
 	Post("set-min-time!", struct {
 		MinTime int64 `json:"new-min-time-ns"`
 	}{minTime.Nanoseconds()})
 }
 
-func SetMaxTimeNs(maxTime time.Duration) {
+func setMaxTimeNs(maxTime time.Duration) {
 	Post("set-max-time!", struct {
 		MaxTime int64 `json:"new-max-time-ns"`
 	}{maxTime.Nanoseconds()})
+}
+
+type CreateRunEvent struct {
+	Seed          Seed
+	Faults        Faults
+	TickFrequency float64
+	MinTimeNs     time.Duration
+	MaxTimeNs     time.Duration
+}
+
+func CreateRun(testId TestId, event CreateRunEvent) RunId {
+	runId := createRun(testId)
+	setSeed(event.Seed)
+	injectFaults(event.Faults)
+	setTickFrequency(event.TickFrequency)
+	setMinTimeNs(event.MinTimeNs)
+	setMaxTimeNs(event.MaxTimeNs)
+	return runId
 }
 
 func Run() {
