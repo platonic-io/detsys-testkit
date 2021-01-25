@@ -350,22 +350,7 @@
       (= drop? :delay) (do
                          (log/debug :delaying-message body)
                          [data' {:events []}])
-      :else (let [[data' expired-clients] (expired-clients data' timestamp)
-                  _ (doseq [client expired-clients]
-                      (db/append-network-trace! (:test-id data')
-                                                (:run-id data')
-                                                {:message (:event client)
-                                                 :args (:args client)
-                                                 :from (:to client)
-                                                 :to (:from client)
-                                                 :kind (:kind client)
-                                                 :sent-logical-time (:logical-time data')
-                                                 :recv-logical-time (:logical-time data')
-                                                 :recv-simulated-time (:clock data')
-                                                 :dropped false
-                                                 :jepsen-type :info
-                                                 :jepsen-process (-> client :from parse-client-id)}))
-                  is-from-client? (re-matches #"^client:\d+$" (:from body))
+      :else (let [is-from-client? (re-matches #"^client:\d+$" (:from body))
                   dropped? (= drop? :drop)
                   _ (log/debug :sent-logical-time body)
                   sent-logical-time (or (-> body :sent-logical-time)
@@ -688,7 +673,22 @@
   (if-let [entry (-> data :agenda peek)]
     (if (time/before? (:next-tick data) (:at entry))
       (tick! data)
-      (execute! data))
+      (let [[data' expired-clients] (expired-clients data (:at entry))]
+        (doseq [client expired-clients]
+          (db/append-network-trace! (:test-id data')
+                                    (:run-id data')
+                                    {:message (:event client)
+                                     :args (:args client)
+                                     :from (:to client)
+                                     :to (:from client)
+                                     :kind (:kind client)
+                                     :sent-logical-time (:logical-time data')
+                                     :recv-logical-time (:logical-time data')
+                                     :recv-simulated-time (:clock data')
+                                     :dropped false
+                                     :jepsen-type :info
+                                     :jepsen-process (-> client :from parse-client-id)}))
+        (execute! data')))
     (if (time/before? (:next-tick data) (time/plus-nanos (time/init-clock)
                                                          (:min-time-ns data)))
       (tick! data)
