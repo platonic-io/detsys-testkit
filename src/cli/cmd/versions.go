@@ -34,6 +34,7 @@ var versionsCmd = &cobra.Command{
 			"detsys-debug",
 			"detsys-db",
 			"detsys-checker",
+			"detsys-ldfi",
 			"detsys-scheduler",
 		}
 		for _, cmd := range cmds {
