@@ -18,7 +18,7 @@ import (
 const (
 	QUEUE_SIZE       int = 1024
 	BUFFER_LEN       int = 128
-	MAX_STARVE_COUNT int = 32
+	MAX_STARVE_COUNT int = 8
 )
 
 func main() {
