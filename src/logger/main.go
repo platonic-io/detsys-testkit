@@ -36,12 +36,16 @@ func main() {
 	}
 }
 
+func newBuffer() [][]byte {
+	return make([][]byte, 0, BUFFER_LEN)
+}
+
 func worker(db *sql.DB, queue chan []byte) {
-	buffer := make([][]byte, 0, BUFFER_LEN)
+	buffer := newBuffer()
 	for {
 		if len(buffer) >= BUFFER_LEN {
 			commit(db, buffer)
-			buffer = buffer[:0]
+			buffer = newBuffer()
 		} else {
 			if len(buffer) == 0 {
 				entry := <-queue // Blocking.
@@ -52,7 +56,7 @@ func worker(db *sql.DB, queue chan []byte) {
 					buffer = append(buffer, entry)
 				} else {
 					commit(db, buffer)
-					buffer = buffer[:0]
+					buffer = newBuffer()
 				}
 			}
 		}
@@ -109,14 +113,14 @@ func commit(db *sql.DB, buffer [][]byte) {
 		panic(err)
 	}
 	duration := time.Since(start)
-	log.Println("The worker thread commited %d entries in %v!", BUFFER_LEN, duration)
+	log.Printf("The worker thread committed %d entries in %v!\n", len(buffer), duration)
 }
 
 func parse(entry []byte) ([]byte, []byte, []byte) {
 	// NOTE: Tab characters are not allowed to appear unescaped in JSON.
 	split := bytes.Split(entry, []byte("\t"))
 	if len(split) != 3 {
-		panic(fmt.Sprintf("parse: failed to split entry: %v", entry))
+		panic(fmt.Sprintf("parse: failed to split entry: %s", string(entry)))
 	}
 	return split[0], split[1], split[2]
 }
