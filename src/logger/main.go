@@ -37,11 +37,11 @@ func main() {
 }
 
 func worker(db *sql.DB, queue chan []byte) {
-	var buffer [][]byte
+	buffer := make([][]byte, 0, BUFFER_LEN)
 	for {
 		if len(buffer) >= BUFFER_LEN {
 			commit(db, buffer)
-			buffer = [][]byte{}
+			buffer = buffer[:0]
 		} else {
 			if len(buffer) == 0 {
 				entry := <-queue // Blocking.
@@ -52,7 +52,7 @@ func worker(db *sql.DB, queue chan []byte) {
 					buffer = append(buffer, entry)
 				} else {
 					commit(db, buffer)
-					buffer = [][]byte{}
+					buffer = buffer[:0]
 				}
 			}
 		}
