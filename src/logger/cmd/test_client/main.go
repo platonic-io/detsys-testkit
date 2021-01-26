@@ -10,7 +10,7 @@ import (
 
 func log(w *bufio.Writer, event []byte, meta []byte, data []byte) {
 	entry := append(bytes.Join([][]byte{event, meta, data}, []byte("\t")), byte('\n'))
-	fmt.Printf("log: entry = %s", string(entry))
+	fmt.Printf("log: entry = '%s'\n", string(entry))
 	_, err := w.Write(entry)
 	if err != nil {
 		panic(err)

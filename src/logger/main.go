@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 const (
 	QUEUE_SIZE int = 1024
 	BUFFER_LEN int = 128
+	PIPE_BUF   int = 512 // POSIX
 )
 
 func main() {
@@ -27,11 +29,17 @@ func main() {
 
 	go worker(db, queue)
 
+	r := bufio.NewReaderSize(fh, PIPE_BUF)
+
 	for {
-		scanner := bufio.NewScanner(fh)
-		scanner.Split(bufio.ScanLines)
-		for scanner.Scan() {
-			enqueue(queue, scanner.Bytes())
+		line, err := r.ReadBytes('\n')
+		for err == nil {
+			enqueue(queue, line)
+			line, err = r.ReadBytes('\n')
+		}
+		if err != io.EOF {
+			fmt.Println(err)
+			return
 		}
 	}
 }
@@ -120,7 +128,7 @@ func parse(entry []byte) ([]byte, []byte, []byte) {
 	// NOTE: Tab characters are not allowed to appear unescaped in JSON.
 	split := bytes.Split(entry, []byte("\t"))
 	if len(split) != 3 {
-		panic(fmt.Sprintf("parse: failed to split entry: %s", string(entry)))
+		panic(fmt.Sprintf("parse: failed to split entry: '%s'\n", string(entry)))
 	}
 	return split[0], split[1], split[2]
 }
