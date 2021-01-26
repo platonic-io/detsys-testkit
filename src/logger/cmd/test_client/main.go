@@ -29,8 +29,8 @@ func main() {
 	}
 	w := bufio.NewWriter(fh)
 
-	for i := 0; i < 129; i++ {
-		if i%20 == 0 {
+	for i := 0; i < 50000; i++ {
+		if i%200 == 0 {
 			fmt.Printf("Writing... i = %d\n", i)
 
 		}
