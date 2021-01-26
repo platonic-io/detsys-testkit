@@ -810,6 +810,29 @@
   [(update data :faults (fn [fs] (apply conj fs (:faults faults))))
    {:ok "added faults"}])
 
+(s/def ::create-run-event
+  (s/keys :req-un
+          [::test-id
+           ::seed
+           ::faults
+           ;; The following fields can in the event also be integer rather than just double
+           ;; in the data field they will always be double though.
+           ;; ::tick-frequency
+           ;; ::min-time-ns
+           ;; ::max-time-ns
+           ]))
+
+(>defn create-run-event!
+  [data create-run-event]
+  [::data ::create-run-event => (s/tuple ::data (s/keys :req-un [::run-id]))]
+  (let [[data _] (set-seed! data {:new-seed (:seed create-run-event)})
+        [data run-id] (create-run! data create-run-event)
+        [data _] (inject-faults! data create-run-event)
+        [data _] (set-tick-frequency! data {:new-tick-frequency (:tick-frequency create-run-event)})
+        [data _] (set-min-time! data {:new-min-time-ns (:min-time-ns create-run-event)})
+        [data _] (set-max-time! data {:new-max-time-ns (:max-time-ns create-run-event)})]
+    [data run-id]))
+
 ;; Since the version is a constant GraalVM will evaluate it at compile-time, and
 ;; it will stay fixed independent of run-time values of the environment
 ;; variable.
