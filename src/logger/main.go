@@ -41,7 +41,7 @@ func worker(db *sql.DB, queue chan []byte) {
 	var buffer [][]byte
 	starve := 0
 	for {
-		if len(buffer) <= BUFFER_LEN || starve >= MAX_STARVE_COUNT {
+		if len(buffer) >= BUFFER_LEN || starve >= MAX_STARVE_COUNT {
 			commit(db, buffer)
 			buffer = [][]byte{}
 		} else {
