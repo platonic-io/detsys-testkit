@@ -73,14 +73,14 @@ func enqueue(queue chan []byte, item []byte) {
 	}
 }
 
-// Non-blocking dequeue.
+// Blocking dequeue with timeout.
 func dequeue(queue chan []byte) ([]byte, bool) {
 	var item []byte
 	var ok bool
 	select {
 	case item = <-queue:
 		ok = true
-	default:
+	case <-time.After(200 * time.Millisecond):
 		ok = false
 	}
 	return item, ok
@@ -99,8 +99,7 @@ func commit(db *sql.DB, buffer [][]byte) {
 			`INSERT INTO event_log(event, meta, data) VALUES(?, ?, ?)`,
 			event, meta, data)
 		if err != nil {
-			_ = tx.Rollback()
-			return
+			panic(err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -111,7 +110,8 @@ func commit(db *sql.DB, buffer [][]byte) {
 }
 
 func parse(item []byte) ([]byte, []byte, []byte) {
-	split := bytes.Split(item, []byte(";"))
+	// NOTE: Tab characters are not allowed to appear unescaped in JSON.
+	split := bytes.Split(item, []byte("\t"))
 	if len(split) != 3 {
 		panic(fmt.Sprintf("parse: failed to split item: %v", item))
 	}
