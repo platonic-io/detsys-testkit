@@ -16,9 +16,8 @@ import (
 )
 
 const (
-	QUEUE_SIZE       int = 1024
-	BUFFER_LEN       int = 128
-	MAX_STARVE_COUNT int = 8
+	QUEUE_SIZE int = 1024
+	BUFFER_LEN int = 128
 )
 
 func main() {
@@ -39,34 +38,38 @@ func main() {
 
 func worker(db *sql.DB, queue chan []byte) {
 	var buffer [][]byte
-	starve := 0
 	for {
-		if len(buffer) >= BUFFER_LEN || starve >= MAX_STARVE_COUNT {
+		if len(buffer) >= BUFFER_LEN {
 			commit(db, buffer)
 			buffer = [][]byte{}
 		} else {
-			item, ok := dequeue(queue)
-			if ok {
-				buffer = append(buffer, item)
-				starve = 0
+			if len(buffer) == 0 {
+				entry := <-queue // Blocking.
+				buffer = append(buffer, entry)
 			} else {
-				starve++
+				entry, ok := dequeue(queue)
+				if ok {
+					buffer = append(buffer, entry)
+				} else {
+					commit(db, buffer)
+					buffer = [][]byte{}
+				}
 			}
 		}
 	}
 }
 
-func enqueue(queue chan []byte, item []byte) {
+func enqueue(queue chan []byte, entry []byte) {
 	var ok bool
 	select {
-	case queue <- item:
+	case queue <- entry:
 		ok = true
 	default:
 		ok = false
 	}
 	if !ok {
 		start := time.Now()
-		queue <- item
+		queue <- entry
 		duration := time.Since(start)
 		log.Println("The main thread was blocked for %v due to the queue being full!",
 			duration)
@@ -75,15 +78,15 @@ func enqueue(queue chan []byte, item []byte) {
 
 // Blocking dequeue with timeout.
 func dequeue(queue chan []byte) ([]byte, bool) {
-	var item []byte
+	var entry []byte
 	var ok bool
 	select {
-	case item = <-queue:
+	case entry = <-queue:
 		ok = true
 	case <-time.After(200 * time.Millisecond):
 		ok = false
 	}
-	return item, ok
+	return entry, ok
 }
 
 func commit(db *sql.DB, buffer [][]byte) {
@@ -93,8 +96,8 @@ func commit(db *sql.DB, buffer [][]byte) {
 	if err != nil {
 		panic(err)
 	}
-	for _, item := range buffer {
-		event, meta, data := parse(item)
+	for _, entry := range buffer {
+		event, meta, data := parse(entry)
 		_, err := tx.ExecContext(ctx,
 			`INSERT INTO event_log(event, meta, data) VALUES(?, ?, ?)`,
 			event, meta, data)
@@ -106,14 +109,14 @@ func commit(db *sql.DB, buffer [][]byte) {
 		panic(err)
 	}
 	duration := time.Since(start)
-	log.Println("The worker thread commited %d items in %v!", BUFFER_LEN, duration)
+	log.Println("The worker thread commited %d entries in %v!", BUFFER_LEN, duration)
 }
 
-func parse(item []byte) ([]byte, []byte, []byte) {
+func parse(entry []byte) ([]byte, []byte, []byte) {
 	// NOTE: Tab characters are not allowed to appear unescaped in JSON.
-	split := bytes.Split(item, []byte("\t"))
+	split := bytes.Split(entry, []byte("\t"))
 	if len(split) != 3 {
-		panic(fmt.Sprintf("parse: failed to split item: %v", item))
+		panic(fmt.Sprintf("parse: failed to split entry: %v", entry))
 	}
 	return split[0], split[1], split[2]
 }
