@@ -124,11 +124,16 @@ func commit(db *sql.DB, buffer [][]byte) {
 	if err != nil {
 		panic(err)
 	}
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO event_log(event, meta, data) VALUES(?,?,?)`)
+	if err != nil {
+		panic(err)
+	}
+	defer stmt.Close()
+
 	for _, entry := range buffer {
+		// parse should probably happen before we do db stuff you know..
 		event, meta, data := parse(entry)
-		_, err := tx.ExecContext(ctx,
-			`INSERT INTO event_log(event, meta, data) VALUES(?, ?, ?)`,
-			event, meta, data)
+		_, err := stmt.ExecContext(ctx, event, meta, data)
 		if err != nil {
 			panic(err)
 		}

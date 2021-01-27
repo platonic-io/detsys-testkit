@@ -1,6 +1,8 @@
 package lib
 
 import (
+	"bufio"
+	"bytes"
 	"database/sql"
 	"encoding/json"
 )
@@ -39,13 +41,12 @@ func EmitEventLog(w *bufio.Writer, event string, meta interface{}, data interfac
 	if err != nil {
 		panic(err)
 	}
-	entry := append(bytes.Join([][]byte{event, meta, data}, []byte("\t")), byte('\n'))
-	// fmt.Printf("log: entry of size '%d'\n", len(entry))
-	_, err := w.Write(entry)
+	entry := append(bytes.Join([][]byte{[]byte(event), metaBlob, dataBlob}, []byte("\t")), byte('\n'))
+	_, err = w.Write(entry)
 	if err != nil {
 		panic(err)
 	}
-	if err := w.Flush(); err != nil {
+	if err = w.Flush(); err != nil {
 		panic(err)
 	}
 }

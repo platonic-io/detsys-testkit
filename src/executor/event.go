@@ -2,10 +2,8 @@ package executor
 
 import (
 	"bufio"
-	"bytes"
 	"database/sql"
 	"encoding/json"
-	// "fmt"
 
 	"time"
 
