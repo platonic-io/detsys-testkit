@@ -73,3 +73,7 @@
 (defn append-network-trace!
   [test-id run-id data]
   (append-event! test-id run-id "NetworkTrace" data))
+
+(defn append-create-run-event!
+  [test-id run-id data]
+  (append-event! test-id run-id "CreateRun" data))
