@@ -21,7 +21,7 @@ pythonPackages.buildPythonApplication rec {
     export SETUPTOOLS_SCM_PRETEND_VERSION="${lib.commitIdFromGitRepo ./../../.git}"
   '';
 
-  checkInputs = with pythonPackages; [ pytest pytestrunner ];
+  checkInputs = with pythonPackages; [ z3 pytest pytestrunner ];
   propagatedBuildInputs = with pythonPackages; [ z3-solver setuptools setuptools_scm ];
 
   checkPhase = "pytest --capture=tee-sys";

@@ -1,0 +1,14 @@
+load("@rules_python//python:defs.bzl", "py_test")
+
+py_test(
+    name = "ldfi_test",
+    main = "tests/test_ldfi.py",
+    srcs = ["tests/test_ldfi.py"],
+    imports = [".."],
+    deps = [
+        "//src/ldfi/src:ldfi_lib"
+    ],
+    env = {
+        "Z3_LIBRARY_PATH": "/nix/store/zdaninww6cyh3h9aj7w0kymz8c13b1q4-z3-4.8.9-lib/lib"
+    }
+)
