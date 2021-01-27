@@ -1,8 +1,12 @@
 package executor
 
 import (
+	"bufio"
+	"bytes"
 	"database/sql"
 	"encoding/json"
+	// "fmt"
+
 	"time"
 
 	"github.com/symbiont-io/detsys-testkit/src/lib"
@@ -17,7 +21,7 @@ type ExecutionStepEvent struct {
 	HeapDiff      json.RawMessage
 }
 
-func EmitExecutionStepEvent(db *sql.DB, event ExecutionStepEvent) {
+func EmitExecutionStepEvent(db *sql.DB, w *bufio.Writer, event ExecutionStepEvent) {
 	meta := struct {
 		Component string     `json:"component"`
 		RunId     lib.RunId  `json:"run-id"`
@@ -42,5 +46,5 @@ func EmitExecutionStepEvent(db *sql.DB, event ExecutionStepEvent) {
 		HeapDiff:      event.HeapDiff,
 	}
 
-	lib.EmitEvent(db, "ExecutionStep", meta, data)
+	lib.EmitEventLog(w, "ExecutionStep", meta, data)
 }
