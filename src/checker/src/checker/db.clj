@@ -99,16 +99,16 @@
 
 (defn store-result
   [test-id run-id valid? result gitrev]
-  (jdbc/execute-one!
-   ds
-   ["INSERT INTO analysis (test_id, run_id, id, valid, result, checker_version)
-     VALUES(?,
-            ?,
-            (SELECT IFNULL(MAX(id), - 1) + 1 FROM analysis WHERE test_id = ? AND run_id = ?),
-            ?,
-            ?,
-            ?)"
-   test-id run-id test-id run-id (if valid? 1 0) (json/write result) gitrev]))
+  (let [meta (json/write {:component "checker"
+                          :test-id test-id
+                          :run-id run-id})
+        data (json/write {:valid valid?
+                          :result result
+                          :checker-version gitrev})]
+    (jdbc/execute-one!
+     ds
+     ["INSERT INTO event_log (event, meta, data) VALUES(?,?,?)"
+      "Analysis" meta data])))
 
 (comment
   (setup-db (db))

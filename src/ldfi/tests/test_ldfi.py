@@ -25,7 +25,7 @@ def test_load_previous_faults():
     storage = ldfi.SqliteStorage()
     # TODO(stevan): add contract test in db component saying ldfi expects the
     # following table and fields.
-    storage.c.execute("""CREATE TABLE IF NOT EXISTS faults (
+    storage.c.execute("""CREATE TABLE IF NOT EXISTS run_info (
                            test_id  INT  NOT NULL,
                            run_id   INT  NOT NULL,
                            faults   JSON NOT NULL)""")
@@ -33,10 +33,10 @@ def test_load_previous_faults():
     config = ldfi.Config(1, [0, 1], 2, 0)
     assert storage.load_previous_faults(config) == []
 
-    faults1 = json.dumps({"faults": [o("A", "B", 1)]})
-    faults2 = json.dumps({"faults": [o("A", "B", 1), o("A", "C", 2)]})
-    storage.c.execute("INSERT INTO faults VALUES(?, ?, ?)", (1, 0, faults1))
-    storage.c.execute("INSERT INTO faults VALUES(?, ?, ?)", (1, 1, faults2))
+    faults1 = json.dumps([o("A", "B", 1)])
+    faults2 = json.dumps([o("A", "B", 1), o("A", "C", 2)])
+    storage.c.execute("INSERT INTO run_info VALUES(?, ?, ?)", (1, 0, faults1))
+    storage.c.execute("INSERT INTO run_info VALUES(?, ?, ?)", (1, 1, faults2))
     storage.conn.commit()
     assert storage.load_previous_faults(config) == [
         [{"kind": "omission", "from": "A", "to": "B", "at": 1}],

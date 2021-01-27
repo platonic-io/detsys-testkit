@@ -831,6 +831,7 @@
         [data _] (set-tick-frequency! data {:new-tick-frequency (:tick-frequency create-run-event)})
         [data _] (set-min-time! data {:new-min-time-ns (:min-time-ns create-run-event)})
         [data _] (set-max-time! data {:new-max-time-ns (:max-time-ns create-run-event)})]
+    (db/append-create-run-event! (:test-id data) (:run-id data) create-run-event)
     [data run-id]))
 
 ;; Since the version is a constant GraalVM will evaluate it at compile-time, and
