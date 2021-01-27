@@ -68,11 +68,11 @@ class SqliteStorage(Storage):
         self.c = self.conn.cursor()
 
     def load_previous_faults(self, config: Config) -> List[List[Dict]]:
-        self.c.execute("""SELECT faults FROM faults
-                          WHERE test_id = '%s'
+        self.c.execute("""SELECT faults FROM run_info
+                          WHERE test_id = %s
                           ORDER BY run_id ASC""" % config.test_id)
 
-        return [ json.loads(row["faults"])["faults"] for row in self.c.fetchall() ]
+        return [ json.loads(row["faults"]) for row in self.c.fetchall() ]
 
     def load_potential_faults(self, config: Config) -> List[List[Dict]]:
         potential_faults: List[List[Dict]] = [ [] for _ in range(len(config.run_ids)) ]
