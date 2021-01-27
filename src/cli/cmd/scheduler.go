@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -20,9 +19,7 @@ var schedulerCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 }
 
-func pidFile() string {
-	return filepath.Join(os.TempDir(), "detsys-scheduler.pid")
-}
+var pidScheduler string = pidFile("scheduler")
 
 var schedulerUpCmd = &cobra.Command{
 	Use:   "up",
@@ -30,9 +27,9 @@ var schedulerUpCmd = &cobra.Command{
 	Long:  ``,
 	Args:  cobra.NoArgs,
 	Run: func(_ *cobra.Command, args []string) {
-		pid, err := readPid()
+		pid, err := readPid("scheduler")
 		if err == nil {
-			fmt.Printf("Already running on pid: %d (%s)\n", pid, pidFile())
+			fmt.Printf("Already running on pid: %d (%s)\n", pid, pidScheduler)
 			os.Exit(1)
 		}
 
@@ -47,22 +44,9 @@ var schedulerUpCmd = &cobra.Command{
 
 		pidBs := []byte(strconv.Itoa(cmd.Process.Pid))
 
-		ioutil.WriteFile(pidFile(), pidBs, 0600)
+		ioutil.WriteFile(pidScheduler, pidBs, 0600)
 		fmt.Printf("%s\n", pidBs)
 	},
-}
-
-func readPid() (int, error) {
-	bs, err := ioutil.ReadFile(pidFile())
-	if err != nil {
-		return -1, err
-	}
-
-	pid, err := strconv.Atoi(string(bs))
-	if err != nil {
-		return -1, err
-	}
-	return pid, nil
 }
 
 var schedulerDownCmd = &cobra.Command{
@@ -72,7 +56,7 @@ var schedulerDownCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	Run: func(_ *cobra.Command, args []string) {
 
-		pid, err := readPid()
+		pid, err := readPid("scheduler")
 		if err != nil {
 			fmt.Printf("%s\n", err)
 			os.Exit(1)
@@ -90,7 +74,7 @@ var schedulerDownCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		err = os.Remove(pidFile())
+		err = os.Remove(pidScheduler)
 		if err != nil {
 			fmt.Printf("%s\n", err)
 			os.Exit(1)
@@ -150,12 +134,7 @@ var schedulerRegisterCmd = &cobra.Command{
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		eventLog := lib.EventLogEmitter{
-			Component: "cli",
-			TestId:    &testId,
-			RunId:     nil,
-		}
-		lib.Register(eventLog, testId)
+		lib.Register(testId)
 	},
 }
 
@@ -170,7 +149,16 @@ var schedulerCreateRunCmd = &cobra.Command{
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		runId := lib.CreateRun(testId)
+
+		// TODO(stevan): make this configurable via flags.
+		runEvent := lib.CreateRunEvent{
+			Seed:          lib.Seed(4),
+			Faults:        lib.Faults{},
+			TickFrequency: 10000000,
+			MinTimeNs:     0,
+			MaxTimeNs:     0,
+		}
+		runId := lib.CreateRun(testId, runEvent)
 		fmt.Printf("Created run id: %v\n", runId)
 	},
 }
