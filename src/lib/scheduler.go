@@ -28,9 +28,7 @@ type QueueSize struct {
 	QueueSize int `json:"queue-size"`
 }
 
-type Seed struct {
-	Seed int `json:"new-seed"`
-}
+type Seed int
 
 func LoadTest(testId TestId) QueueSize {
 	var queueSize QueueSize
@@ -50,27 +48,14 @@ func RegisterExecutor(executorId string, components []string) {
 	})
 }
 
-func setSeed(seed Seed) {
-	Post("set-seed!", seed)
+type SchedulerFault struct {
+	Kind string `json:"kind"`
+	From string `json:"from"`
+	To   string `json:"to"`
+	At   int    `json:"at"` // should be time.Time?
 }
 
-func createRun(testId TestId) RunId {
-	var runId struct {
-		RunId RunId `json:"run-id"`
-	}
-	PostParse("create-run!", struct {
-		TestId TestId `json:"test-id"`
-	}{testId}, &runId)
-	return runId.RunId
-}
-
-func injectFaults(faults Faults) {
-	type SchedulerFault struct {
-		Kind string `json:"kind"`
-		From string `json:"from"`
-		To   string `json:"to"`
-		At   int    `json:"at"` // should be time.Time?
-	}
+func toSchedulerFaults(faults Faults) []SchedulerFault {
 	schedulerFaults := make([]SchedulerFault, 0, len(faults.Faults))
 	for _, fault := range faults.Faults {
 		var schedulerFault SchedulerFault
@@ -91,27 +76,7 @@ func injectFaults(faults Faults) {
 		schedulerFaults = append(schedulerFaults, schedulerFault)
 
 	}
-	Post("inject-faults!", struct {
-		Faults []SchedulerFault `json:"faults"`
-	}{schedulerFaults})
-}
-
-func setTickFrequency(tickFrequency float64) {
-	Post("set-tick-frequency!", struct {
-		TickFrequency float64 `json:"new-tick-frequency"`
-	}{tickFrequency})
-}
-
-func setMinTimeNs(minTime time.Duration) {
-	Post("set-min-time!", struct {
-		MinTime int64 `json:"new-min-time-ns"`
-	}{minTime.Nanoseconds()})
-}
-
-func setMaxTimeNs(maxTime time.Duration) {
-	Post("set-max-time!", struct {
-		MaxTime int64 `json:"new-max-time-ns"`
-	}{maxTime.Nanoseconds()})
+	return schedulerFaults
 }
 
 type CreateRunEvent struct {
@@ -123,13 +88,19 @@ type CreateRunEvent struct {
 }
 
 func CreateRun(testId TestId, event CreateRunEvent) RunId {
-	runId := createRun(testId)
-	setSeed(event.Seed)
-	injectFaults(event.Faults)
-	setTickFrequency(event.TickFrequency)
-	setMinTimeNs(event.MinTimeNs)
-	setMaxTimeNs(event.MaxTimeNs)
-	return runId
+	var runId struct {
+		RunId RunId `json:"run-id"`
+	}
+	PostParse("create-run-event!", struct {
+		TestId        TestId           `json:"test-id"`
+		Seed          Seed             `json:"seed"`
+		Faults        []SchedulerFault `json:"faults"`
+		TickFrequency float64          `json:"tick-frequency"`
+		MinTimeNs     time.Duration    `json:"min-time-ns"`
+		MaxTimeNs     time.Duration    `json:"max-time-ns"`
+	}{testId, event.Seed, toSchedulerFaults(event.Faults), event.TickFrequency, event.MinTimeNs, event.MaxTimeNs}, &runId)
+	return runId.RunId
+
 }
 
 func Run() {

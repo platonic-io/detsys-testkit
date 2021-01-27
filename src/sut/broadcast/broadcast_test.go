@@ -52,7 +52,7 @@ func many(round Round, t *testing.T) {
 		lib.Reset()
 		maxTime := time.Duration(5) * time.Second
 		runEvent := lib.CreateRunEvent{
-			Seed:          lib.Seed{1},
+			Seed:          lib.Seed(1),
 			Faults:        lib.Faults{faults},
 			TickFrequency: tickFrequency,
 			MaxTimeNs:     maxTime,

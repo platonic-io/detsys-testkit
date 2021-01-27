@@ -72,7 +72,7 @@ func testRegisterWithFrontEnd(newFrontEnd func() lib.Reactor, tickFrequency floa
 	for {
 		lib.Reset()
 		runEvent := lib.CreateRunEvent{
-			Seed:          lib.Seed{4},
+			Seed:          lib.Seed(4),
 			Faults:        lib.Faults{faults},
 			TickFrequency: tickFrequency,
 			MinTimeNs:     0,
