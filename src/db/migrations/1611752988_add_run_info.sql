@@ -11,5 +11,9 @@ CREATE VIEW IF NOT EXISTS run_info AS
     FROM event_log
    WHERE event like 'CreateRun';
 
+DROP TABLE IF EXISTS faults;
+
 -- +migrate Down
 DROP VIEW IF EXISTS run_info;
+
+CREATE TABLE IF NOT EXISTS faults (rowid INTEGER PRIMARY KEY) WITHOUT ROWID;

@@ -97,10 +97,15 @@ class SqliteStorage(Storage):
         return potential_faults
 
     def store(self, event: Event):
-        self.c.execute("""INSERT INTO faults(test_id, run_id, faults, version, statistics)
-                          VALUES(?, ?, ?, ?, ?)""",
-                       (event.test_id, event.run_id, event.faults, event.version,
-                        event.statistics))
+        meta = json.dumps({"component": "ldfi",
+                           "test-id": event.test_id,
+                           "runid": event.run_id})
+        data = json.dumps({"faults": json.loads(event.faults)["faults"],
+                           "version": event.version,
+                           "statistics": event.statistics})
+        self.c.execute("""INSERT INTO event_log(event, meta, data)
+                          VALUES(?, ?, ?)""",
+                       ("LdfiAnalysis", meta, data))
         self.conn.commit()
 
 def create_sat_formula(config, previous_faults, potential_faults):
