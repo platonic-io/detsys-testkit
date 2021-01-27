@@ -18,7 +18,7 @@ import (
 
 const (
 	QUEUE_SIZE int = 1024
-	BUFFER_LEN int = 128
+	BUFFER_LEN int = 512
 	PIPE_BUF   int = 512 // POSIX
 )
 
@@ -38,8 +38,11 @@ func main() {
 			line, err = r.ReadBytes('\n')
 		}
 		if err != io.EOF {
-			fmt.Println(err)
-			return
+			panic(err)
+		} else {
+			// Avoid getting into a 100% CPU loop if there's nothing
+			// to read from the pipe.
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 }
@@ -83,7 +86,7 @@ func enqueue(queue chan []byte, entry []byte) {
 		start := time.Now()
 		queue <- entry
 		duration := time.Since(start)
-		log.Println("The main thread was blocked for %v due to the queue being full!",
+		log.Printf("The main thread was blocked for %v due to the queue being full!\n",
 			duration)
 	}
 }
