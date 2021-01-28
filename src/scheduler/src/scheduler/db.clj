@@ -35,16 +35,11 @@
                   (update :at time/instant)
                   (update :args json/read)))))
 
-(defn create-run!
-  [test-id seed]
+(defn next-run-id!
+  [test-id]
   (jdbc/execute-one!
    ds
-   ["INSERT INTO run (test_id, id, seed)
-     VALUES (?, (SELECT IFNULL(MAX(id), -1) + 1 FROM run WHERE test_id = ?), ?)"
-    test-id test-id seed])
-  (jdbc/execute-one!
-   ds
-   ["SELECT MAX(id) as `run-id` FROM run WHERE test_id = ?" test-id]
+   ["SELECT IFNULL(MAX(run_id), -1) + 1 as `run-id` FROM run_info WHERE test_id = ?" test-id]
    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (comment
