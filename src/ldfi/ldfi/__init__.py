@@ -107,7 +107,7 @@ class SqliteStorage(Storage):
     def store(self, event: Event):
         meta = json.dumps({"component": "ldfi",
                            "test-id": event.test_id,
-                           "runid": event.run_id})
+                           "run-id": event.run_id})
         data = json.dumps({"faults": json.loads(event.faults)["faults"],
                            "version": event.version,
                            "statistics": event.statistics})

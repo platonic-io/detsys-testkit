@@ -63,6 +63,10 @@ var schedulerDownCmd = &cobra.Command{
 		}
 
 		process, err := os.FindProcess(pid)
+
+		// TODO(stevan): catch `os: process already finished` and remove
+		// pid file and exit 0. (And do the same for logger, or better
+		// yet factor out this code.)
 		if err != nil {
 			fmt.Printf("%s\n", err)
 			os.Exit(1)
