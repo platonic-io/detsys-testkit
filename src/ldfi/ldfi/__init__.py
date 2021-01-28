@@ -68,11 +68,19 @@ class SqliteStorage(Storage):
         self.c = self.conn.cursor()
 
     def load_previous_faults(self, config: Config) -> List[List[Dict]]:
+        # The json is not guaranteed to be in the same order as the dictionary
+        # we normally create, so we re-create it here to guarantee they will be
+        # the same.
+        def element(e):
+            return {"kind": e['kind'],
+                    "from": e['from'],
+                    "to": e['to'],
+                    "at": e['at']}
         self.c.execute("""SELECT faults FROM run_info
                           WHERE test_id = %s
                           ORDER BY run_id ASC""" % config.test_id)
 
-        return [ json.loads(row["faults"]) for row in self.c.fetchall() ]
+        return [ [ element(e) for e in json.loads(row["faults"])] for row in self.c.fetchall() ]
 
     def load_potential_faults(self, config: Config) -> List[List[Dict]]:
         potential_faults: List[List[Dict]] = [ [] for _ in range(len(config.run_ids)) ]
