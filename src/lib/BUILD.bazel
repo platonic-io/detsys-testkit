@@ -4,6 +4,7 @@ go_library(
     name = "lib",
     srcs = [
         "checker.go",
+        "event.go",
         "generator.go",
         "ldfi.go",
         "lib.go",

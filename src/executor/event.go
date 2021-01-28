@@ -18,7 +18,7 @@ type ExecutionStepEvent struct {
 }
 
 func EmitExecutionStepEvent(db *sql.DB, event ExecutionStepEvent) {
-	metaBlob, err := json.Marshal(struct {
+	meta := struct {
 		Component string     `json:"component"`
 		RunId     lib.RunId  `json:"run-id"`
 		TestId    lib.TestId `json:"test-id"`
@@ -26,12 +26,9 @@ func EmitExecutionStepEvent(db *sql.DB, event ExecutionStepEvent) {
 		Component: "executor",
 		RunId:     event.Meta.RunId,
 		TestId:    event.Meta.TestId,
-	})
-	if err != nil {
-		panic(err)
 	}
 
-	dataBlob, err := json.Marshal(struct {
+	data := struct {
 		Reactor       string          `json:"reactor"`
 		LogicalTime   int             `json:"logical-time"`
 		SimulatedTime time.Time       `json:"simulated-time"`
@@ -43,20 +40,7 @@ func EmitExecutionStepEvent(db *sql.DB, event ExecutionStepEvent) {
 		SimulatedTime: event.SimulatedTime,
 		LogLines:      event.LogLines,
 		HeapDiff:      event.HeapDiff,
-	})
-	if err != nil {
-		panic(err)
 	}
 
-	stmt, err := db.Prepare(`INSERT INTO event_log(event, meta, data) VALUES(?,?,?)`)
-	if err != nil {
-		panic(err)
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec("ExecutionStep", metaBlob, dataBlob)
-
-	if err != nil {
-		panic(err)
-	}
+	lib.EmitEvent(db, "ExecutionStep", meta, data)
 }

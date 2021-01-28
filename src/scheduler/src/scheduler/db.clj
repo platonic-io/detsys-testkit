@@ -28,12 +28,12 @@
   [test-id]
   (->> (jdbc/execute!
         ds
-        ["SELECT * FROM agenda WHERE test_id = ? ORDER BY id ASC" test-id]
-        {:return-keys true :builder-fn rs/as-unqualified-lower-maps})
-       (mapv #(-> %
-                  (dissoc :id :test_id)
-                  (update :at time/instant)
-                  (update :args json/read)))))
+        ["SELECT agenda FROM test_info WHERE test_id = ?" test-id]
+        {:builder-fn rs/as-unqualified-lower-maps})
+       first ;; we should only have one test for the test_id..
+       :agenda
+       json/read
+       (mapv #(update % :at time/instant))))
 
 (defn next-run-id!
   [test-id]

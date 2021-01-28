@@ -187,36 +187,14 @@ func Deploy(srv *http.Server, topology Topology, m lib.Marshaler) {
 }
 
 func topologyFromDeployment(testId lib.TestId, constructor func(string) lib.Reactor) (Topology, error) {
-	query := fmt.Sprintf(`SELECT component,type
-                              FROM deployment
-                              WHERE test_id = %d`, testId.TestId)
+	deployments, err := lib.DeploymentInfoForTest(testId)
 
-	db := lib.OpenDB()
-	defer db.Close()
-
-	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	topologyRaw := make(map[string]string)
-	type Column struct {
-		Component string
-		Type      string
-	}
-	for rows.Next() {
-		column := Column{}
-		err := rows.Scan(&column.Component, &column.Type)
-		if err != nil {
-			return nil, err
-		}
-		topologyRaw[column.Component] = column.Type
-	}
-
 	topologyCooked := make(Topology)
-	for component, typ := range topologyRaw {
-		topologyCooked[component] = constructor(typ)
+	for _, deploy := range deployments {
+		topologyCooked[deploy.Reactor] = constructor(deploy.Type)
 	}
 	return topologyCooked, nil
 }
@@ -277,7 +255,7 @@ func (e *Executor) SetTestId(testId lib.TestId) {
 	e.testId = testId
 }
 
-func NewExecutor(testId lib.TestId, marshaler lib.Marshaler, logger *zap.Logger, reactorNames []string, constructor func(name string, logger *zap.Logger) lib.Reactor) *Executor {
+func NewExecutor(marshaler lib.Marshaler, logger *zap.Logger, reactorNames []string, constructor func(name string, logger *zap.Logger) lib.Reactor) *Executor {
 	topology := make(map[string]lib.Reactor)
 	buffers := make(map[string]*LogWriter)
 
@@ -293,7 +271,6 @@ func NewExecutor(testId lib.TestId, marshaler lib.Marshaler, logger *zap.Logger,
 		topology:    topology,
 		buffers:     buffers,
 		marshaler:   marshaler,
-		testId:      testId,
 		constructor: constructor,
 		logger:      logger,
 	}
@@ -320,8 +297,6 @@ func (e *Executor) Deploy(srv *http.Server) {
 }
 
 func (e *Executor) Register() {
-	// Should probably separate the loading of the database to get deployment and register
-	// if so we could remove the need for `Executor` to know the test-id
 	components := make([]string, 0, len(e.topology))
 	for c, _ := range e.topology {
 		components = append(components, c)

@@ -22,10 +22,20 @@ type HeapDiff struct {
 }
 
 func GetInitHeap(testId lib.TestId) []HeapDiff {
-	query := fmt.Sprintf(`SELECT component,args
-                              FROM deployment
-                              WHERE test_id = %d`, testId.TestId)
-	return helper(query)
+	deploys, err := lib.DeploymentInfoForTest(testId)
+	if err != nil {
+		panic(err)
+	}
+
+	diffs := make([]HeapDiff, 0, len(deploys))
+	for _, dep := range deploys {
+		diffs = append(diffs, HeapDiff{
+			Reactor: dep.Reactor,
+			Diff:    dep.Args,
+		})
+	}
+
+	return diffs
 }
 
 func GetHeapTrace(testId lib.TestId, runId lib.RunId) []HeapDiff {
