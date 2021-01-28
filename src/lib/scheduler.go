@@ -91,7 +91,7 @@ func CreateRun(testId TestId, event CreateRunEvent) RunId {
 	var runId struct {
 		RunId RunId `json:"run-id"`
 	}
-	PostParse("create-run-event!", struct {
+	PostParse("create-run!", struct {
 		TestId        TestId           `json:"test-id"`
 		Seed          Seed             `json:"seed"`
 		Faults        []SchedulerFault `json:"faults"`

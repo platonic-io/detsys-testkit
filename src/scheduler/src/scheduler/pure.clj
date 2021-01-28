@@ -110,19 +110,6 @@
   [m k f]
   (update m k #(f m %)))
 
-(defn create-run!
-  [data {:keys [test-id]}]
-  (case (:state data)
-    :inits-prepared
-    (let [run-id (db/create-run! test-id (:seed data))]
-      (log/info :run-id run-id)
-      [(-> data
-           (assoc :state :ready
-                  :test-id test-id
-                  :run-id (:run-id run-id)))
-       run-id])
-    [(assoc data :state :error-cannot-create-run-in-this-state) nil]))
-
 (comment
   (-> (init-data)
       (load-test! {:test-id 1})
@@ -760,37 +747,6 @@
 (comment
   (status (init-data)))
 
-
-(s/def ::new-seed integer?)
-
-(>defn set-seed!
-  [data {new-seed :new-seed}]
-  [::data (s/keys :req-un [::new-seed]) => (s/tuple ::data integer?)]
-  [(assoc data :seed new-seed) new-seed])
-
-(s/def ::new-tick-frequency (s/or :integer integer? :double double?))
-
-(>defn set-tick-frequency!
-  [data {new-tick-frequency :new-tick-frequency}]
-  [::data (s/keys :req-un [::new-tick-frequency]) => (s/tuple ::data double?)]
-  (let [tick-frequency (double new-tick-frequency)]
-    [(assoc data :tick-frequency tick-frequency) tick-frequency]))
-
-(s/def ::new-min-time-ns (s/or :integer integer? :double double?))
-(s/def ::new-max-time-ns (s/or :integer integer? :double double?))
-
-(>defn set-min-time!
-  [data {new-min-time-ns :new-min-time-ns}]
-  [::data (s/keys :req-un [::new-min-time-ns]) => (s/tuple ::data double?)]
-  (let [min-time (double new-min-time-ns)]
-    [(assoc data :min-time-ns min-time) min-time]))
-
-(>defn set-max-time!
-  [data {new-max-time-ns :new-max-time-ns}]
-  [::data (s/keys :req-un [::new-max-time-ns]) => (s/tuple ::data double?)]
-  (let [max-time (double new-max-time-ns)]
-    [(assoc data :max-time-ns max-time) max-time]))
-
 (defn reset
   [_data]
   [(init-data) :reset])
@@ -804,12 +760,6 @@
 
 (s/def ::faults (s/coll-of fault?))
 
-(>defn inject-faults!
-  [data faults]
-  [::data (s/keys :req-un [::faults]) => (s/tuple ::data map?)]
-  [(update data :faults (fn [fs] (apply conj fs (:faults faults))))
-   {:ok "added faults"}])
-
 (s/def ::create-run-event
   (s/keys :req-un
           [::test-id
@@ -822,17 +772,30 @@
            ;; ::max-time-ns
            ]))
 
-(>defn create-run-event!
-  [data create-run-event]
+(>defn create-run!
+  [data event]
   [::data ::create-run-event => (s/tuple ::data (s/keys :req-un [::run-id]))]
-  (let [[data _] (set-seed! data {:new-seed (:seed create-run-event)})
-        [data run-id] (create-run! data create-run-event)
-        [data _] (inject-faults! data create-run-event)
-        [data _] (set-tick-frequency! data {:new-tick-frequency (:tick-frequency create-run-event)})
-        [data _] (set-min-time! data {:new-min-time-ns (:min-time-ns create-run-event)})
-        [data _] (set-max-time! data {:new-max-time-ns (:max-time-ns create-run-event)})]
-    (db/append-create-run-event! (:test-id data) (:run-id data) create-run-event)
-    [data run-id]))
+  (case (:state data)
+    :inits-prepared
+    (let [test-id (:test-id event)
+          run-id (db/next-run-id! test-id)
+          seed (:seed event)
+          tick-frequency (double (:tick-frequency event))
+          min-time (double (:min-time-ns event))
+          max-time (double (:max-time-ns event))
+          faults (:faults event)
+          data (-> data
+                   (assoc :state :ready
+                          :test-id test-id
+                          :run-id (:run-id run-id)
+                          :seed seed
+                          :tick-frequency tick-frequency
+                          :min-time-ns min-time
+                          :max-time-ns max-time
+                          :faults faults))]
+      (db/append-create-run-event! (:test-id data) (:run-id data) event)
+      [data run-id])
+    [(assoc data :state :error-cannot-create-run-in-this-state) nil]))
 
 ;; Since the version is a constant GraalVM will evaluate it at compile-time, and
 ;; it will stay fixed independent of run-time values of the environment
