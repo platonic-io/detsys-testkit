@@ -20,6 +20,7 @@ go_test(
     name = "register_test",
     srcs = ["example_test.go"],
     embed = [":register"],
+    gotags = ["json1"],
     deps = [
         "//src/executor",
         "//src/lib",

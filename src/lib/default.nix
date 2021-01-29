@@ -16,7 +16,9 @@ buildGoModule rec {
   vendorSha256 = "1dq4w81g3s26chpfqad3mqpybg4900646h2b2k6xsz295ds9qk7q";
 
   postInstall = ''
-    mkdir -p $out
-    cp -R $src $out/src
+    mkdir -p $out/src
+    # Don't copy over bazel build file, or bazel will try to build that
+    # directory.
+    cp $(ls $src | grep -v BUILD.bazel) $out/src
   '';
 }
