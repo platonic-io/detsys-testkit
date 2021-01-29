@@ -32,6 +32,19 @@ func main() {
 	r := bufio.NewReaderSize(fh, PIPE_BUF)
 
 	for {
+		// TODO(stevan): If we want or need to support linearisable
+		// reads rather than eventual consist ant reads, we could do it
+		// as follows. Upon opening the db, save the highest index of
+		// the event log table. When reading a line, increment the
+		// index, parse the line to determine if it's a write or a read.
+		// If it's a write, proceed like below. If it's a read then
+		// spawn a new goroutine and pass it the index and the read
+		// query. This reader goroutine should then wait until the index
+		// is persisted in the db and then perform the read query. This
+		// way the reads happen as fast they can while being
+		// linearisable and not holding up writes. The efficiency of
+		// this solution relies on the assumption that there are many
+		// writes between each read.
 		line, err := r.ReadBytes('\n')
 		for err == nil {
 			enqueue(queue, line)
