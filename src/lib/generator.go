@@ -31,73 +31,45 @@ func GenerateTest(test string) TestId {
 type Topology = map[string]Reactor
 type Agenda = []ScheduledEvent
 
-func generateNewEmptyTest() TestId {
-	var testId TestId
+func GenerateTestFromTopologyAndAgenda(topology Topology, agenda Agenda) TestId {
+	db := OpenDB()
+	defer db.Close()
 
+	var testId TestId
 	{
-		db := OpenDB()
-		defer db.Close()
-		stmt, err := db.Prepare(`INSERT INTO test DEFAULT VALUES`)
+		stmt, err := db.Prepare(`SELECT IFNULL(max(test_id),-1)+1 FROM test_info`)
 		defer stmt.Close()
 
-		_, err = stmt.Exec()
 		if err != nil {
 			panic(err)
 		}
-	}
-
-	{
-		db := OpenDB()
-		defer db.Close()
-		stmt, err := db.Prepare(`SELECT max(id) FROM test`)
-		defer stmt.Close()
 
 		if err = stmt.QueryRow().Scan(&testId.TestId); err != nil {
 			panic(err)
 		}
 	}
 
-	return testId
-}
-
-func setDeploymentHeap(testId TestId, topology Topology) {
-	db := OpenDB()
-	defer db.Close()
-
-	stmt, err := db.Prepare(`INSERT INTO deployment(test_id, component, type, args)
-                                 VALUES(?,?,?,?)`)
-	if err != nil {
-		panic(err)
+	meta := struct {
+		Component string `json:"component"`
+		TestId    int    `json:"test-id"`
+	}{
+		Component: "generator",
+		TestId:    testId.TestId,
 	}
-	defer stmt.Close()
 
-	for k, r := range topology {
-		j, err := json.Marshal(r)
-		if err != nil {
-			panic(err)
-		}
-		typ := strings.ToLower(strings.Split(reflect.TypeOf(r).String(), ".")[1])
-		_, err = stmt.Exec(testId.TestId, k, typ, j)
-		if err != nil {
-			panic(err)
-		}
+	type AgendaItem struct {
+		Kind  string          `json:"kind"`
+		Event string          `json:"event"`
+		Args  json.RawMessage `json:"args"`
+		From  string          `json:"from"`
+		To    string          `json:"to"`
+		At    time.Time       `json:"at"`
 	}
-}
 
-func setAgenda(testId TestId, agenda Agenda) {
-	type Entry struct {
-		Kind  string
-		Event string
-		Args  []byte
-		From  string
-		To    string
-		At    time.Time
-	}
-	entries := make([]Entry, len(agenda))
-
-	for id, entry := range agenda {
+	entries := make([]AgendaItem, 0, len(agenda))
+	for _, entry := range agenda {
 		var kind, event string
-		var args []byte
+		var args json.RawMessage
 
 		switch ev := entry.Event.(type) {
 		case ClientRequest:
@@ -119,37 +91,41 @@ func setAgenda(testId TestId, agenda Agenda) {
 		default:
 			panic(fmt.Sprintf("Unknown message type %#v\n", ev))
 		}
-		entries[id] = Entry{
+		entries = append(entries, AgendaItem{
 			Kind:  kind,
 			Event: event,
 			Args:  args,
 			From:  entry.From,
 			To:    entry.To,
 			At:    entry.At,
-		}
+		})
 	}
 
-	db := OpenDB()
-	defer db.Close()
+	deployment := make([]DeploymentInfo, 0, len(topology))
 
-	stmt, err := db.Prepare("INSERT INTO agenda(test_id, id, kind, event, args, `from`, `to`, at) VALUES(?,?,?,?,?,?,?,?)")
-	if err != nil {
-		panic(err)
-	}
-	defer stmt.Close()
-
-	for id, entry := range entries {
-		_, err = stmt.Exec(testId.TestId, id, entry.Kind, entry.Event, entry.Args, entry.From, entry.To, entry.At.Format(time.RFC3339Nano))
+	for reactor, r := range topology {
+		args, err := json.Marshal(r)
 		if err != nil {
 			panic(err)
 		}
-	}
-}
 
-func GenerateTestFromTopologyAndAgenda(topology Topology, agenda Agenda) TestId {
-	testId := generateNewEmptyTest()
-	setDeploymentHeap(testId, topology)
-	setAgenda(testId, agenda)
+		typ := strings.ToLower(strings.Split(reflect.TypeOf(r).String(), ".")[1])
+		deployment = append(deployment, DeploymentInfo{
+			Reactor: reactor,
+			Type:    typ,
+			Args:    args,
+		})
+	}
+
+	data := struct {
+		Agenda     []AgendaItem     `json:"agenda"`
+		Deployment []DeploymentInfo `json:"deployment"`
+	}{
+		Agenda:     entries,
+		Deployment: deployment,
+	}
+
+	EmitEvent(db, "CreateTest", meta, data)
 
 	return testId
 }

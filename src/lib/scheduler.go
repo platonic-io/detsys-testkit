@@ -123,43 +123,30 @@ func Step() json.RawMessage {
 	return result
 }
 
-func componentsFromDeployment(testId TestId) ([]string, error) {
-	query := fmt.Sprintf(`SELECT component
-                              FROM deployment
-                              WHERE test_id = %d`, testId.TestId)
+func reactorsFromDeployment(testId TestId) ([]string, error) {
+	deploys, err := DeploymentInfoForTest(testId)
 
-	db := OpenDB()
-	defer db.Close()
-
-	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var components []string
-	type Column struct {
-		Component string
+	reactors := make([]string, 0, len(deploys))
+
+	for _, dep := range deploys {
+		reactors = append(reactors, dep.Reactor)
 	}
-	for rows.Next() {
-		column := Column{}
-		err := rows.Scan(&column.Component)
-		if err != nil {
-			return nil, err
-		}
-		components = append(components, column.Component)
-	}
-	return components, nil
+
+	return reactors, nil
 }
 
 func Register(testId TestId) {
 	// TODO(stevan): Make executorUrl part of topology/deployment.
 	const executorUrl string = "http://localhost:3001/api/v1/"
 
-	components, err := componentsFromDeployment(testId)
+	reactors, err := reactorsFromDeployment(testId)
 	if err != nil {
 		panic(err)
 	}
 
-	RegisterExecutor(executorUrl, components)
+	RegisterExecutor(executorUrl, reactors)
 }

@@ -102,6 +102,53 @@ func OpenDB() *sql.DB {
 	return db
 }
 
+type DeploymentInfo struct {
+	Reactor string          `json:"reactor"`
+	Type    string          `json:"type"`
+	Args    json.RawMessage `json:"args"`
+}
+
+func DeploymentInfoForTest(testId TestId) ([]DeploymentInfo, error) {
+	db := OpenDB()
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT deployment
+                              FROM test_info
+                              WHERE test_id = ?`, testId.TestId)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var deployments = make([]DeploymentInfo, 0)
+	found_one := false
+	for rows.Next() {
+		// we should only find one test with a given test-id
+		if found_one {
+			return nil, errors.New(fmt.Sprintf("We found multiple tests with id: %d", testId.TestId))
+		}
+		found_one = true
+
+		var jsonBlob []byte
+		err := rows.Scan(&jsonBlob)
+		if err != nil {
+			return nil, err
+		}
+		var columns []DeploymentInfo
+		err = json.Unmarshal(jsonBlob, &columns)
+
+		if err != nil {
+			return nil, err
+		}
+
+		for _, column := range columns {
+			deployments = append(deployments, column)
+		}
+	}
+
+	return deployments, nil
+}
+
 type TimeFromString time.Time
 
 func (tf *TimeFromString) Scan(src interface{}) error {
