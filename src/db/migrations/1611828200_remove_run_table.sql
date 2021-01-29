@@ -1,5 +1,0 @@
--- +migrate Up
-DROP TABLE IF EXISTS run;
-
--- +migrate Down
-CREATE TABLE IF NOT EXISTS run (rowid INTEGER PRIMARY KEY) WITHOUT ROWID;
