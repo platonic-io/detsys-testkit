@@ -199,13 +199,13 @@ func topologyFromDeployment(testId lib.TestId, constructor func(string) lib.Reac
 	return topologyCooked, nil
 }
 
-func DeployRaw(srv *http.Server, testId lib.TestId, topology map[string]string, m lib.Marshaler, constructor func(string) lib.Reactor) {
-	topologyCooked, err := topologyFromDeployment(testId, constructor)
+func DeployRaw(srv *http.Server, testId lib.TestId, m lib.Marshaler, constructor func(string) lib.Reactor) {
+	topology, err := topologyFromDeployment(testId, constructor)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Deploying topology: %+v\n", topologyCooked)
-	Deploy(srv, topologyCooked, m)
+	fmt.Printf("Deploying topology: %+v\n", topology)
+	Deploy(srv, topology, m)
 }
 
 type LogWriter struct {

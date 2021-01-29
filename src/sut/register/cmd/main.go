@@ -46,13 +46,7 @@ func main() {
 	}()
 
 	marshaler := sut.NewMarshaler()
-	eventLog := lib.EventLogEmitter{
-		Component: "Register cmd",
-		TestId:    &testId,
-		RunId:     nil,
-	}
-	// TODO(stevan): nil below should be topology?
-	executor.DeployRaw(&srv, testId, eventLog, nil, marshaler, constructor)
+	executor.DeployRaw(&srv, testId, marshaler, constructor)
 
 	<-idleConnsClosed
 }
