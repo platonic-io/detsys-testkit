@@ -7,9 +7,6 @@ import (
 	jsonpatch "github.com/evanphx/json-patch"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/nsf/jsondiff"
-	"io/ioutil"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -198,70 +195,42 @@ func colon(s string) string {
 	return strings.Replace(s, ":", "", -1)
 }
 
-func SequenceDiagrams(testId lib.TestId, runId lib.RunId) [][]byte {
-	tmpfile, err := ioutil.TempFile("", "sequence_diagram_*_000.txt")
-	if err != nil {
-		panic(err)
-	}
+type SequenceDiagrams struct {
+	inner map[int][]byte
+	net   []NetworkEvent
+}
+
+func NewSequenceDiagrams(testId lib.TestId, runId lib.RunId) *SequenceDiagrams {
 	net := GetNetworkTrace(testId, runId)
-	for i := 0; i < len(net); i++ {
-		if _, err := tmpfile.Write([]byte("@startuml\n")); err != nil {
-			tmpfile.Close()
-			panic(err)
-		}
-		for j, event := range net {
-			var arrow string
-			if event.Dropped {
-				arrow = "-->"
-			} else {
-				arrow = "->"
-			}
-			var line string
-			if i == j {
-				line = fmt.Sprintf("%s %s %s : <<< %s >>>\n",
-					colon(event.From), arrow, colon(event.To), event.Message)
-			} else {
-				line = fmt.Sprintf("%s %s %s : %s\n",
-					colon(event.From), arrow, colon(event.To), event.Message)
-			}
-			if _, err := tmpfile.Write([]byte(line)); err != nil {
-				tmpfile.Close()
-				panic(err)
-			}
-		}
-		if _, err := tmpfile.Write([]byte("@enduml\n")); err != nil {
-			tmpfile.Close()
-			panic(err)
-		}
+	return &SequenceDiagrams{
+		inner: make(map[int][]byte),
+		net:   net,
+	}
+}
+
+func (s *SequenceDiagrams) At(at int) []byte {
+	val, ok := s.inner[at]
+
+	if ok {
+		return val
 	}
 
-	cmd := exec.Command("plantuml", "-tutxt", tmpfile.Name())
-	err = cmd.Run()
-	if err != nil {
-		panic(err)
+	arrows := make([]Arrow, 0, len(s.net))
+	for _, event := range s.net {
+		arrows = append(arrows, Arrow{
+			From:    event.From,
+			To:      event.To,
+			Message: event.Message,
+			Dropped: event.Dropped,
+		})
 	}
+	gen := DrawDiagram(arrows, DrawSettings{
+		MarkerSize: 3,
+		MarkAt:     at,
+	})
 
-	base := strings.TrimSuffix(tmpfile.Name(), ".txt")
-
-	diagrams := make([][]byte, len(net))
-	var file string
-
-	for i := 0; i < len(net); i++ {
-		if i == 0 {
-			file = base + ".utxt"
-		} else {
-			file = fmt.Sprintf("%s_%03d.utxt", base, i)
-		}
-		diagram, err := ioutil.ReadFile(file)
-		if err != nil {
-			panic(err)
-		}
-		diagrams[i] = []byte(diagram)
-		os.Remove(file)
-	}
-	defer os.Remove(tmpfile.Name())
-
-	return diagrams
+	s.inner[at] = gen
+	return gen
 }
 
 func GetLogMessages(testId lib.TestId, runId lib.RunId, reactor string, at int) [][]byte {

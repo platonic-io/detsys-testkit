@@ -10,12 +10,13 @@ go_library(
         "@com_github_evanphx_json_patch//:json-patch",
         "@com_github_mattn_go_sqlite3//:go-sqlite3",
         "@com_github_nsf_jsondiff//:jsondiff",
+        "@com_github_andreyvit_diff//:diff",
     ],
 )
 
 go_test(
     name = "internal_test",
-    srcs = ["debugger_test.go"],
+    srcs = ["debugger_test.go" "sequence_test.go"],
     embed = [":internal"],
     deps = ["//src/lib"],
 )
