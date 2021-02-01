@@ -77,11 +77,11 @@ func (fe *FrontEnd) ReceiveClient(at time.Time, from string, event lib.ClientReq
 
 	oevs = []lib.OutEvent{
 		{
-			To:   register1,
+			To:   lib.Singleton(register1),
 			Args: translate(event.Request, sessionId),
 		},
 		{
-			To:   register2,
+			To:   lib.Singleton(register2),
 			Args: translate(event.Request, sessionId),
 		},
 	}
@@ -101,7 +101,8 @@ func (fe *FrontEnd) Receive(at time.Time, from string, event lib.InEvent) []lib.
 			if ok {
 				oevs = []lib.OutEvent{
 					{
-						To: fmt.Sprintf("client:%d", clientId),
+						To: lib.Singleton(
+							fmt.Sprintf("client:%d", clientId)),
 						Args: &lib.ClientResponse{
 							Id:       clientId,
 							Response: msg.Response,

@@ -45,15 +45,15 @@ func (fe *FrontEnd4) ReceiveClient(at time.Time, from string, event lib.ClientRe
 
 	return []lib.OutEvent{
 		{
-			To:   register1,
+			To:   lib.Singleton(register1),
 			Args: args,
 		},
 		{
-			To:   register2,
+			To:   lib.Singleton(register2),
 			Args: args,
 		},
 		{
-			To: "frontend",
+			To: lib.Singleton("frontend"),
 			Args: &lib.Timer{
 				Duration: fe.ResendTimer,
 			},
@@ -102,7 +102,8 @@ func (fe *FrontEnd4) Receive(at time.Time, from string, event lib.InEvent) []lib
 			if noMore {
 				oevs = []lib.OutEvent{
 					{
-						To: fmt.Sprintf("client:%d", clientId),
+						To: lib.Singleton(
+							fmt.Sprintf("client:%d", clientId)),
 						Args: &lib.ClientResponse{
 							Id:       clientId,
 							Response: msg.Response,
@@ -133,7 +134,7 @@ func (fe *FrontEnd4) Timer(at time.Time) []lib.OutEvent {
 			fe.OnGoing[i].At = at
 			fe.OnGoing[i].NumberOfTries++
 			event := lib.OutEvent{
-				To:   on.Register,
+				To:   lib.Singleton(on.Register),
 				Args: translate(on.Request, on.SessionId),
 			}
 			resend = append(resend, event)
@@ -142,7 +143,7 @@ func (fe *FrontEnd4) Timer(at time.Time) []lib.OutEvent {
 
 	if len(resend) > 0 {
 		resend = append(resend, lib.OutEvent{
-			To: "frontend",
+			To: lib.Singleton("frontend"),
 			Args: &lib.Timer{
 				Duration: fe.ResendTimer,
 			},

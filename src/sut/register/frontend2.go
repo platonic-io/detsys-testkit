@@ -53,11 +53,11 @@ func (fe *FrontEnd2) ReceiveClient(at time.Time, from string, event lib.ClientRe
 
 	return []lib.OutEvent{
 		{
-			To:   register1,
+			To:   lib.Singleton(register1),
 			Args: args,
 		},
 		{
-			To:   register2,
+			To:   lib.Singleton(register2),
 			Args: args,
 		},
 	}
@@ -99,7 +99,8 @@ func (fe *FrontEnd2) Receive(at time.Time, from string, event lib.InEvent) []lib
 			if ok {
 				oevs = []lib.OutEvent{
 					{
-						To: fmt.Sprintf("client:%d", clientId),
+						To: lib.Singleton(
+							fmt.Sprintf("client:%d", clientId)),
 						Args: &lib.ClientResponse{
 							Id:       clientId,
 							Response: msg.Response,
@@ -128,7 +129,7 @@ func (fe *FrontEnd2) Tick(at time.Time) []lib.OutEvent {
 			fe.onGoing[i].At = at
 			fe.onGoing[i].NumberOfTries++
 			event := lib.OutEvent{
-				To:   on.Register,
+				To:   lib.Singleton(on.Register),
 				Args: translate(on.Request, on.SessionId),
 			}
 			resend = append(resend, event)

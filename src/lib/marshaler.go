@@ -89,11 +89,11 @@ func unmarshal(m Marshaler, kind string, event string, from string, input json.R
 }
 
 type unscheduledEvent struct {
-	To    string `json:"to"`
-	From  string `json:"from"`
-	Kind  string `json:"kind"`
-	Event string `json:"event"`
-	Args  Args   `json:"args"`
+	To    []string `json:"to"`
+	From  string   `json:"from"`
+	Kind  string   `json:"kind"`
+	Event string   `json:"event"`
+	Args  Args     `json:"args"`
 }
 type timerEvent struct {
 	Kind     string        `json:"kind"`
