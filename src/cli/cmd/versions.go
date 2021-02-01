@@ -31,9 +31,10 @@ var versionsCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, args []string) {
 		cmds := []string{
 			"detsys",
-			"detsys-debug",
-			"detsys-db",
 			"detsys-checker",
+			"detsys-db",
+			"detsys-debug",
+			"detsys-generator",
 			"detsys-ldfi",
 			"detsys-scheduler",
 		}
