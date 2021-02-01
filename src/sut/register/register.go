@@ -29,7 +29,7 @@ func (r *Register) Receive(_ time.Time, from string, event lib.InEvent) []lib.Ou
 			case Read:
 				oevs = []lib.OutEvent{
 					{
-						To: from,
+						To: lib.Singleton(from),
 						Args: &lib.InternalMessage{InternalResponse{
 							Id:       msg.Id,
 							Response: Value{r.Value},
@@ -50,7 +50,7 @@ func (r *Register) Receive(_ time.Time, from string, event lib.InEvent) []lib.Ou
 				}
 				oevs = []lib.OutEvent{
 					{
-						To: from,
+						To: lib.Singleton(from),
 						Args: &lib.InternalMessage{InternalResponse{
 							Id:       msg.Id,
 							Response: Ack{},

@@ -108,7 +108,7 @@ func (n *Node) Receive(_ time.Time, from string, event lib.InEvent) []lib.OutEve
 			n.Log = msg.Data
 			if n.Round == AckDeliv {
 				ack := lib.OutEvent{
-					To:   from,
+					To:   lib.Singleton(from),
 					Args: &lib.InternalMessage{Ack{}},
 				}
 				oevs = append(oevs, ack)
@@ -135,34 +135,35 @@ func (n *Node) Tick(_ time.Time) []lib.OutEvent {
 
 func (n *Node) Timer(at time.Time) []lib.OutEvent {
 	var oevs []lib.OutEvent
+	var neighbours []lib.Receiver
 	for neighbour, broadcast := range n.Neighbours {
 		if broadcast && n.Log != "" {
-			oev := lib.OutEvent{
-				To: neighbour,
-				Args: &lib.InternalMessage{Broadcast{
-					Data: n.Log,
-				}},
-			}
-			oevs = append(oevs, oev)
-
+			neighbours = append(neighbours, neighbour)
 			if n.Round == SimpleDeliv || n.Round == ClassicDeliv {
 				n.Neighbours[neighbour] = false
 			}
 		}
 	}
+	oev := lib.OutEvent{
+		To: lib.Set(neighbours...),
+		Args: &lib.InternalMessage{Broadcast{
+			Data: n.Log,
+		}},
+	}
+	oevs = append(oevs, oev)
 
 	// Renew the timer.
 	duration, err := time.ParseDuration("500ms")
 	if err != nil {
 		panic(err)
 	}
-	oev := lib.OutEvent{
-		To: "scheduler",
+	oev2 := lib.OutEvent{
+		To: lib.Singleton("scheduler"),
 		Args: &lib.Timer{
 			Duration: duration,
 		},
 	}
-	oevs = append(oevs, oev)
+	oevs = append(oevs, oev2)
 
 	return oevs
 }
@@ -174,7 +175,7 @@ func (n *Node) Init() []lib.OutEvent {
 		panic(err)
 	}
 	oev := lib.OutEvent{
-		To: "scheduler",
+		To: lib.Singleton("scheduler"),
 		Args: &lib.Timer{
 			Duration: duration,
 		},

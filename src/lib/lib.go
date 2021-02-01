@@ -93,8 +93,18 @@ func (_ ClientResponse) Args()  {}
 func (_ InternalMessage) Args() {}
 func (_ Timer) Args()           {}
 
+type Receiver = string
+
+func Singleton(to Receiver) []Receiver {
+	return Set(to)
+}
+
+func Set(to ...Receiver) []Receiver {
+	return to
+}
+
 type OutEvent struct {
-	To   string
+	To   []Receiver // Assumed to be a set.
 	Args Args
 }
 
