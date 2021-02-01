@@ -47,7 +47,7 @@ type DebugApplication struct {
 	testId        lib.TestId
 	runId         lib.RunId
 	heaps         []map[string][]byte
-	diagrams      [][]byte
+	diagrams      *debugger.SequenceDiagrams
 	events        []debugger.NetworkEvent
 	reactors      []string
 	activeRow     int // should probably be logic time
@@ -79,7 +79,7 @@ func (da *DebugApplication) redraw() {
 	messageView.Clear()
 	logView.Clear()
 	row := da.activeRow
-	fmt.Fprintf(w2, "%s", string(da.diagrams[row-1]))
+	fmt.Fprintf(w2, "%s", string(da.diagrams.At(row-1)))
 	reactor := da.reactors[da.activeReactor]
 	old := da.heaps[row-1][reactor]
 	new := da.heaps[min(row, len(da.heaps))][reactor]
@@ -101,7 +101,7 @@ func (da *DebugApplication) redraw() {
 func MakeDebugApplication(testId lib.TestId, runId lib.RunId) *DebugApplication {
 	heaps := debugger.Heaps(testId, runId)
 	events := debugger.GetNetworkTrace(testId, runId)
-	diagrams := debugger.SequenceDiagrams(testId, runId)
+	diagrams := debugger.NewSequenceDiagrams(testId, runId)
 
 	reactors := make([]string, 0, len(heaps[0]))
 	for reactor := range heaps[0] {

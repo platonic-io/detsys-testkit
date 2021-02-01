@@ -18,7 +18,6 @@ pkgs.mkShell {
     python38
     mypy
 
-    plantuml
     git
     nix
     niv
