@@ -8,5 +8,4 @@ data         JSON     NOT NULL CHECK(json_valid(data)),
 at           DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')));
 
 -- +migrate Down
-
--- No down migration to avoid dropping the event log by mistake.
+DROP TABLE IF EXISTS event_log;
