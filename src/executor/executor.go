@@ -267,15 +267,13 @@ func NewExecutor(marshaler lib.Marshaler, logger *zap.Logger, reactorNames []str
 		buffers[reactorName] = buffer
 	}
 
-	executor := &Executor{
+	return &Executor{
 		topology:    topology,
 		buffers:     buffers,
 		marshaler:   marshaler,
 		constructor: constructor,
 		logger:      logger,
 	}
-
-	return executor
 }
 
 func (e *Executor) Deploy(srv *http.Server) {
