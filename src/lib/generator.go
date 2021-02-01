@@ -3,7 +3,6 @@ package lib
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os/exec"
 	"reflect"
 	"strconv"
@@ -16,13 +15,13 @@ func GenerateTest(test string) TestId {
 	cmd := exec.Command("detsys-generator", test)
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	i, err := strconv.Atoi(strings.TrimRight(string(out), "\n"))
 
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	return TestId{i}
