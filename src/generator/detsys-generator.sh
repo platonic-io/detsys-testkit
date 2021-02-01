@@ -4,6 +4,12 @@
 # https://stackoverflow.com/a/246128/3858681
 pushd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )" > /dev/null
 
+if [ "$1" == "--version" ]; then
+    cat $(which detsys-generator-version)
+    echo ""
+    exit 0
+fi
+
 TEST="$1"
 DETSYS_DB=${DETSYS_DB:-"${HOME}/.detsys.db"}
 
