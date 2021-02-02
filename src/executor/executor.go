@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"sort"
 	"time"
 
 	"go.uber.org/zap"
@@ -144,9 +145,20 @@ func handleInits(topology Topology, m lib.Marshaler) http.HandlerFunc {
 		}
 
 		var inits []lib.Event
-		for component, reactor := range topology {
+
+		// we need make sure we output init messages in a deterministic order
+		// so we will output them in alphabetical order
+		reactors := make([]string, 0, len(topology))
+		{
+			for reactor, _ := range topology {
+				reactors = append(reactors, reactor)
+			}
+			sort.Strings(reactors)
+		}
+
+		for _, reactor := range reactors {
 			inits = append(inits,
-				lib.OutEventsToEvents(component, reactor.Init())...)
+				lib.OutEventsToEvents(reactor, topology[reactor].Init())...)
 		}
 
 		// Use `[]` for no events, rather than `null`, in the JSON encoding.
