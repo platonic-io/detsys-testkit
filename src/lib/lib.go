@@ -109,7 +109,6 @@ type OutEvent struct {
 }
 
 // ---------------------------------------------------------------------
-
 var quit chan struct{}
 
 func Setup(f func()) {

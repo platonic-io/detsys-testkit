@@ -9,6 +9,7 @@ go_library(
         "ldfi.go",
         "lib.go",
         "marshaler.go",
+        "topology.go",
         "scheduler.go",
         "util.go",
     ],

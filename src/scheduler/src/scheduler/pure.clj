@@ -661,11 +661,11 @@
  (assert (or (not (empty? (:agenda data)))
              (not (min-time? data))))
  (let [all-events (transient [])]
-   (doseq [[component url] (:topology data)]
+   (doseq [[reactor url] (:topology data)]
      (let [url (str url "tick")
            events (-> (client/put url
                                   {:body (json/write {:at (:next-tick data)
-                                                      :component component})
+                                                      :reactor reactor})
                                    :content-type "application/json; charset=utf-8"})
                       :body
                       json/read
