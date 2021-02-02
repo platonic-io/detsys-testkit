@@ -65,7 +65,7 @@ func handler(db *sql.DB, topology lib.Topology, m lib.Marshaler, cu ComponentUpd
 
 func handleTick(topology lib.Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	type TickRequest struct {
-		Reactor string    `json:"component"`
+		Reactor string    `json:"reactor"`
 		At      time.Time `json:"at"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
