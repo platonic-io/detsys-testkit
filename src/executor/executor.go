@@ -44,11 +44,11 @@ func handler(db *sql.DB, topology Topology, m lib.Marshaler, cu ComponentUpdate)
 		if err := lib.UnmarshalScheduledEvent(m, body, &sev); err != nil {
 			panic(err)
 		}
-		si := cu(sev.To)
 		heapBefore := dumpHeapJson(topology[sev.To])
 		oevs := topology[sev.To].Receive(sev.At, sev.From, sev.Event)
 		heapAfter := dumpHeapJson(topology[sev.To])
 		heapDiff := jsonDiff(heapBefore, heapAfter)
+		si := cu(sev.To)
 
 		EmitExecutionStepEvent(db, ExecutionStepEvent{
 			Meta:          sev.Meta,
@@ -84,8 +84,8 @@ func handleTick(topology Topology, m lib.Marshaler, cu ComponentUpdate) http.Han
 		if err := json.Unmarshal(body, &req); err != nil {
 			panic(err)
 		}
-		cu(req.Component) // we should flushLog, but we should also just remove tick
 		oevs := topology[req.Component].Tick(req.At)
+		cu(req.Component)
 		bs := lib.MarshalUnscheduledEvents(req.Component, oevs)
 		fmt.Fprint(w, string(bs))
 	}
@@ -114,11 +114,12 @@ func handleTimer(db *sql.DB, topology Topology, m lib.Marshaler, cu ComponentUpd
 		if err := json.Unmarshal(body, &req); err != nil {
 			panic(err)
 		}
-		si := cu(req.Component)
+
 		heapBefore := dumpHeapJson(topology[req.Component])
 		oevs := topology[req.Component].Timer(req.At)
 		heapAfter := dumpHeapJson(topology[req.Component])
 		heapDiff := jsonDiff(heapBefore, heapAfter)
+		si := cu(req.Component)
 
 		EmitExecutionStepEvent(db, ExecutionStepEvent{
 			Meta:          req.Meta,
