@@ -11,11 +11,11 @@ import (
 )
 
 func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testing.T) (lib.RunId, bool) {
-	topology := map[string]lib.Reactor{
-		"A": NewNodeA(round),
-		"B": NewNode(round, "C"),
-		"C": NewNode(round, "B"),
-	}
+	topology := lib.NewTopology(
+		lib.Item{"A", NewNodeA(round)},
+		lib.Item{"B", NewNode(round, "C")},
+		lib.Item{"C", NewNode(round, "B")},
+	)
 	marshaler := NewMarshaler()
 	var srv http.Server
 	lib.Setup(func() {
@@ -31,7 +31,7 @@ func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testin
 	log.Printf("Finished run id: %d\n", runId.RunId)
 	lib.Teardown(&srv)
 	log.Printf("Checking\n")
-	nodeB := topology["B"].(*Node)
+	nodeB := topology.Reactor("B").(*Node)
 	result := nodeB.Log == "Hello world!"
 	return runId, result
 }

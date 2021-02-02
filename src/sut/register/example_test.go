@@ -10,12 +10,12 @@ import (
 	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
-func createTopology(newFrontEnd func() lib.Reactor) map[string]lib.Reactor {
-	return map[string]lib.Reactor{
-		"frontend":  newFrontEnd(),
-		"register1": NewRegister(),
-		"register2": NewRegister(),
-	}
+func createTopology(newFrontEnd func() lib.Reactor) lib.Topology {
+	return lib.NewTopology(
+		lib.Item{"frontend", newFrontEnd()},
+		lib.Item{"register1", NewRegister()},
+		lib.Item{"register2", NewRegister()},
+	)
 }
 
 func once(newFrontEnd func() lib.Reactor, testId lib.TestId, runEvent lib.CreateRunEvent, t *testing.T) (lib.RunId, bool) {

@@ -27,7 +27,6 @@ func GenerateTest(test string) TestId {
 	return TestId{i}
 }
 
-type Topology = map[string]Reactor
 type Agenda = []ScheduledEvent
 
 func GenerateTestFromTopologyAndAgenda(topology Topology, agenda Agenda) TestId {
@@ -100,9 +99,11 @@ func GenerateTestFromTopologyAndAgenda(topology Topology, agenda Agenda) TestId 
 		})
 	}
 
-	deployment := make([]DeploymentInfo, 0, len(topology))
+	deployment := make([]DeploymentInfo, 0, topology.Len())
 
-	for reactor, r := range topology {
+	reactors := topology.Reactors()
+	for _, reactor := range reactors {
+		r := topology.Reactor(reactor)
 		args, err := json.Marshal(r)
 		if err != nil {
 			panic(err)
