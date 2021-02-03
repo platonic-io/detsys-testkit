@@ -13,6 +13,7 @@ pkgs.mkShell {
     # PR for 4.0: https://github.com/NixOS/nixpkgs/pull/106984
 
     # bazel
+    # buildifier # Bazel BUILD file formatter
     go
     clojure
     python38

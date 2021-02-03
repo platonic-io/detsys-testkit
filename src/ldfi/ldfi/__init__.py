@@ -173,6 +173,7 @@ def create_sat_formula(config, previous_faults, potential_faults):
 def sat_solve(formula):
     solver = z3.Solver()
     solver.add(formula)
+    # TODO(stevan): Use seed from the run?
     z3.set_option('smt.random_seed', 0)
     result = solver.check()
     if result == z3.sat:
