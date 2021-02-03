@@ -2,23 +2,17 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
 func log(w *bufio.Writer, event []byte, meta []byte, data []byte) {
-	entry, err := json.Marshal(map[string][]byte{
-		"event": event,
-		"meta":  meta,
-		"data":  data,
-	})
-	if err != nil {
-		panic(err)
-	}
+	entry := append(bytes.Join([][]byte{event, meta, data}, []byte("\t")),
+		byte('\n'))
 	fmt.Printf("entry = '%s'\n", string(entry))
-	_, err = w.Write(append(entry, byte('\n')))
+	_, err := w.Write(entry)
 	if err != nil {
 		panic(err)
 	}

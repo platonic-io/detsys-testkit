@@ -35,9 +35,7 @@ func NewLogger() *Logger {
 }
 
 type Log struct {
-	Event []byte `json:"event"`
-	Meta  []byte `json:"meta"`
-	Data  []byte `json:"data"`
+	Entry []byte
 }
 
 func (_ Log) Message()             {}
@@ -48,10 +46,7 @@ func (l *Logger) Receive(at time.Time, from string, event lib.InEvent) []lib.Out
 	case *lib.InternalMessage:
 		switch msg := (*ev).Message.(type) {
 		case Log:
-			// XXX: msg.Event and msg.Meta should also be enqueued!
-			enqueue(l.Queue,
-				bytes.Join([][]byte{msg.Event, msg.Meta, msg.Data},
-					[]byte("\t")))
+			enqueue(l.Queue, msg.Entry)
 		default:
 			panic(fmt.Errorf("Unknown message type: %s\n", msg))
 		}
@@ -187,18 +182,8 @@ func NewMarshaler() *Marshaler {
 func (_ *Marshaler) UnmarshalMessage(message string, raw json.RawMessage, msg *lib.Message) error {
 	switch strings.ToLower(message) {
 	case "log":
-		var op struct {
-			Event []byte `json:"event"`
-			Meta  []byte `json:"meta"`
-			Data  []byte `json:"data"`
-		}
-		if err := json.Unmarshal(raw, &op); err != nil {
-			panic(err)
-		}
 		*msg = Log{
-			Event: op.Event,
-			Meta:  op.Meta,
-			Data:  op.Data,
+			Entry: raw,
 		}
 	default:
 		panic(fmt.Errorf("Unknown message type: %s\n%s", message, raw))
@@ -237,7 +222,6 @@ func DeployReadOnlyPipe(pipeName string, reactor lib.Reactor, m lib.Marshaler) {
 			// The client could prepend the line with the operation
 			// and then add a tab to separate it from the data?
 			if line != nil {
-				log.Printf("ReadBytes: '%s'\n", line)
 				var msg lib.Message
 				err := m.UnmarshalMessage("log", line, &msg)
 				if err != nil {
