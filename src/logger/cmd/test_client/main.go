@@ -2,16 +2,23 @@ package main
 
 import (
 	"bufio"
-	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
 func log(w *bufio.Writer, event []byte, meta []byte, data []byte) {
-	entry := append(bytes.Join([][]byte{event, meta, data}, []byte("\t")), byte('\n'))
-	fmt.Printf("log: entry = '%s'\n", string(entry))
-	_, err := w.Write(entry)
+	entry, err := json.Marshal(map[string][]byte{
+		"event": event,
+		"meta":  meta,
+		"data":  data,
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("entry = '%s'\n", string(entry))
+	_, err = w.Write(append(entry, byte('\n')))
 	if err != nil {
 		panic(err)
 	}
@@ -29,8 +36,8 @@ func main() {
 	}
 	w := bufio.NewWriter(fh)
 
-	for i := 0; i < 50000; i++ {
-		if i%200 == 0 {
+	for i := 0; i < 5; i++ {
+		if i%2 == 0 {
 			fmt.Printf("Writing... i = %d\n", i)
 
 		}

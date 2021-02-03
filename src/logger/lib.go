@@ -35,20 +35,25 @@ func NewLogger() *Logger {
 }
 
 type Log struct {
-	Data []byte
+	Event []byte `json:"event"`
+	Meta  []byte `json:"meta"`
+	Data  []byte `json:"data"`
 }
 
-func (_ Log) Request()             {}
-func (_ Log) RequestEvent() string { return "log" }
+func (_ Log) Message()             {}
+func (_ Log) MessageEvent() string { return "log" }
 
 func (l *Logger) Receive(at time.Time, from string, event lib.InEvent) []lib.OutEvent {
 	switch ev := event.(type) {
-	case *lib.ClientRequest:
-		switch req := (*ev).Request.(type) {
+	case *lib.InternalMessage:
+		switch msg := (*ev).Message.(type) {
 		case Log:
-			enqueue(l.Queue, req.Data)
+			// XXX: msg.Event and msg.Meta should also be enqueued!
+			enqueue(l.Queue,
+				bytes.Join([][]byte{msg.Event, msg.Meta, msg.Data},
+					[]byte("\t")))
 		default:
-			panic(fmt.Errorf("Unknown request type: %s\n", req))
+			panic(fmt.Errorf("Unknown message type: %s\n", msg))
 		}
 	default:
 		panic(fmt.Errorf("Unknown event type: %s\n", ev))
@@ -57,6 +62,7 @@ func (l *Logger) Receive(at time.Time, from string, event lib.InEvent) []lib.Out
 }
 
 func (l *Logger) Init() []lib.OutEvent {
+	log.Println("Initalising Logger reactor")
 	db := OpenDB()
 	go worker(db, l.Queue)
 	return nil
@@ -75,6 +81,7 @@ func newBuffer() [][]byte {
 }
 
 func worker(db *sql.DB, queue chan []byte) {
+	log.Println("Logger worker starting up")
 	buffer := newBuffer()
 	for {
 		if len(buffer) >= BUFFER_LEN {
@@ -160,7 +167,7 @@ func parse(entry []byte) ([]byte, []byte, []byte) {
 }
 
 func OpenDB() *sql.DB {
-	path := DBPath()
+	path := lib.DBPath()
 	// https://stackoverflow.com/questions/35804884/sqlite-concurrent-writing-performance
 	db, err := sql.Open("sqlite3",
 		path+"?&cache=shared&_journal_mode=WAL&_synchronous=NORMAL")
@@ -171,41 +178,43 @@ func OpenDB() *sql.DB {
 	return db
 }
 
-func DBPath() string {
-	path, ok := os.LookupEnv("DETSYS_DB")
-	if !ok {
-		path = os.Getenv("HOME") + "/.detsys.db"
-	}
-	return path
-}
-
 type Marshaler struct{}
 
 func NewMarshaler() *Marshaler {
 	return &Marshaler{}
 }
 
-func (_ *Marshaler) UnmarshalRequest(request string, raw json.RawMessage, req *lib.Request) error {
-	switch strings.ToLower(request) {
+func (_ *Marshaler) UnmarshalMessage(message string, raw json.RawMessage, msg *lib.Message) error {
+	switch strings.ToLower(message) {
 	case "log":
 		var op struct {
-			Data []byte `json:"data"`
+			Event []byte `json:"event"`
+			Meta  []byte `json:"meta"`
+			Data  []byte `json:"data"`
 		}
 		if err := json.Unmarshal(raw, &op); err != nil {
 			panic(err)
 		}
-		*req = Log{
-			Data: op.Data,
+		*msg = Log{
+			Event: op.Event,
+			Meta:  op.Meta,
+			Data:  op.Data,
 		}
 	default:
-		panic(fmt.Errorf("Unknown request type: %s\n%s", request, raw))
+		panic(fmt.Errorf("Unknown message type: %s\n%s", message, raw))
 	}
 	return nil
 }
 
-func deployReadOnlyPipe(pipePath string, reactor lib.Reactor, m lib.Marshaler) {
+func (_ *Marshaler) UnmarshalRequest(request string, raw json.RawMessage, req *lib.Request) error {
+	return nil
+}
 
-	fh := openPipe(pipePath)
+func DeployReadOnlyPipe(pipeName string, reactor lib.Reactor, m lib.Marshaler) {
+
+	log.Println("Deploying reactor on a read-only pipe")
+
+	fh := openPipe(pipeName)
 	r := bufio.NewReaderSize(fh, PIPE_BUF)
 
 	for {
@@ -227,17 +236,20 @@ func deployReadOnlyPipe(pipePath string, reactor lib.Reactor, m lib.Marshaler) {
 			// TODO(stevan): how can we not only try to parse `log`?
 			// The client could prepend the line with the operation
 			// and then add a tab to separate it from the data?
-			var req lib.Request
-			err := m.UnmarshalRequest("log", line, &req)
-			if err != nil {
-				panic(err)
-			}
-			from := "client" // TODO(stevan): make this part of the request?
-			var clientId uint64
-			clientId = 0
-			oevs := reactor.Receive(time.Now(), from, lib.ClientRequest{clientId, req})
-			if oevs != nil {
-				panic("read only pipe")
+			if line != nil {
+				log.Printf("ReadBytes: '%s'\n", line)
+				var msg lib.Message
+				err := m.UnmarshalMessage("log", line, &msg)
+				if err != nil {
+					panic(err)
+				}
+				from := "client" // TODO(stevan): make this part of the request?
+				oevs := reactor.Receive(time.Now(),
+					from,
+					&lib.InternalMessage{msg})
+				if oevs != nil {
+					panic("read only pipe")
+				}
 			}
 			line, err = r.ReadBytes('\n')
 		}
@@ -251,8 +263,8 @@ func deployReadOnlyPipe(pipePath string, reactor lib.Reactor, m lib.Marshaler) {
 	}
 }
 
-func openPipe(pipePath string) *os.File {
-	namedPipe := filepath.Join(os.TempDir(), pipePath)
+func openPipe(pipeName string) *os.File {
+	namedPipe := filepath.Join(os.TempDir(), pipeName)
 	syscall.Mkfifo(namedPipe, 0600)
 
 	fh, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
