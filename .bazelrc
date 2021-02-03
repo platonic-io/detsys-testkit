@@ -1,2 +1,6 @@
-build --action_env=GOPRIVATE=github.com/symbiont-io
-run --action_env=GOPRIVATE=github.com/symbiont-io
+build --action_env=GOPRIVATE=github.com/symbiont-io \
+      --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host \
+      --crosstool_top=@local_config_cc//:toolchain
+run --action_env=GOPRIVATE=github.com/symbiont-io \
+      --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host \
+      --crosstool_top=@local_config_cc//:toolchain

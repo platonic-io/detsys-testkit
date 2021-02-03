@@ -12,16 +12,9 @@ go_library(
     deps = [
         "//src/lib",
         "@com_github_evanphx_json_patch//:json-patch",
-        "@com_github_mattn_go_sqlite3//:go-sqlite3",
         "@org_uber_go_zap//:zap",
         "@org_uber_go_zap//zapcore",
     ],
-)
-
-go_test(
-    name = "lib_test",
-    srcs = ["executor_test.go"],
-    embed = [":executor"],
 )
 
 go_test(

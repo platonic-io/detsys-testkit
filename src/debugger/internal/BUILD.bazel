@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "internal",
-    srcs = ["debugger.go"],
+    srcs = [
+        "debugger.go",
+        "sequence.go",
+    ],
     importpath = "github.com/symbiont-io/detsys-testkit/src/debugger/internal",
     visibility = ["//src/debugger:__subpackages__"],
     deps = [
@@ -10,13 +13,18 @@ go_library(
         "@com_github_evanphx_json_patch//:json-patch",
         "@com_github_mattn_go_sqlite3//:go-sqlite3",
         "@com_github_nsf_jsondiff//:jsondiff",
-        "@com_github_andreyvit_diff//:diff",
     ],
 )
 
 go_test(
     name = "internal_test",
-    srcs = ["debugger_test.go" "sequence_test.go"],
+    srcs = [
+        "debugger_test.go",
+        "sequence_test.go",
+    ],
     embed = [":internal"],
-    deps = ["//src/lib"],
+    deps = [
+        "//src/lib",
+        "@com_github_andreyvit_diff//:diff",
+    ],
 )
