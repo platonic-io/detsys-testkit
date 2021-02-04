@@ -1,3 +1,4 @@
+load("@pip//:requirements.bzl", "requirement")
 load("@rules_python//python:defs.bzl", "py_test")
 
 py_test(
@@ -6,8 +7,10 @@ py_test(
     srcs = ["tests/test_ldfi.py"],
     imports = [".."],
     deps = [
-        "//src/ldfi/src:ldfi_lib"
+        requirement("z3-solver"),
+        "//src/ldfi/src:ldfi_lib",
     ],
+    data = ["@z3//:bin"],
     env = {
         "Z3_LIBRARY_PATH": "/nix/store/zdaninww6cyh3h9aj7w0kymz8c13b1q4-z3-4.8.9-lib/lib"
     }
