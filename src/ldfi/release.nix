@@ -24,5 +24,8 @@ pythonPackages.buildPythonApplication rec {
   checkInputs = with pythonPackages; [ z3 pytest pytestrunner ];
   propagatedBuildInputs = with pythonPackages; [ z3-solver setuptools setuptools_scm ];
 
-  checkPhase = "pytest --capture=tee-sys";
+  checkPhase = ''
+    export PYTHONPATH=$src/src:$PYTHONPATH
+    pytest --capture=tee-sys
+  '';
 }
