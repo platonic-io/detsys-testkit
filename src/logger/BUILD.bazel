@@ -1,17 +1,11 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
-
-go_binary(
-    name = "logger",
-    embed = [":logger_lib"],
-    visibility = ["//visibility:public"],
-)
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "logger_lib",
-    srcs = ["main.go"],
+    srcs = ["lib.go"],
     importpath = "github.com/symbiont-io/detsys-testkit/src/logger",
     visibility = ["//visibility:private"],
     deps = [
-        "@com_github_mattn_go_sqlite3//:go-sqlite3",
+        "//src/lib",
     ],
 )

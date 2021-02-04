@@ -170,7 +170,7 @@ func TestSchedulerContractFault(t *testing.T) {
 func TestSchedulerContractOutput(t *testing.T) {
 	output := []lib.OutEvent{
 		lib.OutEvent{
-			To: "client:0",
+			To: lib.Singleton("client:0"),
 			Args: &lib.ClientResponse{
 				Id:       0,
 				Response: Value{1},
