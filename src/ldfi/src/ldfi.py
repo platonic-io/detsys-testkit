@@ -234,6 +234,3 @@ def main():
     storage.store(event)
     logging.debug(event.faults)
     print(event.faults)
-
-if __name__ == '__main__':
-    main()

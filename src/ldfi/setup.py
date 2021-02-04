@@ -8,11 +8,15 @@ setuptools.setup(
     author='Stevan Andjelkovic',
     author_email='stevan.andjelkovic@symbiont.io',
     license='BSD 2-clause',
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages(where='src'),
     python_requires='>=3.6',
     install_requires=['z3-solver>=4.8.9.0'],
     setup_requires=['pytest-runner'],
     tests_require=['pytest'],
-    scripts=['bin/detsys-ldfi'],
+    entry_points={
+        'console_scripts': [
+            'detsys-ldfi=ldfi:main',
+        ],
+    },
     classifiers=[],
 )

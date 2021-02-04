@@ -1,0 +1,22 @@
+load("@pip//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_library", "py_binary")
+
+py_library(
+    name = "ldfi_lib",
+    srcs = ["ldfi.py"],
+    srcs_version = "PY3",
+    visibility = ["//src/ldfi:__subpackages__"],
+    deps = [
+        requirement("z3-solver"),
+        requirement("setuptools"),
+    ],
+)
+
+py_binary(
+    name = "ldfi",
+    srcs = ["__init__.py"],
+    main = "__init__.py",
+    deps = [
+        ":ldfi_lib"
+    ],
+)

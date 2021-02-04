@@ -13,5 +13,5 @@ let
 in
 
 mkShell {
-  buildInputs = [ pythonEnv mypy black ];
+  buildInputs = [ pythonEnv z3 mypy black ];
 }

@@ -1,11 +1,11 @@
 import json
-import ldfi
 import tempfile
 import logging
 import os
 import sqlite3
 import z3
 from z3 import (And, Or, Not, Bool)
+import ldfi
 
 def test_sorted_faults():
     l = sorted([{"kind": "omission", "from": "frontend", "to": "register2", "at": 2},
