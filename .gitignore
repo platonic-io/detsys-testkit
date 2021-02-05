@@ -9,5 +9,7 @@ reports/
 vendor/
 result*
 __pycache__/
+# Python wheel files
+*.whl 
 bazel-*
 .\#*

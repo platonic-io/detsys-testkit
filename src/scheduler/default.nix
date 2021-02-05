@@ -7,7 +7,6 @@ let
   mvn2nix = import (fetchTarball https://github.com/fzakaria/mvn2nix/archive/master.tar.gz) {};
   mavenRepository =
     mvn2nix.buildMavenRepositoryFromLockFile { file = ./mvn2nix-lock.json; };
-  graalvm = (callPackage ./../../nix/graalvm.nix {}).graalvm11-ce;
   inherit (import sources.gitignore {}) gitignoreSource;
 in stdenv.mkDerivation rec {
   pname = "scheduler";
@@ -15,7 +14,7 @@ in stdenv.mkDerivation rec {
   name = "${pname}-${version}";
   src = gitignoreSource ./.;
 
-  buildInputs = [ clojure jdk11_headless graalvm ];
+  buildInputs = [ clojure jdk11_headless graalvm11-ce ];
 
   buildPhase = ''
     export DETSYS_SCHEDULER_VERSION="${lib.commitIdFromGitRepo ./../../.git}"

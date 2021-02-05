@@ -7,6 +7,7 @@ http_archive(
     name = "io_tweag_rules_nixpkgs",
     strip_prefix = "rules_nixpkgs-0.7.0",
     urls = ["https://github.com/tweag/rules_nixpkgs/archive/v0.7.0.tar.gz"],
+    sha256 = "5c80f5ed7b399a857dd04aa81e66efcb012906b268ce607aaf491d8d71f456c8"
 )
 
 load("@io_tweag_rules_nixpkgs//nixpkgs:repositories.bzl", "rules_nixpkgs_dependencies")
