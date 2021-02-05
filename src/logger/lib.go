@@ -26,11 +26,14 @@ const (
 
 type Logger struct {
 	Queue chan []byte
+	Index uint64
 }
 
 func NewLogger() *Logger {
 	return &Logger{
 		Queue: make(chan []byte, QUEUE_SIZE),
+		// NOTE: The index will get initialised in `Init()`.
+		Index: 0,
 	}
 }
 
@@ -41,12 +44,22 @@ type Log struct {
 func (_ Log) Message()             {}
 func (_ Log) MessageEvent() string { return "log" }
 
+type Index struct {
+	Component string
+}
+
+func (_ Index) Message()             {}
+func (_ Index) MessageEvent() string { return "index" }
+
 func (l *Logger) Receive(at time.Time, from string, event lib.InEvent) []lib.OutEvent {
 	switch ev := event.(type) {
 	case *lib.InternalMessage:
 		switch msg := (*ev).Message.(type) {
 		case Log:
 			enqueue(l.Queue, msg.Entry)
+			l.Index++
+		case Index:
+			writeIndex(msg.Component, l.Index)
 		default:
 			panic(fmt.Errorf("Unknown message type: %s\n", msg))
 		}
@@ -60,7 +73,18 @@ func (l *Logger) Init() []lib.OutEvent {
 	log.Println("Initalising Logger reactor")
 	db := OpenDB()
 	go worker(db, l.Queue)
+	l.Index = getHighestIndex(db)
 	return nil
+}
+
+func getHighestIndex(db *sql.DB) uint64 {
+	row := db.QueryRow("SELECT max(rowid) from event_log")
+	var index uint64
+	err := row.Scan(&index)
+	if err != nil {
+		panic(err)
+	}
+	return index
 }
 
 func (_ *Logger) Tick(_ time.Time) []lib.OutEvent {
@@ -203,33 +227,17 @@ func DeployReadOnlyPipe(pipeName string, reactor lib.Reactor, m lib.Marshaler) {
 	r := bufio.NewReaderSize(fh, PIPE_BUF)
 
 	for {
-		// TODO(stevan): If we want or need to support linearisable
-		// reads rather than eventual consist ant reads, we could do it
-		// as follows. Upon opening the db, save the highest index of
-		// the event log table. When reading a line, increment the
-		// index, parse the line to determine if it's a write or a read.
-		// If it's a write, proceed like below. If it's a read then
-		// spawn a new goroutine and pass it the index and the read
-		// query. This reader goroutine should then wait until the index
-		// is persisted in the db and then perform the read query. This
-		// way the reads happen as fast they can while being
-		// linearisable and not holding up writes. The efficiency of
-		// this solution relies on the assumption that there are many
-		// writes between each read.
 		line, err := r.ReadBytes('\n')
 		for err == nil {
-			// TODO(stevan): how can we not only try to parse `log`?
-			// The client could prepend the line with the operation
-			// and then add a tab to separate it from the data?
 			if line != nil {
 				var msg lib.Message
-				err := m.UnmarshalMessage("log", line, &msg)
+				from, message, data := parse(line)
+				err := m.UnmarshalMessage(string(message), data, &msg)
 				if err != nil {
 					panic(err)
 				}
-				from := "client" // TODO(stevan): make this part of the request?
 				oevs := reactor.Receive(time.Now(),
-					from,
+					string(from),
 					&lib.InternalMessage{msg})
 				if oevs != nil {
 					panic("read only pipe")
@@ -245,6 +253,20 @@ func DeployReadOnlyPipe(pipeName string, reactor lib.Reactor, m lib.Marshaler) {
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
+}
+
+func writeIndex(component string, index uint64) {
+	// NOTE: Opening and closing these pipes is not ideal from a performance
+	// perspective, but read requests (which ask for the index) shouldn't be
+	// too common, so perhaps it's fine.
+	namedPipe := filepath.Join(os.TempDir(), fmt.Sprintf("detsys-%s", component))
+
+	fh, err := os.OpenFile(namedPipe, os.O_WRONLY, 0600)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Fprintf(fh, "%d", index)
+	fh.Close()
 }
 
 func openPipe(pipeName string) *os.File {
