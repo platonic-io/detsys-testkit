@@ -2,21 +2,28 @@
 , pkgs ? import sources.nixpkgs {} }:
 with pkgs;
 
+let
+  pythonEnv = python38.withPackages (ps: [ ps.pip ]);
+  fake-lsb-release = pkgs.writeScriptBin "lsb_release" ''
+    #!${pkgs.runtimeShell}
+
+    case "$1" in
+      -i) echo "nixos";;
+      -r) echo "nixos";;
+    esac
+  '';
+in
+
 pkgs.mkShell {
   name = "dev-shell";
 
   buildInputs = [
-    # PR to update bazel to 3.7.2: https://github.com/NixOS/nixpkgs/pull/105439
-    # there seems to be a problem on MacOS though, so for now install bazel
-    # 3.7.2 manually outside of nix.
-
-    # PR for 4.0: https://github.com/NixOS/nixpkgs/pull/106984
-
-    # bazel
-    # buildifier # Bazel BUILD file formatter
+    bazel_3
+    buildifier # Bazel BUILD file formatter
     go
     clojure
-    python38
+    pythonEnv
+    fake-lsb-release
     mypy
 
     git
