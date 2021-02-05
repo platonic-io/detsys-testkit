@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -185,6 +186,20 @@ func parse(entry []byte) ([]byte, []byte, []byte) {
 	return split[0], split[1], split[2]
 }
 
+func parseLine(line []byte) ([]byte, []byte, []byte) {
+	// NOTE: Tab characters are not allowed to appear unescaped in JSON.
+	split := bytes.SplitN(line, []byte("\t"), 3)
+	if len(split) != 3 {
+		panic(fmt.Sprintf("parseLine: failed to split line: '%s'\n", string(line)))
+	}
+	return split[0], split[1], split[2]
+}
+
+func parseFrom(meta []byte) []byte {
+	// NOTE: The only metadata is the sender for now.
+	return meta
+}
+
 func OpenDB() *sql.DB {
 	path := lib.DBPath()
 	// https://stackoverflow.com/questions/35804884/sqlite-concurrent-writing-performance
@@ -209,6 +224,10 @@ func (_ *Marshaler) UnmarshalMessage(message string, raw json.RawMessage, msg *l
 		*msg = Log{
 			Entry: raw,
 		}
+	case "index":
+		*msg = Index{
+			Component: strings.TrimSpace(string(raw)),
+		}
 	default:
 		panic(fmt.Errorf("Unknown message type: %s\n%s", message, raw))
 	}
@@ -231,11 +250,13 @@ func DeployReadOnlyPipe(pipeName string, reactor lib.Reactor, m lib.Marshaler) {
 		for err == nil {
 			if line != nil {
 				var msg lib.Message
-				from, message, data := parse(line)
-				err := m.UnmarshalMessage(string(message), data, &msg)
+				log.Printf("line = %s\n", line)
+				event, meta, data := parseLine(line)
+				err := m.UnmarshalMessage(string(event), data, &msg)
 				if err != nil {
 					panic(err)
 				}
+				from := parseFrom(meta)
 				oevs := reactor.Receive(time.Now(),
 					string(from),
 					&lib.InternalMessage{msg})
@@ -262,16 +283,19 @@ func writeIndex(component string, index uint64) {
 	namedPipe := filepath.Join(os.TempDir(), fmt.Sprintf("detsys-%s", component))
 
 	fh, err := os.OpenFile(namedPipe, os.O_WRONLY, 0600)
+	defer fh.Close()
 	if err != nil {
 		panic(err)
 	}
-	fmt.Fprintf(fh, "%d", index)
-	fh.Close()
+	fmt.Fprintf(fh, "%d\n", index)
 }
 
 func openPipe(pipeName string) *os.File {
 	namedPipe := filepath.Join(os.TempDir(), pipeName)
-	syscall.Mkfifo(namedPipe, 0600)
+	err := syscall.Mkfifo(namedPipe, 0600)
+	if !errors.Is(err, os.ErrExist) {
+		panic(err)
+	}
 
 	fh, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
 	if err != nil {
