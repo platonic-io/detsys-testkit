@@ -37,6 +37,18 @@ END_META
 {"agenda":[], "deployment": [{"reactor": "A", "type": "node", "args": {"log":"Hello world!","neighbours":{}}} , {"reactor": "B", "type": "node", "args": {"log":"","neighbours":{}}} , {"reactor": "C", "type": "node", "args": {"log":"","neighbours":{}}}]}
 END_DATA
         )
+elif [ "${TEST}" == "logger" ]; then
+    META=$(cat <<END_META
+{"component": "detsys-generator", "test-id": ${TEST_ID}}
+END_META
+        )
+    DATA=$(cat <<END_DATA
+{"agenda":[{"kind": "invoke", "event": "log", "args": {"entry": "TestEvent  {}  {\"data\": \"test_data\"}"}, "from": "client:0", "to": "frontend", "at": "1970-01-01T00:00:00Z"}, {"kind": "invoke", "event": "index", "args": {}, "from": "client:0", "to": "frontend", "at": "1970-01-01T00:00:10Z"}], "deployment": [{"reactor": "Logger", "type": "logger", "args": {}}]}
+END_DATA
+        )
+else
+    echo "detsys-generator: can't generate a test case of kind: '${TEST}'"
+    exit 1
 fi
 
 sqlite3 "${DETSYS_DB}" <<EOF

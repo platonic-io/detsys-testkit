@@ -16,7 +16,12 @@ var generateCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, args []string) {
 		cmd := exec.Command("detsys-generator", args[0])
 
-		err := cmd.Run()
+		out, err := cmd.CombinedOutput()
+
+		if err != nil {
+			fmt.Printf("%s\n%s\n", out, err)
+			os.Exit(1)
+		}
 
 		if err != nil {
 			fmt.Printf("%s\n", err)
