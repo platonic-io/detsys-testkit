@@ -56,7 +56,7 @@ ldfi ts =
     is = intersections ns
     c  = \i j -> f i j is
   in
-    And (vars is) :||
+    vars is :||
     And [ vars (c i j) :&& vars (i Set.\\ j) :|| vars (j Set.\\ i)
         | i <- ns, j <- ns, i /= j
         ]
