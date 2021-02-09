@@ -26,6 +26,9 @@ nodes = foldMap (\e -> Set.singleton (from e) `mappend` Set.singleton (to e))
 edges :: Trace -> Set Edge
 edges = foldMap (\e -> Set.singleton (from e, to e))
 
+infixr 3 :&&
+infixr 2 :||
+
 data Formula
   = Formula :&& Formula
   | Formula :|| Formula
@@ -40,12 +43,23 @@ data Formula
 intersections :: (Foldable f, Ord a) => f (Set a) -> Set a
 intersections = foldl1 Set.intersection
 
+f :: Ord a => Set a -> Set a -> Set a -> Set a
+f i j is = (i `Set.intersection` j) Set.\\ is
+
+vars :: Set String -> [Formula]
+vars = map Var . Set.toList
+
 ldfi :: [Trace] -> Formula
 ldfi ts =
   let
     ns = map nodes ts
+    is = intersections ns
+    c  = \i j -> f i j is
   in
-    And (map Var (Set.toList (intersections ns)))
+    And (vars is) :||
+    And [ And (vars (c i j)) :&& undefined | i <- ns, j <- ns, i /= j ]
+
+
 
 main :: IO ()
 main = return ()
