@@ -38,7 +38,21 @@ data Formula
   | TT
   | FF
   | Var String
-  deriving Show
+  deriving (Eq, Show)
+
+simplify :: Formula -> Formula
+simplify (TT :&& r) = simplify r
+simplify (l  :&& r) = simplify l :&& simplify r
+simplify (FF :|| r) = simplify r
+simplify (l  :|| r) = simplify l :|| simplify r
+simplify (And [])   = TT
+simplify (And [f])  = f
+simplify (And fs)   = And (map simplify fs)
+simplify f          = f
+
+fixpoint :: Formula -> Formula
+fixpoint f | simplify f == f = f
+           | otherwise       = fixpoint (simplify f)
 
 intersections :: (Foldable f, Ord a) => f (Set a) -> Set a
 intersections = foldl1 Set.intersection
@@ -64,4 +78,4 @@ ldfi ts =
 
 
 main :: IO ()
-main = print (ldfi exTraces)
+main = print (fixpoint (ldfi exTraces))
