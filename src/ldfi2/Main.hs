@@ -66,15 +66,16 @@ vars = And . map Var . Set.toList
 ldfi :: [Trace] -> Formula
 ldfi ts =
   let
-    ns = map nodes ts
-    is = intersections ns
-    c  = \i j -> f i j is
+    ns  = map nodes ts
+    is  = intersections ns
+    c   = \i j -> f i j is
+    len = length ns `div` 2
   in
-    vars is :||
+    vars is :&&
     And [ vars (c i j) :&& vars (i Set.\\ j) :|| vars (j Set.\\ i)
-        | i <- ns, j <- ns, i /= j
+        | i <- take len ns
+        , j <- drop len ns
         ]
-
 
 
 main :: IO ()
