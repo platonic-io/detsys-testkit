@@ -62,4 +62,4 @@ ldfi ts =
 
 
 main :: IO ()
-main = return ()
+main = print (ldfi exTraces)
