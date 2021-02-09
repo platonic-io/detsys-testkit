@@ -15,6 +15,11 @@ data Event = Event
 
 type Trace = [Event]
 
+exTraces :: [Trace]
+exTraces = [ [Event "A" "B", Event "A" "C"]
+           , [Event "A" "B", Event "A" "R", Event "R" "S1", Event "R" "S2"]
+           ]
+
 nodes :: Trace -> Set Node
 nodes = foldMap (\e -> Set.singleton (from e) `mappend` Set.singleton (to e))
 
