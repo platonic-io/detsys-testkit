@@ -34,10 +34,18 @@ data Formula
   | Neg Formula
   | TT
   | FF
+  | Var String
   deriving Show
 
+intersections :: (Foldable f, Ord a) => f (Set a) -> Set a
+intersections = foldl1 Set.intersection
+
 ldfi :: [Trace] -> Formula
-ldfi [] = FF
+ldfi ts =
+  let
+    ns = map nodes ts
+  in
+    And (map Var (Set.toList (intersections ns)))
 
 main :: IO ()
 main = return ()
