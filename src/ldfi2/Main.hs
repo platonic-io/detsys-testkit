@@ -46,8 +46,8 @@ intersections = foldl1 Set.intersection
 f :: Ord a => Set a -> Set a -> Set a -> Set a
 f i j is = (i `Set.intersection` j) Set.\\ is
 
-vars :: Set String -> [Formula]
-vars = map Var . Set.toList
+vars :: Set String -> Formula
+vars = And . map Var . Set.toList
 
 ldfi :: [Trace] -> Formula
 ldfi ts =
@@ -57,7 +57,9 @@ ldfi ts =
     c  = \i j -> f i j is
   in
     And (vars is) :||
-    And [ And (vars (c i j)) :&& undefined | i <- ns, j <- ns, i /= j ]
+    And [ vars (c i j) :&& vars (i Set.\\ j) :|| vars (j Set.\\ i)
+        | i <- ns, j <- ns, i /= j
+        ]
 
 
 
