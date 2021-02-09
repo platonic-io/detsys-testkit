@@ -16,9 +16,11 @@ data Event = Event
 type Trace = [Event]
 
 exTraces :: [Trace]
-exTraces = [ [Event "A" "B", Event "A" "C"]
-           , [Event "A" "B", Event "A" "R", Event "R" "S1", Event "R" "S2"]
-           ]
+exTraces =
+  [ [Event "A" "B", Event "A" "C", Event "A" "D"]
+  , [Event "A" "B", Event "A" "R", Event "R" "S1", Event "R" "S2", Event "A" "D"]
+  , [Event "A" "B", Event "A" "C", Event "A" "T1", Event "A" "T2"]
+  ]
 
 nodes :: Trace -> Set Node
 nodes = foldMap (\e -> Set.singleton (from e) `mappend` Set.singleton (to e))
@@ -41,13 +43,19 @@ data Formula
   deriving (Eq, Show)
 
 simplify :: Formula -> Formula
-simplify (TT :&& r) = simplify r
-simplify (l  :&& r) = simplify l :&& simplify r
-simplify (FF :|| r) = simplify r
-simplify (l  :|| r) = simplify l :|| simplify r
-simplify (And [])   = TT
-simplify (And [f])  = f
-simplify (And fs)   = And (map simplify fs)
+simplify (TT :&& r)     = simplify r
+simplify (And xs :&& y) = And (map simplify xs ++ [simplify y])
+simplify (x :&& And ys) = And (simplify x : map simplify ys)
+simplify (FF :|| r)     = simplify r
+simplify (l  :|| r)     = simplify l :|| simplify r
+simplify (And fs)       = case filter (/= TT) . (>>= expandAnd) $ map simplify fs of
+  [] -> TT
+  [f] -> f
+  fs' -> And fs'
+  where
+    expandAnd (And xs) = xs
+    expandAnd (l :&& r) = [l, r]
+    expandAnd f = [f]
 simplify f          = f
 
 fixpoint :: Formula -> Formula
@@ -57,9 +65,6 @@ fixpoint f | simplify f == f = f
 intersections :: (Foldable f, Ord a) => f (Set a) -> Set a
 intersections = foldl1 Set.intersection
 
-f :: Ord a => Set a -> Set a -> Set a -> Set a
-f i j is = (i `Set.intersection` j) Set.\\ is
-
 vars :: Set String -> Formula
 vars = And . map Var . Set.toList
 
@@ -68,7 +73,7 @@ ldfi ts =
   let
     ns  = map nodes ts
     is  = intersections ns
-    c   = \i j -> f i j is
+    c   = \i j -> (i `Set.intersection` j) Set.\\ is
     len = length ns `div` 2
   in
     vars is :&&
