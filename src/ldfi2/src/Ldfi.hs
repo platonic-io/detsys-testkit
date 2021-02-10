@@ -1,8 +1,11 @@
+{-# LANGUAGE DeriveFoldable #-}
+
 module Ldfi where
 
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Numeric.Natural
+import Z3.Monad
 
 ------------------------------------------------------------------------
 -- * Traces
@@ -34,7 +37,7 @@ edges = foldMap (\e -> Set.singleton (from e, to e))
 infixr 3 :&&
 infixr 2 :||
 
-data Formula
+data FormulaF var
   = Formula :&& Formula
   | Formula :|| Formula
   | And [Formula]
@@ -42,18 +45,24 @@ data Formula
   | Neg Formula
   | TT
   | FF
-  | Var String
-  deriving (Eq, Show)
+  | Var var
+  deriving (Eq, Show, Foldable)
 
-simplify :: Formula -> Formula
-simplify (TT :&& r)  = simplify r
-simplify (l  :&& r)  = simplify l :&& simplify r
-simplify (FF :|| r)  = simplify r
-simplify (l  :|| TT) = simplify l
-simplify (l  :|| r)  = simplify l :|| simplify r
-simplify (And [])    = TT
-simplify (And [f])   = f
-simplify (And fs)    = And (map simplify fs)
+type Formula = FormulaF String
+
+getVars :: Ord var => FormulaF var -> Set var
+getVars = foldMap Set.singleton
+
+simplify1 :: Formula -> Formula
+simplify1 (TT :&& r)  = simplify1 r
+simplify1 (l  :&& r)  = simplify1 l :&& simplify1 r
+simplify1 (FF :|| r)  = simplify1 r
+simplify1 (l  :|| TT) = simplify1 l
+simplify1 (l  :|| r)  = simplify1 l :|| simplify1 r
+simplify1 (And [])    = TT
+simplify1 (And [f])   = f
+simplify1 (And fs)    = And (map simplify1 fs)
+simplify1 f           = f
 
 -- simplify (TT :&& r)     = simplify r
 -- simplify (And xs :&& y) = And (map simplify xs ++ [simplify y])
@@ -68,11 +77,10 @@ simplify (And fs)    = And (map simplify fs)
 --     expandAnd (And xs) = xs
 --     expandAnd (l :&& r) = [l, r]
 --     expandAnd f = [f]
-simplify f          = f
 
 fixpoint :: Formula -> Formula
-fixpoint f | simplify f == f = f
-           | otherwise       = fixpoint (simplify f)
+fixpoint f | simplify1 f == f = f
+           | otherwise        = fixpoint (simplify1 f)
 
 vars :: Set String -> Formula
 vars = And . map Var . Set.toList
@@ -109,3 +117,9 @@ ldfi' ts =
 
 ldfi :: [Trace] -> Formula
 ldfi = fixpoint . ldfi'
+
+------------------------------------------------------------------------
+-- * SAT formula
+
+toSatAst :: MonadZ3 z3 => Formula -> z3 AST
+toSatAst = undefined
