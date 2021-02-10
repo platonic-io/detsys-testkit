@@ -10,6 +10,9 @@ vendor/
 result*
 __pycache__/
 # Python wheel files
-*.whl 
+*.whl
 bazel-*
 .\#*
+# Haskell
+dist-newstyle/
+cabal.project.local

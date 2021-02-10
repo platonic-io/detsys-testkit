@@ -25,6 +25,8 @@ pkgs.mkShell {
     pythonEnv
     fake-lsb-release
     mypy
+    haskellPackages.ghc
+    haskellPackages.cabal-install
 
     git
     nix
