@@ -2,7 +2,7 @@ packages: .
 
 with-compiler: ghc-8.10.3
 
--- reject-unconstrained-dependencies: all
+reject-unconstrained-dependencies: all
 
 constraints:
 
