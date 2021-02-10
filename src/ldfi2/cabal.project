@@ -11,3 +11,8 @@ package ldfi
 
 allow-older: *
 allow-newer: *
+
+source-repository-package
+  type: git
+  location: https://github.com/IagoAbal/haskell-z3.git
+  tag: ed1f41c7a7e3bfbee1d5041bfaeb156106476437

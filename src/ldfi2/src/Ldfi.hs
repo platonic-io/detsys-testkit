@@ -2,30 +2,34 @@ module Ldfi where
 
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Numeric.Natural
+
+------------------------------------------------------------------------
+-- * Traces
+
+type Trace = [Event]
+
+data Event = Event
+  { from :: Node
+  , to   :: Node
+  , at   :: Time
+  }
+  deriving (Eq, Ord, Show)
 
 type Node = String
 
 type Edge = (Node, Node)
 
-data Event = Event
-  { from :: Node
-  , to   :: Node
-  }
-  deriving (Eq, Ord, Show)
-
-type Trace = [Event]
-
-exTraces :: [Trace]
-exTraces =
-  [ [Event "A" "B", Event "A" "C"]
-  , [Event "A" "B", Event "A" "R", Event "R" "S1", Event "R" "S2"]
-  ]
+type Time = Natural
 
 nodes :: Trace -> Set Node
 nodes = foldMap (\e -> Set.singleton (from e) `mappend` Set.singleton (to e))
 
 edges :: Trace -> Set Edge
 edges = foldMap (\e -> Set.singleton (from e, to e))
+
+------------------------------------------------------------------------
+-- * Propositional logic formulae
 
 infixr 3 :&&
 infixr 2 :||
@@ -42,13 +46,14 @@ data Formula
   deriving (Eq, Show)
 
 simplify :: Formula -> Formula
-simplify (TT :&& r) = simplify r
-simplify (l  :&& r) = simplify l :&& simplify r
-simplify (FF :|| r) = simplify r
-simplify (l  :|| r) = simplify l :|| simplify r
-simplify (And [])   = TT
-simplify (And [f])  = f
-simplify (And fs)   = And (map simplify fs)
+simplify (TT :&& r)  = simplify r
+simplify (l  :&& r)  = simplify l :&& simplify r
+simplify (FF :|| r)  = simplify r
+simplify (l  :|| TT) = simplify l
+simplify (l  :|| r)  = simplify l :|| simplify r
+simplify (And [])    = TT
+simplify (And [f])   = f
+simplify (And fs)    = And (map simplify fs)
 
 -- simplify (TT :&& r)     = simplify r
 -- simplify (And xs :&& y) = And (map simplify xs ++ [simplify y])
@@ -69,11 +74,24 @@ fixpoint :: Formula -> Formula
 fixpoint f | simplify f == f = f
            | otherwise       = fixpoint (simplify f)
 
-intersections :: (Foldable f, Ord a) => f (Set a) -> Set a
-intersections = foldl1 Set.intersection
-
 vars :: Set String -> Formula
 vars = And . map Var . Set.toList
+
+------------------------------------------------------------------------
+-- * Failure specification
+
+data FailureSpec = FailureSpec
+  { endOfFiniteFailures :: Time    -- ^ When finite failures, i.e. omissions,
+                                   -- stop (a.k.a. EOF).
+  , maxCrashes          :: Natural -- ^ The maximum amount of crashes allowed.
+  , endOfTime           :: Time    -- ^ When the test stops (a.k.a. EOT).
+  }
+
+------------------------------------------------------------------------
+-- * Lineage-driven fault injection
+
+intersections :: (Foldable f, Ord a) => f (Set a) -> Set a
+intersections = foldl1 Set.intersection
 
 ldfi' :: [Trace] -> Formula
 ldfi' ts =

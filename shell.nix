@@ -27,6 +27,7 @@ pkgs.mkShell {
     mypy
     haskellPackages.ghc
     haskellPackages.cabal-install
+    z3
 
     git
     nix
