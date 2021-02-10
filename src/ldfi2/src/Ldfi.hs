@@ -1,4 +1,4 @@
-module Main where
+module Ldfi where
 
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -17,9 +17,8 @@ type Trace = [Event]
 
 exTraces :: [Trace]
 exTraces =
-  [ [Event "A" "B", Event "A" "C", Event "A" "D"]
-  , [Event "A" "B", Event "A" "R", Event "R" "S1", Event "R" "S2", Event "A" "D"]
-  , [Event "A" "B", Event "A" "C", Event "A" "T1", Event "A" "T2"]
+  [ [Event "A" "B", Event "A" "C"]
+  , [Event "A" "B", Event "A" "R", Event "R" "S1", Event "R" "S2"]
   ]
 
 nodes :: Trace -> Set Node
@@ -43,19 +42,27 @@ data Formula
   deriving (Eq, Show)
 
 simplify :: Formula -> Formula
-simplify (TT :&& r)     = simplify r
-simplify (And xs :&& y) = And (map simplify xs ++ [simplify y])
-simplify (x :&& And ys) = And (simplify x : map simplify ys)
-simplify (FF :|| r)     = simplify r
-simplify (l  :|| r)     = simplify l :|| simplify r
-simplify (And fs)       = case filter (/= TT) . (>>= expandAnd) $ map simplify fs of
-  [] -> TT
-  [f] -> f
-  fs' -> And fs'
-  where
-    expandAnd (And xs) = xs
-    expandAnd (l :&& r) = [l, r]
-    expandAnd f = [f]
+simplify (TT :&& r) = simplify r
+simplify (l  :&& r) = simplify l :&& simplify r
+simplify (FF :|| r) = simplify r
+simplify (l  :|| r) = simplify l :|| simplify r
+simplify (And [])   = TT
+simplify (And [f])  = f
+simplify (And fs)   = And (map simplify fs)
+
+-- simplify (TT :&& r)     = simplify r
+-- simplify (And xs :&& y) = And (map simplify xs ++ [simplify y])
+-- simplify (x :&& And ys) = And (simplify x : map simplify ys)
+-- simplify (FF :|| r)     = simplify r
+-- simplify (l  :|| r)     = simplify l :|| simplify r
+-- simplify (And fs)       = case filter (/= TT) . (>>= expandAnd) $ map simplify fs of
+--   [] -> TT
+--   [f] -> f
+--   fs' -> And fs'
+--   where
+--     expandAnd (And xs) = xs
+--     expandAnd (l :&& r) = [l, r]
+--     expandAnd f = [f]
 simplify f          = f
 
 fixpoint :: Formula -> Formula
@@ -68,8 +75,8 @@ intersections = foldl1 Set.intersection
 vars :: Set String -> Formula
 vars = And . map Var . Set.toList
 
-ldfi :: [Trace] -> Formula
-ldfi ts =
+ldfi' :: [Trace] -> Formula
+ldfi' ts =
   let
     ns  = map nodes ts
     is  = intersections ns
@@ -82,6 +89,5 @@ ldfi ts =
         , j <- drop len ns
         ]
 
-
-main :: IO ()
-main = print (fixpoint (ldfi exTraces))
+ldfi :: [Trace] -> Formula
+ldfi = fixpoint . ldfi'
