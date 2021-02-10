@@ -30,7 +30,7 @@ library
 test-suite test
   type:              exitcode-stdio-1.0
   hs-source-dirs:    test/
-  main-is:           Driver.hs
+  main-is:           Main.hs
   build-depends:
       base
     , containers
@@ -41,6 +41,7 @@ test-suite test
   build-depends:
     z3
   other-modules:
+    Driver
     LdfiTest
   ghc-options:       -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
   default-language:  Haskell2010
