@@ -3,6 +3,7 @@ module LdfiTest where
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Test.HUnit
+import qualified Test.QuickCheck as QC
 import Z3.Monad
 
 import Ldfi
@@ -14,17 +15,23 @@ emptyFailureSpec = FailureSpec
   , endOfTime = 0
   }
 
-shouldBe :: Formula -> Formula -> Assertion
-shouldBe actual expected = do
+z3_same :: Formula -> Formula -> IO Result
+z3_same l r = do
   (result, _, _) <- evalZ3 . solve $ do
     -- we could also check that the variables are the same.. but then
     -- we would also need to check we don't have silly things like (x \/ ~x)
-    let vs = Set.toList (getVars actual `Set.union` getVars expected)
+    let vs = Set.toList (getVars l `Set.union` getVars r)
     vs' <- mapM mkFreshBoolVar vs
     let env = Map.fromList (zip vs vs')
-    af <- translate env actual
-    ef <- translate env expected
-    mkEq af ef
+    lf <- translate env l
+    rf <- translate env r
+    mkEq lf rf
+  pure result
+
+shouldBe :: Formula -> Formula -> Assertion
+shouldBe actual expected = do
+  result <- z3_same actual expected
+  print result
   case result of
     Sat -> pure ()
     Unsat -> assertFailure msg
@@ -78,3 +85,15 @@ broadcast2Traces :: [Trace]
 broadcast2Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
                    , [Event "A" "B" 1] -- Omission between A C or Crash C.
                    ]
+
+------------------------------------------------------------------------
+
+-- simplify gives a logical equivalent formula
+prop_simplify_eq :: Formula -> QC.Property
+prop_simplify_eq f =
+  let simp_f = simplify1 f
+  in QC.ioProperty $ do
+    res <- z3_same f simp_f
+    return $ case res of
+      Sat -> True
+      _ -> False
