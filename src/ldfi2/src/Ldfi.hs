@@ -83,7 +83,7 @@ vars = And . map Var . Set.toList
 data FailureSpec = FailureSpec
   { endOfFiniteFailures :: Time    -- ^ When finite failures, i.e. omissions,
                                    -- stop (a.k.a. EOF).
-  , maxCrashes          :: Natural -- ^ The maximum amout of crashes allowed.
+  , maxCrashes          :: Natural -- ^ The maximum amount of crashes allowed.
   , endOfTime           :: Time    -- ^ When the test stops (a.k.a. EOT).
   }
 
