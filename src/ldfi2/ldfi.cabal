@@ -41,7 +41,7 @@ test-suite test
   default-language:  Haskell2010
 
 executable ldfi
-  hs-source-dirs:    app
+  hs-source-dirs:    app/
   main-is:           Main.hs
   build-depends:
       base

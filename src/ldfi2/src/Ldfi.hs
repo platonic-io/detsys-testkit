@@ -3,6 +3,8 @@ module Ldfi where
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+------------------------------------------------------------------------
+
 type Node = String
 
 type Edge = (Node, Node)
@@ -14,12 +16,6 @@ data Event = Event
   deriving (Eq, Ord, Show)
 
 type Trace = [Event]
-
-exTraces :: [Trace]
-exTraces =
-  [ [Event "A" "B", Event "A" "C"]
-  , [Event "A" "B", Event "A" "R", Event "R" "S1", Event "R" "S2"]
-  ]
 
 nodes :: Trace -> Set Node
 nodes = foldMap (\e -> Set.singleton (from e) `mappend` Set.singleton (to e))
@@ -42,13 +38,14 @@ data Formula
   deriving (Eq, Show)
 
 simplify :: Formula -> Formula
-simplify (TT :&& r) = simplify r
-simplify (l  :&& r) = simplify l :&& simplify r
-simplify (FF :|| r) = simplify r
-simplify (l  :|| r) = simplify l :|| simplify r
-simplify (And [])   = TT
-simplify (And [f])  = f
-simplify (And fs)   = And (map simplify fs)
+simplify (TT :&& r)  = simplify r
+simplify (l  :&& r)  = simplify l :&& simplify r
+simplify (FF :|| r)  = simplify r
+simplify (l  :|| TT) = simplify l
+simplify (l  :|| r)  = simplify l :|| simplify r
+simplify (And [])    = TT
+simplify (And [f])   = f
+simplify (And fs)    = And (map simplify fs)
 
 -- simplify (TT :&& r)     = simplify r
 -- simplify (And xs :&& y) = And (map simplify xs ++ [simplify y])
