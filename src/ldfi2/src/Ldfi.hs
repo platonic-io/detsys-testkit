@@ -64,6 +64,7 @@ simplify1 (l  :|| r)  = simplify1 l :|| simplify1 r
 simplify1 (And [])    = TT
 simplify1 (And [f])   = f
 simplify1 (And fs)    = And (map simplify1 fs)
+simplify1 (Neg f)     = Neg (simplify1 f)
 simplify1 f           = f
 
 -- simplify (TT :&& r)     = simplify r
@@ -103,8 +104,8 @@ data FailureSpec = FailureSpec
 intersections :: (Foldable f, Ord a) => f (Set a) -> Set a
 intersections = foldl1 Set.intersection
 
-ldfi' :: [Trace] -> Formula
-ldfi' ts =
+lineage :: [Trace] -> Formula
+lineage ts =
   let
     ns  = map nodes ts
     is  = intersections ns
@@ -117,8 +118,12 @@ ldfi' ts =
         , j <- drop len ns
         ]
 
-ldfi :: [Trace] -> Formula
-ldfi = fixpoint . ldfi'
+-- This probably needs the [Trace] ?
+failureSpecConstraint :: FailureSpec -> Formula
+failureSpecConstraint _ = TT
+
+ldfi :: FailureSpec -> [Trace] -> Formula
+ldfi fs = fixpoint . (failureSpecConstraint fs :&&) . Neg . lineage
 
 ------------------------------------------------------------------------
 -- * SAT formula

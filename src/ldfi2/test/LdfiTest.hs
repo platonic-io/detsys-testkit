@@ -4,6 +4,16 @@ import Test.HUnit
 
 import Ldfi
 
+emptyFailureSpec :: FailureSpec
+emptyFailureSpec = FailureSpec
+  { endOfFiniteFailures = 0
+  , maxCrashes = 0
+  , endOfTime = 0
+  }
+
+shouldBe :: Formula -> Formula -> Assertion
+shouldBe = (@?=)
+
 ------------------------------------------------------------------------
 
 -- Peter Alvaro's cache example: "a frontend A depends on a service B
@@ -23,9 +33,8 @@ cacheTraces =
 
 unit_cache :: Assertion
 unit_cache =
-  assertEqual ""
-    (ldfi cacheTraces)
-    (And [Var "A", Var "B"] :&& (Var "C" :|| And [Var "R", Var "S1", Var "S2"]))
+    (ldfi emptyFailureSpec cacheTraces) `shouldBe`
+    (Neg (And [Var "A", Var "B"] :&& (Var "C" :|| And [Var "R", Var "S1", Var "S2"])))
 
 ------------------------------------------------------------------------
 
@@ -37,9 +46,9 @@ broadcast1Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
                    ]
 
 unit_broadcast1 :: Assertion
-unit_broadcast1 = assertEqual ""
-  (ldfi broadcast1Traces)
-  (And [Var "A", Var "B"] :&& Var "C")
+unit_broadcast1 =
+  (ldfi emptyFailureSpec broadcast1Traces) `shouldBe`
+  (Neg (And [Var "A", Var "B"] :&& Var "C"))
   -- ^ XXX: If the SAT solver keeps finding crashing C as the solution
   -- then we are stuck in a loop?
 
