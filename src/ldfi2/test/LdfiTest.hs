@@ -17,8 +17,8 @@ import Ldfi
 -- suggest failing S1 or S2 or both without also suggesting failing C."
 cacheTraces :: [Trace]
 cacheTraces =
-  [ [Event "A" "B", Event "A" "C"]
-  , [Event "A" "B", Event "A" "R", Event "R" "S1", Event "R" "S2"]
+  [ [Event "A" "B" 0, Event "A" "C" 1]
+  , [Event "A" "B" 0, Event "A" "R" 1, Event "R" "S1" 2, Event "R" "S2" 3]
   ]
 
 unit_cache :: Assertion
@@ -32,8 +32,8 @@ unit_cache =
 -- Node A broadcasts to node B and C without retry. Node B getting the
 -- message constitutes a successful outcome.
 broadcast1Traces :: [Trace]
-broadcast1Traces = [ [Event "A" "B", Event "A" "C"]
-                   , [Event "A" "B"] -- Omission between A C or Crash C.
+broadcast1Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
+                   , [Event "A" "B" 1] -- Omission between A C or Crash C.
                    ]
 
 unit_broadcast1 :: Assertion
@@ -42,3 +42,12 @@ unit_broadcast1 = assertEqual ""
   (And [Var "A", Var "B"] :&& Var "C")
   -- ^ XXX: If the SAT solver keeps finding crashing C as the solution
   -- then we are stuck in a loop?
+
+------------------------------------------------------------------------
+
+-- Node A broadcasts to node B and C with retry. Node B getting the
+-- message constitutes a successful outcome.
+broadcast2Traces :: [Trace]
+broadcast2Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
+                   , [Event "A" "B" 1] -- Omission between A C or Crash C.
+                   ]

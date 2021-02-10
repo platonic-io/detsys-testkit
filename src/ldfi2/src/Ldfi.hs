@@ -2,26 +2,34 @@ module Ldfi where
 
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Numeric.Natural
 
 ------------------------------------------------------------------------
+-- * Traces
+
+type Trace = [Event]
+
+data Event = Event
+  { from :: Node
+  , to   :: Node
+  , at   :: Time
+  }
+  deriving (Eq, Ord, Show)
 
 type Node = String
 
 type Edge = (Node, Node)
 
-data Event = Event
-  { from :: Node
-  , to   :: Node
-  }
-  deriving (Eq, Ord, Show)
-
-type Trace = [Event]
+type Time = Natural
 
 nodes :: Trace -> Set Node
 nodes = foldMap (\e -> Set.singleton (from e) `mappend` Set.singleton (to e))
 
 edges :: Trace -> Set Edge
 edges = foldMap (\e -> Set.singleton (from e, to e))
+
+------------------------------------------------------------------------
+-- * Propositional logic formulae
 
 infixr 3 :&&
 infixr 2 :||
@@ -66,11 +74,24 @@ fixpoint :: Formula -> Formula
 fixpoint f | simplify f == f = f
            | otherwise       = fixpoint (simplify f)
 
-intersections :: (Foldable f, Ord a) => f (Set a) -> Set a
-intersections = foldl1 Set.intersection
-
 vars :: Set String -> Formula
 vars = And . map Var . Set.toList
+
+------------------------------------------------------------------------
+-- * Failure specification
+
+data FailureSpec = FailureSpec
+  { endOfFiniteFailures :: Time    -- ^ When finite failures, i.e. omissions,
+                                   -- stop (a.k.a. EOF).
+  , maxCrashes          :: Natural -- ^ The maximum amout of crashes allowed.
+  , endOfTime           :: Time    -- ^ When the test stops (a.k.a. EOT).
+  }
+
+------------------------------------------------------------------------
+-- * Lineage-driven fault injection
+
+intersections :: (Foldable f, Ord a) => f (Set a) -> Set a
+intersections = foldl1 Set.intersection
 
 ldfi' :: [Trace] -> Formula
 ldfi' ts =
