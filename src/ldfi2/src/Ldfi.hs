@@ -161,9 +161,9 @@ translate env f0 = case f0 of
 solve :: MonadZ3 z3 => z3 AST -> z3 (Result, Maybe Model, Maybe String)
 solve m = do
   ast <- m
-  assert =<< mkNot ast
+  assert ast
   (result, mModel) <- getModel
-  mModelString <- traverse showModel mModel
+  mModelString <- traverse modelToString mModel
   return (result, mModel, mModelString)
 
 sat :: Formula -> IO (Result, Maybe Model, Maybe String)
