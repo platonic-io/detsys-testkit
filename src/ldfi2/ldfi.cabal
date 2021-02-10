@@ -22,6 +22,7 @@ library
   build-depends:
       base           >=4.14 && <4.15
     , containers
+    , QuickCheck
   -- Other dependencies:
   build-depends:
       z3
@@ -36,8 +37,10 @@ test-suite test
     , containers
     , HUnit
     , ldfi
+    , QuickCheck
     , tasty
     , tasty-hunit
+    , tasty-quickcheck
   build-depends:
     z3
   other-modules:
