@@ -27,6 +27,7 @@ pkgs.mkShell {
     mypy
     haskellPackages.ghc
     haskellPackages.cabal-install
+    haskellPackages.tasty-discover
     z3
 
     git
