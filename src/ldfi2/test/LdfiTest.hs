@@ -1,6 +1,9 @@
 module LdfiTest where
 
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Test.HUnit
+import Z3.Monad
 
 import Ldfi
 
@@ -12,7 +15,22 @@ emptyFailureSpec = FailureSpec
   }
 
 shouldBe :: Formula -> Formula -> Assertion
-shouldBe = (@?=)
+shouldBe actual expected = do
+  (result, _, _) <- evalZ3 . solve $ do
+    -- we could also check that the variables are the same.. but then
+    -- we would also need to check we don't have silly things like (x \/ ~x)
+    let vs = Set.toList (getVars actual `Set.union` getVars expected)
+    vs' <- mapM mkFreshBoolVar vs
+    let env = Map.fromList (zip vs vs')
+    af <- translate env actual
+    ef <- translate env expected
+    mkEq af ef
+  case result of
+    Sat -> pure ()
+    Unsat -> assertFailure msg
+      where msg = "expected: " ++ show expected ++ "\n but got: " ++ show actual
+    Undef -> assertFailure msg
+      where msg = "z3 returns Undef"
 
 ------------------------------------------------------------------------
 
