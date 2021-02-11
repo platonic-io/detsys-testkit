@@ -95,7 +95,8 @@ See the file [CONTRIBUTING.md](CONTRIBUTING.md).
 * The [P](https://github.com/p-org/P) programming language;
 * [Simulant](https://github.com/Datomic/simulant);
 * [Jepsen](https://github.com/jepsen-io/jepsen) and
-  [Maelstrom](https://github.com/jepsen-io/maelstrom).
+  [Maelstrom](https://github.com/jepsen-io/maelstrom);
+* [stateright](https://github.com/stateright/stateright).
 
 ### License
 
