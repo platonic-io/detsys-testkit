@@ -54,24 +54,24 @@ data FormulaF var
 type Formula = FormulaF String
 
 genFormula :: [v] -> Int -> QC.Gen (FormulaF v)
-genFormula vars 0 = QC.oneof
+genFormula env 0 = QC.oneof
   [ pure TT
   , pure FF
-  , Var <$> QC.elements vars
+  , Var <$> QC.elements env
   ]
-genFormula vars size =
-  QC.oneof [ genFormula vars 0
-           , Neg <$> genFormula vars (size - 1)
-           , QC.elements [(:&&), (:||)] <*> genFormula vars (size `div` 2) <*> genFormula vars (size `div` 2)
+genFormula env size =
+  QC.oneof [ genFormula env 0
+           , Neg <$> genFormula env (size - 1)
+           , QC.elements [(:&&), (:||)] <*> genFormula env (size `div` 2) <*> genFormula env (size `div` 2)
            , do
                n <- QC.choose (0, size `div` 2)
-               QC.elements [And, Or] <*> QC.vectorOf n (genFormula vars (size `div` 4))
+               QC.elements [And, Or] <*> QC.vectorOf n (genFormula env (size `div` 4))
            ]
 
 instance QC.Arbitrary v => QC.Arbitrary (FormulaF v) where
   arbitrary = do
-    vars <- QC.listOf1 QC.arbitrary
-    QC.sized (genFormula vars)
+    env <- QC.listOf1 QC.arbitrary
+    QC.sized (genFormula env)
 
 getVars :: Ord var => FormulaF var -> Set var
 getVars = foldMap Set.singleton
@@ -80,7 +80,7 @@ simplify1 :: Formula -> Formula
 simplify1 (TT :&& r)  = simplify1 r
 simplify1 (l  :&& r)  = simplify1 l :&& simplify1 r
 simplify1 (FF :|| r)  = simplify1 r
-simplify1 (l  :|| TT) = TT
+simplify1 (_l  :|| TT) = TT
 simplify1 (l  :|| r)  = simplify1 l :|| simplify1 r
 simplify1 (And [])    = TT
 simplify1 (And [f])   = f
@@ -127,6 +127,7 @@ intersections = foldl1 Set.intersection
 
 lineage :: [Trace] -> Formula
 lineage ts =
+  -- Or [ vars t | t <- map nodes ts]
   let
     ns  = map nodes ts
     is  = intersections ns
@@ -134,7 +135,7 @@ lineage ts =
     len = length ns `div` 2
   in
     vars is :&&
-    And [ vars (c i j) :&& vars (i Set.\\ j) :|| vars (j Set.\\ i)
+    And [ vars (c i j) :&& (vars (i Set.\\ j) :|| vars (j Set.\\ i))
         | i <- take len ns
         , j <- drop len ns
         ]
