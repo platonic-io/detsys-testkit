@@ -20,7 +20,6 @@ library
   hs-source-dirs:   src/
   exposed-modules:
     Ldfi
-    Ldfi.Storage
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
