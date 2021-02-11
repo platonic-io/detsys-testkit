@@ -80,7 +80,7 @@ simplify1 :: Formula -> Formula
 simplify1 (TT :&& r)  = simplify1 r
 simplify1 (l  :&& r)  = simplify1 l :&& simplify1 r
 simplify1 (FF :|| r)  = simplify1 r
-simplify1 (_l  :|| TT) = TT
+simplify1 (_l :|| TT) = TT
 simplify1 (l  :|| r)  = simplify1 l :|| simplify1 r
 simplify1 (And [])    = TT
 simplify1 (And [f])   = f
@@ -106,8 +106,8 @@ fixpoint :: Formula -> Formula
 fixpoint f | simplify1 f == f = f
            | otherwise        = fixpoint (simplify1 f)
 
-vars :: Set String -> Formula
-vars = And . map Var . Set.toList
+makeVars :: Set String -> Formula
+makeVars = And . map Var . Set.toList
 
 ------------------------------------------------------------------------
 -- * Failure specification
@@ -134,8 +134,8 @@ lineage ts =
     c   = \i j -> (i `Set.intersection` j) Set.\\ is
     len = length ns `div` 2
   in
-    vars is :&&
-    And [ vars (c i j) :&& (vars (i Set.\\ j) :|| vars (j Set.\\ i))
+    makeVars is :&&
+    And [ makeVars (c i j) :&& (makeVars (i Set.\\ j) :|| makeVars (j Set.\\ i))
         | i <- take len ns
         , j <- drop len ns
         ]
