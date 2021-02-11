@@ -2,11 +2,9 @@
 
 module Ldfi.GitHash where
 
-import GitHash
+import Ldfi.GitHashImpl
 
 ------------------------------------------------------------------------
 
 version :: String
-version = giHash gi ++ if giDirty gi then " (dirty)" else ""
-  where
-    gi = $$tGitInfoCwd
+version = $$tGetGitInfo
