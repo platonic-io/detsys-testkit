@@ -28,6 +28,10 @@ pkgs.mkShell {
     haskellPackages.ghc
     haskellPackages.cabal-install
     haskellPackages.tasty-discover
+    haskellPackages.cabal-fmt       # For formatting .cabal files, example
+                                    # invocation: `cabal-fmt -i ldfi.cabal`.
+    haskellPackages.stylish-haskell # For import statement formatting, can be
+                                    # invoked from spacemacs via `, F`.
     z3
 
     git
