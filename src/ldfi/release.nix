@@ -28,4 +28,11 @@ pythonPackages.buildPythonApplication rec {
     export PYTHONPATH=$src/src:$PYTHONPATH
     pytest --capture=tee-sys
   '';
+
+  postInstall = ''
+    cp $src/src/ldfi.py $out/lib
+    for prog in "$out"/bin/*; do
+      wrapProgram "$prog" --set PYTHONPATH $PYTHONPATH:"$out/lib"
+    done
+  '';
 }
