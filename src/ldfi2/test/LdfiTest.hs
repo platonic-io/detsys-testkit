@@ -7,6 +7,10 @@ import qualified Test.QuickCheck as QC
 import Z3.Monad
 
 import Ldfi
+import Ldfi.FailureSpec
+import Ldfi.Prop
+import Ldfi.Sat
+import Ldfi.Traces
 
 emptyFailureSpec :: FailureSpec
 emptyFailureSpec = FailureSpec
