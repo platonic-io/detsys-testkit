@@ -12,6 +12,8 @@ import Ldfi.Prop
 import Ldfi.Sat
 import Ldfi.Traces
 
+------------------------------------------------------------------------
+
 emptyFailureSpec :: FailureSpec
 emptyFailureSpec = FailureSpec
   { endOfFiniteFailures = 0
@@ -24,7 +26,7 @@ data WasSame = Same | NotSame (Maybe String) | Dunno
 
 z3_same :: Formula -> Formula -> IO WasSame
 z3_same l r = do
-  (result, _, modString) <- evalZ3 . solve $ do
+  result <- evalZ3 . oldSolve $ do
     -- we could also check that the variables are the same.. but then
     -- we would also need to check we don't have silly things like (x \/ ~x)
     let vs = Set.toList (getVars l `Set.union` getVars r)
@@ -34,10 +36,10 @@ z3_same l r = do
     rf <- translate env r
     mkNot =<< mkIff lf rf
   pure $ case result of
-    Sat -> NotSame modString
-    Unsat -> Same
+    Sat  -> NotSame Nothing -- TODO(stevan): Maybe we can give a better
+                            -- counterexample here?
+    Unsat  -> Same
     Undef -> Dunno
-
 
 shouldBe :: Formula -> Formula -> Assertion
 shouldBe actual expected = do

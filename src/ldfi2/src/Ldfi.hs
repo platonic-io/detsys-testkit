@@ -1,24 +1,25 @@
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE NamedFieldPuns #-}
+
 module Ldfi where
 
-import Data.Set (Set)
 import qualified Data.Set as Set
 
+import Ldfi.Storage
 import Ldfi.FailureSpec
 import Ldfi.Prop
 import Ldfi.Traces
+import Ldfi.Solver
 
 ------------------------------------------------------------------------
 -- * Lineage-driven fault injection
-
-intersections :: (Foldable f, Ord a) => f (Set a) -> Set a
-intersections = foldl1 Set.intersection
 
 lineage :: [Trace] -> Formula
 lineage ts =
   -- Or [ makeVars t | t <- map nodes ts]
   let
     ns  = map nodes ts
-    is  = intersections ns
+    is  = foldl1 Set.intersection ns
     c   = \i j -> (i `Set.intersection` j) Set.\\ is
     len = length ns `div` 2
   in
@@ -34,3 +35,11 @@ failureSpecConstraint _ = TT
 
 ldfi :: FailureSpec -> [Trace] -> Formula
 ldfi fs = fixpoint . (failureSpecConstraint fs :&&) . Neg . lineage
+
+------------------------------------------------------------------------
+-- * Main
+
+run :: Monad m => Storage m -> Solver m -> TestId -> FailureSpec -> m Solution
+run Storage{load} Solver{solve} testId failureSpec = do
+  traces <- load testId
+  solve (ldfi failureSpec traces)
