@@ -15,7 +15,7 @@ intersections = foldl1 Set.intersection
 
 lineage :: [Trace] -> Formula
 lineage ts =
-  -- Or [ vars t | t <- map nodes ts]
+  -- Or [ makeVars t | t <- map nodes ts]
   let
     ns  = map nodes ts
     is  = intersections ns
