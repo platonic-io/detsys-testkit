@@ -11,7 +11,7 @@ import System.Environment
 import System.FilePath
 import System.IO.Error
 
-import Ldfi
+import Ldfi.Traces
 
 ------------------------------------------------------------------------
 

@@ -20,8 +20,12 @@ library
   hs-source-dirs:   src/
   exposed-modules:
     Ldfi
+    Ldfi.FailureSpec
     Ldfi.GitHash
+    Ldfi.Prop
+    Ldfi.Sat
     Ldfi.Storage
+    Ldfi.Traces
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
