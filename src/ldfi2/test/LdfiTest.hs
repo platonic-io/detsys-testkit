@@ -1,14 +1,17 @@
 module LdfiTest where
 
-import Test.HUnit
+import qualified Data.Map as Map
+import Test.HUnit hiding (Node)
 import qualified Test.QuickCheck as QC
+import Text.Read (readMaybe)
 
 import Ldfi
 import Ldfi.FailureSpec
 import Ldfi.Prop
 import Ldfi.Sat
-import Ldfi.Traces
 import Ldfi.Solver
+import Ldfi.Storage
+import Ldfi.Traces
 
 ------------------------------------------------------------------------
 
@@ -74,10 +77,29 @@ cacheTraces =
   , [Event "A" "B" 0, Event "A" "R" 1, Event "R" "S1" 2, Event "R" "S2" 3]
   ]
 
-unit_cache :: Assertion
-unit_cache =
-    (ldfi emptyFailureSpec cacheTraces) `shouldBe`
-    (Neg (And [Var "A", Var "B"] :&& (Var "C" :|| And [Var "R", Var "S1", Var "S2"])))
+unit_cache_lineage :: Assertion
+unit_cache_lineage =
+    (fmap show $ fixpoint $ lineage cacheTraces) `shouldBe`
+    (var "A" "B" 0 :&& (var "A" "C" 1 :|| And [var "A" "R" 1, var "R" "S1" 2, var "R" "S2" 3]))
+  where
+
+-- This should move out of the tests..
+makeFaults :: Solution -> [Fault]
+makeFaults NoSolution        = []
+makeFaults (Solution assign) =
+  [ f
+  | (key, True) <- Map.toAscList assign
+  , Just (FaultVar f) <- pure $ readMaybe key
+  ]
+
+unit_cacheFailures :: Assertion
+unit_cacheFailures = do
+  let testId = 0
+  sol <- run (mockStorage cacheTraces) z3Solver testId emptyFailureSpec
+  makeFaults sol @?= [ Omission ("A", "B") 0]
+
+var :: Node -> Node -> Time -> Formula
+var f t a = Var (show $ EventVar (Event f t a))
 
 ------------------------------------------------------------------------
 
@@ -90,8 +112,8 @@ broadcast1Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
 
 unit_broadcast1 :: Assertion
 unit_broadcast1 =
-  (ldfi emptyFailureSpec broadcast1Traces) `shouldBe`
-  (Neg (And [Var "A", Var "B"]))
+  (fmap show $ fixpoint $ lineage broadcast1Traces) `shouldBe`
+  (And [var "A" "B" 1])
   -- ^ XXX: If the SAT solver keeps finding crashing C as the solution
   -- then we are stuck in a loop?
 
