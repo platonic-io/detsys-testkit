@@ -18,7 +18,7 @@ pkgs.mkShell {
   name = "dev-shell";
 
   buildInputs = [
-    bazel_3
+    bazel_4
     buildifier # Bazel BUILD file formatter
     go
     clojure
