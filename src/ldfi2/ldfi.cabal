@@ -8,7 +8,7 @@ description:
 bug-reports:        https://github.com/symbiont-io/detsys-testkit/issues
 license:            AllRightsReserved
 license-file:       LICENSE
-author:             Stevan Andjelkovic
+author:             Stevan Andjelkovic, Daniel Gustafsson
 maintainer:         symbiont-stevan-andjelkovic@users.noreply.github.com
 copyright:          Copyright (c) 2021 Symbiont Inc
 category:           Testing, Distributed Systems
@@ -25,7 +25,11 @@ library
     Ldfi.Prop
     Ldfi.Sat
     Ldfi.Storage
+    Ldfi.Solver
     Ldfi.Traces
+
+  other-modules:
+        Ldfi.GitHashImpl
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
@@ -34,16 +38,13 @@ library
     , containers
     , filepath
     , mtl
+    , template-haskell
 
   -- Other dependencies:
   build-depends:
       QuickCheck
     , sqlite-simple
-    , template-haskell
     , z3
-
-  other-modules:
-        Ldfi.GitHashImpl
 
   default-language: Haskell2010
 

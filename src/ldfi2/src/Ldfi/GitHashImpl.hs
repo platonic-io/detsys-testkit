@@ -2,15 +2,26 @@
 
 module Ldfi.GitHashImpl where
 
+import Control.Exception
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import System.Environment
-
+import System.IO.Error
 
 ------------------------------------------------------------------------
--- We need this indirection, because you can't define and splice in the same module..
+
+-- We need this indirection, because you can't define and splice in the
+-- same module...
+
+getVersionFromEnv :: IO String
+getVersionFromEnv = do
+  getEnv "DETSYS_LDFI_VERSION"
+    `catchIOError` \e ->
+      if isDoesNotExistError e
+      then return "unknown"
+      else throwIO e
 
 tGetGitInfo :: Q (TExp String)
 tGetGitInfo = do
-    s <- runIO $ getEnv "DETSYS_LDFI_VERSION"
+    s <- runIO getVersionFromEnv
     liftTyped s
