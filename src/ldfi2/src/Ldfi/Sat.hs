@@ -4,7 +4,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import GHC.Stack (HasCallStack)
-import Z3.Monad
+import Z3.Monad hiding (Solver)
 
 import Ldfi.Prop
 import Ldfi.Solver
@@ -63,3 +63,6 @@ z3Solve f = evalZ3 $ do
         mbs <- mapM (evalBool model) vs'
         let bs = map (maybe (error "impossible") id) mbs
         return (Solution (Map.fromList (zip vs bs)))
+
+z3Solver :: Solver IO
+z3Solver = Solver z3Solve
