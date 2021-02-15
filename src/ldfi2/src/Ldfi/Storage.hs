@@ -5,7 +5,6 @@ module Ldfi.Storage where
 
 import Data.List (groupBy)
 import Control.Exception
-import Control.Monad.Identity
 import Database.SQLite.Simple
 import System.Environment
 import System.FilePath
@@ -18,12 +17,10 @@ import Ldfi.Traces
 type TestId = Int
 type RunId  = Int
 
-type Fault = String -- XXX: ???
-
 data LdfiEvent = LdfiEvent
   { leTestId     :: TestId
   , leRunIds     :: [RunId]
-  , leFaults     :: [Fault]
+  , leFaults     :: [String] -- XXX: Fault?
   , leVersion    :: String
   , leStatistics :: String
   }
@@ -33,9 +30,9 @@ data Storage m = Storage
   , store :: LdfiEvent -> m ()
   }
 
-emptyStorage :: Storage Identity
-emptyStorage = Storage
-  { load  = const (return [])
+mockStorage :: Monad m => [Trace] -> Storage m
+mockStorage ts = Storage
+  { load  = const (return ts)
   , store = const (return ())
   }
 

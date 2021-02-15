@@ -1,6 +1,6 @@
 module LdfiTest where
 
-import Test.HUnit
+import Test.HUnit hiding (Node)
 import qualified Test.QuickCheck as QC
 
 import Ldfi
@@ -8,6 +8,7 @@ import Ldfi.FailureSpec
 import Ldfi.Prop
 import Ldfi.Sat
 import Ldfi.Traces
+import Ldfi.Storage
 import Ldfi.Solver
 
 ------------------------------------------------------------------------
@@ -78,6 +79,29 @@ unit_cache :: Assertion
 unit_cache =
     (ldfi emptyFailureSpec cacheTraces) `shouldBe`
     (Neg (And [Var "A", Var "B"] :&& (Var "C" :|| And [Var "R", Var "S1", Var "S2"])))
+
+makeFaults :: Solution -> [Fault]
+makeFaults NoSolution        = []
+makeFaults (Solution assign) = undefined
+
+data Fault = Crash Node Time | Omission Edge Time
+  deriving (Eq, Show)
+
+unit_cacheFailures :: Assertion
+unit_cacheFailures = do
+  let testId = 0
+  sol <- run (mockStorage cacheTraces) z3Solver testId emptyFailureSpec
+  makeFaults sol @=?
+    [ Omission ("A", "B") 0
+    , Omission ("A", "C") 1
+    , Crash "A" 1
+    , Crash "C" 1 -- XXX(stevan): C never sends something, so we can't crash it?
+    , Omission ("A", "R") 1
+    , Omission ("R", "S1") 2
+    , Crash "R" 2
+    , Omission ("R", "S2") 2
+    , Crash "R" 3
+    ]
 
 ------------------------------------------------------------------------
 

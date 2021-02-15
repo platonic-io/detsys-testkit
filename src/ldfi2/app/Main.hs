@@ -3,8 +3,8 @@
 
 module Main where
 
-import Options.Generic
 import qualified Data.Text.IO as T
+import Options.Generic
 
 import qualified Ldfi
 import Ldfi.FailureSpec (FailureSpec(FailureSpec))
