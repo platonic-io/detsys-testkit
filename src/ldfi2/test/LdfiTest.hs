@@ -19,14 +19,14 @@ emptyFailureSpec = FailureSpec
   , endOfTime = 0
   }
 
-data WasSame = Same | NotSame (Maybe String)
+data WasSame = Same | NotSame String
   deriving Show
 
 z3_same :: Formula -> Formula -> IO WasSame
 z3_same l r = do
   sol <- z3Solve (Neg (l :<-> r))
   pure $ case sol of
-    Solution assignment -> NotSame (Just (show assignment))
+    Solution assignment -> NotSame (show assignment)
     NoSolution          -> Same
 
 shouldBe :: Formula -> Formula -> Assertion
@@ -36,7 +36,7 @@ shouldBe actual expected = do
     Same -> pure ()
     NotSame modString -> assertFailure msg
       where msg = "expected: " ++ show expected ++ "\n but got: " ++ show actual ++
-              "\n model: " ++ show modString
+              "\n model: " ++ modString
 
 ------------------------------------------------------------------------
 -- Sanity checks for z3_same
