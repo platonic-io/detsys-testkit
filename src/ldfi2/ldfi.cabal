@@ -35,6 +35,7 @@ library
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
   build-depends:
       base        >=4.14 && <4.15
+    , bytestring
     , containers
     , filepath
     , mtl
@@ -77,6 +78,7 @@ executable detsys-ldfi
   main-is:          Main.hs
   build-depends:
       base
+    , bytestring
     , ldfi
     , optparse-generic
 

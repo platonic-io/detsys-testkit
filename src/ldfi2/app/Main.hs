@@ -4,9 +4,10 @@
 module Main where
 
 import Options.Generic
+import qualified Data.ByteString.Char8 as BS
 
 import qualified Ldfi
-import Ldfi.FailureSpec (FailureSpec)
+import Ldfi.FailureSpec (FailureSpec(FailureSpec))
 import qualified Ldfi.GitHash as Git
 import Ldfi.Sat (z3Solver)
 import Ldfi.Solver
@@ -16,9 +17,9 @@ import Ldfi.Storage
 
 data Config = Config
   { testId              :: Maybe Int
-  , endOfTime           :: Maybe Int
   , endOfFiniteFailures :: Maybe Int
   , maxCrashes          :: Maybe Int
+  , endOfTime           :: Maybe Int
   , version             :: Bool
   }
   deriving (Generic, Show)
@@ -35,16 +36,15 @@ go cfg help
   | version cfg = putStrLn Git.version
   | otherwise   =
       let
-        mFailSpec = makeFailureSpec (testId cfg) (endOfTime cfg) (endOfFiniteFailures cfg)
+        mFailSpec = makeFailureSpec (endOfFiniteFailures cfg) (maxCrashes cfg) (endOfTime cfg)
       in
         case (testId cfg, mFailSpec) of
           (Just tid, Just failSpec) -> do
             sol <- Ldfi.run sqliteStorage z3Solver tid failSpec
-            putStrLn (marshal sol)
+            BS.putStrLn (marshal sol)
           (_, _) -> help
 
 makeFailureSpec :: Maybe Int -> Maybe Int -> Maybe Int -> Maybe FailureSpec
-makeFailureSpec = undefined
-
-marshal :: Solution -> String
-marshal = undefined
+makeFailureSpec (Just eof) (Just crashes) (Just eot) =
+  Just (FailureSpec (toEnum eof) (toEnum crashes) (toEnum eot))
+makeFailureSpec _ _ _ = Nothing
