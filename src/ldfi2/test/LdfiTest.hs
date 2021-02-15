@@ -87,10 +87,12 @@ makeFaults (Solution assign) = undefined
 data Fault = Crash Node Time | Omission Edge Time
   deriving (Eq, Show)
 
+dummyTestId :: TestId
+dummyTestId = error "This testId will never be used."
+
 unit_cacheFailures :: Assertion
 unit_cacheFailures = do
-  let testId = 0
-  sol <- run (mockStorage cacheTraces) z3Solver testId emptyFailureSpec
+  sol <- run (mockStorage cacheTraces) z3Solver dummyTestId emptyFailureSpec
   makeFaults sol @=?
     [ Omission ("A", "B") 0
     , Omission ("A", "C") 1
@@ -109,7 +111,7 @@ unit_cacheFailures = do
 -- message constitutes a successful outcome.
 broadcast1Traces :: [Trace]
 broadcast1Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
-                   , [Event "A" "B" 1] -- Omission between A C or Crash C.
+                   , [Event "A" "B" 1]
                    ]
 
 unit_broadcast1 :: Assertion
@@ -119,15 +121,52 @@ unit_broadcast1 =
   -- ^ XXX: If the SAT solver keeps finding crashing C as the solution
   -- then we are stuck in a loop?
 
+unit_broadcast1Run1 :: Assertion
+unit_broadcast1Run1 = do
+  sol <- run (mockStorage (take 1 broadcast1Traces)) z3Solver dummyTestId emptyFailureSpec
+  makeFaults sol @=? [ Omission ("A", "C") 1 ]
+  -- ^ Lets assume this fault gets picked rather than omission between A and B,
+  -- so that we need another concrete run.
+
+unit_broadcast1Run2 :: Assertion
+unit_broadcast1Run2 = do
+  sol <- run (mockStorage (take 2 broadcast1Traces)) z3Solver dummyTestId emptyFailureSpec
+  makeFaults sol @=? [ Omission ("A", "B") 1 ] -- Minimal counterexample.
+
 ------------------------------------------------------------------------
+
+broadcast2FailureSpec :: FailureSpec
+broadcast2FailureSpec = FailureSpec
+  { endOfFiniteFailures = 3
+  , maxCrashes          = 1
+  , endOfTime           = 5
+  }
 
 -- Node A broadcasts to node B and C with retry. Node B getting the
 -- message constitutes a successful outcome.
 broadcast2Traces :: [Trace]
 broadcast2Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
-                   , [Event "A" "B" 1] -- Omission between A C or Crash C.
+                   , [Event "A" "B" 1]
+                   , [Event "A" "B" 2, Event "A" "C" 1]
+                   , [Event "A" "B" 1, Event "A" "C" 1]
                    ]
 
+-- Lets assume that run 1 and 2 were the same as in broadcast1.
+unit_broadcast2Run3 :: Assertion
+unit_broadcast2Run3 = do
+  sol <- run (mockStorage (take 3 broadcast2Traces)) z3Solver dummyTestId broadcast2FailureSpec
+  makeFaults sol @=?
+    [ Omission ("A", "B") 1
+    , Omission ("A", "B") 2
+    ]
+
+unit_broadcast2Run4 :: Assertion
+unit_broadcast2Run4 = do
+  sol <- run (mockStorage (take 4 broadcast2Traces)) z3Solver dummyTestId broadcast2FailureSpec
+  makeFaults sol @=?
+    [ Omission ("A", "B") 1
+    , Crash "A" 2
+    ] -- Minimal counterexample.
 
 ------------------------------------------------------------------------
 -- QuickCheck property
