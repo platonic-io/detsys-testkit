@@ -4,7 +4,7 @@
 module Main where
 
 import Options.Generic
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.Text.IO as T
 
 import qualified Ldfi
 import Ldfi.FailureSpec (FailureSpec(FailureSpec))
@@ -41,7 +41,7 @@ go cfg help
         case (testId cfg, mFailSpec) of
           (Just tid, Just failSpec) -> do
             sol <- Ldfi.run sqliteStorage z3Solver tid failSpec
-            BS.putStrLn (marshal sol)
+            T.putStrLn (marshal sol)
           (_, _) -> help
 
 makeFailureSpec :: Maybe Int -> Maybe Int -> Maybe Int -> Maybe FailureSpec
