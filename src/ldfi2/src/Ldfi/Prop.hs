@@ -18,6 +18,7 @@ data FormulaF var
   | And [FormulaF var]
   | Or [FormulaF var]
   | Neg (FormulaF var)
+  | FormulaF var :<-> FormulaF var
   | TT
   | FF
   | Var var
@@ -32,13 +33,14 @@ genFormula env 0 = QC.oneof
   , Var <$> QC.elements env
   ]
 genFormula env size =
-  QC.oneof [ genFormula env 0
-           , Neg <$> genFormula env (size - 1)
-           , QC.elements [(:&&), (:||)] <*> genFormula env (size `div` 2) <*> genFormula env (size `div` 2)
-           , do
-               n <- QC.choose (0, size `div` 2)
-               QC.elements [And, Or] <*> QC.vectorOf n (genFormula env (size `div` 4))
-           ]
+  QC.oneof
+    [ genFormula env 0
+    , Neg <$> genFormula env (size - 1)
+    , QC.elements [(:&&), (:||)] <*> genFormula env (size `div` 2) <*> genFormula env (size `div` 2)
+    , do
+        n <- QC.choose (0, size `div` 2)
+        QC.elements [And, Or] <*> QC.vectorOf n (genFormula env (size `div` 4))
+    ]
 
 instance QC.Arbitrary v => QC.Arbitrary (FormulaF v) where
   arbitrary = do
@@ -58,6 +60,7 @@ simplify1 (And [])    = TT
 simplify1 (And [f])   = f
 simplify1 (And fs)    = And (map simplify1 fs)
 simplify1 (Neg f)     = Neg (simplify1 f)
+simplify1 (l :<-> r)  = simplify1 l :<-> simplify1 r
 simplify1 f           = f
 
 -- simplify (TT :&& r)     = simplify r

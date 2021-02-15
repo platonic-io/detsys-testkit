@@ -1,16 +1,14 @@
 module LdfiTest where
 
-import qualified Data.Map as Map
-import qualified Data.Set as Set
 import Test.HUnit
 import qualified Test.QuickCheck as QC
-import Z3.Monad
 
 import Ldfi
 import Ldfi.FailureSpec
 import Ldfi.Prop
 import Ldfi.Sat
 import Ldfi.Traces
+import Ldfi.Solver
 
 ------------------------------------------------------------------------
 
@@ -21,25 +19,15 @@ emptyFailureSpec = FailureSpec
   , endOfTime = 0
   }
 
-data WasSame = Same | NotSame (Maybe String) | Dunno
+data WasSame = Same | NotSame (Maybe String)
   deriving Show
 
 z3_same :: Formula -> Formula -> IO WasSame
 z3_same l r = do
-  result <- evalZ3 . oldSolve $ do
-    -- we could also check that the variables are the same.. but then
-    -- we would also need to check we don't have silly things like (x \/ ~x)
-    let vs = Set.toList (getVars l `Set.union` getVars r)
-    vs' <- mapM mkFreshBoolVar vs
-    let env = Map.fromList (zip vs vs')
-    lf <- translate env l
-    rf <- translate env r
-    mkNot =<< mkIff lf rf
-  pure $ case result of
-    Sat  -> NotSame Nothing -- TODO(stevan): Maybe we can give a better
-                            -- counterexample here?
-    Unsat  -> Same
-    Undef -> Dunno
+  sol <- z3Solve (Neg (l :<-> r))
+  pure $ case sol of
+    Solution assignment -> NotSame (Just (show assignment))
+    NoSolution          -> Same
 
 shouldBe :: Formula -> Formula -> Assertion
 shouldBe actual expected = do
@@ -49,8 +37,6 @@ shouldBe actual expected = do
     NotSame modString -> assertFailure msg
       where msg = "expected: " ++ show expected ++ "\n but got: " ++ show actual ++
               "\n model: " ++ show modString
-    Dunno -> assertFailure msg
-      where msg = "z3 returns Undef"
 
 ------------------------------------------------------------------------
 -- Sanity checks for z3_same

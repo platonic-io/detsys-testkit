@@ -3,6 +3,7 @@ module Ldfi.Sat where
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import GHC.Stack (HasCallStack)
 import Z3.Monad
 
 import Ldfi.Prop
@@ -30,6 +31,10 @@ translate env f0 = case f0 of
     fs' <- mapM (translate env) fs
     mkOr fs'
   Neg f -> mkNot =<< translate env f
+  l :<-> r -> do
+    l' <- translate env l
+    r' <- translate env r
+    mkIff l' r'
   TT    -> mkTrue
   FF    -> mkFalse
   Var v -> return (env Map.! v)
@@ -41,7 +46,7 @@ oldSolve m =  do
   (result, _mModel) <- getModel
   return result
 
-z3Solve :: Formula -> IO Solution
+z3Solve :: HasCallStack => Formula -> IO Solution
 z3Solve f = evalZ3 $ do
   let vs = Set.toList (getVars f)
   vs' <- mapM mkFreshBoolVar vs
