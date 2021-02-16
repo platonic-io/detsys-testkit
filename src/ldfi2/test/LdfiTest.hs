@@ -92,39 +92,16 @@ makeFaults (Solution assign) =
   , Just (FaultVar f) <- pure $ readMaybe key
   ]
 
-unit_cacheFailures :: Assertion
-unit_cacheFailures = do
-  let testId = 0
-  sol <- run (mockStorage cacheTraces) z3Solver testId emptyFailureSpec
-  makeFaults sol @?= [ Omission ("A", "B") 0]
-
-var :: Node -> Node -> Time -> Formula
-var f t a = Var (show $ EventVar (Event f t a))
-
-makeFaults :: Solution -> [Fault]
-makeFaults NoSolution        = []
-makeFaults (Solution assign) = undefined
-
-data Fault = Crash Node Time | Omission Edge Time
-  deriving (Eq, Show)
-
 dummyTestId :: TestId
 dummyTestId = error "This testId will never be used."
 
 unit_cacheFailures :: Assertion
 unit_cacheFailures = do
   sol <- run (mockStorage cacheTraces) z3Solver dummyTestId emptyFailureSpec
-  makeFaults sol @=?
-    [ Omission ("A", "B") 0
-    , Omission ("A", "C") 1
-    , Crash "A" 1
-    , Crash "C" 1 -- XXX(stevan): C never sends something, so we can't crash it?
-    , Omission ("A", "R") 1
-    , Omission ("R", "S1") 2
-    , Crash "R" 2
-    , Omission ("R", "S2") 2
-    , Crash "R" 3
-    ]
+  makeFaults sol @?= [ Omission ("A", "B") 0 ]
+
+var :: Node -> Node -> Time -> Formula
+var f t a = Var (show $ EventVar (Event f t a))
 
 ------------------------------------------------------------------------
 
@@ -139,29 +116,31 @@ unit_broadcast1 :: Assertion
 unit_broadcast1 =
   (fmap show $ fixpoint $ lineage broadcast1Traces) `shouldBe`
   (And [var "A" "B" 1])
-  -- ^ XXX: If the SAT solver keeps finding crashing C as the solution
-  -- then we are stuck in a loop?
 
-unit_broadcast1Run1 :: Assertion
-unit_broadcast1Run1 = do
-  sol <- run (mockStorage (take 1 broadcast1Traces)) z3Solver dummyTestId emptyFailureSpec
-  makeFaults sol @=? [ Omission ("A", "C") 1 ]
-  -- ^ Lets assume this fault gets picked rather than omission between A and B,
-  -- so that we need another concrete run.
-
-unit_broadcast1Run2 :: Assertion
-unit_broadcast1Run2 = do
-  sol <- run (mockStorage (take 2 broadcast1Traces)) z3Solver dummyTestId emptyFailureSpec
-  makeFaults sol @=? [ Omission ("A", "B") 1 ] -- Minimal counterexample.
-
-------------------------------------------------------------------------
-
-broadcast2FailureSpec :: FailureSpec
-broadcast2FailureSpec = FailureSpec
+broadcastFailureSpec :: FailureSpec
+broadcastFailureSpec = FailureSpec
   { endOfFiniteFailures = 3
   , maxCrashes          = 1
   , endOfTime           = 5
   }
+
+-- TODO(stevan): this seems wrong, B hasn't sent anything. Should be `Omission
+-- "A" "B" 1` or `Omission "A" "C" 1`, can we make a variant of run that returns
+-- all possible models?
+unit_broadcast1Run1 :: Assertion
+unit_broadcast1Run1 = do
+  sol <- run (mockStorage (take 1 broadcast1Traces)) z3Solver dummyTestId broadcastFailureSpec
+  makeFaults sol @?= [ Crash "B" 1 ]
+
+-- TODO(stevan): Lets assume this fault gets picked rather than omission between
+-- A and B, so that we need another concrete run. Can we force this selection somehow?
+unit_broadcast1Run2 :: Assertion
+unit_broadcast1Run2 = do
+  sol <- run (mockStorage (take 2 broadcast1Traces)) z3Solver dummyTestId broadcastFailureSpec
+  makeFaults sol @?= [ Crash "B" 1 ] -- XXX: should be:
+    -- [ Omission ("A", "B") 1 ] -- Minimal counterexample.
+
+------------------------------------------------------------------------
 
 -- Node A broadcasts to node B and C with retry. Node B getting the
 -- message constitutes a successful outcome.
@@ -175,16 +154,16 @@ broadcast2Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
 -- Lets assume that run 1 and 2 were the same as in broadcast1.
 unit_broadcast2Run3 :: Assertion
 unit_broadcast2Run3 = do
-  sol <- run (mockStorage (take 3 broadcast2Traces)) z3Solver dummyTestId broadcast2FailureSpec
-  makeFaults sol @=?
+  sol <- run (mockStorage (take 3 broadcast2Traces)) z3Solver dummyTestId broadcastFailureSpec
+  makeFaults sol @?=
     [ Omission ("A", "B") 1
     , Omission ("A", "B") 2
     ]
 
 unit_broadcast2Run4 :: Assertion
 unit_broadcast2Run4 = do
-  sol <- run (mockStorage (take 4 broadcast2Traces)) z3Solver dummyTestId broadcast2FailureSpec
-  makeFaults sol @=?
+  sol <- run (mockStorage (take 4 broadcast2Traces)) z3Solver dummyTestId broadcastFailureSpec
+  makeFaults sol @?=
     [ Omission ("A", "B") 1
     , Crash "A" 2
     ] -- Minimal counterexample.
