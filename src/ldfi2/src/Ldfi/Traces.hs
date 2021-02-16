@@ -2,7 +2,7 @@ module Ldfi.Traces where
 
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Numeric.Natural
+import GHC.Natural
 
 ------------------------------------------------------------------------
 -- * Traces
@@ -14,7 +14,7 @@ data Event = Event
   , to   :: Node
   , at   :: Time
   }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Read, Show)
 
 type Node = String
 

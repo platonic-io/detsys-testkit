@@ -24,6 +24,10 @@ translate env f0 = case f0 of
     l' <- translate env l
     r' <- translate env r
     mkOr [l', r']
+  l :+ r -> do
+    l' <- translate env l
+    r' <- translate env r
+    mkXor l' r'
   And fs -> do
     fs' <- mapM (translate env) fs
     mkAnd fs'
@@ -38,6 +42,7 @@ translate env f0 = case f0 of
   TT    -> mkTrue
   FF    -> mkFalse
   Var v -> return (env Map.! v)
+  AtMost vs i -> mkAtMost [env Map.! v | v <- vs] i
 
 oldSolve :: MonadZ3 z3 => z3 AST -> z3 Result
 oldSolve m =  do

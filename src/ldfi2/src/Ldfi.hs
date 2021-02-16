@@ -3,38 +3,102 @@
 
 module Ldfi where
 
+import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified GHC.Natural as Nat
 
-import Ldfi.Storage
 import Ldfi.FailureSpec
 import Ldfi.Prop
-import Ldfi.Traces
 import Ldfi.Solver
+import Ldfi.Storage
+import Ldfi.Traces
 
 ------------------------------------------------------------------------
 -- * Lineage-driven fault injection
 
-lineage :: [Trace] -> Formula
+data LDFIVar
+  = EventVar Event
+  | FaultVar Fault
+  deriving (Eq, Ord, Read, Show)
+
+type LDFIFormula = FormulaF LDFIVar
+
+lineage :: [Trace] -> LDFIFormula
 lineage ts =
   -- Or [ makeVars t | t <- map nodes ts]
   let
-    ns  = map nodes ts
-    is  = foldl1 Set.intersection ns
+    vs = map (foldMap $ Set.singleton . EventVar) ts
+    is  = foldl1 Set.intersection vs
     c   = \i j -> (i `Set.intersection` j) Set.\\ is
-    len = length ns `div` 2
+    len = length vs `div` 2
   in
     makeVars is :&&
     And [ makeVars (c i j) :&& (makeVars (i Set.\\ j) :|| makeVars (j Set.\\ i))
-        | i <- take len ns
-        , j <- drop len ns
+        | i <- take len vs
+        , j <- drop len vs
         ]
 
--- This probably needs the [Trace] ?
-failureSpecConstraint :: FailureSpec -> Formula
-failureSpecConstraint _ = TT
+data Fault = Crash Node Time | Omission Edge Time
+  deriving (Eq, Ord, Read, Show)
 
-ldfi :: FailureSpec -> [Trace] -> Formula
-ldfi fs = fixpoint . (failureSpecConstraint fs :&&) . Neg . lineage
+affects :: Fault -> Event -> Bool
+affects (Omission (f, t) a) (Event f' t' a') = f == f' && t == t' && a == a'
+affects (Crash n a) (Event _ n' a') = n == n' && a <= a'
+   -- we should be able to be smarter if we knew when something was sent, then
+   -- we could also count for the sender..
+
+-- failureSemantic computes a formula s.t for each event either (xor) the event
+-- is true or one of the failures that affect it is true
+failureSemantic :: Set Event -> Set Fault -> LDFIFormula
+failureSemantic events failures = And
+  [ Var (EventVar event) :+ Or [ Var (FaultVar failure)
+                               | failure <- Set.toList failures
+                               , failure `affects` event]
+  | event <- Set.toList events]
+
+-- failureSpecConstraint is the formula that makes sure we are following the
+-- Failure Specification. Although we will never generate any faults that occur
+-- later than eff, so we don't have to check that here
+failureSpecConstraint :: FailureSpec -> Set Fault -> LDFIFormula
+failureSpecConstraint fs faults = AtMost crashes (Nat.naturalToInt $ maxCrashes fs)
+  where
+    crashes = [ FaultVar c | c@(Crash _ _) <- Set.toList faults]
+
+-- enumerateAllFaults will generate the interesting faults that could affect the
+-- set of events. But since it is pointless to generate a fault that is later
+-- than eff (since it would never be picked anyway) we don't generate those. In
+-- general it is enough to have a possible fault of either an omission or a
+-- crash before the event happened.
+--
+-- Though for crashes they could be generated before the eff, but have no event
+-- for that node in eff, so we make a special case to add a crash in eff. We
+-- could have done this by always adding crash at eff for each node, but instead
+-- only do this if there are events to the node after eff.
+enumerateAllFaults :: Set Event -> FailureSpec -> Set Fault
+enumerateAllFaults events fs = Set.unions (Set.map possibleFailure events)
+  where
+    eff = endOfFiniteFailures fs
+    possibleFailure :: Event -> Set Fault
+    possibleFailure (Event f t a)
+      | eff < a = Set.singleton (Crash t eff)
+      | otherwise = Set.fromList [Omission (f,t) a, Crash t a]
+
+-- ldfi will produce a formula that if solved will give you:
+-- * Which faults to introduce
+-- * Which events will break (though we are probably not interested in those)
+-- such that
+-- * If we introduce faults the corresponding events are false (`failureSemantic`)
+-- * We don't intruduce faults that violates the failure spec (`failureSpecConstaint`)
+-- * The lineage graph from traces are not satisfied (`Neg lineage`)
+ldfi :: FailureSpec -> [Trace] -> FormulaF String
+ldfi fs ts = fmap show $ fixpoint $ And
+  [ failureSemantic allEvents allFaults
+  , failureSpecConstraint fs allFaults
+  , Neg (lineage ts)
+  ]
+  where
+    allEvents = Set.unions (map Set.fromList ts)
+    allFaults = enumerateAllFaults allEvents fs
 
 ------------------------------------------------------------------------
 -- * Main
