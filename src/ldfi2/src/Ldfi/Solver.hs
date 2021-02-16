@@ -2,10 +2,10 @@
 
 module Ldfi.Solver where
 
+import Data.Map(Map)
+import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Map (Map)
-import qualified Data.Map as Map
 
 import Ldfi.Prop
 

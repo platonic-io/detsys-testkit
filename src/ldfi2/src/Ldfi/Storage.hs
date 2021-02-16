@@ -17,12 +17,10 @@ import Ldfi.Traces
 type TestId = Int
 type RunId  = Int
 
--- type Fault = String -- XXX: ???
-
 data LdfiEvent = LdfiEvent
   { leTestId     :: TestId
   , leRunIds     :: [RunId]
-  , leFaults     :: [String]
+  , leFaults     :: [String] -- XXX: Fault?
   , leVersion    :: String
   , leStatistics :: String
   }

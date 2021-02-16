@@ -80,9 +80,12 @@ simplify1 f           = f
 --     expandAnd (l :&& r) = [l, r]
 --     expandAnd f = [f]
 
-fixpoint :: Eq var => FormulaF var -> FormulaF var
-fixpoint f | simplify1 f == f = f
-           | otherwise        = fixpoint (simplify1 f)
+fixpoint :: Eq a => (a -> a) -> a -> a
+fixpoint f x | f x == x  = x
+             | otherwise = fixpoint f (f x)
+
+simplify :: Eq var => FormulaF var -> FormulaF var
+simplify = fixpoint simplify1
 
 makeVars :: Set var -> FormulaF var
 makeVars = And . map Var . Set.toList

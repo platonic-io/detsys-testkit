@@ -14,34 +14,24 @@ import Ldfi.Solver
 
 type Env = Map String AST
 
+liftFun :: MonadZ3 z3 => Env -> Formula -> Formula -> (AST -> AST -> z3 AST) -> z3 AST
+liftFun env l r f = do
+    l' <- translate env l
+    r' <- translate env r
+    f l' r'
+
 translate :: MonadZ3 z3 => Env -> Formula -> z3 AST
 translate env f0 = case f0 of
-  l :&& r -> do
-    l' <- translate env l
-    r' <- translate env r
-    mkAnd [l', r']
-  l :|| r -> do
-    l' <- translate env l
-    r' <- translate env r
-    mkOr [l', r']
-  l :+ r -> do
-    l' <- translate env l
-    r' <- translate env r
-    mkXor l' r'
-  And fs -> do
-    fs' <- mapM (translate env) fs
-    mkAnd fs'
-  Or fs -> do
-    fs' <- mapM (translate env) fs
-    mkOr fs'
-  Neg f -> mkNot =<< translate env f
-  l :<-> r -> do
-    l' <- translate env l
-    r' <- translate env r
-    mkIff l' r'
-  TT    -> mkTrue
-  FF    -> mkFalse
-  Var v -> return (env Map.! v)
+  l :&& r     -> liftFun env l r (\l' r' -> mkAnd [l', r'])
+  l :|| r     -> liftFun env l r (\l' r' -> mkOr [l', r'])
+  l :+ r      -> liftFun env l r mkXor
+  And fs      -> mkAnd =<< mapM (translate env) fs
+  Or fs       -> mkOr  =<< mapM (translate env) fs
+  Neg f       -> mkNot =<< translate env f
+  l :<-> r    -> liftFun env l r mkIff
+  TT          -> mkTrue
+  FF          -> mkFalse
+  Var v       -> return (env Map.! v)
   AtMost vs i -> mkAtMost [env Map.! v | v <- vs] i
 
 oldSolve :: MonadZ3 z3 => z3 AST -> z3 Result
