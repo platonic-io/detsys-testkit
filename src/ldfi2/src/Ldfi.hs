@@ -3,9 +3,11 @@
 
 module Ldfi where
 
+import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified GHC.Natural as Nat
+import Text.Read (readMaybe)
 
 import Ldfi.FailureSpec
 import Ldfi.Prop
@@ -37,9 +39,6 @@ lineage ts =
         | i <- take len vs
         , j <- drop len vs
         ]
-
-data Fault = Crash Node Time | Omission Edge Time
-  deriving (Eq, Ord, Read, Show)
 
 affects :: Fault -> Event -> Bool
 affects (Omission (f, t) a) (Event f' t' a') = f == f' && t == t' && a == a'
@@ -107,3 +106,14 @@ run :: Monad m => Storage m -> Solver m -> TestId -> FailureSpec -> m Solution
 run Storage{load} Solver{solve} testId failureSpec = do
   traces <- load testId
   solve (ldfi failureSpec traces)
+
+data Fault = Crash Node Time | Omission Edge Time
+  deriving (Eq, Ord, Read, Show)
+
+makeFaults :: Solution -> [Fault]
+makeFaults NoSolution        = []
+makeFaults (Solution assign) =
+  [ f
+  | (key, True) <- Map.toAscList assign
+  , Just (FaultVar f) <- pure $ readMaybe key
+  ]

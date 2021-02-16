@@ -1,9 +1,7 @@
 module LdfiTest where
 
-import qualified Data.Map as Map
 import Test.HUnit hiding (Node)
 import qualified Test.QuickCheck as QC
-import Text.Read (readMaybe)
 
 import Ldfi
 import Ldfi.FailureSpec
@@ -82,15 +80,6 @@ unit_cache_lineage =
     (fmap show $ simplify $ lineage cacheTraces) `shouldBe`
     (var "A" "B" 0 :&& (var "A" "C" 1 :|| And [var "A" "R" 1, var "R" "S1" 2, var "R" "S2" 3]))
   where
-
--- This should move out of the tests..
-makeFaults :: Solution -> [Fault]
-makeFaults NoSolution        = []
-makeFaults (Solution assign) =
-  [ f
-  | (key, True) <- Map.toAscList assign
-  , Just (FaultVar f) <- pure $ readMaybe key
-  ]
 
 dummyTestId :: TestId
 dummyTestId = error "This testId will never be used."
