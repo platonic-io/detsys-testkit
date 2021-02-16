@@ -79,7 +79,7 @@ cacheTraces =
 
 unit_cache_lineage :: Assertion
 unit_cache_lineage =
-    (fmap show $ fixpoint $ lineage cacheTraces) `shouldBe`
+    (fmap show $ simplify $ lineage cacheTraces) `shouldBe`
     (var "A" "B" 0 :&& (var "A" "C" 1 :|| And [var "A" "R" 1, var "R" "S1" 2, var "R" "S2" 3]))
   where
 
@@ -114,7 +114,7 @@ broadcast1Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
 
 unit_broadcast1 :: Assertion
 unit_broadcast1 =
-  (fmap show $ fixpoint $ lineage broadcast1Traces) `shouldBe`
+  (fmap show $ simplify $ lineage broadcast1Traces) `shouldBe`
   (And [var "A" "B" 1])
 
 broadcastFailureSpec :: FailureSpec

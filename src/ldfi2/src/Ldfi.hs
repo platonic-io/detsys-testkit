@@ -91,7 +91,7 @@ enumerateAllFaults events fs = Set.unions (Set.map possibleFailure events)
 -- * We don't intruduce faults that violates the failure spec (`failureSpecConstaint`)
 -- * The lineage graph from traces are not satisfied (`Neg lineage`)
 ldfi :: FailureSpec -> [Trace] -> FormulaF String
-ldfi fs ts = fmap show $ fixpoint $ And
+ldfi fs ts = fmap show $ simplify $ And
   [ failureSemantic allEvents allFaults
   , failureSpecConstraint fs allFaults
   , Neg (lineage ts)
