@@ -10,7 +10,6 @@ import qualified Ldfi
 import Ldfi.FailureSpec (FailureSpec(FailureSpec))
 import qualified Ldfi.GitHash as Git
 import Ldfi.Sat (z3Solver)
-import Ldfi.Solver
 import Ldfi.Storage
 
 ------------------------------------------------------------------------

@@ -53,32 +53,24 @@ getVars :: Ord var => FormulaF var -> Set var
 getVars = foldMap Set.singleton
 
 simplify1 :: FormulaF var -> FormulaF var
-simplify1 (TT :&& r)  = simplify1 r
-simplify1 (l  :&& r)  = simplify1 l :&& simplify1 r
-simplify1 (FF :|| r)  = simplify1 r
-simplify1 (_l :|| TT) = TT
-simplify1 (l  :|| r)  = simplify1 l :|| simplify1 r
-simplify1 (And [])    = TT
-simplify1 (And [f])   = f
-simplify1 (And fs)    = And (map simplify1 fs)
-simplify1 (Neg f)     = Neg (simplify1 f)
-simplify1 (l :<-> r)  = simplify1 l :<-> simplify1 r
-simplify1 (l :+ r)    = simplify1 l :+ simplify1 r
-simplify1 f           = f
-
--- simplify (TT :&& r)     = simplify r
--- simplify (And xs :&& y) = And (map simplify xs ++ [simplify y])
--- simplify (x :&& And ys) = And (simplify x : map simplify ys)
--- simplify (FF :|| r)     = simplify r
--- simplify (l  :|| r)     = simplify l :|| simplify r
--- simplify (And fs)       = case filter (/= TT) . (>>= expandAnd) $ map simplify fs of
---   [] -> TT
---   [f] -> f
---   fs' -> And fs'
---   where
---     expandAnd (And xs) = xs
---     expandAnd (l :&& r) = [l, r]
---     expandAnd f = [f]
+simplify1 (TT :&& r)    = simplify1 r
+simplify1 (l  :&& r)    = simplify1 l :&& simplify1 r
+simplify1 (FF :|| r)    = simplify1 r
+simplify1 (_l :|| TT)   = TT
+simplify1 (l  :|| r)    = simplify1 l :|| simplify1 r
+simplify1 (And [])      = TT
+simplify1 (And [f])     = f
+simplify1 (And fs)      = And (map simplify1 fs)
+simplify1 (Or [])       = FF
+simplify1 (Or [f])      = f
+simplify1 (Or fs)       = Or (map simplify1 fs)
+simplify1 (Neg f)       = Neg (simplify1 f)
+simplify1 (l :<-> r)    = simplify1 l :<-> simplify1 r
+simplify1 (l :+ r)      = simplify1 l :+ simplify1 r
+simplify1 f@(AtMost {}) = f
+simplify1 f@TT          = f
+simplify1 f@FF          = f
+simplify1 f@(Var _)     = f
 
 fixpoint :: Eq a => (a -> a) -> a -> a
 fixpoint f x | f x == x  = x
