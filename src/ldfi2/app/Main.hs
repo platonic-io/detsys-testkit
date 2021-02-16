@@ -40,8 +40,8 @@ go cfg help
       in
         case (testId cfg, mFailSpec) of
           (Just tid, Just failSpec) -> do
-            sol <- Ldfi.run sqliteStorage z3Solver tid failSpec
-            T.putStrLn (marshal sol)
+            json <- Ldfi.run' sqliteStorage z3Solver tid failSpec
+            T.putStrLn json
           (_, _) -> help
 
 makeFailureSpec :: Maybe Int -> Maybe Int -> Maybe Int -> Maybe FailureSpec

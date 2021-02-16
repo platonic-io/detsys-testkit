@@ -1,11 +1,14 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Ldfi where
 
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Text (Text)
+import qualified Data.Text as T
 import qualified GHC.Natural as Nat
 import Text.Read (readMaybe)
 
@@ -14,6 +17,7 @@ import Ldfi.Prop
 import Ldfi.Solver
 import Ldfi.Storage
 import Ldfi.Traces
+import Ldfi.Util
 
 ------------------------------------------------------------------------
 -- * Lineage-driven fault injection
@@ -102,11 +106,6 @@ ldfi fs ts = fmap show $ simplify $ And
 ------------------------------------------------------------------------
 -- * Main
 
-run :: Monad m => Storage m -> Solver m -> TestId -> FailureSpec -> m Solution
-run Storage{load} Solver{solve} testId failureSpec = do
-  traces <- load testId
-  solve (ldfi failureSpec traces)
-
 data Fault = Crash Node Time | Omission Edge Time
   deriving (Eq, Ord, Read, Show)
 
@@ -117,3 +116,18 @@ makeFaults (Solution assign) =
   | (key, True) <- Map.toAscList assign
   , Just (FaultVar f) <- pure $ readMaybe key
   ]
+
+marshalFaults :: [Fault] -> Text
+marshalFaults  fs = "{\"faults\":" <> marshalList (map show fs) <> "}"
+  where
+    marshalList :: [String] -> Text
+    marshalList = T.pack . show
+
+run :: Monad m => Storage m -> Solver m -> TestId -> FailureSpec -> m [Fault]
+run Storage{load} Solver{solve} testId failureSpec = do
+  traces <- load testId
+  sol <- solve (ldfi failureSpec traces)
+  return (makeFaults sol)
+
+run' :: Monad m => Storage m -> Solver m -> TestId -> FailureSpec -> m Text
+run' = fmap marshalFaults .:: run
