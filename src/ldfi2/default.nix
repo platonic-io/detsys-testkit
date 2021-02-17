@@ -12,7 +12,10 @@ let
             packages = super.haskell.packages // {
               ${compiler} = super.haskell.packages.${compiler}.override {
                 overrides = self: super: {
-                  z3 = self.callPackage ./z3.nix
+                  z3 = self.callCabal2nix "z3" (builtins.fetchGit {
+                    url = "git@github.com:stevana/haskell-z3";
+                    rev = "b984d0451969428f6fbc00d65f4d958c8998d05a";
+                  })
                     { z3 = pkgs.z3; };
                 };
               };
@@ -28,6 +31,7 @@ in pkg.overrideAttrs(attrs: {
   '';
   src = gitignoreSource ./.;
   # this should probably check that attrs.checkInputs doesn't exist
-  checkInputs = [nixpkgs.pkgs.haskell.packages.${compiler}.tasty-discover];
+  checkInputs = [ nixpkgs.pkgs.haskell.packages.${compiler}.tasty-discover ];
   pname = "detsys-ldfi2";
+  checkPhase = "";
 })
