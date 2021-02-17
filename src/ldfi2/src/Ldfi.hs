@@ -33,18 +33,7 @@ type LDFIFormula = FormulaF LDFIVar
 
 lineage :: [Trace] -> LDFIFormula
 lineage ts =
-  -- Or [ makeVars t | t <- map nodes ts ]
-  let
-    vs  = map (foldMap $ Set.singleton . EventVar) ts
-    is  = foldl Set.intersection Set.empty vs
-    c   = \i j -> (i `Set.intersection` j) Set.\\ is
-    len = length vs `div` 2
-  in
-    makeVars is :&&
-    And [ makeVars (c i j) :&& (makeVars (i Set.\\ j) :|| makeVars (j Set.\\ i))
-        | i <- take len vs
-        , j <- drop len vs
-        ]
+  Or [ makeVars t | t <- map (foldMap $ Set.singleton . EventVar) ts ]
 
 affects :: Fault -> Event -> Bool
 affects (Omission (f, t) a) (Event f' t' a') = f == f' && t == t' && a == a'
