@@ -31,10 +31,10 @@ type LDFIFormula = FormulaF LDFIVar
 
 lineage :: [Trace] -> LDFIFormula
 lineage ts =
-  -- Or [ makeVars t | t <- map nodes ts]
+  -- Or [ makeVars t | t <- map nodes ts ]
   let
-    vs = map (foldMap $ Set.singleton . EventVar) ts
-    is  = foldl1 Set.intersection vs
+    vs  = map (foldMap $ Set.singleton . EventVar) ts
+    is  = foldl Set.intersection Set.empty vs
     c   = \i j -> (i `Set.intersection` j) Set.\\ is
     len = length vs `div` 2
   in
@@ -63,7 +63,9 @@ failureSemantic events failures = And
 -- Failure Specification. Although we will never generate any faults that occur
 -- later than eff, so we don't have to check that here
 failureSpecConstraint :: FailureSpec -> Set Fault -> LDFIFormula
-failureSpecConstraint fs faults = AtMost crashes (Nat.naturalToInt $ maxCrashes fs)
+failureSpecConstraint fs faults
+  | null crashes = TT
+  | otherwise    = AtMost crashes (Nat.naturalToInt $ maxCrashes fs)
   where
     crashes = [ FaultVar c | c@(Crash _ _) <- Set.toList faults]
 
@@ -118,10 +120,17 @@ makeFaults (Solution assign) =
   ]
 
 marshalFaults :: [Fault] -> Text
-marshalFaults  fs = "{\"faults\":" <> marshalList (map show fs) <> "}"
+marshalFaults  fs = "{\"faults\":" <> marshalList (map marshalFault fs) <> "}"
   where
-    marshalList :: [String] -> Text
-    marshalList = T.pack . show
+    marshalList :: [Text] -> Text
+    marshalList ts = "[" <> T.intercalate "," ts <> "]"
+
+    marshalFault :: Fault -> Text
+    marshalFault (Crash from at) =
+      "{\"kind\":\"crash\",\"from\":" <> T.pack (show from) <> ",\"at\":" <> T.pack (show at) <> "}"
+    marshalFault (Omission (from, to) at) =
+      "{\"kind\":\"omission\",\"from\":" <> T.pack (show from) <> ",\"to\":" <> T.pack (show to) <>
+      ",\"at\":" <> T.pack (show at) <> "}"
 
 run :: Monad m => Storage m -> Solver m -> TestId -> FailureSpec -> m [Fault]
 run Storage{load} Solver{solve} testId failureSpec = do
