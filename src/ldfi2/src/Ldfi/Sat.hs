@@ -42,22 +42,36 @@ oldSolve m =  do
   return result
 
 z3Solve :: HasCallStack => Formula -> IO Solution
-z3Solve f = evalZ3 $ do
+z3Solve f = do
+  sols <- z3SolveAll f
+  case sols of
+    []      -> return NoSolution
+    sol : _ -> return sol
+
+z3Solver :: Solver IO
+z3Solver = Solver z3Solve
+
+z3SolveAll :: HasCallStack => Formula -> IO [Solution]
+z3SolveAll f = evalZ3 $ do
   let vs = Set.toList (getVars f)
   vs' <- mapM mkFreshBoolVar vs
   let env = Map.fromList (zip vs vs')
   a <- translate env f
   assert a
-  (result, mModel) <- getModel
-  case result of
-    Undef -> error "impossible"
-    Unsat -> return NoSolution
-    Sat -> case mModel of
-      Nothing -> error "impossible" -- TODO(stevan): steal Agda's __IMPOSSIBLE__?
-      Just model -> do
-        mbs <- mapM (evalBool model) vs'
-        let bs = map (maybe (error "impossible") id) mbs
-        return (Solution (Map.fromList (zip vs bs)))
-
-z3Solver :: Solver IO
-z3Solver = Solver z3Solve
+  go [] vs vs'
+    where
+      go :: MonadZ3 z3 => [Solution] -> [String] -> [AST] -> z3 [Solution]
+      go acc vs vs' = do
+        (result, mModel) <- getModel
+        case result of
+          Undef -> error "impossible"
+          Unsat -> return (reverse acc)
+          Sat -> case mModel of
+            Nothing -> error "impossible" -- TODO(stevan): steal Agda's __IMPOSSIBLE__?
+            Just model -> do
+              mbs <- mapM (evalBool model) vs'
+              let bs = map (maybe (error "impossible") id) mbs
+              bs' <- mapM (\(ix, b) -> mkNot =<< mkEq (vs' !! ix) =<< mkBool b)
+                          (zip [0 .. length bs - 1] bs)
+              assert =<< mkOr bs'
+              go (Solution (Map.fromList (zip vs bs)) : acc) vs vs'
