@@ -113,21 +113,17 @@ broadcastFailureSpec = FailureSpec
   , endOfTime           = 5
   }
 
--- TODO(stevan): this seems wrong, B hasn't sent anything. Should be `Omission
--- "A" "B" 1` or `Omission "A" "C" 1`, can we make a variant of run that returns
--- all possible models?
+-- TODO(stevan): This seems wrong, should be `Omission "A" "B" 1` or `Omission
+-- "A" "C" 1`, can we make a variant of run that returns all possible models?
 unit_broadcast1Run1 :: Assertion
 unit_broadcast1Run1 = do
   fs <- run (mockStorage (take 1 broadcast1Traces)) z3Solver dummyTestId broadcastFailureSpec
-  fs @?= [ Crash "B" 1 ]
+  fs @?= []
 
--- TODO(stevan): Lets assume this fault gets picked rather than omission between
--- A and B, so that we need another concrete run. Can we force this selection somehow?
 unit_broadcast1Run2 :: Assertion
 unit_broadcast1Run2 = do
   fs <- run (mockStorage (take 2 broadcast1Traces)) z3Solver dummyTestId broadcastFailureSpec
-  fs @?= [ Crash "B" 1 ] -- XXX: should be:
-    -- [ Omission ("A", "B") 1 ] -- Minimal counterexample.
+  fs @?= [ Omission ("A", "B") 1 ] -- Minimal counterexample.
 
 ------------------------------------------------------------------------
 
@@ -144,10 +140,7 @@ broadcast2Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
 unit_broadcast2Run3 :: Assertion
 unit_broadcast2Run3 = do
   fs <- run (mockStorage (take 3 broadcast2Traces)) z3Solver dummyTestId broadcastFailureSpec
-  fs @?=
-    [ Omission ("A", "B") 1
-    , Omission ("A", "B") 2
-    ]
+  fs @?= [Omission ("A", "C") 1]
 
 unit_broadcast2Run4 :: Assertion
 unit_broadcast2Run4 = do

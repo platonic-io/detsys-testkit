@@ -4,6 +4,8 @@
 
 module Ldfi where
 
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -57,7 +59,8 @@ failureSemantic events failures = And
   [ Var (EventVar event) :+ Or [ Var (FaultVar failure)
                                | failure <- Set.toList failures
                                , failure `affects` event]
-  | event <- Set.toList events]
+  | event <- Set.toList events
+  ]
 
 -- failureSpecConstraint is the formula that makes sure we are following the
 -- Failure Specification. Although we will never generate any faults that occur
@@ -67,7 +70,7 @@ failureSpecConstraint fs faults
   | null crashes = TT
   | otherwise    = AtMost crashes (Nat.naturalToInt $ maxCrashes fs)
   where
-    crashes = [ FaultVar c | c@(Crash _ _) <- Set.toList faults]
+    crashes = [ FaultVar c | c@(Crash _ _) <- Set.toList faults ]
 
 -- enumerateAllFaults will generate the interesting faults that could affect the
 -- set of events. But since it is pointless to generate a fault that is later
@@ -82,11 +85,26 @@ failureSpecConstraint fs faults
 enumerateAllFaults :: Set Event -> FailureSpec -> Set Fault
 enumerateAllFaults events fs = Set.unions (Set.map possibleFailure events)
   where
+    eff :: Time
     eff = endOfFiniteFailures fs
+
+    activeNodesAt :: IntMap (Set Node)
+    activeNodesAt = IntMap.fromListWith (<>)
+      [ (fromEnum at, Set.singleton from)
+      | Event from _to at <- Set.toList events
+      ]
+
+    beenActive :: Node -> Time -> Bool
+    beenActive n t = case IntMap.lookup (fromEnum t) activeNodesAt of
+      Nothing -> False
+      Just ns -> Set.member n ns
+
     possibleFailure :: Event -> Set Fault
     possibleFailure (Event f t a)
-      | eff < a = Set.singleton (Crash t eff)
-      | otherwise = Set.fromList [Omission (f,t) a, Crash t a]
+      | eff < a   = Set.singleton (Crash t eff)
+      | otherwise = Set.fromList ([Omission (f, t) a] ++
+                                  -- Only crash nodes that have sent something.
+                                  if beenActive t a then [Crash t a] else [])
 
 -- ldfi will produce a formula that if solved will give you:
 -- * Which faults to introduce
