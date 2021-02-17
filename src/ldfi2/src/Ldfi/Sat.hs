@@ -29,6 +29,7 @@ translate env f0 = case f0 of
   Or fs       -> mkOr  =<< mapM (translate env) fs
   Neg f       -> mkNot =<< translate env f
   l :<-> r    -> liftFun env l r mkIff
+  l :-> r     -> liftFun env l r mkImplies
   TT          -> mkTrue
   FF          -> mkFalse
   Var v       -> return (env Map.! v)

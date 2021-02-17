@@ -10,9 +10,10 @@ import GHC.Natural
 type Trace = [Event]
 
 data Event = Event
-  { from :: Node
-  , to   :: Node
-  , at   :: Time
+  { from  :: Node
+  , sent  :: Time
+  , to    :: Node
+  , recv  :: Time
   }
   deriving (Eq, Ord, Read, Show)
 

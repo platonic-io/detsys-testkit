@@ -4,8 +4,6 @@
 
 module Ldfi where
 
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -36,8 +34,9 @@ lineage ts =
   Or [ makeVars t | t <- map (foldMap $ Set.singleton . EventVar) ts ]
 
 affects :: Fault -> Event -> Bool
-affects (Omission (f, t) a) (Event f' t' a') = f == f' && t == t' && a == a'
-affects (Crash n a) (Event _ n' a') = n == n' && a <= a'
+affects (Omission (s, r) ra) (Event s' _ r' ra') = s == s' && r == r' && ra == ra'
+affects (Crash n a) (Event s sa r ra) =
+    (n == s && a <= sa) || (n == r && a <= ra)
    -- we should be able to be smarter if we knew when something was sent, then
    -- we could also count for the sender..
 
@@ -54,12 +53,17 @@ failureSemantic events failures = And
 -- failureSpecConstraint is the formula that makes sure we are following the
 -- Failure Specification. Although we will never generate any faults that occur
 -- later than eff, so we don't have to check that here
-failureSpecConstraint :: FailureSpec -> Set Fault -> LDFIFormula
-failureSpecConstraint fs faults
+failureSpecConstraint :: FailureSpec -> Set Event -> Set Fault -> LDFIFormula
+failureSpecConstraint fs events faults
   | null crashes = TT
-  | otherwise    = AtMost crashes (Nat.naturalToInt $ maxCrashes fs)
+  | otherwise    = And (AtMost crashVars (Nat.naturalToInt $ maxCrashes fs) : crashConditions)
   where
-    crashes = [ FaultVar c | c@(Crash _ _) <- Set.toList faults ]
+    crashes = [ c | c@(Crash _ _) <- Set.toList faults ]
+    crashVars = map FaultVar crashes
+    crashConditions = [ Var (FaultVar c) :-> Or [ Var (EventVar e)
+                                          | e@(Event s sa _ _) <- Set.toList events
+                                          , s == n && sa < t]
+                      | c@(Crash n t) <- crashes]
 
 -- enumerateAllFaults will generate the interesting faults that could affect the
 -- set of events. But since it is pointless to generate a fault that is later
@@ -77,23 +81,10 @@ enumerateAllFaults events fs = Set.unions (Set.map possibleFailure events)
     eff :: Time
     eff = endOfFiniteFailures fs
 
-    activeNodesAt :: IntMap (Set Node)
-    activeNodesAt = IntMap.fromListWith (<>)
-      [ (fromEnum at, Set.singleton from)
-      | Event from _to at <- Set.toList events
-      ]
-
-    beenActive :: Node -> Time -> Bool
-    beenActive n t = case IntMap.lookup (fromEnum t) activeNodesAt of
-      Nothing -> False
-      Just ns -> Set.member n ns
-
     possibleFailure :: Event -> Set Fault
-    possibleFailure (Event f t a)
-      | eff < a   = Set.singleton (Crash t eff)
-      | otherwise = Set.fromList ([Omission (f, t) a] ++
-                                  -- Only crash nodes that have sent something.
-                                  if beenActive t a then [Crash t a] else [])
+    possibleFailure (Event s sa r ra)
+      | eff < ra  = Set.fromList [Crash s eff , Crash r eff]
+      | otherwise = Set.fromList [Omission (s, r) ra, Crash s sa, Crash r ra]
 
 -- ldfi will produce a formula that if solved will give you:
 -- * Which faults to introduce
@@ -105,7 +96,7 @@ enumerateAllFaults events fs = Set.unions (Set.map possibleFailure events)
 ldfi :: FailureSpec -> [Trace] -> FormulaF String
 ldfi fs ts = fmap show $ simplify $ And
   [ failureSemantic allEvents allFaults
-  , failureSpecConstraint fs allFaults
+  , failureSpecConstraint fs allEvents allFaults
   , Neg (lineage ts)
   ]
   where
