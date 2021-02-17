@@ -16,6 +16,7 @@ data FormulaF var
   = FormulaF var :&& FormulaF var
   | FormulaF var :|| FormulaF var
   | FormulaF var :+  FormulaF var
+  | FormulaF var :-> FormulaF var
   | And [FormulaF var]
   | Or [FormulaF var]
   | Neg (FormulaF var)
@@ -66,6 +67,7 @@ simplify1 (Or [f])      = f
 simplify1 (Or fs)       = Or (map simplify1 fs)
 simplify1 (Neg f)       = Neg (simplify1 f)
 simplify1 (l :<-> r)    = simplify1 l :<-> simplify1 r
+simplify1 (l :-> r)     = simplify1 l :-> simplify1 r
 simplify1 (l :+ r)      = simplify1 l :+ simplify1 r
 simplify1 f@(AtMost {}) = f
 simplify1 f@TT          = f

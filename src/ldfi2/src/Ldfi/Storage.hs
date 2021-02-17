@@ -77,8 +77,8 @@ sqliteLoad testId = do
     historyToTrace = map (map go)
       where
         go :: NetworkTraceEvent -> Event
-        go (NetworkTraceEvent _runId sender receiver received _sent) =
-          Event sender receiver (toEnum received)
+        go (NetworkTraceEvent _runId sender receiver recvAt sentAt) =
+          Event sender (toEnum sentAt) receiver (toEnum recvAt)
 
 -- TODO(stevan): What exactly do we need to store? Previous faults are no longer
 -- interesting.
