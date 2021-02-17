@@ -21,9 +21,8 @@ let
         };
     };
   };
-  pkg = nixpkgs.pkgs.haskell.packages.${compiler}.callPackage ./ldfi2.nix { };
+  pkg = nixpkgs.pkgs.haskell.packages.${compiler}.callCabal2nix "ldfi" (./.) {};
 in pkg.overrideAttrs(attrs: {
-  # this should probably check that attrs.preBuild doesn't exist
   preBuild = ''
     export DETSYS_LDFI_VERSION="${nixpkgs.lib.commitIdFromGitRepo ./../../.git}"
   '';
