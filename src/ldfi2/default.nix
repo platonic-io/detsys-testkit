@@ -1,8 +1,26 @@
 { sources ? import ./../../nix/sources.nix
-, nixpkgs ? import sources.nixpkgs {}
-, compiler ? "ghc8103" }:
+, compiler ? "ghc8103"
+}:
 let
   inherit (import sources.gitignore {}) gitignoreSource;
+  nixpkgs = import sources.nixpkgs {
+    config = {
+      allowUnfree = true;
+      packageOverrides = super: let pkgs = super.pkgs; in
+        {
+          haskell = super.haskell // {
+            packages = super.haskell.packages // {
+              ${compiler} = super.haskell.packages.${compiler}.override {
+                overrides = self: super: {
+                  z3 = self.callPackage ./z3.nix
+                    { z3 = pkgs.z3; };
+                };
+              };
+            };
+          };
+        };
+    };
+  };
   pkg = nixpkgs.pkgs.haskell.packages.${compiler}.callPackage ./ldfi2.nix { };
 in pkg.overrideAttrs(attrs: {
   # this should probably check that attrs.preBuild doesn't exist
@@ -11,6 +29,6 @@ in pkg.overrideAttrs(attrs: {
   '';
   src = gitignoreSource ./.;
   # this should probably check that attrs.checkInputs doesn't exist
-  checkInputs = [nixpkgs.pkgs.haskellPackages.tasty-discover];
+  checkInputs = [nixpkgs.pkgs.haskell.packages.${compiler}.tasty-discover];
   pname = "detsys-ldfi2";
 })
