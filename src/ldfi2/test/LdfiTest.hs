@@ -118,7 +118,7 @@ broadcastFailureSpec = FailureSpec
 unit_broadcast1Run1 :: Assertion
 unit_broadcast1Run1 = do
   fs <- run (mockStorage (take 1 broadcast1Traces)) z3Solver dummyTestId broadcastFailureSpec
-  fs @?= []
+  fs @?= [ Omission ("A", "B") 1 ]
 
 unit_broadcast1Run2 :: Assertion
 unit_broadcast1Run2 = do
@@ -133,21 +133,22 @@ broadcast2Traces :: [Trace]
 broadcast2Traces = [ [Event "A" "B" 1, Event "A" "C" 1]
                    , [Event "A" "B" 1]
                    , [Event "A" "B" 2, Event "A" "C" 1]
-                   , [Event "A" "B" 1, Event "A" "C" 1]
+                   , [Event "A" "B" 4]
                    ]
 
 -- Lets assume that run 1 and 2 were the same as in broadcast1.
 unit_broadcast2Run3 :: Assertion
 unit_broadcast2Run3 = do
   fs <- run (mockStorage (take 3 broadcast2Traces)) z3Solver dummyTestId broadcastFailureSpec
-  fs @?= [Omission ("A", "C") 1]
+  fs @?= [Omission ("A", "B") 1, Omission ("A", "B") 2]
 
 unit_broadcast2Run4 :: Assertion
 unit_broadcast2Run4 = do
   fs <- run (mockStorage (take 4 broadcast2Traces)) z3Solver dummyTestId broadcastFailureSpec
   fs @?=
-    [ Omission ("A", "B") 1
-    , Crash "A" 2
+    [ Crash "B" 3
+    , Omission ("A", "B") 1
+    , Omission ("A", "B") 2
     ] -- Minimal counterexample.
 
 ------------------------------------------------------------------------
