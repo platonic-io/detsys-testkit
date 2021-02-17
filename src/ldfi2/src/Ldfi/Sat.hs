@@ -43,25 +43,28 @@ oldSolve m =  do
 
 z3Solve :: HasCallStack => Formula -> IO Solution
 z3Solve f = do
-  sols <- z3SolveAll f
+  sols <- z3SolveAll (Just 1) f
   case sols of
     []      -> return NoSolution
     sol : _ -> return sol
 
-z3Solver :: Solver IO
-z3Solver = Solver z3Solve
-
-z3SolveAll :: HasCallStack => Formula -> IO [Solution]
-z3SolveAll f = evalZ3 $ do
+z3SolveAll :: HasCallStack => Maybe Int -> Formula -> IO [Solution]
+z3SolveAll limit f = evalZ3 $ do
   let vs = Set.toList (getVars f)
   vs' <- mapM mkFreshBoolVar vs
   let env = Map.fromList (zip vs vs')
   a <- translate env f
   assert a
-  go [] vs vs'
+  go 0 [] vs vs'
     where
-      go :: MonadZ3 z3 => [Solution] -> [String] -> [AST] -> z3 [Solution]
-      go acc vs vs' = do
+      limitReached :: Int -> Bool
+      limitReached n = case limit of
+        Nothing -> False
+        Just k  -> n >= k
+
+      go :: MonadZ3 z3 => Int -> [Solution] -> [String] -> [AST] -> z3 [Solution]
+      go n acc vs vs' | limitReached n = return (reverse acc)
+                      | otherwise      = do
         (result, mModel) <- getModel
         case result of
           Undef -> error "impossible"
@@ -74,4 +77,7 @@ z3SolveAll f = evalZ3 $ do
               bs' <- mapM (\(ix, b) -> mkNot =<< mkEq (vs' !! ix) =<< mkBool b)
                           (zip [0 .. length bs - 1] bs)
               assert =<< mkOr bs'
-              go (Solution (Map.fromList (zip vs bs)) : acc) vs vs'
+              go (succ n) (Solution (Map.fromList (zip vs bs)) : acc) vs vs'
+
+z3Solver :: Solver IO
+z3Solver = Solver z3Solve
