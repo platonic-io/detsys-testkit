@@ -28,12 +28,15 @@ pkgs.mkShell {
     haskellPackages.ghc
     haskellPackages.cabal-install
     haskellPackages.tasty-discover
-    haskellPackages.cabal-fmt       # For formatting .cabal files, example
-                                    # invocation: `cabal-fmt -i ldfi.cabal`.
+    haskellPackages.cabal-fmt # For formatting .cabal files, example
+                              # invocation: `cabal-fmt -i ldfi.cabal`.
     haskellPackages.stylish-haskell # For import statement formatting, can be
                                     # invoked from spacemacs via `, F`.
+    haskellPackages.ormolu # Haskell code formatting, to format all files in the
+                           # current directory: `ormolu --mode inplace $(find . -name '*.hs')`.
     z3
 
+    nixpkgs-fmt # Nix code formatting, example invocation: `nixpkgs-fmt default.nix`.
     git
     nix
     niv

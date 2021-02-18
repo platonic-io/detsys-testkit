@@ -1,8 +1,7 @@
 module Main where
 
-import Test.Tasty
-
 import qualified Driver
+import Test.Tasty
 
 ------------------------------------------------------------------------
 

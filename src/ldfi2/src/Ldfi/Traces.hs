@@ -5,15 +5,16 @@ import qualified Data.Set as Set
 import GHC.Natural
 
 ------------------------------------------------------------------------
+
 -- * Traces
 
 type Trace = [Event]
 
 data Event = Event
-  { from  :: Node
-  , sent  :: Time
-  , to    :: Node
-  , recv  :: Time
+  { from :: Node,
+    sent :: Time,
+    to :: Node,
+    recv :: Time
   }
   deriving (Eq, Ord, Read, Show)
 

@@ -4,22 +4,21 @@
 module Main where
 
 import qualified Data.Text.IO as T
-import Options.Generic
-
 import qualified Ldfi
-import Ldfi.FailureSpec (FailureSpec(FailureSpec))
+import Ldfi.FailureSpec (FailureSpec (FailureSpec))
 import qualified Ldfi.GitHash as Git
 import Ldfi.Sat (z3Solver)
 import Ldfi.Storage
+import Options.Generic
 
 ------------------------------------------------------------------------
 
 data Config = Config
-  { testId              :: Maybe Int
-  , endOfFiniteFailures :: Maybe Int
-  , maxCrashes          :: Maybe Int
-  , endOfTime           :: Maybe Int
-  , version             :: Bool
+  { testId :: Maybe Int,
+    endOfFiniteFailures :: Maybe Int,
+    maxCrashes :: Maybe Int,
+    endOfTime :: Maybe Int,
+    version :: Bool
   }
   deriving (Generic, Show)
 
@@ -33,11 +32,9 @@ main = do
 go :: Config -> IO () -> IO ()
 go cfg help
   | version cfg = putStrLn Git.version
-  | otherwise   =
-      let
-        mFailSpec = makeFailureSpec (endOfFiniteFailures cfg) (maxCrashes cfg) (endOfTime cfg)
-      in
-        case (testId cfg, mFailSpec) of
+  | otherwise =
+    let mFailSpec = makeFailureSpec (endOfFiniteFailures cfg) (maxCrashes cfg) (endOfTime cfg)
+     in case (testId cfg, mFailSpec) of
           (Just tid, Just failSpec) -> do
             json <- Ldfi.run' sqliteStorage z3Solver tid failSpec
             T.putStrLn json
