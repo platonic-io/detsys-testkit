@@ -74,13 +74,10 @@ func (f *Fault) UnmarshalJSON(bs []byte) error {
 func Ldfi(testId TestId, runIds []RunId, fail FailSpec) Faults {
 	start := time.Now()
 	args := []string{
-		"--eff", strconv.Itoa(fail.EFF),
-		"--crashes", strconv.Itoa(fail.Crashes),
-		"--test-id", strconv.Itoa(testId.TestId),
-		"--run-ids",
-	}
-	for _, runId := range runIds {
-		args = append(args, strconv.Itoa(runId.RunId))
+		"--endOfFiniteFailures", strconv.Itoa(fail.EFF),
+		"--maxCrashes", strconv.Itoa(fail.Crashes),
+		"--testId", strconv.Itoa(testId.TestId),
+		"--endOfTime", strconv.Itoa(0), // not used
 	}
 	cmd := exec.Command("detsys-ldfi", args...)
 	cmd.Stderr = os.Stderr
