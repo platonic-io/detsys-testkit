@@ -67,6 +67,7 @@ sqliteLoad testId = do
     "SELECT run_id,sender,receiver,recv_logical_time,sent_logical_time FROM network_trace \
     \ WHERE test_id = :testId \
     \ AND kind <> 'timer' \
+    \ AND NOT dropped \
     \ AND NOT (sender   LIKE 'client:%') \
     \ AND NOT (receiver LIKE 'client:%') \
     \ ORDER BY run_id ASC"
