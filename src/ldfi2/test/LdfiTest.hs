@@ -1,8 +1,5 @@
 module LdfiTest where
 
-import Test.HUnit hiding (Node)
-import qualified Test.QuickCheck as QC
-
 import Ldfi
 import Ldfi.FailureSpec
 import Ldfi.Prop
@@ -10,25 +7,28 @@ import Ldfi.Sat
 import Ldfi.Solver
 import Ldfi.Storage
 import Ldfi.Traces
+import Test.HUnit hiding (Node)
+import qualified Test.QuickCheck as QC
 
 ------------------------------------------------------------------------
 
 emptyFailureSpec :: FailureSpec
-emptyFailureSpec = FailureSpec
-  { endOfFiniteFailures = 0
-  , maxCrashes = 0
-  , endOfTime = 0
-  }
+emptyFailureSpec =
+  FailureSpec
+    { endOfFiniteFailures = 0,
+      maxCrashes = 0,
+      endOfTime = 0
+    }
 
 data WasSame = Same | NotSame String
-  deriving Show
+  deriving (Show)
 
 z3_same :: Formula -> Formula -> IO WasSame
 z3_same l r = do
   sol <- z3Solve (Neg (l :<-> r))
   pure $ case sol of
     Solution assignment -> NotSame (show assignment)
-    NoSolution          -> Same
+    NoSolution -> Same
 
 shouldBe :: Formula -> Formula -> Assertion
 shouldBe actual expected = do
@@ -36,8 +36,11 @@ shouldBe actual expected = do
   case result of
     Same -> pure ()
     NotSame modString -> assertFailure msg
-      where msg = "expected: " ++ show expected ++ "\n but got: " ++ show actual ++
-              "\n model: " ++ modString
+      where
+        msg =
+          "expected: " ++ show expected ++ "\n but got: " ++ show actual
+            ++ "\n model: "
+            ++ modString
 
 ------------------------------------------------------------------------
 -- Sanity checks for z3_same
@@ -48,7 +51,8 @@ unit_z3_same_eq = do
   case r of
     Same -> pure ()
     _ -> assertFailure msg
-      where msg = "A was not equal to it self:\n" ++ show r
+      where
+        msg = "A was not equal to it self:\n" ++ show r
 
 unit_z3_same_neq :: Assertion
 unit_z3_same_neq = do
@@ -56,7 +60,8 @@ unit_z3_same_neq = do
   case r of
     NotSame _ -> pure ()
     _ -> assertFailure msg
-      where msg = "A was equal to B:\n" ++ show r
+      where
+        msg = "A was equal to B:\n" ++ show r
 
 ------------------------------------------------------------------------
 
@@ -71,14 +76,14 @@ unit_z3_same_neq = do
 -- suggest failing S1 or S2 or both without also suggesting failing C."
 cacheTraces :: [Trace]
 cacheTraces =
-  [ [Event "A" 0 "B" 0, Event "A" 1 "C" 1]
-  , [Event "A" 0 "B" 0, Event "A" 1 "R" 1, Event "R" 2 "S1" 2, Event "R" 3 "S2" 3]
+  [ [Event "A" 0 "B" 0, Event "A" 1 "C" 1],
+    [Event "A" 0 "B" 0, Event "A" 1 "R" 1, Event "R" 2 "S1" 2, Event "R" 3 "S2" 3]
   ]
 
 unit_cache_lineage :: Assertion
 unit_cache_lineage =
-    (fmap show $ simplify $ lineage cacheTraces) `shouldBe`
-    (var "A" 0 "B" 0 :&& (var "A" 1 "C" 1 :|| And [var "A" 1 "R" 1, var "R" 2 "S1" 2, var "R" 3 "S2" 3]))
+  (fmap show $ simplify $ lineage cacheTraces)
+    `shouldBe` (var "A" 0 "B" 0 :&& (var "A" 1 "C" 1 :|| And [var "A" 1 "R" 1, var "R" 2 "S1" 2, var "R" 3 "S2" 3]))
   where
 
 dummyTestId :: TestId
@@ -87,7 +92,7 @@ dummyTestId = error "This testId will never be used."
 unit_cacheFailures :: Assertion
 unit_cacheFailures = do
   fs <- run (mockStorage cacheTraces) z3Solver dummyTestId emptyFailureSpec
-  fs @?= [ Omission ("A", "B") 0 ]
+  fs @?= [Omission ("A", "B") 0]
 
 var :: Node -> Time -> Node -> Time -> Formula
 var f ft t tt = Var (show $ EventVar (Event f ft t tt))
@@ -97,58 +102,61 @@ var f ft t tt = Var (show $ EventVar (Event f ft t tt))
 -- Node A broadcasts to node B and C without retry. Node B getting the
 -- message constitutes a successful outcome.
 broadcast1Traces :: [Trace]
-broadcast1Traces = [ [Event "A" 0 "B" 1, Event "A" 0 "C" 1]
-                   , [Event "A" 0 "B" 1]
-                   ]
+broadcast1Traces =
+  [ [Event "A" 0 "B" 1, Event "A" 0 "C" 1],
+    [Event "A" 0 "B" 1]
+  ]
 
 unit_broadcast1 :: Assertion
 unit_broadcast1 =
-  (fmap show $ simplify $ lineage broadcast1Traces) `shouldBe`
-  (And [var "A" 0 "B" 1])
+  (fmap show $ simplify $ lineage broadcast1Traces)
+    `shouldBe` (And [var "A" 0 "B" 1])
 
 broadcastFailureSpec :: FailureSpec
-broadcastFailureSpec = FailureSpec
-  { endOfFiniteFailures = 3
-  , maxCrashes          = 1
-  , endOfTime           = 5
-  }
+broadcastFailureSpec =
+  FailureSpec
+    { endOfFiniteFailures = 3,
+      maxCrashes = 1,
+      endOfTime = 5
+    }
 
 -- TODO(stevan): This seems wrong, should be `Omission "A" "B" 1` or `Omission
 -- "A" "C" 1`, can we make a variant of run that returns all possible models?
 unit_broadcast1Run1 :: Assertion
 unit_broadcast1Run1 = do
   fs <- run (mockStorage (take 1 broadcast1Traces)) z3Solver dummyTestId broadcastFailureSpec
-  fs @?= [ Omission ("A", "B") 1 ]
+  fs @?= [Omission ("A", "B") 1]
 
 unit_broadcast1Run2 :: Assertion
 unit_broadcast1Run2 = do
   fs <- run (mockStorage (take 2 broadcast1Traces)) z3Solver dummyTestId broadcastFailureSpec
-  fs @?= [ Omission ("A", "B") 1, Omission ("A", "C") 1 ] -- Minimal counterexample.
+  fs @?= [Omission ("A", "B") 1, Omission ("A", "C") 1] -- Minimal counterexample.
 
 ------------------------------------------------------------------------
 
 -- Node A broadcasts to node B and C with retry. Node B getting the
 -- message constitutes a successful outcome.
 broadcast2Traces :: [Trace]
-broadcast2Traces = [ [Event "A" 0 "B" 1, Event "A" 0 "C" 1]
-                   , [Event "A" 0 "B" 1]
-                   , [Event "A" 1 "B" 2, Event "A" 0 "C" 1]
-                   , [Event "A" 3 "B" 4]
-                   ]
+broadcast2Traces =
+  [ [Event "A" 0 "B" 1, Event "A" 0 "C" 1],
+    [Event "A" 0 "B" 1],
+    [Event "A" 1 "B" 2, Event "A" 0 "C" 1],
+    [Event "A" 3 "B" 4]
+  ]
 
 -- Lets assume that run 1 and 2 were the same as in broadcast1.
 unit_broadcast2Run3 :: Assertion
 unit_broadcast2Run3 = do
   fs <- run (mockStorage (take 3 broadcast2Traces)) z3Solver dummyTestId broadcastFailureSpec
-  fs @?= [ Crash "A" 1, Omission ("A", "B") 1]
+  fs @?= [Crash "A" 1, Omission ("A", "B") 1]
 
 unit_broadcast2Run4 :: Assertion
 unit_broadcast2Run4 = do
   fs <- run (mockStorage (take 4 broadcast2Traces)) z3Solver dummyTestId broadcastFailureSpec
-  fs @?=
-    [ Crash "A" 1
-    , Omission ("A", "B") 1
-    ] -- Minimal counterexample.
+  fs
+    @?= [ Crash "A" 1,
+          Omission ("A", "B") 1
+        ] -- Minimal counterexample.
 
 ------------------------------------------------------------------------
 -- QuickCheck property
@@ -157,8 +165,8 @@ unit_broadcast2Run4 = do
 prop_simplify_eq :: Formula -> QC.Property
 prop_simplify_eq f =
   let simp_f = simplify1 f
-  in QC.ioProperty $ do
-    res <- z3_same f simp_f
-    return $ case res of
-      Same -> True
-      _ -> False
+   in QC.ioProperty $ do
+        res <- z3_same f simp_f
+        return $ case res of
+          Same -> True
+          _ -> False

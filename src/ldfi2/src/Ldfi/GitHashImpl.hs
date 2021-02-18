@@ -18,10 +18,10 @@ getVersionFromEnv = do
   getEnv "DETSYS_LDFI_VERSION"
     `catchIOError` \e ->
       if isDoesNotExistError e
-      then return "unknown"
-      else throwIO e
+        then return "unknown"
+        else throwIO e
 
 tGetGitInfo :: Q (TExp String)
 tGetGitInfo = do
-    s <- runIO getVersionFromEnv
-    liftTyped s
+  s <- runIO getVersionFromEnv
+  liftTyped s
