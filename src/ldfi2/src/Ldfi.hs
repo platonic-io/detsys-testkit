@@ -72,11 +72,11 @@ failureSpecConstraint fs events faults
         | c@(Crash n t) <- crashes
       ]
 
--- enumerateAllFaults will generate the interesting faults that could affect the
--- set of events. But since it is pointless to generate a fault that is later
--- than eff (since it would never be picked anyway) we don't generate those. In
--- general it is enough to have a possible fault of either an omission or a
--- crash before the event happened.
+-- `enumerateAllFaults` will generate the interesting faults that could affect
+-- the set of events. But since it is pointless to generate a fault that is
+-- later than eff (since it would never be picked anyway) we don't generate
+-- those. In general it is enough to have a possible fault of either an omission
+-- or a crash before the event happened.
 --
 -- Though for crashes they could be generated before the eff, but have no event
 -- for that node in eff, so we make a special case to add a crash in eff. We
@@ -93,20 +93,13 @@ enumerateAllFaults events fs = Set.unions (Set.map possibleFailure events)
       | eff < ra = Set.fromList [Crash s eff, Crash r eff]
       | otherwise = Set.fromList [Omission (s, r) ra, Crash s sa, Crash r ra]
 
--- ldfi will produce a formula that if solved will give you:
-
--- * Which faults to introduce
-
--- * Which events will break (though we are probably not interested in those)
-
+-- | `ldfi` will produce a formula that if solved will give you:
+--     * Which faults to introduce
+--     * Which events will break (though we are probably not interested in those)
 -- such that
-
--- * If we introduce faults the corresponding events are false (`failureSemantic`)
-
--- * We don't intruduce faults that violates the failure spec (`failureSpecConstaint`)
-
--- * The lineage graph from traces are not satisfied (`Neg lineage`)
-
+--     * If we introduce faults the corresponding events are false (`failureSemantic`)
+--     * We don't intruduce faults that violates the failure spec (`failureSpecConstaint`)
+--     * The lineage graph from traces are not satisfied (`Neg lineage`)
 ldfi :: FailureSpec -> [Trace] -> FormulaF String
 ldfi fs ts =
   fmap show $
