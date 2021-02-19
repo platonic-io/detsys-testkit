@@ -29,11 +29,17 @@ nixpkgs_git_repository(
 )
 
 nixpkgs_cc_configure(
-    repository = "@nixpkgs//:default.nix"
+    name = "nixpkgs_config_cc",
+    repository = "@nixpkgs//:default.nix",
 )
 
 nixpkgs_package(
-    name = "z3",
+    name = "z3.dev",
+    repositories = { "nixpkgs": "@nixpkgs//:default.nix" }
+)
+
+nixpkgs_package(
+    name = "z3.lib",
     repositories = { "nixpkgs": "@nixpkgs//:default.nix" }
 )
 
@@ -69,7 +75,7 @@ rules_haskell_dependencies()
 load("@rules_haskell//haskell:nixpkgs.bzl", "haskell_register_ghc_nixpkgs")
 
 haskell_register_ghc_nixpkgs(
-    attribute_path = "nixpkgs.ghc",
+    attribute_path = "haskell.compiler.ghc8103",
     repositories = {"nixpkgs": "@nixpkgs"},
     version = "8.10.3",
 )
@@ -77,6 +83,41 @@ haskell_register_ghc_nixpkgs(
 load("@rules_haskell//haskell:toolchain.bzl", "rules_haskell_toolchains")
 
 rules_haskell_toolchains(version = "8.10.3")
+
+http_archive(
+    name = "haskell_z3",
+    build_file = "//src/ldfi2/third_party/haskell-z3:haskell-z3.BUILD",
+    strip_prefix = "haskell-z3-e8af470c0e6045d063f2361719dfac488e5476bd",
+    sha256 = "5ce97d4315855d2ec4abdd0f7c2404225d3abfbd80a6c2a9e1ff8de62c8a5cc2",
+    urls = [
+        "https://github.com/IagoAbal/haskell-z3/archive/e8af470c0e6045d063f2361719dfac488e5476bd.tar.gz",
+    ],
+)
+
+load("@rules_haskell//haskell:cabal.bzl", "stack_snapshot")
+
+stack_snapshot(
+    name = "stackage",
+    packages = [
+        "base",
+        "containers",
+        "filepath",
+        "mtl",
+        "template-haskell",
+        "QuickCheck",
+        "sqlite-simple",
+        "text",
+
+        # z3-haskell dependencies
+        "transformers",
+
+    ],
+    snapshot = "lts-17.2",
+    extra_deps = {"z3": ["@z3.dev//:include", "@z3.lib//:lib"]},
+    vendored_packages = {
+        "z3": "@haskell_z3//:z3",
+    }
+)
 
 # Golang
 http_archive(
