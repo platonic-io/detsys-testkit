@@ -5,9 +5,9 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Nix
 http_archive(
     name = "io_tweag_rules_nixpkgs",
-    strip_prefix = "rules_nixpkgs-0.7.0",
-    urls = ["https://github.com/tweag/rules_nixpkgs/archive/v0.7.0.tar.gz"],
-    sha256 = "5c80f5ed7b399a857dd04aa81e66efcb012906b268ce607aaf491d8d71f456c8"
+    strip_prefix = "rules_nixpkgs-0.8.0",
+    urls = ["https://github.com/tweag/rules_nixpkgs/archive/v0.8.0.tar.gz"],
+    sha256 = "7aee35c95251c1751e765f7da09c3bb096d41e6d6dca3c72544781a5573be4aa"
 )
 
 load("@io_tweag_rules_nixpkgs//nixpkgs:repositories.bzl", "rules_nixpkgs_dependencies")
@@ -24,11 +24,13 @@ load("@io_tweag_rules_nixpkgs//nixpkgs:nixpkgs.bzl",
 # niv support, see https://github.com/tweag/rules_nixpkgs/issues/127 .
 nixpkgs_git_repository(
     name = "nixpkgs",
-    revision = "cf7475d2061ac3ada4b226571a4a1bb91420b578",
-    sha256 = "a68da1275af117cf314305aeb86cc9f1cacfa68c8b984efd68ac473d3e4bf6f3"
+    revision = "a58a0b5098f0c2a389ee70eb69422a052982d990",
+    sha256 = "42ff79e0265ba9fabe6d424298f240b42224467e771848e244126262fb148c85",
 )
 
-nixpkgs_cc_configure(repository = "@nixpkgs//:default.nix")
+nixpkgs_cc_configure(
+    repository = "@nixpkgs//:default.nix"
+)
 
 nixpkgs_package(
     name = "z3",
@@ -50,6 +52,31 @@ http_archive(
 load("@rules_python//python:pip.bzl", "pip_install")
 
 pip_install(requirements = "//src/ldfi:requirements.txt")
+
+# Haskell
+
+http_archive(
+    name = "rules_haskell",
+    strip_prefix = "rules_haskell-7fd2f198b0f827827be3233450599a0e30afb118",
+    urls = ["https://github.com/tweag/rules_haskell/archive/7fd2f198b0f827827be3233450599a0e30afb118.tar.gz"],
+    sha256 = "a87ed394e280b552ec21c53c4d9ef0ef6b4d70a3224e76c98f5e65184825a339",
+)
+
+load("@rules_haskell//haskell:repositories.bzl", "rules_haskell_dependencies")
+
+rules_haskell_dependencies()
+
+load("@rules_haskell//haskell:nixpkgs.bzl", "haskell_register_ghc_nixpkgs")
+
+haskell_register_ghc_nixpkgs(
+    attribute_path = "nixpkgs.ghc",
+    repositories = {"nixpkgs": "@nixpkgs"},
+    version = "8.10.3",
+)
+
+load("@rules_haskell//haskell:toolchain.bzl", "rules_haskell_toolchains")
+
+rules_haskell_toolchains(version = "8.10.3")
 
 # Golang
 http_archive(
