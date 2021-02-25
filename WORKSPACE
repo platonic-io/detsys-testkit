@@ -156,3 +156,31 @@ load("//:gazelle-ws.bzl", "gazelle_ws")
 gazelle_ws()
 
 gazelle_dependencies()
+
+# Clojure
+http_archive(
+    name = "rules_clojure",
+    sha256 = "4749769faee9e2d00bb50d08e6a16b46aebdb885dc8ee75356964719622bf4e9",
+    strip_prefix = "rules_clojure-5605a9fb9653157579f7b86d9bd9b5993eec2b31",
+    urls = ["https://github.com/simuons/rules_clojure/archive/5605a9fb9653157579f7b86d9bd9b5993eec2b31.tar.gz"],
+)
+
+load("@rules_clojure//:repositories.bzl", "rules_clojure_dependencies", "rules_clojure_toolchains")
+
+rules_clojure_dependencies()
+
+rules_clojure_toolchains()
+
+RULES_JVM_EXTERNAL_TAG = "4.0"
+RULES_JVM_EXTERNAL_SHA = "31701ad93dbfe544d597dbe62c9a1fdd76d81d8a9150c2bf1ecf928ecdf97169"
+
+http_archive(
+    name = "rules_jvm_external",
+    strip_prefix = "rules_jvm_external-%s" % RULES_JVM_EXTERNAL_TAG,
+    sha256 = RULES_JVM_EXTERNAL_SHA,
+    url = "https://github.com/bazelbuild/rules_jvm_external/archive/%s.zip" % RULES_JVM_EXTERNAL_TAG,
+)
+
+load("//:clojure-ws.bzl", "clojure_ws")
+
+clojure_ws()
