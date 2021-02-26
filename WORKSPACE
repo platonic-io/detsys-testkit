@@ -63,9 +63,9 @@ pip_install(requirements = "//src/ldfi:requirements.txt")
 
 http_archive(
     name = "rules_haskell",
-    strip_prefix = "rules_haskell-7fd2f198b0f827827be3233450599a0e30afb118",
-    urls = ["https://github.com/tweag/rules_haskell/archive/7fd2f198b0f827827be3233450599a0e30afb118.tar.gz"],
-    sha256 = "a87ed394e280b552ec21c53c4d9ef0ef6b4d70a3224e76c98f5e65184825a339",
+    strip_prefix = "rules_haskell-cf1300cffed8b786420a77d67e1b1481232f84c7",
+    urls = ["https://github.com/tweag/rules_haskell/archive/cf1300cffed8b786420a77d67e1b1481232f84c7.tar.gz"],
+    sha256 = "0787d2093d160b2c3ce3196c3a00c5fddcf1ec132f58f8dc0fd842160e1f9bbc",
 )
 
 load("@rules_haskell//haskell:repositories.bzl", "rules_haskell_dependencies")
