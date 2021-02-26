@@ -105,6 +105,10 @@ def clojure_ws():
                     "org.clojure:clojure",
                 ],
             ),
+            # Checker
+            "elle:elle:0.1.2",
+            "spootnik:unilog:0.7.27",
+            "me.raynes:fs:1.4.6",
         ],
         repositories = [
             "https://repo1.maven.org/maven2",

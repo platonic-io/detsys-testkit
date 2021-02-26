@@ -1,0 +1,45 @@
+load("@rules_clojure//:rules.bzl", "clojure_library", "clojure_binary")
+load("@rules_clojure//:toolchains.bzl", "clojure_toolchain")
+
+clojure_toolchain(
+    name = "clojure_toolchain_def",
+    classpath = [
+        "@maven//:org_clojure_clojure",
+        "@maven//:org_clojure_core_specs_alpha",
+        "@maven//:org_clojure_spec_alpha",
+    ],
+)
+
+toolchain(
+    name = "clojure_toolchain",
+    toolchain = ":clojure_toolchain_def",
+    toolchain_type = "@rules_clojure//:toolchain",
+)
+
+java_library(
+    name = "lockfix",
+    srcs = ["java/src/lockfix/LockFix.java"],
+    deps = ["@maven//:org_clojure_clojure"],
+)
+
+clojure_library(
+    name = "checker-lib",
+    srcs = glob([
+        "src/**/*.clj",
+    ]),
+    deps = [
+        "@maven//:elle_elle",
+        "@maven//:spootnik_unilog",
+        "@maven//:me_raynes_fs",
+        "@maven//:seancorfield_next_jdbc",
+        "@maven//:org_xerial_sqlite_jdbc",
+        "@maven//:metosin_jsonista",
+        ":lockfix",
+    ]
+)
+
+clojure_binary(
+    name = "checker",
+    main = "checker.core",
+    deps = [":checker-lib"],
+)
