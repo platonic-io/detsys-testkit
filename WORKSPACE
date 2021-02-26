@@ -63,9 +63,9 @@ pip_install(requirements = "//src/ldfi:requirements.txt")
 
 http_archive(
     name = "rules_haskell",
-    strip_prefix = "rules_haskell-7fd2f198b0f827827be3233450599a0e30afb118",
-    urls = ["https://github.com/tweag/rules_haskell/archive/7fd2f198b0f827827be3233450599a0e30afb118.tar.gz"],
-    sha256 = "a87ed394e280b552ec21c53c4d9ef0ef6b4d70a3224e76c98f5e65184825a339",
+    strip_prefix = "rules_haskell-cf1300cffed8b786420a77d67e1b1481232f84c7",
+    urls = ["https://github.com/tweag/rules_haskell/archive/cf1300cffed8b786420a77d67e1b1481232f84c7.tar.gz"],
+    sha256 = "0787d2093d160b2c3ce3196c3a00c5fddcf1ec132f58f8dc0fd842160e1f9bbc",
 )
 
 load("@rules_haskell//haskell:repositories.bzl", "rules_haskell_dependencies")
@@ -156,3 +156,31 @@ load("//:gazelle-ws.bzl", "gazelle_ws")
 gazelle_ws()
 
 gazelle_dependencies()
+
+# Clojure
+http_archive(
+    name = "rules_clojure",
+    sha256 = "4749769faee9e2d00bb50d08e6a16b46aebdb885dc8ee75356964719622bf4e9",
+    strip_prefix = "rules_clojure-5605a9fb9653157579f7b86d9bd9b5993eec2b31",
+    urls = ["https://github.com/simuons/rules_clojure/archive/5605a9fb9653157579f7b86d9bd9b5993eec2b31.tar.gz"],
+)
+
+load("@rules_clojure//:repositories.bzl", "rules_clojure_dependencies", "rules_clojure_toolchains")
+
+rules_clojure_dependencies()
+
+rules_clojure_toolchains()
+
+RULES_JVM_EXTERNAL_TAG = "4.0"
+RULES_JVM_EXTERNAL_SHA = "31701ad93dbfe544d597dbe62c9a1fdd76d81d8a9150c2bf1ecf928ecdf97169"
+
+http_archive(
+    name = "rules_jvm_external",
+    strip_prefix = "rules_jvm_external-%s" % RULES_JVM_EXTERNAL_TAG,
+    sha256 = RULES_JVM_EXTERNAL_SHA,
+    url = "https://github.com/bazelbuild/rules_jvm_external/archive/%s.zip" % RULES_JVM_EXTERNAL_TAG,
+)
+
+load("//:clojure-ws.bzl", "clojure_ws")
+
+clojure_ws()

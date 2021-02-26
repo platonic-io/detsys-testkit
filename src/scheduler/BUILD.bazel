@@ -1,0 +1,52 @@
+load("@rules_clojure//:rules.bzl", "clojure_library", "clojure_binary")
+load("@rules_clojure//:toolchains.bzl", "clojure_toolchain")
+
+clojure_toolchain(
+    name = "clojure_toolchain_def",
+    classpath = [
+        "@maven//:org_clojure_clojure",
+        "@maven//:org_clojure_core_specs_alpha",
+        "@maven//:org_clojure_spec_alpha",
+    ],
+)
+
+toolchain(
+    name = "clojure_toolchain",
+    toolchain = ":clojure_toolchain_def",
+    toolchain_type = "@rules_clojure//:toolchain",
+)
+
+java_library(
+    name = "lockfix",
+    srcs = ["java/src/lockfix/LockFix.java"],
+    deps = ["@maven//:org_clojure_clojure"],
+)
+
+clojure_library(
+    name = "scheduler-lib",
+    srcs = glob([
+        "src/**/*.clj",
+    ]),
+    deps = ["@maven//:ring_ring_core",
+            "@maven//:ring_ring_devel",
+            "@maven//:ring_ring_defaults",
+            "@maven//:ring_ring_jetty_adapter",
+            "@maven//:clj_http_clj_http",
+            "@maven//:clj_http_fake_clj_http_fake",
+            "@maven//:org_clojure_clojure",
+            "@maven//:org_clojure_data_generators",
+            "@maven//:shams_priority_queue",
+            "@maven//:seancorfield_next_jdbc",
+            "@maven//:org_xerial_sqlite_jdbc",
+            "@maven//:com_taoensso_timbre",
+            "@maven//:metosin_jsonista",
+            "@maven//:gnl_ghostwheel",
+            ":lockfix",
+    ]
+)
+
+clojure_binary(
+    name = "scheduler",
+    main = "scheduler.core",
+    deps = [":scheduler-lib"],
+)
