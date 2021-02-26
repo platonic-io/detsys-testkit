@@ -1,0 +1,13 @@
+packages: .
+
+with-compiler: ghc-8.10.3
+
+reject-unconstrained-dependencies: all
+
+constraints: QuickCheck +old-random
+
+package ldfi
+  ghc-options: -Wall
+
+allow-older: *
+allow-newer: *

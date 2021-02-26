@@ -7,6 +7,7 @@
 , nix-build-debugger  ? false
 , nix-build-generator ? true
 , nix-build-ldfi      ? false
+, nix-build-ltl       ? true
 , nix-build-scheduler ? false
 }:
 with pkgs;
@@ -20,6 +21,7 @@ let
   debugger = callPackage ./src/debugger/default.nix {};
   generator = callPackage ./src/generator/default.nix {};
   ldfi = callPackage ./src/ldfi2/default.nix {};
+  ltl = callPackage ./src/ltl/default.nix {};
   scheduler = callPackage ./src/scheduler/default.nix {};
 in
 
@@ -38,6 +40,7 @@ stdenv.mkDerivation {
                           ++ lib.optional (nix-build-all || nix-build-debugger)  [ debugger ]
                           ++ lib.optional (nix-build-all || nix-build-generator) [ generator ]
                           ++ lib.optional (nix-build-all || nix-build-ldfi)      [ ldfi ]
+                          ++ lib.optional (nix-build-all || nix-build-ltl)       [ ltl ]
                           ++ lib.optional (nix-build-all || nix-build-scheduler) [ scheduler ];
 
   installPhase = ''
@@ -81,6 +84,12 @@ stdenv.mkDerivation {
     install -D ${ldfi.out}/bin/detsys-ldfi $out/bin
     '' else ''
     install -D $src/ldfi2/ldfi2 $out/bin/detsys-ldfi
+    ''
+    }
+    ${if nix-build-ltl || nix-build-all then ''
+    install -D ${ltl.out}/bin/detsys-ltl $out/bin
+    '' else ''
+    install -D $src/ltl/ltl $out/bin/detsys-ltl
     ''
     }
     ${if nix-build-scheduler || nix-build-all then ''
