@@ -1,5 +1,5 @@
 {:paths ["src" "java/src"]
- :deps {org.clojure/clojure           {:mvn/version "1.10.2-alpha4"}
+ :deps {org.clojure/clojure           {:mvn/version "1.10.2"}
         elle/elle                     {:mvn/version "0.1.2"}
         spootnik/unilog               {:mvn/version "0.7.27"}
         me.raynes/fs                  {:mvn/version "1.4.6"}
