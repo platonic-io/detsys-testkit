@@ -16,4 +16,5 @@ go_library(
         "@com_github_mattn_go_sqlite3//:go-sqlite3",
         "@com_github_rubenv_sql_migrate//:sql-migrate",
     ],
+    x_defs = {"version": "{STABLE_GIT_COMMIT}"},
 )
