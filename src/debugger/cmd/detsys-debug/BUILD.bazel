@@ -18,4 +18,5 @@ go_library(
         "@com_github_nsf_jsondiff//:jsondiff",
         "@com_github_rivo_tview//:tview",
     ],
+    x_defs = {"version": "{STABLE_GIT_COMMIT}"},
 )
