@@ -4,18 +4,20 @@
 
 module Ldfi where
 
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import qualified GHC.Natural as Nat
 import Ldfi.FailureSpec
+import qualified Ldfi.Marshal.Faults as MF
 import Ldfi.Prop
 import Ldfi.Solver
 import Ldfi.Storage
 import Ldfi.Traces
-import Ldfi.Util
 import Text.Read (readMaybe)
 
 ------------------------------------------------------------------------
@@ -100,14 +102,18 @@ enumerateAllFaults events fs = Set.unions (Set.map possibleFailure events)
 --     * If we introduce faults the corresponding events are false (`failureSemantic`)
 --     * We don't intruduce faults that violates the failure spec (`failureSpecConstaint`)
 --     * The lineage graph from traces are not satisfied (`Neg lineage`)
-ldfi :: FailureSpec -> [Trace] -> FormulaF String
-ldfi fs ts =
+ldfi :: FailureSpec -> [Trace] -> [Failures] -> FormulaF String
+ldfi fs ts failures =
   fmap show $
     simplify $
       And
         [ failureSemantic allEvents allFaults,
           failureSpecConstraint fs allEvents allFaults,
-          Neg (lineage ts)
+          Neg (lineage ts),
+          And
+            [ Neg $ And $ map (Var . FaultVar) faults
+              | faults <- failures
+            ]
         ]
   where
     allEvents = Set.unions (map Set.fromList ts)
@@ -116,9 +122,6 @@ ldfi fs ts =
 ------------------------------------------------------------------------
 
 -- * Main
-
-data Fault = Crash Node Time | Omission Edge Time
-  deriving (Eq, Ord, Read, Show)
 
 makeFaults :: Solution -> [Fault]
 makeFaults NoSolution = []
@@ -129,25 +132,18 @@ makeFaults (Solution assign) =
   ]
 
 marshalFaults :: [Fault] -> Text
-marshalFaults fs = "{\"faults\":" <> marshalList (map marshalFault fs) <> "}"
+marshalFaults = TE.decodeUtf8 . BSL.toStrict . Aeson.encode . MF.Faults . map convert
   where
-    marshalList :: [Text] -> Text
-    marshalList ts = "[" <> T.intercalate "," ts <> "]"
+    convert :: Fault -> MF.Fault
+    convert (Crash f a) = MF.Crash f a
+    convert (Omission (f,t) a) = MF.Omission f t a
 
-    marshalFault :: Fault -> Text
-    marshalFault (Crash from at) =
-      "{\"kind\":\"crash\",\"from\":" <> T.pack (show from) <> ",\"at\":" <> T.pack (show at) <> "}"
-    marshalFault (Omission (from, to) at) =
-      "{\"kind\":\"omission\",\"from\":" <> T.pack (show from) <> ",\"to\":" <> T.pack (show to)
-        <> ",\"at\":"
-        <> T.pack (show at)
-        <> "}"
-
-run :: Monad m => Storage m -> Solver m -> TestId -> FailureSpec -> m [Fault]
-run Storage {load} Solver {solve} testId failureSpec = do
-  traces <- load testId
-  sol <- solve (ldfi failureSpec traces)
+run :: Monad m => Storage m -> Solver m -> TestInformation -> FailureSpec -> m [Fault]
+run Storage {load, loadFailures} Solver {solve} testInformation failureSpec = do
+  traces <- load testInformation
+  failures <- loadFailures testInformation
+  sol <- solve (ldfi failureSpec traces failures)
   return (makeFaults sol)
 
-run' :: Monad m => Storage m -> Solver m -> TestId -> FailureSpec -> m Text
-run' = fmap marshalFaults .:: run
+run' :: Monad m => Storage m -> Solver m -> TestInformation -> FailureSpec -> m Text
+run' storage solver testInformation failureSpec = fmap marshalFaults (run storage solver testInformation failureSpec)

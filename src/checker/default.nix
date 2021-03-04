@@ -14,7 +14,8 @@ in stdenv.mkDerivation rec {
   name = "${pname}-${version}";
   src = gitignoreSource ./.;
 
-  buildInputs = [ clojure jdk11_headless graalvm11-ce ];
+  buildInputs = [ clojure jdk11_headless graalvm11-ce ]
+                ++ lib.optional stdenv.isLinux [ freetype.dev ];
 
   buildPhase = ''
     export DETSYS_CHECKER_VERSION="${lib.commitIdFromGitRepo ./../../.git}"
@@ -72,11 +73,21 @@ in stdenv.mkDerivation rec {
       --initialize-at-run-time=sun.font.StrikeCache \
       --initialize-at-run-time=sun.font.SunLayoutEngine \
       --initialize-at-run-time=sun.font.FontManagerNativeLibrary \
-      --initialize-at-run-time=sun.awt.X11GraphicsConfig \
       --initialize-at-run-time=javax.imageio.ImageTypeSpecifier \
       --initialize-at-run-time=sun.java2d.SurfaceData \
       --initialize-at-run-time='com.sun.imageio.plugins.jpeg.JPEG$JCS' \
       --initialize-at-run-time='sun.awt.dnd.SunDropTargetContextPeer$EventDispatcher' \
+      ${lib.optionalString stdenv.isLinux ''
+      --initialize-at-run-time=sun.awt.X11GraphicsConfig \
+      --initialize-at-run-time=sun.awt.X11.MotifDnDConstants \
+      --initialize-at-run-time=sun.java2d.xr.XRBackendNative \
+      --initialize-at-run-time=sun.awt.X11.XWM \
+      --initialize-at-run-time=sun.awt.X11.XSelection \
+      --initialize-at-run-time=sun.awt.X11.XDnDConstants \
+      --initialize-at-run-time=sun.awt.X11.WindowPropertyGetter \
+      --initialize-at-run-time=sun.awt.X11InputMethodBase \
+      --initialize-at-run-time=sun.awt.X11.XWindow \
+      ''} \
       --report-unsupported-elements-at-runtime \
       --allow-incomplete-classpath \
       --verbose \
