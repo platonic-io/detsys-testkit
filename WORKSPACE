@@ -43,6 +43,26 @@ nixpkgs_package(
     repository = "@nixpkgs",
 )
 
+nixpkgs_package(
+    name = "zlib.dev",
+    repository = "@nixpkgs",
+)
+
+nixpkgs_package(
+    name = "zlib.out",
+    repository = "@nixpkgs",
+)
+
+nixpkgs_package(
+    name = "freetype.dev",
+    repository = "@nixpkgs",
+)
+
+nixpkgs_package(
+    name = "freetype.out",
+    repository = "@nixpkgs",
+)
+
 # Python
 nixpkgs_python_configure(
     repository = "@nixpkgs",
@@ -176,10 +196,9 @@ load("@rules_jvm_external//:defs.bzl", "maven_install")
 
 git_repository(
     name = "rules_clojure",
-    commit = "11478580b9bb10e183af6da9bc1acc4d1524927f",
-    remote = "https://github.com/griffinbank/rules_clojure.git",
+    commit = "dbcaaa516e8cfcb32e51e80a838cf2be6bf93093",
+    remote = "https://github.com/stevana/rules_clojure.git",
 )
-
 
 load("@rules_clojure//:repositories.bzl", "rules_clojure_dependencies")
 load("@rules_clojure//:toolchains.bzl", "rules_clojure_toolchains")
@@ -194,10 +213,10 @@ clojure_ws()
 # GraalVM
 http_archive(
     name = "rules_graal",
-    sha256 = "ba3ece52c0c60acaceb09104a3ddc76c7bba076ae449331f7bc911b382499d3d",
-    strip_prefix = "rules_graal-d49695e245e0ca224476ec9c5b2ff3db4d0ccfd8",
+    sha256 = "543dcf9018d3b7c5ac7e73b6ad841b8c79d3e48e6dc0646f2abdc6163de5fc1d",
+    strip_prefix = "rules_graal-e7cfa9c762ea7e01cad77bb8904c5dab01f7e9a4",
     urls = [
-        "https://github.com/stevana/rules_graal/archive/d49695e245e0ca224476ec9c5b2ff3db4d0ccfd8.zip",
+        "https://github.com/stevana/rules_graal/archive/e7cfa9c762ea7e01cad77bb8904c5dab01f7e9a4.zip",
     ],
 )
 

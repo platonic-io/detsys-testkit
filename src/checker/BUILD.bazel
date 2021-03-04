@@ -1,5 +1,7 @@
-load("@rules_clojure//:rules.bzl", "clojure_library", "clojure_binary")
+load("@rules_clojure//:rules.bzl", "clojure_namespace", "clojure_library", "clojure_binary")
 load("@rules_clojure//:toolchains.bzl", "clojure_toolchain")
+load("@rules_java//java:defs.bzl", "java_library")
+load("@rules_graal//graal:graal.bzl", "graal_binary")
 
 clojure_toolchain(
     name = "clojure_toolchain_def",
@@ -20,26 +22,87 @@ java_library(
     name = "lockfix",
     srcs = ["java/src/lockfix/LockFix.java"],
     deps = ["@maven//:org_clojure_clojure"],
+    visibility = ["//src/checker:__subpackages__"],
 )
 
-#clojure_library(
-#    name = "checker-lib",
-#    srcs = glob([
-#        "src/**/*.clj",
-#    ]),
-#    deps = [
-#        "@maven//:elle_elle",
-#        "@maven//:spootnik_unilog",
-#        "@maven//:me_raynes_fs",
-#        "@maven//:seancorfield_next_jdbc",
-#        "@maven//:org_xerial_sqlite_jdbc",
-#        "@maven//:metosin_jsonista",
-#        ":lockfix",
-#    ]
-#)
-#
-#clojure_binary(
-#    name = "checker",
-#    main = "checker.core",
-#    deps = [":checker-lib"],
-#)
+# TODO(stevan): figure out how or if we can depending on these cc libraries in
+# the graal_binary so we don't have to pass the paths explicitly.
+cc_library(
+    name = "zlib",
+    srcs = ["@zlib.out//:lib"],
+    hdrs = ["@zlib.dev//:include"],
+    strip_include_prefix = "/include",
+    linkstatic=1,
+)
+
+cc_library(
+    name = "freetype",
+    #srcs = ["@freetype.out//:lib"],
+    #hdrs = ["@freetype.dev//:include/freetype"],
+    strip_include_prefix = "/include/freetype",
+    linkstatic=1,
+)
+
+clojure_library(
+    name = "checker-lib",
+    srcs = ["//src/checker/src/checker:checker-ns"],
+    aot = ["checker.core"],
+    javacopts = [
+        "-Djava.awt.headless=true",
+    ],
+    compiledeps = [":zlib", ":freetype", "@rules_clojure//src/rules_clojure:jar"],
+)
+
+graal_binary(
+    name = "checker",
+    deps = [":checker-lib"],
+    reflection_configuration = "native-image/reflection-config.json",
+    jni_configuration = "native-image/jni-config.json",
+    main_class = "checker.core",
+    initialize_at_build_time = [
+        "org.sqlite.JDBC",
+        "org.sqlite.core.DB$ProgressObserver",
+        "org.sqlite.core.DB",
+        "org.sqlite.core.NativeDB",
+        "org.sqlite.ProgressHandler",
+        "org.sqlite.Function",
+        "org.sqlite.Function$Aggregate",
+        "org.sqlite.Function$Window",
+    ],
+
+    graal_extra_args = [
+        # TODO(stevan): figure out how a better way to get these paths:
+        "-H:CCompilerOption=-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
+        "-H:CLibraryPath=/nix/store/06ymz7xipyybjn1pmxcpn3zzbm1bxk50-freetype-2.10.4/lib",
+        "-H:+ReportExceptionStackTraces",
+        "-H:IncludeResources='db/.*|static/.*|templates/.*|.*.yml|.*.xml|.*/org/sqlite/.*|org/sqlite/.*'",
+        "-J-Dclojure.spec.skip-macros=true",
+        "-J-Dclojure.compiler.direct-linking=true",
+        "-J-Dfile.encoding=UTF-8",
+        "-J-Djava.awt.headless=true",
+        "-J-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory",
+        "--initialize-at-build-time",
+        "--initialize-at-run-time=sun.font.SunFontManager",
+        "--initialize-at-run-time=sun.font.StrikeCache",
+        "--initialize-at-run-time=sun.font.SunLayoutEngine",
+        "--initialize-at-run-time=sun.font.FontManagerNativeLibrary",
+        "--initialize-at-run-time=javax.imageio.ImageTypeSpecifier",
+        "--initialize-at-run-time=sun.java2d.SurfaceData",
+        "--initialize-at-run-time=com.sun.imageio.plugins.jpeg.JPEG$JCS",
+        "--initialize-at-run-time=sun.awt.dnd.SunDropTargetContextPeer$EventDispatcher",
+        "--initialize-at-run-time=sun.awt.X11GraphicsConfig",
+        "--initialize-at-run-time=sun.awt.X11.MotifDnDConstants",
+        "--initialize-at-run-time=sun.java2d.xr.XRBackendNative",
+        "--initialize-at-run-time=sun.awt.X11.XWM",
+        "--initialize-at-run-time=sun.awt.X11.XSelection",
+        "--initialize-at-run-time=sun.awt.X11.XDnDConstants",
+        "--initialize-at-run-time=sun.awt.X11.WindowPropertyGetter",
+        "--initialize-at-run-time=sun.awt.X11InputMethodBase",
+        "--initialize-at-run-time=sun.awt.X11.XWindow",
+        "--report-unsupported-elements-at-runtime",
+        "--allow-incomplete-classpath",
+        "--verbose",
+        "--no-fallback",
+        "--no-server",
+    ],
+)
