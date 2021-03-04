@@ -1,5 +1,7 @@
-load("@rules_clojure//:rules.bzl", "clojure_library", "clojure_binary")
+load("@rules_clojure//:rules.bzl", "clojure_namespace", "clojure_library", "clojure_binary")
 load("@rules_clojure//:toolchains.bzl", "clojure_toolchain")
+load("@rules_java//java:defs.bzl", "java_library")
+load("@rules_graal//graal:graal.bzl", "graal_binary")
 
 clojure_toolchain(
     name = "clojure_toolchain_def",
@@ -20,26 +22,56 @@ java_library(
     name = "lockfix",
     srcs = ["java/src/lockfix/LockFix.java"],
     deps = ["@maven//:org_clojure_clojure"],
+    visibility = ["//src/checker:__subpackages__"],
 )
 
 clojure_library(
     name = "checker-lib",
-    srcs = glob([
-        "src/**/*.clj",
-    ]),
-    deps = [
-        "@maven//:elle_elle",
-        "@maven//:spootnik_unilog",
-        "@maven//:me_raynes_fs",
-        "@maven//:seancorfield_next_jdbc",
-        "@maven//:org_xerial_sqlite_jdbc",
-        "@maven//:metosin_jsonista",
-        ":lockfix",
-    ]
+    srcs = ["//src/checker/src/checker:checker-ns"],
+    deps = ["@maven//:org_clojure_clojure"], # Doesn't work/not needed?
+    aot = ["checker.core"],
+    javacopts = [
+        "-Djava.awt.headless=true",
+        # "-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory",
+    ],
 )
 
-clojure_binary(
+graal_binary(
     name = "checker",
-    main = "checker.core",
     deps = [":checker-lib"],
+    reflection_configuration = "native-image/reflection-config.json",
+    jni_configuration = "native-image/jni-config.json",
+    main_class = "checker.core",
+    initialize_at_build_time = [
+        "org.sqlite.JDBC",
+        "org.sqlite.core.DB$ProgressObserver",
+        "org.sqlite.core.DB",
+        "org.sqlite.core.NativeDB",
+        "org.sqlite.ProgressHandler",
+        "org.sqlite.Function",
+        "org.sqlite.Function$Aggregate",
+        "org.sqlite.Function$Window",
+    ],
+    graal_extra_args = [
+        # TODO(stevan): figure out how a better way to get this path:
+        "-H:CCompilerOption=-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
+        "-H:+ReportExceptionStackTraces",
+        "-H:-CheckToolchain", # Needed for MacOS.
+        "-J-Dclojure.spec.skip-macros=true",
+        "-J-Dclojure.compiler.direct-linking=true",
+        "-J-Dfile.encoding=UTF-8",
+        "-J-Djava.awt.headless=true",
+        "--report-unsupported-elements-at-runtime",
+        "--initialize-at-run-time=sun.font.SunFontManager",
+        "--initialize-at-run-time=sun.font.StrikeCache",
+        "--initialize-at-run-time=sun.font.SunLayoutEngine",
+        "--initialize-at-run-time=sun.font.FontManagerNativeLibrary",
+        "--initialize-at-run-time=sun.awt.X11GraphicsConfig",
+        "--initialize-at-run-time=javax.imageio.ImageTypeSpecifier",
+        "--initialize-at-run-time=sun.java2d.SurfaceData",
+        "--initialize-at-run-time='com.sun.imageio.plugins.jpeg.JPEG$JCS'",
+        "--initialize-at-run-time='sun.awt.dnd.SunDropTargetContextPeer$EventDispatcher'",
+        "--allow-incomplete-classpath",
+        # "--verbose",
+    ],
 )

@@ -43,6 +43,16 @@ nixpkgs_package(
     repositories = { "nixpkgs": "@nixpkgs//:default.nix" }
 )
 
+nixpkgs_package(
+    name = "zlib.dev",
+    repositories = { "nixpkgs": "@nixpkgs//:default.nix" }
+)
+
+nixpkgs_package(
+    name = "zlib.out",
+    repositories = { "nixpkgs": "@nixpkgs//:default.nix" }
+)
+
 # Python
 nixpkgs_python_configure(
     python3_attribute_path = "python3",
@@ -170,10 +180,9 @@ load("@rules_jvm_external//:defs.bzl", "maven_install")
 
 git_repository(
     name = "rules_clojure",
-    commit = "11478580b9bb10e183af6da9bc1acc4d1524927f",
-    remote = "https://github.com/griffinbank/rules_clojure.git",
+    commit = "dbcaaa516e8cfcb32e51e80a838cf2be6bf93093",
+    remote = "https://github.com/stevana/rules_clojure.git",
 )
-
 
 load("@rules_clojure//:repositories.bzl", "rules_clojure_dependencies")
 load("@rules_clojure//:toolchains.bzl", "rules_clojure_toolchains")

@@ -3,13 +3,6 @@ load("@rules_clojure//:toolchains.bzl", "clojure_toolchain")
 load("@rules_java//java:defs.bzl", "java_library")
 load("@rules_graal//graal:graal.bzl", "graal_binary")
 
-java_library(
-    name = "lockfix",
-    srcs = ["java/src/lockfix/LockFix.java"],
-    deps = ["@maven//:org_clojure_clojure"],
-    visibility = ["//src/scheduler:__subpackages__"],
-)
-
 clojure_toolchain(
     name = "clojure_toolchain_def",
     classpath = [
@@ -25,27 +18,30 @@ toolchain(
     toolchain_type = "@rules_clojure//:toolchain",
 )
 
-clojure_library(
-    name = "scheduler-lib",
-    srcs = ["//src/scheduler/src/scheduler:scheduler-ns"],
-    aot = ["scheduler.core"],
-)
-
-clojure_binary(
-    name = "scheduler",
-    deps = [":scheduler-lib"],
-    main_class = "scheduler.core",
+java_library(
+    name = "lockfix",
+    srcs = ["java/src/lockfix/LockFix.java"],
+    deps = ["@maven//:org_clojure_clojure"],
+    visibility = ["//src/scheduler:__subpackages__"],
 )
 
 cc_library(
     name = "zlib",
-    srcs = ["@zlib//:lib"],
-    hdrs = ["@zlib//:include"],
+    srcs = ["@zlib.out//:lib"],
+    hdrs = ["@zlib.dev//:include"],
     strip_include_prefix = "/include",
+    linkstatic=1,
+)
+
+clojure_library(
+    name = "scheduler-lib",
+    srcs = ["//src/scheduler/src/scheduler:scheduler-ns"],
+    aot = ["scheduler.core"],
+    compiledeps = [":zlib", "@rules_clojure//src/rules_clojure:jar"],
 )
 
 graal_binary(
-    name = "scheduler-native",
+    name = "scheduler",
     deps = [":scheduler-lib"],
     reflection_configuration = "native-image/reflection-config.json",
     jni_configuration = "native-image/jni-config.json",
@@ -61,7 +57,9 @@ graal_binary(
         "org.sqlite.Function$Window",
     ],
     graal_extra_args = [
-        # TODO(stevan): figure out how a better way to get this path:
+        # TODO(stevan): figure out how a better way to get the following path.
+        # I think the problem is that $location doesn't work inside
+        # graal_extra_args.
         "-H:CCompilerOption=-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
         "-H:+ReportExceptionStackTraces",
         "-H:-CheckToolchain", # Needed for MacOS.
