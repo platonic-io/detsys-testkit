@@ -86,12 +86,12 @@ unit_cache_lineage =
     `shouldBe` (var "A" 0 "B" 0 :&& (var "A" 1 "C" 1 :|| And [var "A" 1 "R" 1, var "R" 2 "S1" 2, var "R" 3 "S2" 3]))
   where
 
-dummyTestId :: TestId
-dummyTestId = error "This testId will never be used."
+dummyTestInformation :: TestInformation
+dummyTestInformation = error "This testInformation will never be used."
 
 unit_cacheFailures :: Assertion
 unit_cacheFailures = do
-  fs <- run (mockStorage cacheTraces) z3Solver dummyTestId emptyFailureSpec
+  fs <- run (mockStorage cacheTraces) z3Solver dummyTestInformation emptyFailureSpec
   fs @?= [Omission ("A", "B") 0]
 
 var :: Node -> Time -> Node -> Time -> Formula
@@ -124,12 +124,12 @@ broadcastFailureSpec =
 -- "A" "C" 1`, can we make a variant of run that returns all possible models?
 unit_broadcast1Run1 :: Assertion
 unit_broadcast1Run1 = do
-  fs <- run (mockStorage (take 1 broadcast1Traces)) z3Solver dummyTestId broadcastFailureSpec
+  fs <- run (mockStorage (take 1 broadcast1Traces)) z3Solver dummyTestInformation broadcastFailureSpec
   fs @?= [Omission ("A", "B") 1]
 
 unit_broadcast1Run2 :: Assertion
 unit_broadcast1Run2 = do
-  fs <- run (mockStorage (take 2 broadcast1Traces)) z3Solver dummyTestId broadcastFailureSpec
+  fs <- run (mockStorage (take 2 broadcast1Traces)) z3Solver dummyTestInformation broadcastFailureSpec
   fs @?= [Omission ("A", "B") 1, Omission ("A", "C") 1] -- Minimal counterexample.
 
 ------------------------------------------------------------------------
@@ -147,12 +147,12 @@ broadcast2Traces =
 -- Lets assume that run 1 and 2 were the same as in broadcast1.
 unit_broadcast2Run3 :: Assertion
 unit_broadcast2Run3 = do
-  fs <- run (mockStorage (take 3 broadcast2Traces)) z3Solver dummyTestId broadcastFailureSpec
+  fs <- run (mockStorage (take 3 broadcast2Traces)) z3Solver dummyTestInformation broadcastFailureSpec
   fs @?= [Crash "A" 1, Omission ("A", "B") 1]
 
 unit_broadcast2Run4 :: Assertion
 unit_broadcast2Run4 = do
-  fs <- run (mockStorage (take 4 broadcast2Traces)) z3Solver dummyTestId broadcastFailureSpec
+  fs <- run (mockStorage (take 4 broadcast2Traces)) z3Solver dummyTestInformation broadcastFailureSpec
   fs
     @?= [ Crash "A" 1,
           Omission ("A", "B") 1

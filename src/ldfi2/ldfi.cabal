@@ -22,12 +22,12 @@ library
     Ldfi
     Ldfi.FailureSpec
     Ldfi.GitHash
+    Ldfi.Marshal.Faults
     Ldfi.Prop
     Ldfi.Sat
     Ldfi.Solver
     Ldfi.Storage
     Ldfi.Traces
-    Ldfi.Util
 
   other-modules:    Ldfi.GitHashImpl
 
@@ -43,6 +43,9 @@ library
   -- Other dependencies:
   build-depends:
       QuickCheck
+    , aeson
+    , binary
+    , bytestring
     , sqlite-simple
     , text
     , z3
