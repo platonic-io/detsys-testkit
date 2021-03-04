@@ -45,5 +45,10 @@ pkgs.mkShell {
     direnv
     lorri
     nix-index
+
+    zlib.dev
+    zlib.out
+    pkgconfig # Use `pkg-config --libs zlib` from inside the shell to figure out
+              # what to pass to GraalVM's native-image.
   ];
 }

@@ -24,8 +24,8 @@ load("@io_tweag_rules_nixpkgs//nixpkgs:nixpkgs.bzl",
 # niv support, see https://github.com/tweag/rules_nixpkgs/issues/127 .
 nixpkgs_git_repository(
     name = "nixpkgs",
-    revision = "a58a0b5098f0c2a389ee70eb69422a052982d990",
-    sha256 = "42ff79e0265ba9fabe6d424298f240b42224467e771848e244126262fb148c85",
+    revision = "772406c2a4e22a85620854056a4cd02856fa10f0",
+    sha256 = "4e3429bc83182b4dc49a554a44067bd9453bd6c0827b08948b324d8a4bb3dea3",
 )
 
 nixpkgs_cc_configure(
@@ -60,7 +60,6 @@ load("@rules_python//python:pip.bzl", "pip_install")
 pip_install(requirements = "//src/ldfi:requirements.txt")
 
 # Haskell
-
 http_archive(
     name = "rules_haskell",
     strip_prefix = "rules_haskell-cf1300cffed8b786420a77d67e1b1481232f84c7",
@@ -158,19 +157,6 @@ gazelle_ws()
 gazelle_dependencies()
 
 # Clojure
-http_archive(
-    name = "rules_clojure",
-    sha256 = "4749769faee9e2d00bb50d08e6a16b46aebdb885dc8ee75356964719622bf4e9",
-    strip_prefix = "rules_clojure-5605a9fb9653157579f7b86d9bd9b5993eec2b31",
-    urls = ["https://github.com/simuons/rules_clojure/archive/5605a9fb9653157579f7b86d9bd9b5993eec2b31.tar.gz"],
-)
-
-load("@rules_clojure//:repositories.bzl", "rules_clojure_dependencies", "rules_clojure_toolchains")
-
-rules_clojure_dependencies()
-
-rules_clojure_toolchains()
-
 RULES_JVM_EXTERNAL_TAG = "4.0"
 RULES_JVM_EXTERNAL_SHA = "31701ad93dbfe544d597dbe62c9a1fdd76d81d8a9150c2bf1ecf928ecdf97169"
 
@@ -178,9 +164,41 @@ http_archive(
     name = "rules_jvm_external",
     strip_prefix = "rules_jvm_external-%s" % RULES_JVM_EXTERNAL_TAG,
     sha256 = RULES_JVM_EXTERNAL_SHA,
-    url = "https://github.com/bazelbuild/rules_jvm_external/archive/%s.zip" % RULES_JVM_EXTERNAL_TAG,
+    url = "https://github.com/bazelbuild/rules_jvm_external/archive/%s.zip" % RULES_JVM_EXTERNAL_TAG)
+
+load("@rules_jvm_external//:defs.bzl", "maven_install")
+
+git_repository(
+    name = "rules_clojure",
+    commit = "11478580b9bb10e183af6da9bc1acc4d1524927f",
+    remote = "https://github.com/griffinbank/rules_clojure.git",
 )
+
+
+load("@rules_clojure//:repositories.bzl", "rules_clojure_dependencies")
+load("@rules_clojure//:toolchains.bzl", "rules_clojure_toolchains")
+
+rules_clojure_dependencies()
+rules_clojure_toolchains()
 
 load("//:clojure-ws.bzl", "clojure_ws")
 
 clojure_ws()
+
+# GraalVM
+http_archive(
+    name = "rules_graal",
+    sha256 = "ba3ece52c0c60acaceb09104a3ddc76c7bba076ae449331f7bc911b382499d3d",
+    strip_prefix = "rules_graal-d49695e245e0ca224476ec9c5b2ff3db4d0ccfd8",
+    urls = [
+        "https://github.com/stevana/rules_graal/archive/d49695e245e0ca224476ec9c5b2ff3db4d0ccfd8.zip",
+    ],
+)
+
+load("@rules_graal//graal:graal_bindist.bzl", "graal_bindist_repository")
+
+graal_bindist_repository(
+    name = "graal",
+    java_version = "11",
+    version = "21.0.0",
+)
