@@ -1,5 +1,14 @@
-load("@rules_clojure//:rules.bzl", "clojure_library", "clojure_binary")
+load("@rules_clojure//:rules.bzl", "clojure_namespace", "clojure_library", "clojure_binary")
 load("@rules_clojure//:toolchains.bzl", "clojure_toolchain")
+load("@rules_java//java:defs.bzl", "java_library")
+load("@rules_graal//graal:graal.bzl", "graal_binary")
+
+java_library(
+    name = "lockfix",
+    srcs = ["java/src/lockfix/LockFix.java"],
+    deps = ["@maven//:org_clojure_clojure"],
+    visibility = ["//src/scheduler:__subpackages__"],
+)
 
 clojure_toolchain(
     name = "clojure_toolchain_def",
@@ -16,37 +25,54 @@ toolchain(
     toolchain_type = "@rules_clojure//:toolchain",
 )
 
-java_library(
-    name = "lockfix",
-    srcs = ["java/src/lockfix/LockFix.java"],
-    deps = ["@maven//:org_clojure_clojure"],
-)
-
 clojure_library(
     name = "scheduler-lib",
-    srcs = glob([
-        "src/**/*.clj",
-    ]),
-    deps = ["@maven//:ring_ring_core",
-            "@maven//:ring_ring_devel",
-            "@maven//:ring_ring_defaults",
-            "@maven//:ring_ring_jetty_adapter",
-            "@maven//:clj_http_clj_http",
-            "@maven//:clj_http_fake_clj_http_fake",
-            "@maven//:org_clojure_clojure",
-            "@maven//:org_clojure_data_generators",
-            "@maven//:shams_priority_queue",
-            "@maven//:seancorfield_next_jdbc",
-            "@maven//:org_xerial_sqlite_jdbc",
-            "@maven//:com_taoensso_timbre",
-            "@maven//:metosin_jsonista",
-            "@maven//:gnl_ghostwheel",
-            ":lockfix",
-    ]
+    srcs = ["//src/scheduler/src/scheduler:scheduler-ns"],
+    aot = ["scheduler.core"],
 )
 
 clojure_binary(
     name = "scheduler",
-    main = "scheduler.core",
     deps = [":scheduler-lib"],
+    main_class = "scheduler.core",
+)
+
+cc_library(
+    name = "zlib",
+    srcs = ["@zlib//:lib"],
+    hdrs = ["@zlib//:include"],
+    strip_include_prefix = "/include",
+)
+
+graal_binary(
+    name = "scheduler-native",
+    deps = [":scheduler-lib"],
+    reflection_configuration = "native-image/reflection-config.json",
+    jni_configuration = "native-image/jni-config.json",
+    main_class = "scheduler.core",
+    initialize_at_build_time = [
+        "org.sqlite.JDBC",
+        "org.sqlite.core.DB$ProgressObserver",
+        "org.sqlite.core.DB",
+        "org.sqlite.core.NativeDB",
+        "org.sqlite.ProgressHandler",
+        "org.sqlite.Function",
+        "org.sqlite.Function$Aggregate",
+        "org.sqlite.Function$Window",
+    ],
+    graal_extra_args = [
+        # TODO(stevan): figure out how a better way to get this path:
+        "-H:CCompilerOption=-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
+        "-H:+ReportExceptionStackTraces",
+        "-H:-CheckToolchain", # Needed for MacOS.
+        "-H:EnableURLProtocols=http,https",
+        "--enable-all-security-services",
+        "-H:IncludeResources=db/.*|static/.*|templates/.*|.*.yml|.*.xml|.*/org/sqlite/.*|org/sqlite/.*",
+        "-J-Dclojure.spec.skip-macros=true",
+        "-J-Dclojure.compiler.direct-linking=true",
+        "-J-Dfile.encoding=UTF-8",
+        "--initialize-at-build-time",
+        "--report-unsupported-elements-at-runtime",
+        # "--verbose",
+    ],
 )
