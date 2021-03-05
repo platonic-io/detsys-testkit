@@ -198,10 +198,10 @@ clojure_ws()
 # GraalVM
 http_archive(
     name = "rules_graal",
-    sha256 = "75f74b1eb404230fc587065505821adeb075b1cebd3555653204e4848cbc5857",
-    strip_prefix = "rules_graal-cc7271fde4d0ee816f1b35cc6db4e6903e0457e6",
+    sha256 = "543dcf9018d3b7c5ac7e73b6ad841b8c79d3e48e6dc0646f2abdc6163de5fc1d",
+    strip_prefix = "rules_graal-e7cfa9c762ea7e01cad77bb8904c5dab01f7e9a4",
     urls = [
-        "https://github.com/stevana/rules_graal/archive/cc7271fde4d0ee816f1b35cc6db4e6903e0457e6.zip",
+        "https://github.com/stevana/rules_graal/archive/e7cfa9c762ea7e01cad77bb8904c5dab01f7e9a4.zip",
     ],
 )
 

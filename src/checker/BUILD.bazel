@@ -53,17 +53,20 @@ graal_binary(
     ],
 
     c_compiler_option = [
-        "-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
-        "-L/nix/store/wphpzw2swy36pm4ph3r1zfvwfj2njxjf-zlib-1.2.11/lib",
         "-F/nix/store/x4h02ax94qfklbfzfm3vci5mrxh9cmzz-apple-framework-Foundation/Library/Frameworks",
+        "-L/nix/store/wphpzw2swy36pm4ph3r1zfvwfj2njxjf-zlib-1.2.11/lib",
+        "-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib", # libz.so
+        "-I/nix/store/w02nq97ggwq3x2lpjsy1zpspxhnmv474-zlib-1.2.11-dev/include", # zlib.h
         "-F/nix/store/fi8s090l8xd5jpjbvkvr5bj5js49ywk5-apple-framework-CoreFoundation/Library/Frameworks",
     ],
 
     graal_extra_args = [
         # TODO(stevan): figure out how a better way to get this path:
-        "-H:CCompilerPath=/nix/store/kxx4n980xm8qwkk145jidx8s04005yq7-clang-wrapper-7.1.0/bin/clang",
+        # "-H:CCompilerPath=/nix/store/kxx4n980xm8qwkk145jidx8s04005yq7-clang-wrapper-7.1.0/bin/clang",
         "-H:+ReportExceptionStackTraces",
+        "-H:CLibraryPath=/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
         "-H:-CheckToolchain", # Needed for MacOS.
+        #"-H:CCompilerOption=-F/nix/store/x4h02ax94qfklbfzfm3vci5mrxh9cmzz-apple-framework-Foundation/Library/Frameworks -L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
         "-J-Dclojure.spec.skip-macros=true",
         "-J-Dclojure.compiler.direct-linking=true",
         "-J-Dfile.encoding=UTF-8",
