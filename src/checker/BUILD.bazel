@@ -22,24 +22,24 @@ java_library(
     deps = ["@maven//:org_clojure_clojure"],
 )
 
-clojure_library(
-    name = "checker-lib",
-    srcs = glob([
-        "src/**/*.clj",
-    ]),
-    deps = [
-        "@maven//:elle_elle",
-        "@maven//:spootnik_unilog",
-        "@maven//:me_raynes_fs",
-        "@maven//:seancorfield_next_jdbc",
-        "@maven//:org_xerial_sqlite_jdbc",
-        "@maven//:metosin_jsonista",
-        ":lockfix",
-    ]
-)
-
-clojure_binary(
-    name = "checker",
-    main = "checker.core",
-    deps = [":checker-lib"],
-)
+#clojure_library(
+#    name = "checker-lib",
+#    srcs = glob([
+#        "src/**/*.clj",
+#    ]),
+#    deps = [
+#        "@maven//:elle_elle",
+#        "@maven//:spootnik_unilog",
+#        "@maven//:me_raynes_fs",
+#        "@maven//:seancorfield_next_jdbc",
+#        "@maven//:org_xerial_sqlite_jdbc",
+#        "@maven//:metosin_jsonista",
+#        ":lockfix",
+#    ]
+#)
+#
+#clojure_binary(
+#    name = "checker",
+#    main = "checker.core",
+#    deps = [":checker-lib"],
+#)

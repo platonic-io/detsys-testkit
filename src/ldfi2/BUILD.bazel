@@ -12,7 +12,10 @@ haskell_library(
     src_strip_prefix = "src",
     srcs = glob(['src/**/*.hs']),
     deps = [
+        "@stackage//:aeson",
         "@stackage//:base",
+        "@stackage//:binary",
+        "@stackage//:bytestring",
         "@stackage//:containers",
         "@stackage//:filepath",
         "@stackage//:QuickCheck",

@@ -37,12 +37,12 @@ clojure_binary(
     main_class = "scheduler.core",
 )
 
-cc_library(
-    name = "zlib",
-    srcs = ["@zlib//:lib"],
-    hdrs = ["@zlib//:include"],
-    strip_include_prefix = "/include",
-)
+#cc_library(
+    #name = "zlib",
+    #srcs = ["@zlib//:lib"],
+    #hdrs = ["@zlib//:include"],
+    #strip_include_prefix = "/include",
+#)
 
 graal_binary(
     name = "scheduler-native",
