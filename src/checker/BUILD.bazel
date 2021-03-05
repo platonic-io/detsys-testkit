@@ -53,7 +53,7 @@ graal_binary(
     ],
 
     c_compiler_option = [
-        "-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib"
+        "-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
         "-L/nix/store/wphpzw2swy36pm4ph3r1zfvwfj2njxjf-zlib-1.2.11/lib",
         "-F/nix/store/x4h02ax94qfklbfzfm3vci5mrxh9cmzz-apple-framework-Foundation/Library/Frameworks",
     ],
