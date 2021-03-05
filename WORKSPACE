@@ -198,10 +198,10 @@ clojure_ws()
 # GraalVM
 http_archive(
     name = "rules_graal",
-    sha256 = "75f74b1eb404230fc587065505821adeb075b1cebd3555653204e4848cbc5857",
-    strip_prefix = "rules_graal-cc7271fde4d0ee816f1b35cc6db4e6903e0457e6",
+    sha256 = "fc581a429f558ad7d8a9b68942370505654715b468905cb6fda4b0bf7d762871",
+    strip_prefix = "rules_graal-d7ebee5ba46a836cff09b5e676b28ac89b2243bd",
     urls = [
-        "https://github.com/stevana/rules_graal/archive/cc7271fde4d0ee816f1b35cc6db4e6903e0457e6.zip",
+        "https://github.com/BraeWebb/rules_graal/archive/d7ebee5ba46a836cff09b5e676b28ac89b2243bd.zip",
     ],
 )
 
@@ -210,5 +210,5 @@ load("@rules_graal//graal:graal_bindist.bzl", "graal_bindist_repository")
 graal_bindist_repository(
     name = "graal",
     java_version = "11",
-    version = "21.0.0",
+    version = "20.2.0",
 )
