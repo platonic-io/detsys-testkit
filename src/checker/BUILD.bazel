@@ -52,17 +52,16 @@ graal_binary(
         "org.sqlite.Function$Window",
     ],
 
-    #c_compiler_option = [
-        #"-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
-        #"-L/nix/store/wphpzw2swy36pm4ph3r1zfvwfj2njxjf-zlib-1.2.11/lib",
-        #"-F/nix/store/x4h02ax94qfklbfzfm3vci5mrxh9cmzz-apple-framework-Foundation/Library/Frameworks",
-        #"-F/nix/store/fi8s090l8xd5jpjbvkvr5bj5js49ywk5-apple-framework-CoreFoundation/Library/Frameworks",
-    #],
+    c_compiler_option = [
+        "-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
+        "-L/nix/store/wphpzw2swy36pm4ph3r1zfvwfj2njxjf-zlib-1.2.11/lib",
+        "-F/nix/store/x4h02ax94qfklbfzfm3vci5mrxh9cmzz-apple-framework-Foundation/Library/Frameworks",
+        "-F/nix/store/fi8s090l8xd5jpjbvkvr5bj5js49ywk5-apple-framework-CoreFoundation/Library/Frameworks",
+    ],
 
     graal_extra_args = [
         # TODO(stevan): figure out how a better way to get this path:
-        #"-H:CCompilerPath=/nix/store/gk099cfff3s1g01adgvsn3957zabppvw-gcc-wrapper-10.2.0/bin/gcc",
-        "-H:CCompilerOption=-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib",
+        "-H:CCompilerPath=/nix/store/kxx4n980xm8qwkk145jidx8s04005yq7-clang-wrapper-7.1.0/bin/clang",
         "-H:+ReportExceptionStackTraces",
         "-H:-CheckToolchain", # Needed for MacOS.
         "-J-Dclojure.spec.skip-macros=true",
