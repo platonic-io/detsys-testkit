@@ -32,7 +32,6 @@ clojure_library(
     aot = ["checker.core"],
     javacopts = [
         "-Djava.awt.headless=true",
-        # "-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory",
     ],
 )
 
@@ -52,9 +51,15 @@ graal_binary(
         "org.sqlite.Function$Aggregate",
         "org.sqlite.Function$Window",
     ],
+
+    c_compiler_option = [
+        "-L/nix/store/7bgshg2z70fpcc7adxfag1lgf45yamxh-zlib-1.2.11/lib"
+        "-L/nix/store/wphpzw2swy36pm4ph3r1zfvwfj2njxjf-zlib-1.2.11/lib",
+        "-F/nix/store/x4h02ax94qfklbfzfm3vci5mrxh9cmzz-apple-framework-Foundation/Library/Frameworks",
+    ],
+
     graal_extra_args = [
         # TODO(stevan): figure out how a better way to get this path:
-        "-H:CCompilerOption=-L/nix/store/wphpzw2swy36pm4ph3r1zfvwfj2njxjf-zlib-1.2.11/lib -F/nix/store/x4h02ax94qfklbfzfm3vci5mrxh9cmzz-apple-framework-Foundation/Library/Frameworks",
         "-H:CCompilerPath=/nix/store/kxx4n980xm8qwkk145jidx8s04005yq7-clang-wrapper-7.1.0/bin/clang",
         "-H:+ReportExceptionStackTraces",
         "-H:-CheckToolchain", # Needed for MacOS.
@@ -62,6 +67,7 @@ graal_binary(
         "-J-Dclojure.compiler.direct-linking=true",
         "-J-Dfile.encoding=UTF-8",
         "-J-Djava.awt.headless=true",
+        "-J-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory",
         "--report-unsupported-elements-at-runtime",
         "--initialize-at-run-time=sun.font.SunFontManager",
         "--initialize-at-run-time=sun.font.StrikeCache",
@@ -73,6 +79,6 @@ graal_binary(
         "--initialize-at-run-time='com.sun.imageio.plugins.jpeg.JPEG$JCS'",
         "--initialize-at-run-time='sun.awt.dnd.SunDropTargetContextPeer$EventDispatcher'",
         "--allow-incomplete-classpath",
-        # "--verbose",
+        "--verbose",
     ],
 )

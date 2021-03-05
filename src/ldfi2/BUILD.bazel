@@ -22,3 +22,14 @@ haskell_library(
         "@stackage//:z3",
     ],
 )
+
+haskell_binary(
+    name = "ldfi2",
+    srcs = ["app/Main.hs"],
+    deps = [
+        "@stackage//:base",
+        "@stackage//:optparse-generic",
+        "@stackage//:text",
+        ":ldfi-lib"
+    ],
+)

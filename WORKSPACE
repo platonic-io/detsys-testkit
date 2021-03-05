@@ -112,6 +112,7 @@ stack_snapshot(
         "containers",
         "filepath",
         "mtl",
+        "optparse-generic",
         "template-haskell",
         "QuickCheck",
         "sqlite-simple",
@@ -197,10 +198,10 @@ clojure_ws()
 # GraalVM
 http_archive(
     name = "rules_graal",
-    sha256 = "ba3ece52c0c60acaceb09104a3ddc76c7bba076ae449331f7bc911b382499d3d",
-    strip_prefix = "rules_graal-d49695e245e0ca224476ec9c5b2ff3db4d0ccfd8",
+    sha256 = "ef3c9ce5700714ec0fc9e072b30ecaf2acd613918e8e265ccfc715c3c45a3f36",
+    strip_prefix = "rules_graal-d401f8287c7fd6e061568b3f0da97cd9b3570e3e",
     urls = [
-        "https://github.com/stevana/rules_graal/archive/d49695e245e0ca224476ec9c5b2ff3db4d0ccfd8.zip",
+        "https://github.com/stevana/rules_graal/archive/d401f8287c7fd6e061568b3f0da97cd9b3570e3e.zip",
     ],
 )
 
