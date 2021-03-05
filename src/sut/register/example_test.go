@@ -62,7 +62,6 @@ func testRegisterWithFrontEnd(newFrontEnd func() lib.Reactor, tickFrequency floa
 
 	testId := lib.GenerateTestFromTopologyAndAgenda(createTopology(newFrontEnd), agenda)
 
-	var runIds []lib.RunId
 	var faults []lib.Fault
 	failSpec := lib.FailSpec{
 		EFF:     10,
@@ -85,8 +84,7 @@ func testRegisterWithFrontEnd(newFrontEnd func() lib.Reactor, tickFrequency floa
 			t.Errorf("faults: %#v\n", faults)
 			break
 		}
-		runIds = append(runIds, runId)
-		faults = lib.Ldfi(testId, runIds, failSpec).Faults
+		faults = lib.Ldfi(testId, nil, failSpec).Faults
 		if len(faults) == 0 {
 			break
 		}
