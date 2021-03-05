@@ -37,7 +37,7 @@ simple distributed register example:
 3. Issue `nix-shell` to get into an environment where all development tools are
    available;
 4. `bazel build //...` to compile all components;
-5. Exit the `nix-shell` with `exit` or `Ctrl-C`;
+5. Exit the `nix-shell` with `exit` or `Ctrl-d`;
 6. Run `nix-env -if default.nix` to package up and install all binaries that
    `bazel` just built;
 7. Prepare the database with `detsys db up`;
