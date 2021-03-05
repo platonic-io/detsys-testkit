@@ -12,7 +12,6 @@ in
 buildGoModule rec {
   pname = "db";
   version = "latest";
-  goPackagePath = "github.com/symbiont-io/detsys-testkit/src/${pname}";
 
   src = gitignoreSource ./.;
   buildInputs = [ detsysLib ];
