@@ -42,7 +42,8 @@ simple distributed register example:
    `bazel` just built;
 7. Prepare the database with `detsys db up`;
 8. Start the scheduler component with `detsys scheduler up`;
-9. Change directory to where the distributed register example lives with `cd
+Now the system is up and running and ready to be used for tests. A simple way to test the system and see how it works is to run one of the existing sut:
+1. Change directory to where the distributed register example lives with `cd
    src/sut/register`;
 10. Run the first test from the test-suite by typing `go test -run 1`;
 11. Notice how test id `1` and run id `2` doesn't pass the analysis. To debug
