@@ -16,7 +16,7 @@ buildGoModule rec {
   src = gitignoreSource ./.;
   buildInputs = [ detsysLib ];
 
-  vendorSha256 = "0ssxxfgckap99n5vfl3z1fjb2sc59wlf1h65l6jgir7zx7ndlzvr";
+  vendorSha256 = "0prynk34dfw5fsp7za2ryx0h868y88202937s2rq3fm9pgg7bxqi";
 
   buildFlagsArray =
     [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
