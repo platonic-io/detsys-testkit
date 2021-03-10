@@ -12,7 +12,10 @@ haskell_library(
     src_strip_prefix = "src",
     srcs = glob(['src/**/*.hs']),
     deps = [
+        "@stackage//:aeson",
         "@stackage//:base",
+        "@stackage//:binary",
+        "@stackage//:bytestring",
         "@stackage//:containers",
         "@stackage//:filepath",
         "@stackage//:QuickCheck",
@@ -20,5 +23,16 @@ haskell_library(
         "@stackage//:template-haskell",
         "@stackage//:text",
         "@stackage//:z3",
+    ],
+)
+
+haskell_binary(
+    name = "ldfi2",
+    srcs = ["app/Main.hs"],
+    deps = [
+        "@stackage//:base",
+        "@stackage//:optparse-generic",
+        "@stackage//:text",
+        ":ldfi-lib"
     ],
 )

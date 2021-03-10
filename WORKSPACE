@@ -98,10 +98,14 @@ load("@rules_haskell//haskell:cabal.bzl", "stack_snapshot")
 stack_snapshot(
     name = "stackage",
     packages = [
+        "aeson",
         "base",
+        "binary",
+        "bytestring",
         "containers",
         "filepath",
         "mtl",
+        "optparse-generic",
         "template-haskell",
         "QuickCheck",
         "sqlite-simple",
