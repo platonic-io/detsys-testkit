@@ -29,24 +29,22 @@ nixpkgs_git_repository(
 )
 
 nixpkgs_cc_configure(
-    name = "nixpkgs_config_cc",
-    repository = "@nixpkgs//:default.nix",
+    repository = "@nixpkgs",
 )
 
 nixpkgs_package(
     name = "z3.dev",
-    repositories = { "nixpkgs": "@nixpkgs//:default.nix" }
+    repository = "@nixpkgs",
 )
 
 nixpkgs_package(
     name = "z3.lib",
-    repositories = { "nixpkgs": "@nixpkgs//:default.nix" }
+    repository = "@nixpkgs",
 )
 
 # Python
 nixpkgs_python_configure(
-    python3_attribute_path = "python3",
-    repository = "@nixpkgs//:default.nix",
+    repository = "@nixpkgs",
 )
 
 http_archive(
@@ -62,9 +60,9 @@ pip_install(requirements = "//src/ldfi:requirements.txt")
 # Haskell
 http_archive(
     name = "rules_haskell",
-    strip_prefix = "rules_haskell-cf1300cffed8b786420a77d67e1b1481232f84c7",
-    urls = ["https://github.com/tweag/rules_haskell/archive/cf1300cffed8b786420a77d67e1b1481232f84c7.tar.gz"],
-    sha256 = "0787d2093d160b2c3ce3196c3a00c5fddcf1ec132f58f8dc0fd842160e1f9bbc",
+    strip_prefix = "rules_haskell-60ed30aab00e9ffa2e2fe19e59f7de885f029556",
+    urls = ["https://github.com/tweag/rules_haskell/archive/60ed30aab00e9ffa2e2fe19e59f7de885f029556.tar.gz"],
+    sha256 = "a9c94b1fb61e1e341b7544305e9b0a359594779f797fddfcfcd447709c7c9820",
 )
 
 load("@rules_haskell//haskell:repositories.bzl", "rules_haskell_dependencies")
@@ -75,13 +73,11 @@ load("@rules_haskell//haskell:nixpkgs.bzl", "haskell_register_ghc_nixpkgs")
 
 haskell_register_ghc_nixpkgs(
     attribute_path = "haskell.compiler.ghc8103",
-    repositories = {"nixpkgs": "@nixpkgs"},
     version = "8.10.3",
+    repository = "@nixpkgs",
 )
 
 load("@rules_haskell//haskell:toolchain.bzl", "rules_haskell_toolchains")
-
-rules_haskell_toolchains(version = "8.10.3")
 
 http_archive(
     name = "haskell_z3",
