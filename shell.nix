@@ -48,6 +48,7 @@ pkgs.mkShell {
 
     zlib.dev
     zlib.out
+    freetype.dev
     pkgconfig # Use `pkg-config --libs zlib` from inside the shell to figure out
               # what to pass to GraalVM's native-image.
   ] ++ lib.optionals stdenv.hostPlatform.isDarwin
