@@ -17,6 +17,7 @@ load("@io_tweag_rules_nixpkgs//nixpkgs:nixpkgs.bzl",
     "nixpkgs_cc_configure",
     "nixpkgs_git_repository",
     "nixpkgs_package",
+    "nixpkgs_sh_posix_configure",
     "nixpkgs_python_configure",
 )
 
@@ -56,6 +57,11 @@ http_archive(
 load("@rules_python//python:pip.bzl", "pip_install")
 
 pip_install(requirements = "//src/ldfi:requirements.txt")
+
+# POSIX toolchain
+nixpkgs_sh_posix_configure(
+    repository = "@nixpkgs"
+)
 
 # Haskell
 http_archive(
@@ -143,7 +149,7 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 # Use go from nixpkgs.
 load("@io_tweag_rules_nixpkgs//nixpkgs:toolchains/go.bzl", "nixpkgs_go_configure")
-nixpkgs_go_configure(repository = "@nixpkgs//:default.nix")
+nixpkgs_go_configure(repository = "@nixpkgs")
 
 go_rules_dependencies()
 
