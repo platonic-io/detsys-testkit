@@ -8,11 +8,10 @@
 
 * For example
     - Jepsen tests
-        + The subsystem under test here is a Smartlog cluster, faults are
-          injected, TXE-like user traffic randomly generated
-    - War room
-        + The system under test here are a cluster of Symbiont nodes
+        + The subsystem under test here is a database cluster, faults are
+          injected, user traffic randomly generated;
     - Performance tests
+        + Very demanding or many users
 
 ## The consequences of slow and non-deterministic system tests
 
