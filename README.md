@@ -39,16 +39,21 @@ simple distributed register example:
 0. Install [`nix`](https://nixos.org/download.html#nix-quick-install);
 1. Clone this repository;
 2. `cd` into the repository;
-3. Install all development tools and compile all components with `nix-shell`
-   (this can take a while the first time you do it);
-4. Prepare the database with `detsys db up`;
-5. Start the scheduler component with `detsys scheduler up`;
-6. Change directory to where the distributed register example lives with `cd
+3. Issue `nix-shell` to get into an environment where all development tools are
+   available;
+4. `bazel build //...` to compile all components;
+5. Exit the `nix-shell` with `exit` or `Ctrl-d`;
+6. Run `nix-env -if default.nix` to package up and install all binaries that
+   `bazel` just built;
+7. Prepare the database with `detsys db up`;
+8. Start the scheduler component with `detsys scheduler up`;
+Now the system is up and running and ready to be used for tests. A simple way to test the system and see how it works is to run one of the existing sut:
+1. Change directory to where the distributed register example lives with `cd
    src/sut/register`;
-7. Run the first test from the test-suite by typing `go test -run 1`;
-8. Notice how test id `1` and run id `2` doesn't pass the analysis. To debug
+10. Run the first test from the test-suite by typing `go test -run 1`;
+11. Notice how test id `1` and run id `2` doesn't pass the analysis. To debug
    that run enter `detsys debug 1 2`;
-9. Navigate up and down through the messages with your arrow keys or `j` and
+12. Navigate up and down through the messages with your arrow keys or `j` and
    `k`, and finally exit the debugger with `q` or `Ctrl-c`.
 
 At this point it might make sense to have a look at the `go` test-suite in
