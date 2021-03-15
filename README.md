@@ -165,7 +165,7 @@ section is about.
 
 ```
   interface Networking {
-    react : {incoming : Message, from : Node, at : Time} -> Set {to : Node, outgoing : Message}
+    react : {incoming : Message, from : Node, at : Time} -> Set {to : NonEmptySet {Node}, outgoing : Message}
   }
 ```
 
