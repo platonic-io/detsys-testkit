@@ -21,6 +21,11 @@ randomness) and that we can control the passage of time (which in turn means we
 don't have to wait for timeouts etc), which means we can get fast and
 deterministic tests.
 
+*Warning:* This is not a black-box testing approach, and unless your system
+already hides all non-determinism behind interfaces then it's likely that your
+system will need a substantial rewrite, which is probably not worth it unless
+your system is a distributed system that hasn't already been battle-tested.
+
 For more about simulation testing see [this](doc/simulation_testing.md)
 document.
 
@@ -65,9 +70,73 @@ developer workflow and why it's preferable to `docker`.
 
 ### How it works on a higher-level
 
-TODO: Now that we looked at a concrete example...
+Now that we looked at a concrete example we are in better position to explain
+the high-level picture of what is going on.
+
+Testing, in general, can be split up into different stages. First we write or
+generate a test case, then we execute that test case, afterwards we check that
+outcome of the execution matches our expectations, and finally we might want to
+aggregate some statistics about some subset of all tests that we have done for
+further analysis.
+
+When testing concurrent programs or distributed systems there are typically many
+ways to execute a single test case. These different executions is the
+non-determinism typically associated with concurrent or distributed systems. For
+example, consider when two concurrent requests are being made against some
+service then we typically cannot know which finishes first.
+
+If we want our tests to be deterministic we need to be able to control the
+scheduling of threads, or in the distributed systems case the scheduling of when
+messages between the nodes of the system arrive at their destination.
+
+Distributed systems typically consist of several different components that are
+not necessarily written in the same programming language. Distributed systems
+are also long running, and as they run they might accumulate "junk" which makes
+them fail over time. Distributed systems need to be able to be upgraded without
+downtime, in order to do so they need to allow for different software versions
+of the components to be compatible.
+
+With all these constraints in mind, let us sketch the high-level design of this
+project.
+
+In order to be able to test how a system performs over time, we must be able to
+test over time. That is: simulate a weeks worth of traffic today, make sure
+everything looks fine, close everything down, and then the day after be able to
+pick up where we left off and continue simulating another weeks worth of traffic
+and so on. This type of workflow is also useful for when you need to explore a
+huge state space but with limited resources, e.g. nightly CI runs, where you
+want to avoid retesting the same thing. To facilitate the bookkeeping necessary
+to do so we introduce a database for the testing work.
+
+The different stages of testing, e.g. generating, executing, checking, etc,
+become separate processes which can be run independently and they communicate
+via the database. This allows for things like generating one test case,
+executing it several times (especially important for concurrent or distributed
+systems), check each execution several times all at different moments of time.
+
+In order to avoid the non-determinism of distributed systems we assume that all
+components that rely on network communication implement a reactor-like
+interface.
+
+This interface abstracts out the concurrency from the implementation of the
+system under test (SUT) and lets us create fake communication channels between
+the nodes of the system. In fact we route all network messages through a
+`scheduler` which assigns arrival times to all messages and there by controls in
+which order messages arrive, hence eliminating the non-determinism related to
+networking in a distributed system.
+
+Because the SUT can be implemented in multiple different languages, there's a small shim on
+top of the SUT, called `executor`, which receives messages from the scheduler
+and applies them to the SUT. The idea being that this shim can easily be ported
+to other programming languages.
+
+* TODO: ldfi/faults + link to ticket
+
+* TODO: high-level diagram
 
 * TODO: link to video presentation?
+
+* TODO: Longer term we'd like this reactor assumtion to be replaced by a test protocol
 
 ### More examples
 
@@ -77,6 +146,14 @@ TODO: Now that we looked at a concrete example...
 
 ### How it works on a lower-level
 
+For the typical user it should be enough to understand the high-level picture,
+the examples and the library API for the programming language they want to write
+the tests in.
+
+However if you are curious or want to contribute to the project itself it's also
+helpful to understand more about the components themselves and that's what this
+section is about.
+
 * How each component works (see their respective `README.md`);
 * Database schema;
 * Interfaces between components (APIs):
@@ -84,7 +161,13 @@ TODO: Now that we looked at a concrete example...
       [code](doc/pseudo_code_for_discrete-event_simulator.md) for discrete-event
       simulation);
     * Executor;
-    * SUT (see also [network normal form](doc/network_normal_form.md).
+    * SUT (see also ["network normal form"](doc/network_normal_form.md).
+
+```
+  interface Networking {
+    react : {incoming : Message, from : Node, at : Time} -> Set {to : NonEmptySet {Node}, outgoing : Message}
+  }
+```
 
 ### How to contribute
 
