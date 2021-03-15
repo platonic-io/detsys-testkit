@@ -39,21 +39,23 @@ simple distributed register example:
 0. Install [`nix`](https://nixos.org/download.html#nix-quick-install);
 1. Clone this repository;
 2. `cd` into the repository;
-3. Issue `nix-shell` to get into an environment where all development tools are
-   available;
-4. `bazel build //...` to compile all components;
-5. Exit the `nix-shell` with `exit` or `Ctrl-d`;
-6. Run `nix-env -if default.nix` to package up and install all binaries that
-   `bazel` just built;
-7. Prepare the database with `detsys db up`;
-8. Start the scheduler component with `detsys scheduler up`;
-Now the system is up and running and ready to be used for tests. A simple way to test the system and see how it works is to run one of the existing sut:
-1. Change directory to where the distributed register example lives with `cd
+3. Issue `nix-shell --command 'bazel build //...'` to compile all binaries;
+4. Run `nix-env -if default.nix` to package up and install all binaries;
+5. Prepare the database with `detsys db up`;
+6. Start the scheduler component with `detsys scheduler up`.
+
+We are now ready to start testing.
+
+In case you don't have a system of your own to test, which is very likely if you
+are just getting started, you can try it out on one of the examples provided in
+this repository using the instructions below:
+
+7. Change directory to where the distributed register example lives with `cd
    src/sut/register`;
-10. Run the first test from the test-suite by typing `go test -run 1`;
-11. Notice how test id `1` and run id `2` doesn't pass the analysis. To debug
+8. Run the first test from the test-suite by typing `go test -run 1`;
+9. Notice how test id `1` and run id `2` doesn't pass the analysis. To debug
    that run enter `detsys debug 1 2`;
-12. Navigate up and down through the messages with your arrow keys or `j` and
+10. Navigate up and down through the messages with your arrow keys or `j` and
    `k`, and finally exit the debugger with `q` or `Ctrl-c`.
 
 At this point it might make sense to have a look at the `go` test-suite in
