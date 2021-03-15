@@ -40,13 +40,6 @@ clojure_library(
     compiledeps = [":zlib", "@rules_clojure//src/rules_clojure:jar"],
 )
 
-#cc_library(
-    #name = "zlib",
-    #srcs = ["@zlib//:lib"],
-    #hdrs = ["@zlib//:include"],
-    #strip_include_prefix = "/include",
-#)
-
 graal_binary(
     name = "scheduler",
     deps = [":scheduler-lib"],

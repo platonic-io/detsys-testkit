@@ -10,7 +10,6 @@ go_binary(
 go_library(
     name = "detsys-debug_lib",
     srcs = ["main.go"],
-    gotags = ["json1"],
     importpath = "github.com/symbiont-io/detsys-testkit/src/debugger/cmd/detsys-debug",
     visibility = ["//visibility:private"],
     deps = [

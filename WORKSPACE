@@ -45,12 +45,22 @@ nixpkgs_package(
 
 nixpkgs_package(
     name = "zlib.dev",
-    repositories = { "nixpkgs": "@nixpkgs//:default.nix" }
+    repository = "@nixpkgs",
 )
 
 nixpkgs_package(
     name = "zlib.out",
-    repositories = { "nixpkgs": "@nixpkgs//:default.nix" }
+    repository = "@nixpkgs",
+)
+
+nixpkgs_package(
+    name = "freetype.dev",
+    repository = "@nixpkgs",
+)
+
+nixpkgs_package(
+    name = "freetype.out",
+    repository = "@nixpkgs",
 )
 
 # Python
