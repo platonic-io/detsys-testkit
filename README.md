@@ -125,7 +125,7 @@ the nodes of the system. In fact we route all network messages through a
 which order messages arrive, hence eliminating the non-determinism related to
 networking in a distributed system.
 
-Because the SUT can multiple implementation languages, there's a small shim on
+Because the SUT can be implemented in multiple different languages, there's a small shim on
 top of the SUT, called `executor`, which receives messages from the scheduler
 and applies them to the SUT. The idea being that this shim can easily be ported
 to other programming languages.
