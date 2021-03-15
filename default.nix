@@ -1,10 +1,14 @@
 { sources ? import ./nix/sources.nix
-, pkgs ? import sources.nixpkgs {} }:
+, pkgs ? import sources.nixpkgs {}
+, nix-build-checker ? true
+, nix-build-scheduler ? false }:
 with pkgs;
 
 let
-  # TODO(stevan): remove this workaround once checker builds with bazel.
+  # TODO(stevan): remove these workarounds once checker (on both linux and
+  # macos) and scheduler builds with bazel (on macos).
   checker = callPackage ./src/checker/default.nix {};
+  scheduler = callPackage ./src/scheduler/default.nix {};
 in
 
 stdenv.mkDerivation {
@@ -15,7 +19,9 @@ stdenv.mkDerivation {
 
   phases = [ "installPhase" "installCheckPhase" ];
 
-  propagatedBuildInputs = [ checker z3 ];
+  propagatedBuildInputs = [ z3 ]
+                          ++ lib.optional nix-build-checker [ checker ]
+                          ++ lib.optional nix-build-scheduler [ scheduler ];
 
   installPhase = ''
     install -D $src/cli/cli_/cli \
@@ -24,11 +30,21 @@ stdenv.mkDerivation {
                $out/bin/detsys-db
     install -D $src/debugger/cmd/detsys-debug/detsys-debug_/detsys-debug \
                $out/bin/detsys-debug
-    install -D $src/scheduler/scheduler-bin \
-               $out/bin/detsys-scheduler
+    ${if nix-build-checker then ''
+    install -D ${checker.out}/bin/detsys-checker $out/bin
+    '' else ''
+    # TODO(stevan): uncomment once checker builds with rules_graal
     # install -D $src/checker/checker-bin \
     #            $out/bin/detsys-checker
-    install -D ${checker.out}/bin/detsys-checker $out/bin
+    ''
+    }
+    ${if nix-build-scheduler then ''
+    install -D ${scheduler.out}/bin/detsys-scheduler $out/bin
+    '' else ''
+    install -D $src/scheduler/scheduler-bin \
+               $out/bin/detsys-scheduler
+    ''
+    }
     install -D $src/ldfi2/ldfi2 \
                $out/bin/detsys-ldfi
   '';
