@@ -11,9 +11,10 @@ import (
 )
 
 type FailSpec struct {
-	EFF     int // End (time) of finite failures.
-	Crashes int // Max amount of node (permanent) crashes.
-	EOT     int // End of time, for the test.
+	EFF         int // End (time) of finite failures.
+	Crashes     int // Max amount of node (permanent) crashes.
+	EOT         int // End of time, for the test.
+	LimitFaults int // Have a limit of how many faults may be generated, 0 is no limit
 }
 
 type Fault struct {
@@ -78,6 +79,10 @@ func Ldfi(testId TestId, failedRunIds []RunId, fail FailSpec) Faults {
 		"--maxCrashes", strconv.Itoa(fail.Crashes),
 		"--testId", strconv.Itoa(testId.TestId),
 		"--endOfTime", strconv.Itoa(0), // not used
+	}
+	if fail.LimitFaults > 0 {
+		args = append(args, "--limitNumberOfFaults")
+		args = append(args, strconv.Itoa(fail.LimitFaults))
 	}
 	for _, r := range failedRunIds {
 		args = append(args, "--failedRunId")

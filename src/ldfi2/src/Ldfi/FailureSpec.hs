@@ -13,5 +13,7 @@ data FailureSpec = FailureSpec
     -- | The maximum amount of crashes allowed.
     maxCrashes :: Natural,
     -- | When the test stops (a.k.a. EOT).
-    endOfTime :: Time
+    endOfTime :: Time,
+    -- | Potential max limit of number of faults
+    numberOfFaultLimit :: Maybe Int
   }

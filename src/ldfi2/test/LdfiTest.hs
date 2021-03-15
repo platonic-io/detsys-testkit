@@ -17,7 +17,8 @@ emptyFailureSpec =
   FailureSpec
     { endOfFiniteFailures = 0,
       maxCrashes = 0,
-      endOfTime = 0
+      endOfTime = 0,
+      numberOfFaultLimit = Nothing
     }
 
 data WasSame = Same | NotSame String
@@ -117,7 +118,8 @@ broadcastFailureSpec =
   FailureSpec
     { endOfFiniteFailures = 3,
       maxCrashes = 1,
-      endOfTime = 5
+      endOfTime = 5,
+      numberOfFaultLimit = Nothing
     }
 
 -- TODO(stevan): This seems wrong, should be `Omission "A" "B" 1` or `Omission

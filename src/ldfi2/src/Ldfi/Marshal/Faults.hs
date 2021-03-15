@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+
 module Ldfi.Marshal.Faults where
 
 import Data.Aeson
@@ -8,21 +9,23 @@ import GHC.Natural (Natural)
 
 data Fault
   = Omission
-    { from :: String,
-      to :: String,
-      at :: Natural
-    }
+      { from :: String,
+        to :: String,
+        at :: Natural
+      }
   | Crash
-    { from :: String,
-      at :: Natural
-    }
+      { from :: String,
+        at :: Natural
+      }
   deriving (Generic, Show)
 
 customOptions :: Options
-customOptions = defaultOptions
-  { sumEncoding = defaultTaggedObject { tagFieldName = "kind"},
-    constructorTagModifier = map toLower
-  }
+customOptions =
+  defaultOptions
+    { sumEncoding = defaultTaggedObject {tagFieldName = "kind"},
+      constructorTagModifier = map toLower
+    }
+
 instance FromJSON Fault where
   parseJSON = genericParseJSON customOptions
 
@@ -31,7 +34,7 @@ instance ToJSON Fault where
   toEncoding = genericToEncoding customOptions
 
 data Faults = Faults
-  { faults :: [Fault]}
+  {faults :: [Fault]}
   deriving (Generic, Show)
 
 instance ToJSON Faults
