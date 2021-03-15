@@ -41,7 +41,6 @@ func many(round Round, t *testing.T) {
 
 	testId := lib.GenerateTest("broadcast")
 
-	var runIds []lib.RunId
 	var faults []lib.Fault
 	failSpec := lib.FailSpec{
 		EFF:     5,
@@ -64,8 +63,7 @@ func many(round Round, t *testing.T) {
 			t.Errorf("faults: %#v\n", faults)
 			break
 		}
-		runIds = append(runIds, runId)
-		faults = lib.Ldfi(testId, runIds, failSpec).Faults
+		faults = lib.Ldfi(testId, nil, failSpec).Faults
 		if len(faults) == 0 {
 			break
 		}

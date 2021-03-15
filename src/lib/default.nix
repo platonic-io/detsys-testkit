@@ -11,7 +11,6 @@ in
 buildGoModule rec {
   pname = "lib";
   version = "latest";
-  goPackagePath = "github.com/symbiont-io/detsys-testkit/src/${pname}";
   src = gitignoreSource ./.;
   vendorSha256 = "1dq4w81g3s26chpfqad3mqpybg4900646h2b2k6xsz295ds9qk7q";
 

@@ -7,4 +7,4 @@ import Ldfi.GitHashImpl
 ------------------------------------------------------------------------
 
 version :: String
-version = $$tGetGitInfo
+version = $tGetGitInfo
