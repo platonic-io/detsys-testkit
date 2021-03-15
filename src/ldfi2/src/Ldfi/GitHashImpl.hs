@@ -21,7 +21,7 @@ getVersionFromEnv = do
         then return "unknown"
         else throwIO e
 
-tGetGitInfo :: Q (TExp String)
+tGetGitInfo :: Q Exp
 tGetGitInfo = do
   s <- runIO getVersionFromEnv
-  liftTyped s
+  lift s
