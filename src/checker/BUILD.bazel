@@ -37,9 +37,9 @@ cc_library(
 
 cc_library(
     name = "freetype",
-    srcs = ["@freetype.out//:lib"],
-    hdrs = ["@freetype.dev//:include"],
-    strip_include_prefix = "/include",
+    #srcs = ["@freetype.out//:lib"],
+    #hdrs = ["@freetype.dev//:include/freetype"],
+    strip_include_prefix = "/include/freetype",
     linkstatic=1,
 )
 
