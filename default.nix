@@ -2,6 +2,11 @@
 , pkgs ? import sources.nixpkgs {} }:
 with pkgs;
 
+let
+  # TODO(stevan): remove this workaround once checker builds with bazel.
+  checker = callPackage ./src/checker/default.nix {};
+in
+
 stdenv.mkDerivation {
   pname = "detsys";
   version = "latest";
@@ -10,7 +15,7 @@ stdenv.mkDerivation {
 
   phases = [ "installPhase" "installCheckPhase" ];
 
-  propagatedBuildInputs = [ z3 ];
+  propagatedBuildInputs = [ checker z3 ];
 
   installPhase = ''
     install -D $src/cli/cli_/cli \
@@ -21,8 +26,9 @@ stdenv.mkDerivation {
                $out/bin/detsys-debug
     install -D $src/scheduler/scheduler-bin \
                $out/bin/detsys-scheduler
-    install -D $src/checker/checker-bin \
-               $out/bin/detsys-checker
+    # install -D $src/checker/checker-bin \
+    #            $out/bin/detsys-checker
+    install -D ${checker.out}/bin/detsys-checker $out/bin
     install -D $src/ldfi2/ldfi2 \
                $out/bin/detsys-ldfi
   '';
