@@ -1,0 +1,20 @@
+load("@rules_clojure//:rules.bzl", "clojure_namespace")
+
+clojure_namespace(
+    name = "checker-ns",
+    srcs = {"core.clj": "/checker/core.clj",
+            "db.clj":   "/checker/db.clj",
+            "json.clj": "/checker/json.clj",
+    },
+    deps = [
+        "@maven//:elle_elle",
+        "@maven//:spootnik_unilog",
+        "@maven//:me_raynes_fs",
+        "@maven//:seancorfield_next_jdbc",
+        "@maven//:org_clojure_clojure",
+        "@maven//:org_xerial_sqlite_jdbc",
+        "@maven//:metosin_jsonista",
+        "//src/checker:lockfix",
+    ],
+    visibility = ["//src/checker:__subpackages__"],
+)
