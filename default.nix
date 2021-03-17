@@ -57,8 +57,10 @@ stdenv.mkDerivation {
     }
     ${if nix-build-db || nix-build-all then ''
     install -D ${db.out}/bin/detsys-db $out/bin
+    cp -R ${db.out}/migrations $out
     '' else ''
     install -D $src/db/db_/db $out/bin/detsys-db
+    # TODO(stevan): migrations need to be stored somewhere...
     ''
     }
     ${if nix-build-debugger || nix-build-all then ''
