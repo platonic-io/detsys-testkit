@@ -91,10 +91,30 @@ func testRegisterWithFrontEnd(newFrontEnd func() lib.Reactor, tickFrequency floa
 	}
 }
 
+// In the first version of the frontend the implementation forwards the request
+// from the client to both registers and replies to the client with the first
+// response it gets from either register.
+//
+// Given that our test case is that a client first writes and then reads a
+// value, we expect to find a counterexample where we first update one of the
+// registers and then read from the other giving us a stale value.
 func TestRegister1(t *testing.T) {
 	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd() }, 5000.0, t)
 }
 
+// In the next version of the frontend we try to avoid the above problem by
+// waiting for both registers to respond before we respond to the client.
+
+// The implementation is still broken though, because the frontend is happy as
+// soon as it gets two responses from the registers -- it doesn't check that
+// these responses are actually from the two separate registers.
+
+// So given the same test case as before, we expect a counterexample where the
+// frontend forwards the write, one of the registers fails to respond, the
+// frontend retries, the same register fails to respond again, but now the
+// frontend has received two acknowledgments and tells the client that the
+// write has been persisted. The client then tries to read the value and gets
+// a stale value again.
 func TestRegister2(t *testing.T) {
 	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd2() }, 1000.0, t)
 }

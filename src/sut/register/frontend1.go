@@ -65,6 +65,11 @@ func translate(req lib.Request, sessionId SessionId) *lib.InternalMessage {
 	}
 }
 
+// When the frontend receives a client request for a write or a read, then it
+// forwards it to both registers. A session id for that client is included in
+// the forwarded requests and saved in the frontend, so that once we get a
+// response from the registers we know which client the frontend should respond
+// to.
 func (fe *FrontEnd) ReceiveClient(at time.Time, from string, event lib.ClientRequest) []lib.OutEvent {
 	var oevs []lib.OutEvent
 	sessionId, err := fe.NewSessionId(event.Id, at)
@@ -89,6 +94,8 @@ func (fe *FrontEnd) ReceiveClient(at time.Time, from string, event lib.ClientReq
 	return oevs
 }
 
+// The frontend will forward the first response it gets from the registers to
+// the client that made the request.
 func (fe *FrontEnd) Receive(at time.Time, from string, event lib.InEvent) []lib.OutEvent {
 	var oevs []lib.OutEvent
 	switch ev := event.(type) {
@@ -122,13 +129,6 @@ func (fe *FrontEnd) Receive(at time.Time, from string, event lib.InEvent) []lib.
 }
 
 func (fe *FrontEnd) Tick(at time.Time) []lib.OutEvent {
-	duration, _ := time.ParseDuration("25s")
-	for key, value := range fe.InFlight {
-		if at.After(value.At.Add(duration)) {
-			delete(fe.InFlight, key)
-		}
-	}
-
 	return nil
 }
 
