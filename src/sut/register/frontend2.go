@@ -17,10 +17,10 @@ type OnGoingInternalRequest struct {
 }
 
 type FrontEnd2 struct {
-	onGoing          []OnGoingInternalRequest
-	inFlight         map[SessionId]uint64
-	receivedResponse map[SessionId]bool
-	nextSessionId    int
+	OnGoing          []OnGoingInternalRequest
+	InFlight         map[SessionId]uint64
+	ReceivedResponse map[SessionId]bool
+	NextSessionId    int
 }
 
 func NewFrontEnd2() *FrontEnd2 {
@@ -28,22 +28,22 @@ func NewFrontEnd2() *FrontEnd2 {
 }
 
 func (fe *FrontEnd2) ReceiveClient(at time.Time, from string, event lib.ClientRequest) []lib.OutEvent {
-	sessionId := SessionId{fe.nextSessionId}
-	fe.nextSessionId++
+	sessionId := SessionId{fe.NextSessionId}
+	fe.NextSessionId++
 
-	fe.inFlight[sessionId] = event.Id
-	fe.receivedResponse[sessionId] = false
+	fe.InFlight[sessionId] = event.Id
+	fe.ReceivedResponse[sessionId] = false
 
 	args := translate(event.Request, sessionId)
 
-	fe.onGoing = append(fe.onGoing, OnGoingInternalRequest{
+	fe.OnGoing = append(fe.OnGoing, OnGoingInternalRequest{
 		Register:      register1,
 		Request:       event.Request,
 		SessionId:     sessionId,
 		At:            at,
 		NumberOfTries: 0,
 	})
-	fe.onGoing = append(fe.onGoing, OnGoingInternalRequest{
+	fe.OnGoing = append(fe.OnGoing, OnGoingInternalRequest{
 		Register:      register2,
 		Request:       event.Request,
 		SessionId:     sessionId,
@@ -64,20 +64,20 @@ func (fe *FrontEnd2) ReceiveClient(at time.Time, from string, event lib.ClientRe
 }
 
 func (fe *FrontEnd2) RemoveSession(sessionId SessionId) (uint64, bool) {
-	clientId, ok := fe.inFlight[sessionId]
+	clientId, ok := fe.InFlight[sessionId]
 
 	if ok {
-		delete(fe.inFlight, sessionId)
+		delete(fe.InFlight, sessionId)
 
-		temp := fe.onGoing[:0]
+		temp := fe.OnGoing[:0]
 
-		for _, on := range fe.onGoing {
+		for _, on := range fe.OnGoing {
 			if on.SessionId != sessionId {
 				temp = append(temp, on)
 			}
 		}
 
-		fe.onGoing = temp
+		fe.OnGoing = temp
 	}
 
 	return clientId, ok
@@ -91,8 +91,8 @@ func (fe *FrontEnd2) Receive(at time.Time, from string, event lib.InEvent) []lib
 	case *lib.InternalMessage:
 		switch msg := (*ev).Message.(type) {
 		case InternalResponse:
-			if new, ok := fe.receivedResponse[msg.Id]; !new || !ok {
-				fe.receivedResponse[msg.Id] = true
+			if new, ok := fe.ReceivedResponse[msg.Id]; !new || !ok {
+				fe.ReceivedResponse[msg.Id] = true
 				break
 			}
 			clientId, ok := fe.RemoveSession(msg.Id)
@@ -124,10 +124,10 @@ func (fe *FrontEnd2) Tick(at time.Time) []lib.OutEvent {
 
 	resendTimer, _ := time.ParseDuration("5s")
 
-	for i, on := range fe.onGoing {
+	for i, on := range fe.OnGoing {
 		if at.After(on.At.Add(resendTimer)) {
-			fe.onGoing[i].At = at
-			fe.onGoing[i].NumberOfTries++
+			fe.OnGoing[i].At = at
+			fe.OnGoing[i].NumberOfTries++
 			event := lib.OutEvent{
 				To:   lib.Singleton(on.Register),
 				Args: translate(on.Request, on.SessionId),
