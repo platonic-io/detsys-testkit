@@ -1,3 +1,4 @@
+# Clojure
 .cpcache
 .nrepl-port
 target/
@@ -5,13 +6,20 @@ classes/
 reports/
 .eastwood
 *.class
+# Direnv
 ./.envrc-local
+# Go
 vendor/
+# Nix
 result*
+# Python
 __pycache__/
-# Python wheel files
+# Python
 *.whl
+# Bazel
 bazel-*
+.bazelrc.local
+# Emacs
 .\#*
 # Haskell
 dist-newstyle/

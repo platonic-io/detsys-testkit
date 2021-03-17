@@ -35,8 +35,6 @@ pkgs.mkShell {
                                     # invoked from spacemacs via `, F`.
     haskellPackages.ormolu # Haskell code formatting, to format all files in the
                            # current directory: `ormolu --mode inplace $(find . -name '*.hs')`.
-    z3
-
     nixpkgs-fmt # Nix code formatting, example invocation: `nixpkgs-fmt default.nix`.
     conventional-changelog # Run `conventional-changelog -p angular` to generate changelog.
     git
@@ -46,6 +44,7 @@ pkgs.mkShell {
     lorri
     nix-index
 
+    z3
     zlib.dev
     zlib.out
     freetype.dev
