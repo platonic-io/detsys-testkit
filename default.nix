@@ -1,6 +1,6 @@
 { sources ? import ./nix/sources.nix
 , pkgs ? import sources.nixpkgs {}
-, nix-build-all       ? false
+, nix-build-all       ? true
 , nix-build-checker   ? false
 , nix-build-cli       ? false
 , nix-build-db        ? false
