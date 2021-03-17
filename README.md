@@ -39,7 +39,7 @@ simple distributed register example:
 0. Install [`nix`](https://nixos.org/download.html#nix-quick-install);
 1. Clone this repository;
 2. `cd` into the repository;
-3. Issue `nix-shell --command 'bazel build //...'` to compile all binaries;
+3. Issue `nix-build` to compile all binaries;
 4. Run `nix-env -if default.nix` to package up and install all binaries;
 5. Prepare the database with `detsys db up`;
 6. Start the scheduler component with `detsys scheduler up`.
