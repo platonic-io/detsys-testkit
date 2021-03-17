@@ -52,9 +52,9 @@ this repository using the instructions below:
 
 7. Change directory to where the distributed register example lives with `cd
    src/sut/register`;
-8. Run the first test from the test-suite by typing `go test -run 1`;
-9. Notice how test id `1` and run id `2` doesn't pass the analysis. To debug
-   that run enter `detsys debug 1 2`;
+8. Run the first test from the test-suite by typing `go test -run 1 -tags json1`;
+9. Notice how test id `0` and run id `3` doesn't pass the analysis. To debug
+   that run enter `detsys debug 0 3`;
 10. Navigate up and down through the messages with your arrow keys or `j` and
    `k`, and finally exit the debugger with `q` or `Ctrl-c`.
 
