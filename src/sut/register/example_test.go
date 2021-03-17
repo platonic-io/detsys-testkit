@@ -64,7 +64,7 @@ func testRegisterWithFrontEnd(newFrontEnd func() lib.Reactor, tickFrequency floa
 
 	var faults []lib.Fault
 	failSpec := lib.FailSpec{
-		EFF:     10,
+		EFF:     7,
 		Crashes: 0,
 		EOT:     0,
 	}
@@ -119,10 +119,12 @@ func TestRegister2(t *testing.T) {
 	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd2() }, 1000.0, t)
 }
 
+// In the third version the above problem is fixed and the test passes.
 func TestRegister3(t *testing.T) {
 	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd3() }, 1000.0, t)
 }
 
+// The final version is a variant of the third where timers are used instead of ticks.
 func TestRegister4(t *testing.T) {
 	testRegisterWithFrontEnd(func() lib.Reactor { return NewFrontEnd4() }, 10*1000*1000.0, t)
 }
