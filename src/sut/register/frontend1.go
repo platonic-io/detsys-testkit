@@ -128,15 +128,7 @@ func (fe *FrontEnd) Receive(at time.Time, from string, event lib.InEvent) []lib.
 	return oevs
 }
 
-// TODO(stevan): Why was this necessary?
 func (fe *FrontEnd) Tick(at time.Time) []lib.OutEvent {
-	duration, _ := time.ParseDuration("25s")
-	for key, value := range fe.InFlight {
-		if at.After(value.At.Add(duration)) {
-			delete(fe.InFlight, key)
-		}
-	}
-
 	return nil
 }
 
