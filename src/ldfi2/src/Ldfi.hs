@@ -6,6 +6,7 @@ module Ldfi where
 
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as BSL
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -43,12 +44,12 @@ affects (Crash n a) (Event s sa r ra) =
 -- failureSemantic computes a formula s.t for each event either (xor) the event
 -- is true or one of the failures that affect it is true
 failureSemantic :: Set Event -> Set Fault -> LDFIFormula
-failureSemantic events failures =
+failureSemantic events faults =
   And
     [ Var (EventVar event)
         :+ Or
           [ Var (FaultVar failure)
-            | failure <- Set.toList failures,
+            | failure <- Set.toList faults,
               failure `affects` event
           ]
       | event <- Set.toList events
@@ -102,22 +103,27 @@ enumerateAllFaults events fs = Set.unions (Set.map possibleFailure events)
 --     * If we introduce faults the corresponding events are false (`failureSemantic`)
 --     * We don't intruduce faults that violates the failure spec (`failureSpecConstaint`)
 --     * The lineage graph from traces are not satisfied (`Neg lineage`)
-ldfi :: FailureSpec -> [Trace] -> [Failures] -> FormulaF String
-ldfi fs ts failures =
+ldfi :: FailureSpec -> Map RunId Trace -> Failures -> FormulaF String
+ldfi failureSpec tracesByRuns failures =
   fmap show $
     simplify $
-      And
-        [ failureSemantic allEvents allFaults,
-          failureSpecConstraint fs allEvents allFaults,
-          Neg (lineage ts),
-          And
-            [ Neg $ And $ map (Var . FaultVar) faults
-              | faults <- failures
-            ]
-        ]
+      And $
+        addLimit
+          [ failureSemantic allEvents allFaults,
+            failureSpecConstraint failureSpec allEvents allFaults,
+            Neg (lineage traces),
+            And
+              [ Neg $ And $ map (Var . FaultVar) faults
+                | faults <- fFaultsFromFailedRuns failures
+              ]
+          ]
   where
-    allEvents = Set.unions (map Set.fromList ts)
-    allFaults = enumerateAllFaults allEvents fs
+    addLimit xs = case numberOfFaultLimit failureSpec of
+      Nothing -> xs
+      Just l -> AtMost [FaultVar $ f | f <- Set.toList allFaults] l : xs
+    traces = Map.elems tracesByRuns
+    allEvents = Set.unions (map Set.fromList traces)
+    allFaults = enumerateAllFaults allEvents failureSpec
 
 ------------------------------------------------------------------------
 
@@ -136,7 +142,7 @@ marshalFaults = TE.decodeUtf8 . BSL.toStrict . Aeson.encode . MF.Faults . map co
   where
     convert :: Fault -> MF.Fault
     convert (Crash f a) = MF.Crash f a
-    convert (Omission (f,t) a) = MF.Omission f t a
+    convert (Omission (f, t) a) = MF.Omission f t a
 
 run :: Monad m => Storage m -> Solver m -> TestInformation -> FailureSpec -> m [Fault]
 run Storage {load, loadFailures} Solver {solve} testInformation failureSpec = do

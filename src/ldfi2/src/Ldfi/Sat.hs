@@ -58,31 +58,31 @@ z3SolveAll limit f = do
     a <- translate env f
     assert a
     go 0 [] vs vs'
-    where
-      limitReached :: Int -> Bool
-      limitReached n = case limit of
-        Nothing -> False
-        Just k -> n >= k
+  where
+    limitReached :: Int -> Bool
+    limitReached n = case limit of
+      Nothing -> False
+      Just k -> n >= k
 
-      go :: MonadZ3 z3 => Int -> [Solution] -> [String] -> [AST] -> z3 [Solution]
-      go n acc vs vs'
-        | limitReached n = return (reverse acc)
-        | otherwise = do
-          (result, mModel) <- getModel
-          case result of
-            Undef -> error "impossible"
-            Unsat -> return (reverse acc)
-            Sat -> case mModel of
-              Nothing -> error "impossible" -- TODO(stevan): steal Agda's __IMPOSSIBLE__?
-              Just model -> do
-                mbs <- mapM (evalBool model) vs'
-                let bs = map (maybe (error "impossible") id) mbs
-                bs' <-
-                  mapM
-                    (\(ix, b) -> mkNot =<< mkEq (vs' !! ix) =<< mkBool b)
-                    (zip [0 .. length bs - 1] bs)
-                assert =<< mkOr bs'
-                go (succ n) (Solution (Map.fromList (zip vs bs)) : acc) vs vs'
+    go :: MonadZ3 z3 => Int -> [Solution] -> [String] -> [AST] -> z3 [Solution]
+    go n acc vs vs'
+      | limitReached n = return (reverse acc)
+      | otherwise = do
+        (result, mModel) <- getModel
+        case result of
+          Undef -> error "impossible"
+          Unsat -> return (reverse acc)
+          Sat -> case mModel of
+            Nothing -> error "impossible" -- TODO(stevan): steal Agda's __IMPOSSIBLE__?
+            Just model -> do
+              mbs <- mapM (evalBool model) vs'
+              let bs = map (maybe (error "impossible") id) mbs
+              bs' <-
+                mapM
+                  (\(ix, b) -> mkNot =<< mkEq (vs' !! ix) =<< mkBool b)
+                  (zip [0 .. length bs - 1] bs)
+              assert =<< mkOr bs'
+              go (succ n) (Solution (Map.fromList (zip vs bs)) : acc) vs vs'
 
 z3Solver :: Solver IO
 z3Solver = Solver z3Solve
