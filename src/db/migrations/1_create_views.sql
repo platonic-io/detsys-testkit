@@ -60,7 +60,12 @@ CREATE VIEW IF NOT EXISTS test_info AS
   FROM event_log
   WHERE event LIKE 'CreateTest';
 
+CREATE INDEX IF NOT EXISTS idx_test_id
+  ON event_log(json_extract(meta, '$.test-id'));
+
 -- +migrate Down
+DROP INDEX IF EXISTS idx_test_id;
+
 DROP VIEW IF EXISTS execution_step;
 DROP VIEW IF EXISTS jepsen_history;
 DROP VIEW IF EXISTS network_trace;
