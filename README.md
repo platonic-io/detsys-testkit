@@ -168,6 +168,7 @@ section is about.
       [code](doc/pseudo_code_for_discrete-event_simulator.md) for discrete-event
       simulation);
     * Executor;
+    * Spell out concurrency model assumptions;
     * SUT (see also ["network normal form"](doc/network_normal_form.md).
 
 ```
@@ -178,7 +179,9 @@ section is about.
 
 ### How to contribute
 
-See the file [CONTRIBUTING.md](CONTRIBUTING.md).
+Have a look at the [ROADMAP.md](ROADMAP.md) for a high-level overview of where
+we are heading and see the file [CONTRIBUTING.md](CONTRIBUTING.md) for more
+workflow related stuff.
 
 ### See also
 
