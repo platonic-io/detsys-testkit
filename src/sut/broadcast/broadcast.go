@@ -83,15 +83,24 @@ func NewNodeA(round Round) *Node {
 func NewNode(round Round, neighbour string) *Node {
 	var broadcast bool
 	switch round {
-	case SimpleDeliv, RetryDeliv:
+	case SimpleDeliv, RetryDeliv, ClassicDeliv:
 		broadcast = false
-	case RedunDeliv, AckDeliv, ClassicDeliv:
+	case RedunDeliv, AckDeliv:
 		broadcast = true
 	default:
 		panic("Unknown round")
 	}
 	neighbours := make(map[string]bool)
 	neighbours[neighbour] = broadcast
+
+	if round == ClassicDeliv {
+		// Normally node A isn't considered a neighbour, but in the
+		// classic delivery example it seems like node B and C should
+		// send messages back to A.
+		neighbours["A"] = broadcast
+		neighbours[neighbour] = broadcast
+	}
+
 	return &Node{
 		Log:        "",
 		Neighbours: neighbours,
@@ -105,14 +114,28 @@ func (n *Node) Receive(_ time.Time, from string, event lib.InEvent) []lib.OutEve
 	case *lib.InternalMessage:
 		switch msg := (*ev).Message.(type) {
 		case Broadcast:
-			n.Log = msg.Data
 			if n.Round == AckDeliv {
 				ack := lib.OutEvent{
 					To:   lib.Singleton(from),
 					Args: &lib.InternalMessage{Ack{}},
 				}
 				oevs = append(oevs, ack)
+			} else if n.Round == ClassicDeliv && n.Log != msg.Data {
+				// Broadcast back each new message to all
+				// neighbours, once.
+				var neighbours []lib.Receiver
+				for neighbour, _ := range n.Neighbours {
+					neighbours = append(neighbours, neighbour)
+				}
+				oev := lib.OutEvent{
+					To: lib.Set(neighbours...),
+					Args: &lib.InternalMessage{Broadcast{
+						Data: msg.Data,
+					}},
+				}
+				oevs = append(oevs, oev)
 			}
+			n.Log = msg.Data
 		case Ack:
 			if n.Round != AckDeliv {
 				panic("Got unexpected Ack message")
@@ -152,18 +175,21 @@ func (n *Node) Timer(at time.Time) []lib.OutEvent {
 	}
 	oevs = append(oevs, oev)
 
-	// Renew the timer.
-	duration, err := time.ParseDuration("500ms")
-	if err != nil {
-		panic(err)
+	if n.Round != ClassicDeliv {
+
+		// Renew the timer.
+		duration, err := time.ParseDuration("500ms")
+		if err != nil {
+			panic(err)
+		}
+		oev2 := lib.OutEvent{
+			To: lib.Singleton("scheduler"),
+			Args: &lib.Timer{
+				Duration: duration,
+			},
+		}
+		oevs = append(oevs, oev2)
 	}
-	oev2 := lib.OutEvent{
-		To: lib.Singleton("scheduler"),
-		Args: &lib.Timer{
-			Duration: duration,
-		},
-	}
-	oevs = append(oevs, oev2)
 
 	return oevs
 }
@@ -174,12 +200,26 @@ func (n *Node) Init() []lib.OutEvent {
 	if err != nil {
 		panic(err)
 	}
-	oev := lib.OutEvent{
-		To: lib.Singleton("scheduler"),
-		Args: &lib.Timer{
-			Duration: duration,
-		},
+	if n.Round == ClassicDeliv {
+		// Only set the timer on node A, otherwise we won't find the
+		// counterexample with EFF = 3.
+		if n.Log == "Hello world!" {
+			oev := lib.OutEvent{
+				To: lib.Singleton("scheduler"),
+				Args: &lib.Timer{
+					Duration: duration,
+				},
+			}
+			oevs = append(oevs, oev)
+		}
+	} else {
+		oev := lib.OutEvent{
+			To: lib.Singleton("scheduler"),
+			Args: &lib.Timer{
+				Duration: duration,
+			},
+		}
+		oevs = append(oevs, oev)
 	}
-	oevs = append(oevs, oev)
 	return oevs
 }

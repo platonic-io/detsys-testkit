@@ -45,7 +45,12 @@ func many(round Round, expectedRuns int, t *testing.T, expectedFaults []lib.Faul
 
 	var faults []lib.Fault
 	failSpec := lib.FailSpec{
-		EFF:     5,
+		// NOTE: EFF is set to 2 in the paper. There's a mismatch here,
+		// because in the paper two nodes can send messages at the same
+		// time, we can't. And we also got timers which increase the
+		// logical clock, which means we sometimes need a higher EFF in
+		// order to find the problem.
+		EFF:     3,
 		Crashes: 1,
 		EOT:     10,
 	}
