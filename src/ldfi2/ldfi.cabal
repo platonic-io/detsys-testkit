@@ -20,6 +20,7 @@ library
   hs-source-dirs:   src/
   exposed-modules:
     Ldfi
+    Ldfi.Estimate
     Ldfi.FailureSpec
     Ldfi.GitHash
     Ldfi.Marshal.Faults
