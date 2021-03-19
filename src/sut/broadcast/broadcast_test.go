@@ -1,8 +1,10 @@
 package broadcast
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
@@ -36,7 +38,7 @@ func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testin
 	return runId, result
 }
 
-func many(round Round, t *testing.T) {
+func many(round Round, expectedRuns int, t *testing.T, expectedFaults []lib.Fault) {
 	tickFrequency := 100000000000.0 // Make ticks infrequent.
 
 	testId := lib.GenerateTest("broadcast")
@@ -47,7 +49,9 @@ func many(round Round, t *testing.T) {
 		Crashes: 1,
 		EOT:     10,
 	}
+	neededRuns := 0
 	for {
+		neededRuns++
 		lib.Reset()
 		maxTime := time.Duration(5) * time.Second
 		runEvent := lib.CreateRunEvent{
@@ -59,8 +63,11 @@ func many(round Round, t *testing.T) {
 		}
 		runId, result := once(round, testId, runEvent, t)
 		if !result {
-			t.Errorf("%+v and %+v doesn't pass analysis", testId, runId)
-			t.Errorf("faults: %#v\n", faults)
+			fmt.Printf("%+v and %+v doesn't pass analysis\n", testId, runId)
+			if !reflect.DeepEqual(faults, expectedFaults) {
+				t.Errorf("Expected faults:\n%#v, but got faults:\n%#v\n",
+					expectedFaults, faults)
+			}
 			break
 		}
 		faults = lib.Ldfi(testId, nil, failSpec).Faults
@@ -68,24 +75,47 @@ func many(round Round, t *testing.T) {
 			break
 		}
 	}
+	if !reflect.DeepEqual(faults, []lib.Fault{}) {
+		if neededRuns != expectedRuns {
+			t.Errorf("Expected to find counterexample in %d runs, but it took %d runs",
+				expectedRuns, neededRuns)
+		}
+	} else {
+		if neededRuns != expectedRuns {
+			t.Errorf("Expected to find no counterexamples in %d runs, but it took %d runs",
+				expectedRuns, neededRuns)
+		}
+	}
 }
 
 func TestSimpleDelivRound1(t *testing.T) {
-	many(SimpleDeliv, t)
+	many(SimpleDeliv, 2, t,
+		[]lib.Fault{
+			lib.Fault{
+				Kind: "omission",
+				Args: lib.Omission{From: "A", To: "B", At: 3}}})
 }
 
 func TestRetryDelivRound2(t *testing.T) {
-	many(RetryDeliv, t)
+	many(RetryDeliv, 2, t,
+		[]lib.Fault{
+			lib.Fault{
+				Kind: "crash",
+				Args: lib.Crash{From: "A", At: 5}},
+			lib.Fault{
+				Kind: "omission",
+				Args: lib.Omission{From: "A", To: "B", At: 3}},
+		})
 }
 
 func TestRedunDelivRound3(t *testing.T) {
-	many(RedunDeliv, t)
+	many(RedunDeliv, 5, t, []lib.Fault{})
 }
 
 func TestAckDelivRound4(t *testing.T) {
-	many(AckDeliv, t)
+	many(AckDeliv, 5, t, []lib.Fault{})
 }
 
 func TestClassicDelivRound5(t *testing.T) {
-	many(ClassicDeliv, t)
+	many(ClassicDeliv, 2, t, []lib.Fault{})
 }
