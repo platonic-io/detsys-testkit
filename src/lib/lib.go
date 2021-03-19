@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"time"
 )
 
@@ -100,6 +101,7 @@ func Singleton(to Receiver) []Receiver {
 }
 
 func Set(to ...Receiver) []Receiver {
+	sort.Strings(to)
 	return to
 }
 
