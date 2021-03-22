@@ -30,7 +30,7 @@ func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testin
 	runId := lib.CreateRun(testId, runEvent)
 	log.Printf("Created run id: %v", runId)
 	lib.Run()
-	log.Printf("Finished run id: %d\n", runId.RunId)
+	log.Printf("Finished run id: %d %d\n", testId.TestId, runId.RunId)
 	lib.Teardown(&srv)
 	log.Printf("Checking\n")
 	nodeB := topology.Reactor("B").(*Node)
