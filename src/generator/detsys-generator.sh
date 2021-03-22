@@ -34,7 +34,7 @@ elif [ "${TEST}" == "broadcast" ]; then
 END_META
         )
     DATA=$(cat <<END_DATA
-{"agenda":[], "deployment": [{"reactor": "A", "type": "node", "args": {"log":"Hello world!","neighbours":{}}} , {"reactor": "B", "type": "node", "args": {"log":"","neighbours":{}}} , {"reactor": "C", "type": "node", "args": {"log":"","neighbours":{}}}]}
+{"agenda":[], "deployment": [{"reactor": "A", "type": "node", "args": {"name":"A","log":"Hello world!","neighbours":{"B":true,"C":true},"round":""}} , {"reactor": "B", "type": "node", "args": {"name":"B","log":"","neighbours":{"C":""},"round":""}} , {"reactor": "C", "type": "node", "args": {"name":"C","log":"","neighbours":{"B":""},"round":""}}]}
 END_DATA
         )
 fi

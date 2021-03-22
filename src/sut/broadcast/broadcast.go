@@ -49,10 +49,13 @@ type Node struct {
 
 	// Map of neighbour nodes. The bool keeps track of whether we should
 	// broadcast to that node or not.
-	Neighbours map[string]bool `json:"neighbours`
+	Neighbours map[string]bool `json:"neighbours"`
 
 	// The round or version of the implementation.
 	Round Round `json:"round"`
+
+	// Node name.
+	Name string `json:"name"`
 }
 
 type Broadcast struct {
@@ -77,10 +80,11 @@ func NewNodeA(round Round) *Node {
 			"C": true,
 		},
 		Round: round,
+		Name:  "A",
 	}
 }
 
-func NewNode(round Round, neighbour string) *Node {
+func NewNode(name string, round Round) *Node {
 	var broadcast bool
 	switch round {
 	case SimpleDeliv, RetryDeliv, ClassicDeliv:
@@ -90,21 +94,30 @@ func NewNode(round Round, neighbour string) *Node {
 	default:
 		panic("Unknown round")
 	}
-	neighbours := make(map[string]bool)
+	neighbours := make(map[string]bool, 3)
+	var neighbour string
+	switch name {
+	case "B":
+		neighbour = "C"
+	case "C":
+		neighbour = "B"
+	default:
+		panic("unexpected name")
+	}
 	neighbours[neighbour] = broadcast
 
-	if round == ClassicDeliv {
+	if round == ClassicDeliv && name == "B" || name == "C" {
 		// Normally node A isn't considered a neighbour, but in the
 		// classic delivery example it seems like node B and C should
 		// send messages back to A.
 		neighbours["A"] = broadcast
-		neighbours[neighbour] = broadcast
 	}
 
 	return &Node{
 		Log:        "",
 		Neighbours: neighbours,
 		Round:      round,
+		Name:       name,
 	}
 }
 
