@@ -1,8 +1,10 @@
 package broadcast
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
@@ -13,8 +15,8 @@ import (
 func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testing.T) (lib.RunId, bool) {
 	topology := lib.NewTopology(
 		lib.Item{"A", NewNodeA(round)},
-		lib.Item{"B", NewNode(round, "C")},
-		lib.Item{"C", NewNode(round, "B")},
+		lib.Item{"B", NewNode("B", round)},
+		lib.Item{"C", NewNode("C", round)},
 	)
 	marshaler := NewMarshaler()
 	var srv http.Server
@@ -36,9 +38,13 @@ func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testin
 	return runId, result
 }
 
-func many(round Round, t *testing.T) {
+func many(round Round, expectedRuns int, t *testing.T, expectedFaults []lib.Fault) {
 	tickFrequency := 100000000000.0 // Make ticks infrequent.
 
+	// TODO(stevan): GenerateTest should be parametrised by round also.
+	// Currently one test_info.deployment is shared between all rounds,
+	// which is wrong and makes the debugger display the wrong initial
+	// state.
 	testId := lib.GenerateTest("broadcast")
 
 	var faults []lib.Fault
@@ -48,11 +54,13 @@ func many(round Round, t *testing.T) {
 		// time, we can't. And we also got timers which increase the
 		// logical clock, which means we sometimes need a higher EFF in
 		// order to find the problem.
-		EFF:     3,
+		EFF:     5,
 		Crashes: 1,
 		EOT:     10,
 	}
+	neededRuns := 0
 	for {
+		neededRuns++
 		lib.Reset()
 		maxTime := time.Duration(5) * time.Second
 		runEvent := lib.CreateRunEvent{
@@ -64,8 +72,11 @@ func many(round Round, t *testing.T) {
 		}
 		runId, result := once(round, testId, runEvent, t)
 		if !result {
-			t.Errorf("%+v and %+v doesn't pass analysis", testId, runId)
-			t.Errorf("faults: %#v\n", faults)
+			fmt.Printf("%+v and %+v doesn't pass analysis\n", testId, runId)
+			if !reflect.DeepEqual(faults, expectedFaults) {
+				t.Errorf("Expected faults:\n%#v, but got faults:\n%#v\n",
+					expectedFaults, faults)
+			}
 			break
 		}
 		faults = lib.Ldfi(testId, nil, failSpec).Faults
@@ -73,24 +84,69 @@ func many(round Round, t *testing.T) {
 			break
 		}
 	}
+	if !reflect.DeepEqual(faults, []lib.Fault{}) {
+		if neededRuns != expectedRuns {
+			t.Errorf("Expected to find counterexample in %d runs, but it took %d runs",
+				expectedRuns, neededRuns)
+		}
+	} else {
+		if neededRuns != expectedRuns {
+			t.Errorf("Expected to find no counterexamples in %d runs, but it took %d runs",
+				expectedRuns, neededRuns)
+		}
+	}
 }
 
 func TestSimpleDelivRound1(t *testing.T) {
-	many(SimpleDeliv, t)
+	many(SimpleDeliv, 2, t,
+		[]lib.Fault{
+			lib.Fault{
+				Kind: "omission",
+				Args: lib.Omission{From: "A", To: "B", At: 3}}})
 }
 
 func TestRetryDelivRound2(t *testing.T) {
-	many(RetryDeliv, t)
+	many(RetryDeliv, 3, t,
+		[]lib.Fault{
+			lib.Fault{
+				Kind: "crash",
+				Args: lib.Crash{From: "A", At: 3}},
+			lib.Fault{
+				Kind: "omission",
+				Args: lib.Omission{From: "A", To: "B", At: 3}},
+		})
 }
 
+// TODO(stevan): It would be nice to certify that this example doesn't have a
+// bug for a higher EFF. If we increase the EFF and decrease the timer duration
+// a fault where "B" is crashed is introduced causing the checker to fail. We
+// should probably add a pre-condition that ensures that "B" doesn't crash.
 func TestRedunDelivRound3(t *testing.T) {
-	many(RedunDeliv, t)
+	many(RedunDeliv, 3, t, []lib.Fault{})
 }
 
+// TODO(stevan): Same remark as above for round 3.
 func TestAckDelivRound4(t *testing.T) {
-	many(AckDeliv, t)
+	many(AckDeliv, 3, t, []lib.Fault{})
 }
 
+// TODO(stevan): The counterexample according to the paper is: `[omission(A, B,
+// 1), omission(C, A, 2), omission(C, B, 2)]`. Note that they use "sent logical
+// time" while we use "received logical time". It's not clear to me if dropping
+// both messages from "A" to "B" and "C" at send time 1 is valid, if so why
+// isn't that the counterexample (which is what we find, modulo the unnecessary
+// crash).
 func TestClassicDelivRound5(t *testing.T) {
-	many(ClassicDeliv, t)
+	many(ClassicDeliv, 3, t,
+		[]lib.Fault{
+			lib.Fault{
+				Kind: "crash",
+				Args: lib.Crash{From: "A", At: 3}},
+			lib.Fault{
+				Kind: "omission",
+				Args: lib.Omission{From: "A", To: "B", At: 2}},
+			lib.Fault{
+				Kind: "omission",
+				Args: lib.Omission{From: "A", To: "C", At: 3}},
+		})
 }
