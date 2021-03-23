@@ -168,7 +168,7 @@ section is about.
       [code](doc/pseudo_code_for_discrete-event_simulator.md) for discrete-event
       simulation);
     * Executor;
-    * Spell out concurrency model assumptions;
+    * Spell out concurrency model assumptions (see section 2 of LDFI paper);
     * SUT (see also ["network normal form"](doc/network_normal_form.md).
 
 ```
