@@ -1,0 +1,89 @@
+cabal-version:      >=1.10
+name:               ltl
+version:            0.0.0
+synopsis:           linear temporal logic checker
+description:
+  See README at <https://github.com/symbiont-io/detsys-testkit/tree/main/src/ltl#readme>
+
+bug-reports:        https://github.com/symbiont-io/detsys-testkit/issues
+license:            AllRightsReserved
+license-file:       LICENSE
+author:             Daniel Gustafsson
+maintainer:         symbiont-daniel-gustafsson@users.noreply.github.com
+copyright:          Copyright (c) 2021 Symbiont Inc
+category:           Testing, Distributed Systems
+build-type:         Simple
+extra-source-files: CHANGELOG.md
+tested-with:        GHC ==8.10.3
+
+library
+  hs-source-dirs:   src/
+  exposed-modules:
+      Ltl
+    , Ltl.Json
+    , Ltl.Prop
+    , Ltl.Prop.Parser
+    , Ltl.Storage
+    , Ltl.Traces
+
+  -- GHC boot library dependencies:
+  -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
+  build-depends:
+      base              >=4.14 && <4.15
+    , bytestring
+    , containers
+    , filepath
+
+  -- Other dependencies:
+  build-depends:
+      aeson
+    , megaparsec
+    , parser-combinators
+    , sqlite-simple
+    , text
+    , unordered-containers
+    , vector
+
+  default-language: Haskell2010
+
+test-suite test
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test/
+  main-is:          Main.hs
+  build-depends:
+      base
+    , containers
+    , HUnit
+    , ltl
+    , QuickCheck
+    , tasty
+    , tasty-hunit
+    , text
+
+  build-depends:
+      aeson
+    , tasty-quickcheck
+
+  other-modules:
+    Driver
+    Ltl.JsonTest
+    Ltl.Prop.ParserTest
+
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
+  default-language: Haskell2010
+
+executable detsys-ltl
+  hs-source-dirs:   app/
+  main-is:          Main.hs
+  build-depends:
+      base
+    , aeson
+    , ltl
+    , optparse-generic
+    , text
+
+  default-language: Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/symbiont-io/detsys-testkit
