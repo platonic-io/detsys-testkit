@@ -33,8 +33,7 @@ func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testin
 	log.Printf("Finished run id: %d %d\n", testId.TestId, runId.RunId)
 	lib.Teardown(&srv)
 	log.Printf("Checking\n")
-	nodeB := topology.Reactor("B").(*Node)
-	result := nodeB.Log == "Hello world!"
+	result := lib.LtlChecker(testId, runId, "<> @B'.log = `\"Hello world!\"`")
 	return runId, result
 }
 
