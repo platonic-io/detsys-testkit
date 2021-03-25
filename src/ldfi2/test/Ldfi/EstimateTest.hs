@@ -73,7 +73,7 @@ unit_estOmissionsEff' = grossEstimate (Eot 3) (Eff 1) (MaxCrashes 0) nodes2 @=? 
 
 -- should prevent crashed nodes from sending messages.
 unit_estCrashesPreventSending :: Assertion
-unit_estCrashesPreventSending = grossEstimate 3 2 2 nodes2 @=? 121
+unit_estCrashesPreventSending = grossEstimate (Eot 3) (Eff 2) (MaxCrashes 2) nodes2 @=? 121
 -- ^ Explaination:
 -- With a naive estimate that treated omissions and crashes independently, each
 -- node has 4 choices of times to crash and 4 possible combinations of message

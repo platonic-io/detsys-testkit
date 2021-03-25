@@ -112,8 +112,9 @@ possibleSchedules (NetworkTrace xs) =
 
 -- Combination of omissions, orderings and crashes. NOTE that this doesn't not
 -- take _new_ messages created during execution into account, e.g. from retries.
-possibleFaults :: Integer
-possibleFaults = undefined
+possibleFaults :: Nodes -> MaxCrashes -> NetworkTrace -> Integer
+possibleFaults (Nodes nodes) (MaxCrashes maxCrashes) (NetworkTrace xs) =
+  undefined
 
 {-
   * if the receiver's apply function is commutative then orderings don't matter
