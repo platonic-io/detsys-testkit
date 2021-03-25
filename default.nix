@@ -29,7 +29,9 @@ stdenv.mkDerivation {
   pname = "detsys";
   version = "latest";
 
-  src = ./bazel-bin/src;
+  # NOTE: We cannot use `gitignoreSource` here, because the `bazel-bin`
+  # directory which we need to read from is ignored by git.
+  src = ./.;
 
   phases = [ "installPhase" "installCheckPhase" ];
 
@@ -49,27 +51,27 @@ stdenv.mkDerivation {
     ${if nix-build-checker || nix-build-all then ''
     install -D ${checker.out}/bin/detsys-checker $out/bin
     '' else ''
-    install -D $src/checker/checker-bin $out/bin/detsys-checker
+    install -D $src/bazel-bin/src/checker/checker-bin $out/bin/detsys-checker
     ''
     }
     ${if nix-build-cli || nix-build-all then ''
     install -D ${cli.out}/bin/detsys $out/bin
     '' else ''
-    install -D $src/cli/cli_/cli $out/bin/detsys
+    install -D $src/bazel-bin/src/cli/cli_/cli $out/bin/detsys
     ''
     }
     ${if nix-build-db || nix-build-all then ''
     install -D ${db.out}/bin/detsys-db $out/bin
     cp -R ${db.out}/migrations $out
     '' else ''
-    install -D $src/db/db_/db $out/bin/detsys-db
+    install -D $src/bazel-bin/src/db/db_/db $out/bin/detsys-db
     # TODO(stevan): migrations need to be stored somewhere...
     ''
     }
     ${if nix-build-debugger || nix-build-all then ''
     install -D ${debugger.out}/bin/detsys-debug $out/bin
     '' else ''
-    install -D $src/debugger/cmd/detsys-debug/detsys-debug_/detsys-debug \
+    install -D $src/bazel-bin/src/debugger/cmd/detsys-debug/detsys-debug_/detsys-debug \
                $out/bin/detsys-debug
     ''
     }
@@ -83,19 +85,19 @@ stdenv.mkDerivation {
     ${if nix-build-ldfi || nix-build-all then ''
     install -D ${ldfi.out}/bin/detsys-ldfi $out/bin
     '' else ''
-    install -D $src/ldfi2/ldfi2 $out/bin/detsys-ldfi
+    install -D $src/bazel-bin/src/ldfi2/ldfi2 $out/bin/detsys-ldfi
     ''
     }
     ${if nix-build-ltl || nix-build-all then ''
     install -D ${ltl.out}/bin/detsys-ltl $out/bin
     '' else ''
-    install -D $src/ltl/ltl $out/bin/detsys-ltl
+    install -D $src/bazel-bin/src/ltl/ltl $out/bin/detsys-ltl
     ''
     }
     ${if nix-build-scheduler || nix-build-all then ''
     install -D ${scheduler.out}/bin/detsys-scheduler $out/bin
     '' else ''
-    install -D $src/scheduler/scheduler-bin $out/bin/detsys-scheduler
+    install -D $src/bazel-bin/src/scheduler/scheduler-bin $out/bin/detsys-scheduler
     ''
     }
   '';
