@@ -10,7 +10,13 @@ import (
 )
 
 func printVersion(cmd string) {
-	cmdVersion := exec.Command(cmd, "--version")
+	arg := "--version"
+
+	if cmd == "detsys-ltl" {
+		arg = "version"
+	}
+
+	cmdVersion := exec.Command(cmd, arg)
 	out, err := cmdVersion.CombinedOutput()
 
 	if err != nil {
@@ -36,6 +42,7 @@ var versionsCmd = &cobra.Command{
 			"detsys-debug",
 			"detsys-generator",
 			"detsys-ldfi",
+			"detsys-ltl",
 			"detsys-scheduler",
 		}
 		for _, cmd := range cmds {

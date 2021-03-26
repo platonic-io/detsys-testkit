@@ -81,6 +81,9 @@ executable detsys-ltl
     , ltl
     , optparse-generic
     , text
+    , template-haskell
+  other-modules:
+    GitHash
 
   default-language: Haskell2010
 

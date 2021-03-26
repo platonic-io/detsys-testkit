@@ -1,14 +1,17 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeOperators #-}
 module Main where
 
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Text as AesonText
 import qualified Data.Text.Lazy.IO as TextIO
 import Options.Generic
+
+import GitHash (tGetGitInfo)
 
 import Ltl
 import Ltl.Json
@@ -26,11 +29,14 @@ data Config
 
 instance ParseRecord Config
 
+gitVersion :: String
+gitVersion = $tGetGitInfo
+
 main :: IO ()
 main = do
   (cfg, help) <- getWithHelp "LTL checker"
   case cfg of
-    Version -> putStrLn "<GIT VERSION NOT IMPLEMENTED>"
+    Version -> putStrLn gitVersion
     Check{..} -> do
       trace <- Storage.sqliteLoad (unHelpful testId) (unHelpful runId)
       testFormula <- case parse (unHelpful formula) of
