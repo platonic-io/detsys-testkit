@@ -133,7 +133,7 @@ we get:
 |   9 |   7 |       1 |     4 |    2.43*10^26 |
 
 Where the last two entries correspond to the minimal failure specification
-needed to find a durability violation in Kafka and a agreement violation in 3PC
+needed to find a durability violation in Kafka and an agreement violation in 3PC
 respectively, see the LDFI paper for details.
 
 It's worth noting that while this number takes into account that no other faults
