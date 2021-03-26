@@ -119,9 +119,22 @@ Given that we got 3 nodes now out which max one will crash, we get: 3 choose 1 *
 
 The general formula can be found
 [here](https://github.com/symbiont-io/detsys-testkit/blob/main/src/ldfi2/src/Ldfi/Estimate.hs#L156)
-and if we run it on slightly larger failure specification, e.g., five nodes,
-EOT=18, EFF=10, and max 2 crashes we get
-1320974491849506071465723415807894226211603716307955419038351360 possibilities.
+and if we run it on slightly larger failure specifications the following is what
+we get:
+
+| EOT | EFF | Crashes | Nodes |   Combinations|
+|:---:|:---:|:-------:|:-----:|--------------:|
+|   4 |   2 |       1 |     3 |         40704 |
+|   5 |   2 |       1 |     3 |         52992 |
+|   5 |   3 |       1 |     3 |       2617344 |
+|   5 |   3 |       1 |     4 |  863825297408 |
+|   5 |   3 |       2 |     4 | 4071957725184 |
+|   6 |   4 |       1 |     5 |    1.85*10^25 |
+|   9 |   7 |       1 |     4 |    2.43*10^26 |
+
+Where the last two entries correspond to the minimal failure specification
+needed to find a durability violation in Kafka and a agreement violation in 3PC
+respectively, see the LDFI paper for details.
 
 It's worth noting that while this number takes into account that no other faults
 can happen after a crash it doesn't take into account that for example an
