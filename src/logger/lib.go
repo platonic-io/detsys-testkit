@@ -156,16 +156,27 @@ func dequeue(queue chan []byte) ([]byte, bool) {
 
 func commit(db *sql.DB, buffer [][]byte) {
 	start := time.Now()
+	// TODO(stevan): Should we be using context at all? If so, should this
+	// be moved to the top-level?
 	ctx := context.Background()
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		panic(err)
 	}
+	// The rollback will be ignored if the tx has been committed later in the function.
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO event_log(event, meta, data) VALUES(?, ?, ?)`)
+	if err != nil {
+		panic(err)
+	}
+	// Prepared statements take up server resources and should be closed after use.
+	defer stmt.Close()
+
 	for _, entry := range buffer {
 		event, meta, data := parse(entry)
-		_, err := tx.ExecContext(ctx,
-			`INSERT INTO event_log(event, meta, data) VALUES(?, ?, ?)`,
-			event, meta, data)
+		_, err := stmt.ExecContext(ctx, event, meta, data)
 		if err != nil {
 			panic(err)
 		}
@@ -293,7 +304,7 @@ func writeIndex(component string, index uint64) {
 func openPipe(pipeName string) *os.File {
 	namedPipe := filepath.Join(os.TempDir(), pipeName)
 	err := syscall.Mkfifo(namedPipe, 0600)
-	if !errors.Is(err, os.ErrExist) {
+	if err != nil && !errors.Is(err, os.ErrExist) {
 		panic(err)
 	}
 
