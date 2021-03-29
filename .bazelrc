@@ -1,6 +1,6 @@
-build --action_env=GOPRIVATE=github.com/symbiont-io \
-      --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host \
-      --crosstool_top=@local_config_cc//:toolchain
+build --action_env=GOPRIVATE=github.com/symbiont-io
+build --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host
+build --crosstool_top=@nixpkgs_config_cc//:toolchain
 
 build --host_javabase=@bazel_tools//tools/jdk:remote_jdk11
 build --javabase=@bazel_tools//tools/jdk:remote_jdk11
@@ -9,6 +9,6 @@ build --java_toolchain=@bazel_tools//tools/jdk:toolchain_java11
 
 build --stamp --workspace_status_command=$(pwd)/workspace_status_command.sh
 
-run --action_env=GOPRIVATE=github.com/symbiont-io \
-      --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host \
-      --crosstool_top=@local_config_cc//:toolchain
+run --action_env=GOPRIVATE=github.com/symbiont-io
+run --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host
+run --crosstool_top=@local_config_cc//:toolchain
