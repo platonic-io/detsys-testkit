@@ -30,6 +30,7 @@ nixpkgs_git_repository(
 )
 
 nixpkgs_cc_configure(
+    name = "nixpkgs_config_cc",
     repository = "@nixpkgs",
 )
 
