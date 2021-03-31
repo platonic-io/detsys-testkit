@@ -148,3 +148,84 @@ search, in that it actually uses the information from previous runs to narrow
 down the search space. Hopefully, by now, it should be clear that the space is
 so huge that we frankly need techniques like this to achieve any meaningful
 coverage.
+
+#### How LDFI cuts down the fault space
+
+Because lineage-driven fault injection uses information from previous runs it is
+difficult to estimate the explored fault space, since it is dependent on the
+actual system under test. So we will explore this using a specific example that
+is also found in the LDFI paper (section 3.1.2).
+
+The example is retrying broadcast, and it has three nodes `A,B,C.` Node `A` has
+a special message that it will (repeatably) try to send to all other nodes. The
+success criteria is that after the run, node `B` should have the message. Since
+`A` keeps sending the message, the only way to make this system fail is by
+allowing crashes. But to not get the trivial case of crashing A the first thing,
+we put another criteria, that a crashed node was successful in sending a message
+before being crashed.
+
+The failurespec that we will use is `EOT=4, EFF=3,Crashes=1`, so let us first
+just calculate the total fault space using the estimation above. That gives us
+`1830912` combinations of possible faults. But a lot of these combinations
+contain faults that will never do anything (Since B,C never sends any messages).
+
+So if we restrict to only making faults that appeared in a run? So we can see
+that we can only ever pick a crash for node `A`, and only after time 1. Since we
+can only crash a node after they successfully sent a message, and since `B` and
+`C` never sends they can't be crashed.
+
+  * No crash -> There are (2^2)^3=64 possible combinations of omissions
+  * crash t=2 -> There are (2^2)^1 - 1 = 3 possible combinations of omissions
+    ({}, {A->B}, {A->C})
+  * crash t=3 -> There are (2^2)^2 - 1 = 15 possible combinations of omissions
+  * crash t=4 -> There are (2^2)^3 - 1 = 63 possible combinations of omissions
+
+This are all possible which is only `145` combinations. But this is not all LDFI
+does. Suppose the first run introduces an omission for `A -> C` at 1, but we see
+that this continued to work (and didn't change the remaining network messages)
+so LDFI concludes that this message will not affect the validity of the run
+either way. Therefore it is unnecessary to try using this omission anymore. So
+the remaining fault space is:
+
+  * No crash -> 2*4*4=32
+  * crash t=2 -> 2
+  * crash t=3 -> 2*4=8
+  * crash t=4 -> 2*4*4=32
+
+So instead of having `145-1=144` more combinations to try, we only have
+`32+2+8+32=74` which is almost half the space we had before.
+
+This all seems nice, but this example is a bit deceptively simple, all messages
+sent are independent on all other messages. In general a node will send a
+message depending on not just the message it just received, but also historic
+ones. So if in one run it had received a message before, but in the next one it
+didn't it might send a different message. So the space of faults grew (not the
+the total one we calculated in the section before, only the one based on
+history). This is what makes it really tricky to calculate in general what would
+happen.
+
+##### Estimated number of runs
+
+We now have the size of the fault space, but how many runs would it take to find
+a real issue? In order to figure that out, we need to know how many of the
+possible faults would find an issue. Given such a probability `p` we can
+approximate the expected number of runs as `1/p` (this approximation uses the
+binomial distribution, and as such has replacement, i.e. the same faults could
+be picked multiple times, if we want something better we should use
+hyper-geometric distribution but that is more complicated.) So how many faults
+would reveal the issue for the broadcasting example? Calculemus!
+
+The only way to get the issue, is if we crash A, after time 1, and in all times
+before the crash we make omissions from A to B. We also have to be careful to
+make sure one message from A reaches C at some point before the crash. So the
+cases are:
+
+  * crash t=2 -> 1 (we can't do omission to both)
+  * crash t=3 -> 2^2-1=3
+  * crash t=4 -> 2^3-1=7
+
+So there are 11 ways for A, giving the total `11*64^2=45056` possible out of the
+total 1830912. This gives us `p=45056/1830912=0.025` which means we can expect
+`1/p=40.6` runs before finding the issue if we do completely random search. But
+if we have access to the history we instead have `p=11/145=0.076` which has
+expected number of runs being `13.2`.
