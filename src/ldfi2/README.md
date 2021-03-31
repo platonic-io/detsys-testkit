@@ -148,11 +148,3 @@ search, in that it actually uses the information from previous runs to narrow
 down the search space. Hopefully, by now, it should be clear that the space is
 so huge that we frankly need techniques like this to achieve any meaningful
 coverage.
-
-#### Development
-
-##### How to update the ldfi2.nix
-
-```bash
-nix-shell -p cabal2nix --run 'cabal2nix .' > ldfi2.nix
-```
