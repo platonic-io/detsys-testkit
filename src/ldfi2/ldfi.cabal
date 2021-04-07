@@ -22,15 +22,12 @@ library
     Ldfi
     Ldfi.Estimate
     Ldfi.FailureSpec
-    Ldfi.GitHash
     Ldfi.Marshal.Faults
     Ldfi.Prop
     Ldfi.Sat
     Ldfi.Solver
     Ldfi.Storage
     Ldfi.Traces
-
-  other-modules:    Ldfi.GitHashImpl
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
