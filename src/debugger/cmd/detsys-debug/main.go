@@ -5,6 +5,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/nsf/jsondiff"
 	"github.com/rivo/tview"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -154,6 +155,18 @@ Flags:
 	os.Exit(1)
 }
 
+func displayDuration(dur time.Duration) string {
+	days := int(math.Floor(dur.Seconds() / 86400))
+	if days < 1 {
+		return dur.String()
+	}
+	dur = dur.Truncate(24 * time.Hour)
+	if days == 1 {
+		return fmt.Sprintf("1 day %s", dur)
+	}
+	return fmt.Sprintf("%d days %s", days, dur)
+}
+
 func main() {
 	if os.Args[1] == "--version" || os.Args[1] == "-v" {
 		fmt.Println(version)
@@ -209,7 +222,12 @@ func main() {
 			case "At":
 				tableCell = tview.NewTableCell(strconv.Itoa(event.At))
 			case "Time":
-				tableCell = tview.NewTableCell(event.Simulated.Format(time.StampNano))
+				if row == 0 {
+					tableCell = tview.NewTableCell(event.Simulated.Format(time.StampNano))
+				} else {
+					tableCell = tview.NewTableCell(
+						displayDuration(event.Simulated.Sub(time.Unix(0, 0).UTC())))
+				}
 			}
 			if event.Dropped {
 				tableCell.SetTextColor(tcell.ColorGray)
