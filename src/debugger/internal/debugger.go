@@ -196,8 +196,9 @@ func colon(s string) string {
 }
 
 type SequenceDiagrams struct {
-	inner map[int][]byte
-	net   []NetworkEvent
+	inner  map[int][]byte
+	header []byte
+	net    []NetworkEvent
 }
 
 func NewSequenceDiagrams(testId lib.TestId, runId lib.RunId) *SequenceDiagrams {
@@ -224,13 +225,21 @@ func (s *SequenceDiagrams) At(at int) []byte {
 			Dropped: event.Dropped,
 		})
 	}
-	gen := DrawDiagram(arrows, DrawSettings{
+	header, gen := DrawDiagram(arrows, DrawSettings{
 		MarkerSize: 3,
 		MarkAt:     at,
 	})
 
+	if s.header == nil {
+		s.header = header
+	}
+
 	s.inner[at] = gen
 	return gen
+}
+
+func (s *SequenceDiagrams) Header() []byte {
+	return s.header
 }
 
 func GetLogMessages(testId lib.TestId, runId lib.RunId, reactor string, at int) [][]byte {

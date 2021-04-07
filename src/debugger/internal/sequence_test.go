@@ -9,10 +9,12 @@ import (
 
 func goldenTest(t *testing.T, settings DrawSettings, arrows []Arrow, outcome string) {
 	shouldBe := strings.TrimSpace(outcome)
-	boxes := string(DrawDiagram(arrows, settings))
+	header, boxes := DrawDiagram(arrows, settings)
+
+	whole := strings.Join([]string{string(header), string(boxes)}, "\n")
 
 	//sanitize, boxes might have some extra spaces at the end..
-	boxesLines := strings.Split(boxes, "\n")
+	boxesLines := strings.Split(whole, "\n")
 	for i, s := range boxesLines {
 		boxesLines[i] = strings.TrimRight(s, " ")
 	}
@@ -110,7 +112,7 @@ func benchmarkSequence(many int, b *testing.B) {
 	// away
 	var r []byte
 	for i := 0; i < b.N; i++ {
-		r = DrawDiagram(arrows, settings)
+		_, r = DrawDiagram(arrows, settings)
 	}
 	result = r
 }
