@@ -165,7 +165,6 @@ func main() {
 
 	da := MakeDebugApplication(lib.TestId{testId}, lib.RunId{runId})
 
-	textView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Reactor State")
 	messageView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Current Message")
 	diagram.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Sequence Diagram")
 	logView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Reactor Log")
@@ -217,8 +216,13 @@ func main() {
 		da.redraw()
 	})
 
+	longestReactor := 0
 	for i, c := range da.reactors {
 		theRune := ' '
+
+		if len(c) > longestReactor {
+			longestReactor = len(c)
+		}
 
 		if i < 9 {
 			theRune = rune(i + 49) // 48 is '0', but we skip that one
@@ -228,8 +232,11 @@ func main() {
 
 	stateWidget := tview.NewFlex().
 		SetDirection(tview.FlexColumn).
-		AddItem(reactorsWidget, 10, 0, false).
-		AddItem(textView, 0, 4, false)
+		AddItem(reactorsWidget, longestReactor+1+2+4, 0, false).
+		AddItem(textView, 0, 1, false)
+
+	reactorsWidget.SetBorderPadding(1, 1, 1, 2)
+	stateWidget.SetBorder(true).SetTitle("Reactor State")
 
 	layout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
