@@ -111,6 +111,11 @@ func (da *DebugApplication) redraw() {
 	}
 }
 
+func (da *DebugApplication) goToFrom(table *tview.Table) {
+	event := da.events[da.activeRow-1]
+	table.Select(event.SentAt, 0)
+}
+
 func MakeDebugApplication(testId lib.TestId, runId lib.RunId) *DebugApplication {
 	heaps := debugger.Heaps(testId, runId)
 	events := debugger.GetNetworkTrace(testId, runId)
@@ -291,6 +296,9 @@ func main() {
 		if event.Rune() == 'q' {
 			app.Stop()
 			return nil
+		}
+		if event.Rune() == 'f' {
+			da.goToFrom(table)
 		}
 		return event
 	})
