@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -7,11 +8,26 @@ module Main where
 
 import qualified Data.Text.IO as T
 import qualified Ldfi
-import Ldfi.FailureSpec (FailureSpec (FailureSpec))
-import qualified Ldfi.GitHash as Git
+import Ldfi.FailureSpec (FailureSpec(FailureSpec))
 import Ldfi.Sat (z3Solver)
 import Ldfi.Storage
 import Options.Generic
+
+------------------------------------------------------------------------
+
+-- When building with Bazel we generate a module containing the git commit hash
+-- at compile-time.
+#ifdef __BAZEL_BUILD__
+import Ldfi.GitHash
+-- When building with cabal we expect the git commit hash to be passed in via
+-- CPP flags, i.e. `--ghc-option=-D__GIT_HASH__=\"X\"`.
+#elif defined __GIT_HASH__
+gitHash :: String
+gitHash = __GIT_HASH__
+#else
+gitHash :: String
+gitHash = "unknown"
+#endif
 
 ------------------------------------------------------------------------
 
@@ -37,7 +53,7 @@ main = do
 
 go :: Config -> IO () -> IO ()
 go cfg help
-  | unHelpful $ version cfg = putStrLn Git.version
+  | unHelpful $ version cfg = putStrLn gitHash
   | otherwise =
     let mFailSpec = makeFailureSpec (unHelpful $ endOfFiniteFailures cfg) (unHelpful $ maxCrashes cfg) (unHelpful $ endOfTime cfg) (unHelpful $ limitNumberOfFaults cfg)
      in case (unHelpful $ testId cfg, mFailSpec) of

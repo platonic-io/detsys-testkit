@@ -131,4 +131,5 @@ Then follow the relevant language support section of the `nixpkgs`
 
 * Nix [Pills](https://nixos.org/guides/nix-pills/);
 * `nixpkgs` [manual](https://nixos.org/manual/nixpkgs/unstable/);
-* `nix` [manual](https://nixos.org/manual/nix/unstable/).
+* `nix` [manual](https://nixos.org/manual/nix/unstable/);
+* [How to Learn Nix](https://ianthehenry.com/posts/how-to-learn-nix/).

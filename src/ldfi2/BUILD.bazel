@@ -4,13 +4,29 @@ load(
   "@rules_haskell//haskell:defs.bzl",
   "haskell_binary",
   "haskell_library",
-  "haskell_toolchain",
+)
+
+genrule(
+    name = "ldfi_version",
+    srcs = [],
+    outs = ["src/Ldfi/GitHash.hs"],
+    cmd = ";".join([
+        "( echo 'module Ldfi.GitHash (gitHash) where'",
+        "echo 'gitHash :: String'",
+        "echo -n 'gitHash = \"'",
+        "awk '/STABLE_GIT_COMMIT/ { printf $$2 }' bazel-out/stable-status.txt",
+        "echo '\"'",
+        ") > \"$@\"",
+    ]),
+    stamp = True,
+    message = "Generating version file",
+    visibility = ['//visibility:public'],
 )
 
 haskell_library(
-    name = "ldfi-lib",
+    name = "ldfi_lib",
     src_strip_prefix = "src",
-    srcs = glob(['src/**/*.hs']),
+    srcs = glob(['src/**/*.hs']) + [":ldfi_version"],
     deps = [
         "@stackage//:aeson",
         "@stackage//:base",
@@ -29,10 +45,11 @@ haskell_library(
 haskell_binary(
     name = "ldfi2",
     srcs = ["app/Main.hs"],
+    compiler_flags = ["-D__BAZEL_BUILD__"],
     deps = [
         "@stackage//:base",
         "@stackage//:optparse-generic",
         "@stackage//:text",
-        ":ldfi-lib"
+        ":ldfi_lib",
     ],
 )
