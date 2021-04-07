@@ -133,7 +133,6 @@ func appendBoxes(isTop bool, output *strings.Builder, names []string, gaps []int
 			WriteRepeat(output, hLine, halfPoint)
 			output.WriteString("╯")
 		}
-		output.WriteString("\n")
 	}
 }
 
@@ -271,13 +270,14 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 	}
 }
 
-func drawDiagram(names []string, arrows []arrowInternal, gaps []int, nrLoops int) []byte {
+func drawDiagram(names []string, arrows []arrowInternal, gaps []int, nrLoops int) ([]byte, []byte) {
 	if len(names) < 1 {
 		panic("We need at least one box")
 	}
 
 	boxSize := boxSize(names)
 
+	var header strings.Builder
 	var output strings.Builder
 	var expectedSize int
 	{
@@ -291,12 +291,13 @@ func drawDiagram(names []string, arrows []arrowInternal, gaps []int, nrLoops int
 	}
 	output.Grow(expectedSize)
 
-	appendBoxes(true, &output, names, gaps)
+	appendBoxes(true, &header, names, gaps)
+
 	appendArrows(&output, names, arrows, gaps, boxSize)
 	appendBoxes(false, &output, names, gaps)
 
 	// remove last newline
-	return []byte(output.String()[:output.Len()-1])
+	return []byte(header.String()), []byte(output.String())
 }
 
 func index(haystack []string, needle string) int {
@@ -313,7 +314,7 @@ type DrawSettings struct {
 	MarkAt     int
 }
 
-func DrawDiagram(arrows []Arrow, settings DrawSettings) []byte {
+func DrawDiagram(arrows []Arrow, settings DrawSettings) ([]byte, []byte) {
 	var names []string
 	{
 		for _, arr := range arrows {

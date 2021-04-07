@@ -33,6 +33,11 @@ var diagram = tview.NewTextView().
 	Highlight("focused")
 var w2 = tview.ANSIWriter(diagram)
 
+var diagramHeader = tview.NewTextView().
+	SetWrap(false).
+	SetDynamicColors(true)
+var wDiagramHeader = tview.ANSIWriter(diagramHeader)
+
 var reactorsWidget = tview.NewList()
 
 var messageView = tview.NewTextView().
@@ -78,12 +83,14 @@ func (da *DebugApplication) setRow(row int) {
 func (da *DebugApplication) redraw() {
 	textView.Clear()
 	diagram.Clear()
+	diagramHeader.Clear()
 	messageView.Clear()
 	logView.Clear()
 	row := da.activeRow
 	{
 		fmt.Fprintf(w2, "%s", da.diagrams.At(row-1))
 		diagram.ScrollToHighlight()
+		fmt.Fprintf(wDiagramHeader, "%s", da.diagrams.Header())
 	}
 	reactor := da.reactors[da.activeReactor]
 	old := da.heaps[row-1][reactor]
@@ -166,8 +173,15 @@ func main() {
 	da := MakeDebugApplication(lib.TestId{testId}, lib.RunId{runId})
 
 	messageView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Current Message")
-	diagram.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Sequence Diagram")
 	logView.SetBorderPadding(1, 1, 2, 0).SetBorder(true).SetTitle("Reactor Log")
+
+	diagramWidget := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(diagramHeader, 3, 0, false).
+		AddItem(diagram, 0, 1, false)
+	diagramWidget.
+		SetBorder(true).
+		SetTitle("Sequence Diagram")
 
 	da.redraw()
 
@@ -245,7 +259,7 @@ func main() {
 				SetDirection(tview.FlexRow).
 				AddItem(stateWidget, 0, 1, false).
 				AddItem(table, 20, 1, false), 0, 1, false).
-			AddItem(diagram, 0, 1, false), 0, 20, false).
+			AddItem(diagramWidget, 0, 1, false), 0, 20, false).
 		AddItem(messageView, 5, 1, false).
 		AddItem(logView, 10, 1, false)
 
