@@ -363,8 +363,8 @@ func DrawDiagram(arrows []Arrow, settings DrawSettings) []byte {
 		annotationLeft := ""
 		annotationRight := ""
 		if i == settings.MarkAt {
-			annotationLeft = "[yellow]"
-			annotationRight = "[-]"
+			annotationLeft = "[\"focused\"][yellow]"
+			annotationRight = "[-][\"\"]"
 			message = leftMarker + arr.Message + rightMarker
 		} else {
 			message = emptyMarker + arr.Message + emptyMarker

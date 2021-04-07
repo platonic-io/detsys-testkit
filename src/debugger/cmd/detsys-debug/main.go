@@ -28,7 +28,9 @@ var w = tview.ANSIWriter(textView)
 
 var diagram = tview.NewTextView().
 	SetWrap(false).
-	SetDynamicColors(true)
+	SetDynamicColors(true).
+	SetRegions(true).
+	Highlight("focused")
 var w2 = tview.ANSIWriter(diagram)
 
 var reactorsWidget = tview.NewList()
@@ -79,7 +81,10 @@ func (da *DebugApplication) redraw() {
 	messageView.Clear()
 	logView.Clear()
 	row := da.activeRow
-	fmt.Fprintf(w2, "%s", string(da.diagrams.At(row-1)))
+	{
+		fmt.Fprintf(w2, "%s", da.diagrams.At(row-1))
+		diagram.ScrollToHighlight()
+	}
 	reactor := da.reactors[da.activeReactor]
 	old := da.heaps[row-1][reactor]
 	new := da.heaps[min(row, len(da.heaps))][reactor]
