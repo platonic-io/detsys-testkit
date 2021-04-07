@@ -70,9 +70,10 @@ type NetworkEvent struct {
 	Message   string
 	Args      []byte
 	From      string
+	SentAt    int
 	To        string
+	RecvAt    int
 	Dropped   bool
-	At        int
 	Simulated time.Time
 }
 
@@ -83,9 +84,10 @@ func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
 	rows, err := db.Query(`SELECT message,
                                       args,
                                       sender,
+                                      sent_logical_time,
                                       receiver,
-                                      dropped,
                                       recv_logical_time,
+                                      dropped,
                                       recv_simulated_time
 		               FROM network_trace
 		               WHERE test_id = ?
@@ -98,7 +100,7 @@ func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
 	var trace []NetworkEvent
 	for rows.Next() {
 		event := NetworkEvent{}
-		err := rows.Scan(&event.Message, &event.Args, &event.From, &event.To, &event.Dropped, &event.At, (*lib.TimeFromString)(&event.Simulated))
+		err := rows.Scan(&event.Message, &event.Args, &event.From, &event.SentAt, &event.To, &event.RecvAt, &event.Dropped, (*lib.TimeFromString)(&event.Simulated))
 		if err != nil {
 			panic(err)
 		}
