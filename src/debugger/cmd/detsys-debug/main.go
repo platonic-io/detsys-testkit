@@ -105,7 +105,7 @@ func (da *DebugApplication) redraw() {
 	event := da.events[row-1]
 	fmt.Fprintf(wMessageView, "%s", string(event.Args))
 
-	logs := debugger.GetLogMessages(da.testId, da.runId, reactor, event.At)
+	logs := debugger.GetLogMessages(da.testId, da.runId, reactor, event.RecvAt)
 	for _, log := range logs {
 		fmt.Fprintf(wLogView, "%s\n", string(log))
 	}
@@ -201,47 +201,53 @@ func main() {
 	table := tview.NewTable().
 		SetFixed(1, 1)
 
-	for column, header := range []string{"Event", "From", "To", "At", "Time"} {
-		tableCell := tview.NewTableCell(header).
-			SetSelectable(false).
-			SetTextColor(tcell.ColorYellow).
-			SetAlign(tview.AlignLeft)
-		table.SetCell(0, column, tableCell)
-	}
-	for row, event := range da.events {
-		for column, cell := range []string{"Message", "From", "To", "At", "Time"} {
+	{
+		headers := []string{"Event", "From", "Sent", "To", "Received", "Time"}
 
-			var tableCell *tview.TableCell
-			switch cell {
-			case "Message":
-				tableCell = tview.NewTableCell(event.Message)
-			case "From":
-				tableCell = tview.NewTableCell(event.From)
-			case "To":
-				tableCell = tview.NewTableCell(event.To)
-			case "At":
-				tableCell = tview.NewTableCell(strconv.Itoa(event.At))
-			case "Time":
-				if row == 0 {
-					tableCell = tview.NewTableCell(event.Simulated.Format(time.StampNano))
-				} else {
-					tableCell = tview.NewTableCell(
-						displayDuration(event.Simulated.Sub(time.Unix(0, 0).UTC())))
-				}
-			}
-			if event.Dropped {
-				tableCell.SetTextColor(tcell.ColorGray)
-			}
-			table.SetCell(row+1, column, tableCell)
+		for column, header := range headers {
+			tableCell := tview.NewTableCell(header).
+				SetSelectable(false).
+				SetTextColor(tcell.ColorYellow).
+				SetAlign(tview.AlignLeft)
+			table.SetCell(0, column, tableCell)
 		}
+		for row, event := range da.events {
+			for column, cell := range headers {
+
+				var tableCell *tview.TableCell
+				switch cell {
+				case "Event":
+					tableCell = tview.NewTableCell(event.Message)
+				case "From":
+					tableCell = tview.NewTableCell(event.From)
+				case "Sent":
+					tableCell = tview.NewTableCell(strconv.Itoa(event.SentAt))
+				case "To":
+					tableCell = tview.NewTableCell(event.To)
+				case "Received":
+					tableCell = tview.NewTableCell(strconv.Itoa(event.RecvAt))
+				case "Time":
+					if row == 0 {
+						tableCell = tview.NewTableCell(event.Simulated.Format(time.StampNano))
+					} else {
+						tableCell = tview.NewTableCell(
+							displayDuration(event.Simulated.Sub(time.Unix(0, 0).UTC())))
+					}
+				}
+				if event.Dropped {
+					tableCell.SetTextColor(tcell.ColorGray)
+				}
+				table.SetCell(row+1, column, tableCell)
+			}
+		}
+		table.SetBorder(true).SetTitle("Events")
+		table.SetSelectable(true, false)
+		table.SetSelectionChangedFunc(
+			func(row, column int) {
+				da.setRow(row)
+				da.redraw()
+			})
 	}
-	table.SetBorder(true).SetTitle("Events")
-	table.SetSelectable(true, false)
-	table.SetSelectionChangedFunc(
-		func(row, column int) {
-			da.setRow(row)
-			da.redraw()
-		})
 
 	reactorsWidget.SetChangedFunc(func(index int, _mainText string, _secondaryText string, shortcut rune) {
 		da.activeReactor = index
