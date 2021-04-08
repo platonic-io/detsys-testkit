@@ -66,6 +66,7 @@ graal_binary(
         "-H:EnableURLProtocols=http,https",
         "--enable-all-security-services",
         "-H:IncludeResources=db/.*|static/.*|templates/.*|.*.yml|.*.xml|.*/org/sqlite/.*|org/sqlite/.*",
+        "-H:IncludeResources=.*/version.txt",
         "-J-Dclojure.spec.skip-macros=true",
         "-J-Dclojure.compiler.direct-linking=true",
         "-J-Dfile.encoding=UTF-8",

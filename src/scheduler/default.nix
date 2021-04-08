@@ -37,7 +37,7 @@ in stdenv.mkDerivation rec {
 
     echo "creating manifest file"
     echo "Main-Class: ${pname}.core" > manifest.txt
-    echo "Class-Path: ." >> manifest.txt
+    echo "Class-Path: . resources/" >> manifest.txt
     find ${mavenRepository} -name '*.jar' -printf '  %h/%f\n' >> manifest.txt
     cat manifest.txt
 
@@ -52,7 +52,7 @@ in stdenv.mkDerivation rec {
       -H:+ReportExceptionStackTraces \
       -H:EnableURLProtocols=http,https \
       --enable-all-security-services \
-      -H:IncludeResources="db/.*|static/.*|templates/.*|.*.yml|.*.xml|.*/org/sqlite/.*|org/sqlite/.*" \
+      -H:ResourceConfigurationFiles=${src}/native-image/resource-config.json \
       -H:JNIConfigurationFiles=${src}/native-image/jni-config.json \
       -H:ReflectionConfigurationFiles=${src}/native-image/reflection-config.json \
       -J-Dclojure.spec.skip-macros=true \

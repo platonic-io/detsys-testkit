@@ -1,0 +1,14 @@
+{
+  "resources": {
+    "includes": [
+        {"pattern": "db/.*"},
+        {"pattern": "static/.*"},
+        {"pattern": "templates/.*"},
+        {"pattern": ".*.yml"},
+        {"pattern": ".*.xml"},
+        {"pattern": ".*/org/sqlite/.*"},
+        {"pattern": "org/sqlite/.*"},
+        {"pattern": ".*/version.txt"}
+    ]
+  }
+}

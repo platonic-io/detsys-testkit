@@ -1,0 +1,24 @@
+package(default_visibility = ["//visibility:public"])
+
+load("@rules_clojure//:rules.bzl", "clojure_namespace", "clojure_library")
+
+genrule(
+    name = "scheduler_version",
+    srcs = [],
+    outs = ["version.txt"],
+    cmd = "awk '/STABLE_GIT_COMMIT/ { printf $$2 }' bazel-out/stable-status.txt > \"$@\"",
+    stamp = True,
+    message = "Generating version file",
+)
+
+clojure_namespace(
+    name = "resources_ns",
+    srcs = {
+        "version.txt": "//version.txt"
+    },
+)
+
+clojure_library(
+    name = "resources",
+    srcs = ["resources_ns"],
+)

@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [run!])
   (:require [clojure.spec.alpha :as s]
             [clojure.data.generators :as gen]
+            [clojure.java.io :as io]
             [clj-http.client :as client]
             [clj-http.fake :as fake]
             [scheduler.spec :refer [>defn => component-id?]]
@@ -10,7 +11,8 @@
             [scheduler.json :as json]
             [scheduler.random :as random]
             [scheduler.time :as time]
-            [taoensso.timbre :as log]))
+            [taoensso.timbre :as log]
+            [clojure.string :as str]))
 
 (set! *warn-on-reflection* true)
 
@@ -827,12 +829,14 @@
       [data run-id])
     [(assoc data :state :error-cannot-create-run-in-this-state) nil]))
 
-;; Since the version is a constant GraalVM will evaluate it at compile-time, and
-;; it will stay fixed independent of run-time values of the environment
-;; variable.
+;; When building with Bazel we generate a resource file containing the git
+;; commit hash, otherwise we expect the git commit hash to be passed in via an
+;; environment variable.
 (def gitrev ^String
-  (or (System/getenv "DETSYS_SCHEDULER_VERSION")
-      "unknown"))
+  (if-let [file (io/resource "version.txt")]
+    (str/trimr (slurp file))
+    (or (System/getenv "DETSYS_SCHEDULER_VERSION")
+        "unknown")))
 
 (s/def ::gitrev string?)
 
