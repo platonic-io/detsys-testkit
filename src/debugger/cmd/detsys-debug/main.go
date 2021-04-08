@@ -22,6 +22,13 @@ func min(x, y int) int {
 	return x
 }
 
+func max(x, y int) int {
+	if x < y {
+		return y
+	}
+	return x
+}
+
 var textView = tview.NewTextView().
 	SetWrap(false).
 	SetDynamicColors(true)
@@ -50,6 +57,9 @@ var logView = tview.NewTextView().
 	SetWrap(false).
 	SetDynamicColors(true)
 var wLogView = tview.ANSIWriter(logView)
+
+var sentMsgsView = tview.NewTable().
+	SetFixed(1, 1)
 
 type DebugApplication struct {
 	testId        lib.TestId
@@ -109,11 +119,57 @@ func (da *DebugApplication) redraw() {
 	for _, log := range logs {
 		fmt.Fprintf(wLogView, "%s\n", string(log))
 	}
+
+	da.refreshSentMessages()
 }
 
 func (da *DebugApplication) goToFrom(table *tview.Table) {
 	event := da.events[da.activeRow-1]
 	table.Select(event.SentAt, 0)
+}
+
+func (da *DebugApplication) sentEventsAtActive() []debugger.NetworkEvent {
+	event := da.events[da.activeRow-1]
+	sentEvents := make([]debugger.NetworkEvent, 0, 0)
+	for _, ev := range da.events {
+		if ev.SentAt == event.RecvAt {
+			sentEvents = append(sentEvents, ev)
+		}
+	}
+	return sentEvents
+}
+
+func (da *DebugApplication) refreshSentMessages() {
+	sentMsgsView.Clear()
+
+	// Should we have absolute time, and/or relative time to current event?
+	headers := []string{"Event", "To", "Received", "Message"}
+
+	for column, header := range headers {
+		tableCell := tview.NewTableCell(header).
+			SetSelectable(false).
+			SetTextColor(tcell.ColorYellow).
+			SetAttributes(tcell.AttrBold).
+			SetAlign(tview.AlignLeft)
+		sentMsgsView.SetCell(0, column, tableCell)
+	}
+
+	for row, event := range da.sentEventsAtActive() {
+		for column, cell := range headers {
+			var tableCell *tview.TableCell
+			switch cell {
+			case "Event":
+				tableCell = tview.NewTableCell(event.Message)
+			case "To":
+				tableCell = tview.NewTableCell(event.To)
+			case "Received":
+				tableCell = tview.NewTableCell(strconv.Itoa(event.RecvAt))
+			case "Message":
+				tableCell = tview.NewTableCell(string(event.Args))
+			}
+			sentMsgsView.SetCell(row+1, column, tableCell)
+		}
+	}
 }
 
 func MakeDebugApplication(testId lib.TestId, runId lib.RunId) *DebugApplication {
@@ -213,6 +269,7 @@ func main() {
 			tableCell := tview.NewTableCell(header).
 				SetSelectable(false).
 				SetTextColor(tcell.ColorYellow).
+				SetAttributes(tcell.AttrBold).
 				SetAlign(tview.AlignLeft)
 			table.SetCell(0, column, tableCell)
 		}
@@ -254,6 +311,21 @@ func main() {
 			})
 	}
 
+	sentMsgsView.
+		SetBorder(true).
+		SetTitle("Sent Messages")
+	sentMsgsView.SetSelectable(true, false)
+	da.refreshSentMessages()
+
+	sentMsgsView.SetSelectionChangedFunc(
+		func(row, column int) {
+			events := da.sentEventsAtActive()
+			row = max(0, row-1)
+			row = min(row, len(events))
+			event := events[row]
+			table.Select(event.RecvAt, 0)
+		})
+
 	reactorsWidget.SetChangedFunc(func(index int, _mainText string, _secondaryText string, shortcut rune) {
 		da.activeReactor = index
 		da.redraw()
@@ -281,6 +353,10 @@ func main() {
 	reactorsWidget.SetBorderPadding(1, 1, 1, 2)
 	stateWidget.SetBorder(true).SetTitle("Reactor State")
 
+	msgViews := tview.NewFlex().
+		AddItem(messageView, 0, 1, false).
+		AddItem(sentMsgsView, 0, 1, false)
+
 	layout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(tview.NewFlex().
@@ -289,7 +365,7 @@ func main() {
 				AddItem(stateWidget, 0, 1, false).
 				AddItem(table, 20, 1, false), 0, 1, false).
 			AddItem(diagramWidget, 0, 1, false), 0, 20, false).
-		AddItem(messageView, 5, 1, false).
+		AddItem(msgViews, 8, 1, false).
 		AddItem(logView, 10, 1, false)
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
