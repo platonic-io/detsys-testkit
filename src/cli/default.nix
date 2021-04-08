@@ -20,7 +20,7 @@ buildGoModule rec {
   vendorSha256 = "1b99x48mqbayfa4zsqq1nkbamqw6r1x46qcsnkn40bvddm99l5jx";
 
   buildFlagsArray =
-    [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}" ];
+    [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git}-nix" ];
 
   preBuild = ''
     # We need to put the source of the library in `../lib`, because

@@ -18,7 +18,7 @@ in stdenv.mkDerivation rec {
                 ++ lib.optional stdenv.isLinux [ freetype.dev ];
 
   buildPhase = ''
-    export DETSYS_CHECKER_VERSION="${lib.commitIdFromGitRepo ./../../.git}"
+    export DETSYS_CHECKER_VERSION="${lib.commitIdFromGitRepo ./../../.git}-nix"
     export CLASSPATH=$(find ${mavenRepository} -name "*.jar" -printf ':%h/%f')
     export builddir=$TMP/classes
     mkdir -p $builddir
@@ -53,7 +53,6 @@ in stdenv.mkDerivation rec {
       ${lib.optionalString stdenv.isDarwin ''-H:-CheckToolchain''} \
       -H:+ReportExceptionStackTraces \
       -H:IncludeResources="db/.*|static/.*|templates/.*|.*.yml|.*.xml|.*/org/sqlite/.*|org/sqlite/.*" \
-      -H:IncludeResources=".*/version.txt" \
       -H:JNIConfigurationFiles=${src}/native-image/jni-config.json \
       -H:ReflectionConfigurationFiles=${src}/native-image/reflection-config.json \
       -J-Dclojure.spec.skip-macros=true \
