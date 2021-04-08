@@ -36,7 +36,6 @@ haskell_library(
         "@stackage//:filepath",
         "@stackage//:QuickCheck",
         "@stackage//:sqlite-simple",
-        "@stackage//:template-haskell",
         "@stackage//:text",
         "@stackage//:z3",
     ],

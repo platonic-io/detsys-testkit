@@ -127,12 +127,15 @@ stack_snapshot(
         "bytestring",
         "containers",
         "filepath",
+        "megaparsec",
         "mtl",
         "optparse-generic",
-        "template-haskell",
+        "parser-combinators",
         "QuickCheck",
         "sqlite-simple",
         "text",
+        "unordered-containers",
+        "vector",
 
         # z3-haskell dependencies
         "transformers",
