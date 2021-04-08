@@ -32,7 +32,7 @@ pkg.overrideAttrs (attrs: {
   pname = "detsys-ldfi2";
   src = gitignoreSource ./.;
   configureFlags =
-    [ "--ghc-option=-D__GIT_HASH__=\"${nixpkgs.lib.commitIdFromGitRepo ./../../.git}\"" ];
+    [ "--ghc-option=-D__GIT_HASH__=\"${nixpkgs.lib.commitIdFromGitRepo ./../../.git}-nix\"" ];
   # this should probably check that attrs.checkInputs doesn't exist
   checkInputs = [ nixpkgs.pkgs.haskell.packages.${compiler}.tasty-discover ];
 })

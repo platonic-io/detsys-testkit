@@ -16,7 +16,9 @@ stdenv.mkDerivation rec {
   installPhase = ''
     mkdir -p $out/bin
     install -Dm755 ${pname}.sh $out/bin/${pname}
-    install -Dm755 ${writeText "${pname}-version" (lib.commitIdFromGitRepo ./../../.git)} \
+    install -Dm755 \
+            ${writeText "${pname}-version"
+              (lib.commitIdFromGitRepo ./../../.git + "-nix")} \
             $out/bin/${pname}-version
   '';
 }
