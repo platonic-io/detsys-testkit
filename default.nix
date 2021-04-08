@@ -7,7 +7,7 @@
 , nix-build-debugger  ? false
 , nix-build-generator ? true
 , nix-build-ldfi      ? false
-, nix-build-ltl       ? true
+, nix-build-ltl       ? false
 , nix-build-scheduler ? false
 }:
 with pkgs;
