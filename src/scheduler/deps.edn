@@ -1,4 +1,4 @@
-{:paths ["src" "java/src"]
+{:paths ["src" "java/src" "resources"]
  :deps {ring/ring-core              {:mvn/version "1.8.1"}
         ring/ring-devel             {:mvn/version "1.8.1"}
         ring/ring-defaults          {:mvn/version "0.3.2"}
