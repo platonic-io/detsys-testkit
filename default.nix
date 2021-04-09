@@ -39,9 +39,9 @@ stdenv.mkDerivation {
         then []
         else [ ./bazel-bin/src ./bazel-out/k8-fastbuild-ST-578d10beb4b5/bin ];
 
-  phases = [ "installPhase" "installCheckPhase" ];
+  phases = [ "installPhase" "installCheckPhase" "postInstall" ];
 
-  nativeBuildInputs = if stdenv.isLinux then [ patchelf ] else [];
+  nativeBuildInputs = (if stdenv.isLinux then [ patchelf ] else []) ++ [ hexdump xxd ];
 
   propagatedBuildInputs = [ z3 ]
                           ++ lib.optional (nix-build-all || nix-build-checker)   [ checker ]
@@ -130,5 +130,22 @@ stdenv.mkDerivation {
     #if [ "$($out/bin/detsys --version)" != "detsys version unknown" ]; then
     #   echo "version mismatch"
     #fi
+  '';
+
+  # Patch the binaries replacing dummy git commits with the real current git
+  # commit hash.
+  postInstall = ''
+    export DUMMY_VERSION="$(echo -n 0000000000000000000000000000000000000000-nix \
+                                 | hexdump -ve '1/1 "%.2X"')"
+    export REAL_VERSION="$(echo -n ${pkgs.lib.commitIdFromGitRepo ./.git + "-nix"} \
+                                | hexdump -ve '1/1 "%.2X"')"
+    for component in ldfi checker scheduler; do
+        # TODO(stevan): only do the next steps if --version returns the dummy version?
+        hexdump -ve '1/1 "%.2X"' $out/bin/detsys-$component \
+                | sed "s/$DUMMY_VERSION/$REAL_VERSION/" \
+                | xxd -r -p > $out/bin/detsys-$component-patched
+        mv $out/bin/detsys-$component-patched $out/bin/detsys-$component
+        chmod 755 $out/bin/detsys-$component
+    done
   '';
 }
