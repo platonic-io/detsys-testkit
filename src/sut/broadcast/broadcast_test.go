@@ -15,8 +15,8 @@ import (
 func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testing.T) (lib.RunId, bool) {
 	topology := lib.NewTopology(
 		lib.Item{"A", NewNodeA(round)},
-		lib.Item{"B", NewNode("B", round)},
-		lib.Item{"C", NewNode("C", round)},
+		lib.Item{"B", NewNode(round, "C")},
+		lib.Item{"C", NewNode(round, "B")},
 	)
 	marshaler := NewMarshaler()
 	var srv http.Server
@@ -53,7 +53,7 @@ func many(round Round, expectedRuns int, t *testing.T, expectedFaults []lib.Faul
 		// time, we can't. And we also got timers which increase the
 		// logical clock, which means we sometimes need a higher EFF in
 		// order to find the problem.
-		EFF:     5,
+		EFF:     3,
 		Crashes: 1,
 		EOT:     10,
 	}
