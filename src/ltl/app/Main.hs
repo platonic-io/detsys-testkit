@@ -14,6 +14,7 @@ import Options.Generic
 
 import Ltl
 import Ltl.Json
+import qualified Ltl.Proof as Proof
 import Ltl.Prop.Parser (parse)
 import qualified Ltl.Storage as Storage
 
@@ -46,6 +47,14 @@ data Config
 
 instance ParseRecord Config
 
+data Result = Result
+  { result :: Bool
+  , reason :: String
+  } deriving (Generic)
+
+instance Aeson.FromJSON Result
+instance Aeson.ToJSON Result
+
 main :: IO ()
 main = do
   (cfg, help) <- getWithHelp "LTL checker"
@@ -56,13 +65,10 @@ main = do
       testFormula <- case parse (unHelpful formula) of
         Left s  -> error s
         Right x -> pure x
-      let r = Result $ check testFormula trace
+      let
+        dec = check testFormula trace
+        result = case dec of
+          Proof.No{} -> False
+          Proof.Yes{} -> True
+        r = Result result (Proof.reason dec)
       TextIO.putStrLn $ AesonText.encodeToLazyText r
-
-
-data Result = Result
-  { result :: Bool
-  } deriving (Generic)
-
-instance Aeson.FromJSON Result
-instance Aeson.ToJSON Result

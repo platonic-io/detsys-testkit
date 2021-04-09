@@ -21,6 +21,7 @@ library
   exposed-modules:
       Ltl
     , Ltl.Json
+    , Ltl.Proof
     , Ltl.Prop
     , Ltl.Prop.Parser
     , Ltl.Storage

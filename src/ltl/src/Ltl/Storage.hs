@@ -96,7 +96,16 @@ mkTrace es s = case go es s of
   where
     updateState es = Map.adjust (\v -> mergePatch v (Maybe.fromMaybe ("Can't decode heap") $ Aeson.decode $ TextEncoding.encodeUtf8 $ esHeapDiff es)) (esReactor es)
     go [] _ = []
-    go (es:ess) state = let state' = updateState es state in StateBehaviour (State state) Event (State state') : go ess state'
+    go (es:ess) state =
+      let
+        state' = updateState es state
+        sb = StateBehaviour
+          { before = State state
+          , worldTime = esLogicalTime es
+          , action = Event
+          , after = State state'
+          }
+      in sb : go ess state'
 
 sqliteLoad :: TestId -> RunId -> IO Trace
 sqliteLoad testId runId = do
