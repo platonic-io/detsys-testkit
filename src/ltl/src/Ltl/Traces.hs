@@ -14,6 +14,7 @@ data Event = Event -- we will extend this later
 
 data StateBehaviour = StateBehaviour
   { before :: State
+  , worldTime :: Int
   , action :: Event
   , after  :: State
   } deriving (Show)
