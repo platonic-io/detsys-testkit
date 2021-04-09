@@ -17,7 +17,9 @@ in stdenv.mkDerivation rec {
   buildInputs = [ clojure jdk11_headless graalvm11-ce ];
 
   buildPhase = ''
-    export DETSYS_SCHEDULER_VERSION="${lib.commitIdFromGitRepo ./../../.git}-nix"
+    # This is a dummy git hash to avoid breaking the nix cache, it will be
+    # patched in the `postInstall` phase of the top-level `default.nix`.
+    export DETSYS_SCHEDULER_VERSION="0000000000000000000000000000000000000000-nix"
     export CLASSPATH=$(find ${mavenRepository} -name "*.jar" -printf ':%h/%f')
     export builddir=$TMP/classes
     mkdir -p $builddir
