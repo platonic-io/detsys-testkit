@@ -139,7 +139,7 @@ stdenv.mkDerivation {
                                  | hexdump -ve '1/1 "%.2X"')"
     export REAL_VERSION="$(echo -n ${pkgs.lib.commitIdFromGitRepo ./.git + "-nix"} \
                                 | hexdump -ve '1/1 "%.2X"')"
-    for component in ldfi checker scheduler; do
+    for component in checker db debug ldfi ltl scheduler; do
         # TODO(stevan): only do the next steps if --version returns the dummy version?
         hexdump -ve '1/1 "%.2X"' $out/bin/detsys-$component \
                 | sed "s/$DUMMY_VERSION/$REAL_VERSION/" \
@@ -147,5 +147,13 @@ stdenv.mkDerivation {
         mv $out/bin/detsys-$component-patched $out/bin/detsys-$component
         chmod 755 $out/bin/detsys-$component
     done
-  '';
+
+    # The cli binary doesn't follow the same naming convention as the other
+    # components, so we treat it separately.
+    hexdump -ve '1/1 "%.2X"' $out/bin/detsys \
+            | sed "s/$DUMMY_VERSION/$REAL_VERSION/" \
+            | xxd -r -p > $out/bin/detsys-patched
+    mv $out/bin/detsys-patched $out/bin/detsys
+    chmod 755 $out/bin/detsys
+    '';
 }
