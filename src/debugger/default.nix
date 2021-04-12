@@ -19,7 +19,9 @@ buildGoModule rec {
   vendorSha256 = "1y6yq31zmhv1278wf2lpf9p90nlvj44iqcrka9fq8pihdqq3pv7n";
 
   buildFlagsArray =
-    [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git + "-nix"}" ];
+    # This is a dummy git hash to avoid breaking the nix cache, it will be
+    # patched in the `postInstall` phase of the top-level `default.nix`.
+    [ "-ldflags=-X main.version=0000000000000000000000000000000000000000-nix" ];
 
   subPackages = [ "cmd/detsys-debug" ];
 

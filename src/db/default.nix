@@ -20,7 +20,9 @@ buildGoModule rec {
   vendorSha256 = "027028sx9dz7ixz31611xcbrv9z2h62rmiyl74fa405k5m1yaljc";
 
   buildFlagsArray =
-    [ "-ldflags=-X main.version=${lib.commitIdFromGitRepo ./../../.git + "-nix"}" ];
+    # This is a dummy git hash to avoid breaking the nix cache, it will be
+    # patched in the `postInstall` phase of the top-level `default.nix`.
+    [ "-ldflags=-X main.version=0000000000000000000000000000000000000000-nix" ];
 
   preBuild = ''
     # We need to put the source of the library in `../lib`, because
