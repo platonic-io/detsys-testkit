@@ -26,7 +26,7 @@ pkgs.mkShell {
     pythonEnv
     fake-lsb-release
     mypy
-    haskell.compiler.ghc8103
+    haskell.compiler.ghc8104
     haskellPackages.cabal-install
     haskellPackages.tasty-discover
     haskellPackages.cabal-fmt # For formatting .cabal files, example

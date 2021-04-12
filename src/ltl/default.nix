@@ -1,5 +1,5 @@
 { sources ? import ./../../nix/sources.nix
-, compiler ? "ghc8103"
+, compiler ? "ghc8104"
 }:
 let
   inherit (import sources.gitignore { }) gitignoreSource;
