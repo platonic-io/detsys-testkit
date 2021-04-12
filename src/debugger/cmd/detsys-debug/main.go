@@ -49,7 +49,8 @@ var wDiagramHeader = tview.ANSIWriter(diagramHeader)
 var reactorsWidget = tview.NewList()
 
 var messageView = tview.NewTextView().
-	SetWrap(false).
+	SetWrap(true).
+	SetWordWrap(true).
 	SetDynamicColors(true)
 var wMessageView = tview.ANSIWriter(messageView)
 
