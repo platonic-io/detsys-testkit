@@ -1,17 +1,5 @@
 { sources ? import ./../../nix/sources.nix
-, pkgs ? import sources.nixpkgs {}
+, compiler ? "ghc8103"
 }:
-with pkgs;
 
-let
-  inherit (import sources.gitignore {}) gitignoreSource;
-  ldfi = callPackage ./release.nix {
-    pythonPackages = python38Packages;
-    gitignoreSource = gitignoreSource;
-  };
-  pythonEnv = python38.withPackages (ps: [ ldfi ps.pytest ]);
-in
-
-mkShell {
-  buildInputs = [ pythonEnv z3 mypy black ];
-}
+(import ./default.nix { inherit sources compiler; }).env

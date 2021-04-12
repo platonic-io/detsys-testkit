@@ -1,18 +1,54 @@
-load("@pip//:requirements.bzl", "requirement")
-load("@rules_python//python:defs.bzl", "py_test")
+package(default_visibility = ["//visibility:public"])
 
-py_test(
-    name = "ldfi_test",
-    main = "tests/test_ldfi.py",
-    srcs = ["tests/test_ldfi.py"],
-    imports = [".."],
+load(
+  "@rules_haskell//haskell:defs.bzl",
+  "haskell_binary",
+  "haskell_library",
+)
+
+genrule(
+    name = "ldfi_version",
+    srcs = [],
+    outs = ["src/Ldfi/GitHash.hs"],
+    cmd = ";".join([
+        "( echo 'module Ldfi.GitHash (gitHash) where'",
+        "echo 'gitHash :: String'",
+        "echo -n 'gitHash = \"'",
+        "awk '/STABLE_GIT_COMMIT/ { printf $$2 }' bazel-out/stable-status.txt",
+        "echo '\"'",
+        ") > \"$@\"",
+    ]),
+    stamp = True,
+    message = "Generating version file",
+    visibility = ['//visibility:public'],
+)
+
+haskell_library(
+    name = "ldfi_lib",
+    src_strip_prefix = "src",
+    srcs = glob(['src/**/*.hs']) + [":ldfi_version"],
     deps = [
-        requirement("z3-solver"),
-        "//src/ldfi/src:ldfi_lib",
+        "@stackage//:aeson",
+        "@stackage//:base",
+        "@stackage//:binary",
+        "@stackage//:bytestring",
+        "@stackage//:containers",
+        "@stackage//:filepath",
+        "@stackage//:QuickCheck",
+        "@stackage//:sqlite-simple",
+        "@stackage//:text",
+        "@stackage//:z3",
     ],
-    data = ["@z3.dev//:bin"],
+)
 
-    env = {
-        "Z3_LIBRARY_PATH": "/nix/store/zdaninww6cyh3h9aj7w0kymz8c13b1q4-z3-4.8.9-lib/lib"
-    }
+haskell_binary(
+    name = "ldfi",
+    srcs = ["app/Main.hs"],
+    compiler_flags = ["-D__BAZEL_BUILD__"],
+    deps = [
+        "@stackage//:base",
+        "@stackage//:optparse-generic",
+        "@stackage//:text",
+        ":ldfi_lib",
+    ],
 )

@@ -20,7 +20,7 @@ let
   db = callPackage ./src/db/default.nix {};
   debugger = callPackage ./src/debugger/default.nix {};
   generator = callPackage ./src/generator/default.nix {};
-  ldfi = callPackage ./src/ldfi2/default.nix {};
+  ldfi = callPackage ./src/ldfi/default.nix {};
   ltl = callPackage ./src/ltl/default.nix {};
   scheduler = callPackage ./src/scheduler/default.nix {};
 in
@@ -97,7 +97,7 @@ stdenv.mkDerivation {
     ${if nix-build-ldfi || nix-build-all then ''
     install -D ${ldfi.out}/bin/detsys-ldfi $out/bin
     '' else ''
-    install -D $bazelBin/ldfi2/ldfi2 $out/bin/detsys-ldfi
+    install -D $bazelBin/ldfi/ldfi $out/bin/detsys-ldfi
     ${lib.optionalString stdenv.isLinux ''
          patchelf --set-interpreter $(cat $NIX_CC/nix-support/dynamic-linker) \
                   "$out/bin/detsys-ldfi"
