@@ -41,7 +41,7 @@ stdenv.mkDerivation {
 
   phases = [ "installPhase" "installCheckPhase" "postInstall" ];
 
-  nativeBuildInputs = (if stdenv.isLinux then [ patchelf ] else []) ++ [ hexdump xxd ];
+  nativeBuildInputs = (if stdenv.isLinux then [ patchelf ] else []) ++ [ bbe ];
 
   propagatedBuildInputs = [ z3 ]
                           ++ lib.optional (nix-build-all || nix-build-checker)   [ checker ]
@@ -135,24 +135,18 @@ stdenv.mkDerivation {
   # Patch the binaries replacing dummy git commits with the real current git
   # commit hash.
   postInstall = ''
-    export DUMMY_VERSION="$(echo -n 0000000000000000000000000000000000000000-nix \
-                                 | hexdump -ve '1/1 "%.2X"')"
-    export REAL_VERSION="$(echo -n ${pkgs.lib.commitIdFromGitRepo ./.git + "-nix"} \
-                                | hexdump -ve '1/1 "%.2X"')"
+    export DUMMY_VERSION="0000000000000000000000000000000000000000-nix"
+    export REAL_VERSION="${pkgs.lib.commitIdFromGitRepo ./.git + "-nix"}"
     for component in checker db debug ldfi ltl scheduler; do
         # TODO(stevan): only do the next steps if --version returns the dummy version?
-        hexdump -ve '1/1 "%.2X"' $out/bin/detsys-$component \
-                | sed "s/$DUMMY_VERSION/$REAL_VERSION/" \
-                | xxd -r -p > $out/bin/detsys-$component-patched
+        bbe -e "s/$DUMMY_VERSION/$REAL_VERSION/" $out/bin/detsys-$component -o $out/bin/detsys-$component-patched
         mv $out/bin/detsys-$component-patched $out/bin/detsys-$component
         chmod 755 $out/bin/detsys-$component
     done
 
     # The cli binary doesn't follow the same naming convention as the other
     # components, so we treat it separately.
-    hexdump -ve '1/1 "%.2X"' $out/bin/detsys \
-            | sed "s/$DUMMY_VERSION/$REAL_VERSION/" \
-            | xxd -r -p > $out/bin/detsys-patched
+    bbe -e "s/$DUMMY_VERSION/$REAL_VERSION/" $out/bin/detsys -o $out/bin/detsys-patched
     mv $out/bin/detsys-patched $out/bin/detsys
     chmod 755 $out/bin/detsys
     '';
