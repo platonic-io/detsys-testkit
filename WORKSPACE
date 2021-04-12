@@ -108,7 +108,7 @@ load("@rules_haskell//haskell:toolchain.bzl", "rules_haskell_toolchains")
 
 http_archive(
     name = "haskell_z3",
-    build_file = "//src/ldfi2/third_party/haskell-z3:haskell-z3.BUILD",
+    build_file = "//src/ldfi/third_party/haskell-z3:haskell-z3.BUILD",
     strip_prefix = "haskell-z3-e8af470c0e6045d063f2361719dfac488e5476bd",
     sha256 = "5ce97d4315855d2ec4abdd0f7c2404225d3abfbd80a6c2a9e1ff8de62c8a5cc2",
     urls = [
