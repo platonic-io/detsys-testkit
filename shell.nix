@@ -3,7 +3,6 @@
 with pkgs;
 
 let
-  pythonEnv = python38.withPackages (ps: [ ps.pip ]);
   fake-lsb-release = pkgs.writeScriptBin "lsb_release" ''
     #!${pkgs.runtimeShell}
 
@@ -23,9 +22,7 @@ pkgs.mkShell {
     buildifier # Bazel BUILD file formatter
     go
     clojure
-    pythonEnv
     fake-lsb-release
-    mypy
     haskell.compiler.ghc8104
     haskellPackages.cabal-install
     haskellPackages.tasty-discover
