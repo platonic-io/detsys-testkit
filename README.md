@@ -98,10 +98,11 @@ messages between the nodes of the system arrive at their destination.
 
 Distributed systems typically consist of several different components that are
 not necessarily written in the same programming language. Distributed systems
-are also long running, and as they run they might accumulate "junk" which makes
-them fail over time. Distributed systems need to be able to be upgraded without
-downtime, in order to do so they need to allow for different software versions
-of the components to be compatible.
+need to be resilient in the presence of failures. Distributed systems are also
+long running, and as they run they might accumulate "junk" which makes them fail
+over time. Distributed systems need to be able to be upgraded without downtime,
+in order to do so they need to allow for different software versions of the
+components to be compatible.
 
 With all these constraints in mind, let us sketch the high-level design of this
 project.
@@ -119,7 +120,9 @@ The different stages of testing, e.g. generating, executing, checking, etc,
 become separate processes which can be run independently and they communicate
 via the database. This allows for things like generating one test case,
 executing it several times (especially important for concurrent or distributed
-systems), check each execution several times all at different moments of time.
+systems), check each execution several times all at different moments of time
+(as we learn new things to assert we can check old execution traces without
+rerunning the test).
 
 In order to avoid the non-determinism of distributed systems we assume that all
 components that rely on network communication implement a reactor-like
@@ -132,18 +135,23 @@ the nodes of the system. In fact we route all network messages through a
 which order messages arrive, hence eliminating the non-determinism related to
 networking in a distributed system.
 
-Because the SUT can be implemented in multiple different languages, there's a small shim on
-top of the SUT, called `executor`, which receives messages from the scheduler
-and applies them to the SUT. The idea being that this shim can easily be ported
-to other programming languages.
+Another big source of non-determinism in distributed systems are faults.
+Messages might arrive late, not arrive at all, or nodes might crash, etc. The
+fault-space grows very [quickly](src/ldfi/README.md), so in order to achieve any
+meaningful coverage we use [lineage-driven fault
+injection](https://dl.acm.org/doi/10.1145/2723372.2723711). In short what it
+does is to start with a successful test execution and tries to figure out what
+steps in the execution were crucial to the outcome and bases the fault injection
+on that analysis.
 
-* TODO: ldfi/faults + link to ticket
+Because the SUT can be implemented in multiple different languages, there's a
+small shim on top of the SUT, called `executor`, which receives messages from
+the scheduler and applies them to the SUT. The idea being that this shim can
+easily be ported to other programming languages.
 
-* TODO: high-level diagram
+Here's a high-level diagram of the components:
 
-* TODO: link to video presentation?
-
-* TODO: Longer term we'd like this reactor assumtion to be replaced by a test protocol
+![Control structure](doc/control_structure_deterministic_system_tests.png)
 
 ### More examples
 
@@ -155,7 +163,7 @@ to other programming languages.
 
 For the typical user it should be enough to understand the high-level picture,
 the examples and the library API for the programming language they want to write
-the tests in.
+the tests in (currently only Golang is supported).
 
 However if you are curious or want to contribute to the project itself it's also
 helpful to understand more about the components themselves and that's what this
