@@ -12,7 +12,7 @@ import (
 	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
 
-func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testing.T) (lib.RunId, bool) {
+func once(round Round, testId lib.TestId, runEvent lib.CreateRunEvent, t *testing.T) (lib.RunId, lib.LTLResult) {
 	topology := lib.NewTopology(
 		lib.Item{"A", NewNodeA(round)},
 		lib.Item{"B", NewNode(round, "C")},
@@ -70,8 +70,8 @@ func many(round Round, expectedRuns int, t *testing.T, expectedFaults []lib.Faul
 			MinTimeNs:     0,
 		}
 		runId, result := once(round, testId, runEvent, t)
-		if !result {
-			fmt.Printf("%+v and %+v doesn't pass analysis\n", testId, runId)
+		if !result.Result {
+			fmt.Printf("%+v and %+v doesn't pass analysis\n%s\n", testId, runId, result.Reason)
 			if !reflect.DeepEqual(faults, expectedFaults) {
 				t.Errorf("Expected faults:\n%#v, but got faults:\n%#v\n",
 					expectedFaults, faults)
