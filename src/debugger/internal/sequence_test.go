@@ -87,10 +87,58 @@ var settings_1 = DrawSettings{
 	MarkAt:     1,
 }
 
-func TestSequence(t *testing.T) {
+var arrows_2 = []Arrow{
+	Arrow{
+		From:    "A",
+		To:      "B",
+		Message: "first",
+		At:      0,
+	},
+	Arrow{
+		From:    "B",
+		To:      "C",
+		Message: "second",
+		Dropped: true,
+		At:      1,
+	},
+}
+
+const outcome_2 = `
+╭───╮       ╭───╮        ╭───╮
+│ A │       │ B │        │ C │
+╰─┬─╯       ╰─┬─╯        ╰─┬─╯
+  │   first   │            │
+  ├───────────▶            │
+[red]╭─┴─╮[-]         │          [red]╭─┴─╮[-]
+[red]│ ☠ │[-]         │          [red]│ ☠ │[-]
+[red]╰───╯[-]         │          [red]╰───╯[-]
+              │["focused"][yellow]>>>second<<<[-][""]
+              ├╌╌╌╌╌╌╌╌╌╌╌╌▶
+╭─┴─╮       ╭─┴─╮        ╭─┴─╮
+│ A │       │ B │        │ C │
+╰───╯       ╰───╯        ╰───╯
+`
+
+var settings_2 = DrawSettings{
+	MarkerSize: 3,
+	MarkAt:     1,
+	Crashes: map[int][]string{
+		1: []string{"A", "C"},
+	},
+}
+
+func TestSimpleSequence(t *testing.T) {
 	arrows := arrows_1
 	outcome := outcome_1
 	settings := settings_1
+	goldenTest(t, settings, arrows, outcome)
+}
+
+func TestSequenceCrash(t *testing.T) {
+	arrows := arrows_2
+	outcome := outcome_2
+	settings := settings_2
+	fmt.Println(outcome_3)
 	goldenTest(t, settings, arrows, outcome)
 }
 
