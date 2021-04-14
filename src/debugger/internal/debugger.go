@@ -3,6 +3,7 @@ package debugger
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	jsonpatch "github.com/evanphx/json-patch"
 	_ "github.com/mattn/go-sqlite3"
@@ -104,7 +105,9 @@ func GetNetworkTrace(testId lib.TestId, runId lib.RunId) []NetworkEvent {
 		if err != nil {
 			panic(err)
 		}
-		trace = append(trace, event)
+		if !(event.Message == "timer" && event.Dropped) {
+			trace = append(trace, event)
+		}
 	}
 	return trace
 }
@@ -198,16 +201,19 @@ func colon(s string) string {
 }
 
 type SequenceDiagrams struct {
-	inner  map[int][]byte
-	header []byte
-	net    []NetworkEvent
+	inner   map[int][]byte
+	header  []byte
+	net     []NetworkEvent
+	crashes CrashInformation
 }
 
 func NewSequenceDiagrams(testId lib.TestId, runId lib.RunId) *SequenceDiagrams {
 	net := GetNetworkTrace(testId, runId)
+	crashes := GetCrashes(testId, runId)
 	return &SequenceDiagrams{
-		inner: make(map[int][]byte),
-		net:   net,
+		inner:   make(map[int][]byte),
+		net:     net,
+		crashes: crashes,
 	}
 }
 
@@ -223,6 +229,7 @@ func (s *SequenceDiagrams) At(at int) []byte {
 		arrows = append(arrows, Arrow{
 			From:    event.From,
 			To:      event.To,
+			At:      event.RecvAt,
 			Message: event.Message,
 			Dropped: event.Dropped,
 		})
@@ -230,6 +237,7 @@ func (s *SequenceDiagrams) At(at int) []byte {
 	header, gen := DrawDiagram(arrows, DrawSettings{
 		MarkerSize: 3,
 		MarkAt:     at,
+		Crashes:    s.crashes,
 	})
 
 	if s.header == nil {
@@ -242,6 +250,55 @@ func (s *SequenceDiagrams) At(at int) []byte {
 
 func (s *SequenceDiagrams) Header() []byte {
 	return s.header
+}
+
+func GetCrashes(testId lib.TestId, runId lib.RunId) CrashInformation {
+	db := lib.OpenDB()
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT faults
+                               FROM run_info
+                               WHERE test_id = ?
+                               AND   run_id = ?`, testId.TestId, runId.RunId)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	var faults = make([]lib.Fault, 0)
+	found_one := false
+	for rows.Next() {
+		if found_one {
+			panic(errors.New(fmt.Sprintf("Foun multiple runs with same id: %d - %d", testId.TestId, runId.RunId)))
+		}
+		found_one = true
+
+		var jsonBlob []byte
+		err := rows.Scan(&jsonBlob)
+		if err != nil {
+			panic(err)
+		}
+		err = json.Unmarshal(jsonBlob, &faults)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	for _, f := range faults {
+		fmt.Printf("Found fault: %v\n", f)
+	}
+
+	crashInformation := make(map[int][]string)
+	for _, fault := range faults {
+		switch ev := fault.Args.(type) {
+		case lib.Crash:
+			// assert (fault.Kind == "crash")
+			crashesAtThatTime := crashInformation[ev.At] // will be empty array if key don't exists yet
+			crashesAtThatTime = append(crashesAtThatTime, ev.From)
+			crashInformation[ev.At] = crashesAtThatTime
+		default:
+		}
+	}
+	return crashInformation
 }
 
 func GetLogMessages(testId lib.TestId, runId lib.RunId, reactor string, at int) [][]byte {

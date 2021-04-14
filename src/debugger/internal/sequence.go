@@ -4,6 +4,9 @@ import (
 	"strings"
 )
 
+type CrashInformation = map[int][]string
+type crashInformationInternal = map[int][]int
+
 // inlined version of b.WriteString(strings.Repeat(s,count))
 func WriteRepeat(b *strings.Builder, s string, count int) {
 	if count == 0 {
@@ -37,6 +40,7 @@ func WriteRepeat(b *strings.Builder, s string, count int) {
 type Arrow struct {
 	From    string
 	To      string
+	At      int
 	Message string
 	Dropped bool
 }
@@ -44,6 +48,7 @@ type Arrow struct {
 type arrowInternal struct {
 	from               int
 	to                 int
+	at                 int
 	message            string
 	dropped            bool
 	goingRight         bool
@@ -136,9 +141,79 @@ func appendBoxes(isTop bool, output *strings.Builder, names []string, gaps []int
 	}
 }
 
-func appendArrows(output *strings.Builder, names []string, arrows []arrowInternal, gaps []int, boxSize int) {
+func appendArrows(output *strings.Builder, names []string, arrows []arrowInternal, gaps []int, boxSize int, crashInformation crashInformationInternal) {
+	deadNodes := make(map[int]bool)
+
+	halfBox := boxSize / 2
 	for _, arr := range arrows {
-		halfBox := boxSize / 2
+		newCrashes := crashInformation[arr.at]
+
+		for _, n := range newCrashes {
+			deadNodes[n] = true
+		}
+
+		// output lines for new crashes
+		if newCrashes != nil {
+			for i, _ := range names {
+				// "Top"
+				middle := "  │  "
+				newCrash := false
+				for _, v := range newCrashes {
+					if v == i {
+						newCrash = true
+					}
+				}
+
+				if newCrash {
+					middle = "[red]╭─┴─╮[-]"
+				} else if deadNodes[i] {
+					middle = "     "
+				}
+				WriteRepeat(output, " ", halfBox-2+gaps[i])
+				output.WriteString(middle)
+				WriteRepeat(output, " ", halfBox-2)
+			}
+			output.WriteString("\n")
+			for i, _ := range names {
+				middle := "  │  "
+				newCrash := false
+				for _, v := range newCrashes {
+					if v == i {
+						newCrash = true
+					}
+				}
+
+				if newCrash {
+					middle = "[red]│ ☠ │[-]"
+				} else if deadNodes[i] {
+					middle = "     "
+				}
+				WriteRepeat(output, " ", halfBox-2+gaps[i])
+				output.WriteString(middle)
+				WriteRepeat(output, " ", halfBox-2)
+			}
+			output.WriteString("\n")
+			for i, _ := range names {
+				middle := "  │  "
+				newCrash := false
+				for _, v := range newCrashes {
+					if v == i {
+						newCrash = true
+					}
+				}
+
+				if newCrash {
+					middle = "[red]╰───╯[-]"
+				} else if deadNodes[i] {
+					middle = "     "
+				}
+				WriteRepeat(output, " ", halfBox-2+gaps[i])
+				output.WriteString(middle)
+				WriteRepeat(output, " ", halfBox-2)
+			}
+			output.WriteString("\n")
+		}
+
 		{
 			for i, _ := range names {
 				if i == arr.gapIndexToAnnotate {
@@ -156,7 +231,11 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 					}
 					WriteRepeat(output, " ", space)
 				}
-				output.WriteString("│")
+				if deadNodes[i] {
+					output.WriteString(" ")
+				} else {
+					output.WriteString("│")
+				}
 			}
 			output.WriteString("\n")
 		}
@@ -186,7 +265,11 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 				}
 
 				output.WriteString(leftPart)
-				output.WriteString(middle)
+				if deadNodes[i] {
+					output.WriteString(" ")
+				} else {
+					output.WriteString(middle)
+				}
 				output.WriteString(rightPart)
 
 			}
@@ -196,6 +279,9 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 				WriteRepeat(output, " ", gaps[i])
 				leftPart := halfEmpty
 				middle := "│"
+				if deadNodes[i] {
+					middle = " "
+				}
 				rightPart := halfEmpty
 
 				if i == arr.from {
@@ -217,6 +303,9 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 			for i, _ := range names {
 				leftPart := halfEmpty
 				middle := "│"
+				if deadNodes[i] {
+					middle = " "
+				}
 				rightPart := halfEmpty
 				if (arr.goingRight && arr.from < i && i <= arr.to) ||
 					(!arr.goingRight && arr.to < i && i <= arr.from) {
@@ -270,7 +359,7 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 	}
 }
 
-func drawDiagram(names []string, arrows []arrowInternal, gaps []int, nrLoops int) ([]byte, []byte) {
+func drawDiagram(names []string, arrows []arrowInternal, gaps []int, nrLoops int, crashInformation crashInformationInternal) ([]byte, []byte) {
 	if len(names) < 1 {
 		panic("We need at least one box")
 	}
@@ -286,14 +375,15 @@ func drawDiagram(names []string, arrows []arrowInternal, gaps []int, nrLoops int
 			lineWidth += gap
 		}
 		lineWidth += boxSize * len(names)
-		lineWidth++                                        // newline
-		expectedSize = lineWidth * (len(arrows) + nrLoops) // loops have one more line than normal
+		lineWidth++ // newline
+		// loops have one more line than normal, plus each crash is three lines
+		expectedSize = lineWidth * (len(arrows) + nrLoops + len(crashInformation)*3)
 	}
 	output.Grow(expectedSize)
 
 	appendBoxes(true, &header, names, gaps)
 
-	appendArrows(&output, names, arrows, gaps, boxSize)
+	appendArrows(&output, names, arrows, gaps, boxSize, crashInformation)
 	appendBoxes(false, &output, names, gaps)
 
 	// remove last newline
@@ -312,6 +402,7 @@ func index(haystack []string, needle string) int {
 type DrawSettings struct {
 	MarkerSize int
 	MarkAt     int
+	Crashes    CrashInformation
 }
 
 func DrawDiagram(arrows []Arrow, settings DrawSettings) ([]byte, []byte) {
@@ -327,6 +418,15 @@ func DrawDiagram(arrows []Arrow, settings DrawSettings) ([]byte, []byte) {
 		}
 
 	}
+	crashInformation := make(crashInformationInternal)
+	for k, crashedNodes := range settings.Crashes {
+		targets := make([]int, 0, len(crashedNodes))
+		for _, c := range crashedNodes {
+			targets = append(targets, index(names, c))
+		}
+		crashInformation[k] = targets
+	}
+
 	gaps := make([]int, len(names), len(names))
 	arrowsInternal := make([]arrowInternal, 0, len(arrows))
 	allocatedMarkerSize := 2 * settings.MarkerSize
@@ -373,6 +473,7 @@ func DrawDiagram(arrows []Arrow, settings DrawSettings) ([]byte, []byte) {
 		arrowsInternal = append(arrowsInternal, arrowInternal{
 			from:               from,
 			to:                 to,
+			at:                 arr.At,
 			message:            message,
 			dropped:            arr.Dropped,
 			goingRight:         goingRight,
@@ -392,5 +493,5 @@ func DrawDiagram(arrows []Arrow, settings DrawSettings) ([]byte, []byte) {
 		}
 	}
 
-	return drawDiagram(names, arrowsInternal, gaps, nrLoops)
+	return drawDiagram(names, arrowsInternal, gaps, nrLoops, crashInformation)
 }
