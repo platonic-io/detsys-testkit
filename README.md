@@ -149,9 +149,22 @@ small shim on top of the SUT, called `executor`, which receives messages from
 the scheduler and applies them to the SUT. The idea being that this shim can
 easily be ported to other programming languages.
 
-Here's a high-level diagram of the components:
+One consequence of taming the non-determinism is that if we find a problem in
+our SUT, then we can examine the execution in detail using a time-traveling
+`debugger` which allows us to step forwards and backwards.
+
+Here's a high-level diagram of the project:
 
 ![Control structure](doc/control_structure_deterministic_system_tests.png)
+
+As you can see, the developer can generate test cases, execute them, check their
+traces all in separate steps by calling the test library. Typically this is done
+from the test-suite of the software under test (SUT), however there's also a
+command-line [tool](src/cli) which exposes much of the test library together
+with some other conveniences such as migrating the database, starting the
+scheduler and opening the debugger, as we saw in the getting started section
+above, which you typically only want to do once and therefore outside of the
+SUT's test-suite.
 
 ### More examples
 
@@ -163,27 +176,80 @@ Here's a high-level diagram of the components:
 
 For the typical user it should be enough to understand the high-level picture,
 the examples and the library API for the programming language they want to write
-the tests in (currently only Golang is supported).
+the tests in (currently only Golang is [supported](src/lib)).
 
 However if you are curious or want to contribute to the project itself it's also
 helpful to understand more about the components themselves and that's what this
 section is about.
 
-* How each component works (see their respective `README.md`);
-* Database schema;
-* Interfaces between components (APIs):
-    * Scheduler (see also pseudo
-      [code](doc/pseudo_code_for_discrete-event_simulator.md) for discrete-event
-      simulation);
-    * Executor;
-    * Spell out concurrency model assumptions (see section 2 of LDFI paper);
-    * SUT (see also ["network normal form"](doc/network_normal_form.md).
+Let's start by introducing all components:
 
-```
-  interface Networking {
-    react : {incoming : Message, from : Node, at : Time} -> Set {to : NonEmptySet {Node}, outgoing : Message}
-  }
-```
+* `checker`: checks if a test case execution adhears to a given black-box
+             specification, uses Jepsen's Elle transactional consistency checker;
+
+* `cli`: discoverable and unifying interface between the developer and rest of
+         the components;
+
+* `db`: takes care of migrations for the sqlite database, typically only needed
+  once. The schema has one table which provides is a simple append-only event
+  store of json events, and a bunch of SQL `VIEW`s which are aggregated from the
+  event store;
+
+* `debugger`: visual aid for figuring out what happened during a test case execution;
+
+* `executor`: programming language specific shim on top of the software under
+                test (SUT) for converting programming language agnositic messages
+                from the scheduler to the SUT;
+
+* `generator`: tool for generating test cases (currently merely a placeholder,
+                 not suitable for use);
+
+* `ldfi`: suggests faults to inject given past test case executions;
+
+* `lib`: a Golang library which provides the reactor-like
+         [interface](doc/network_normal_form.md) and exposes all components, so they can
+         be easily called from a test-suite (or from the command-line via `cli`);
+
+* `logger`: Batches writes to the db, for better performance;
+
+* `ltl`: checks if a test case execution adhears to a given white-box
+          specification, uses linear temporal logic for concise assertions about
+          the global state of all nodes in a SUT;
+
+* `scheduler`: loads a generated test case and executes the test case by
+                 forwarding the messages involved in the test case to the
+                 appropriate executors one at the time. The new messages that
+                 the executor gets back from the SUT when processing the
+                 forwarded message gets sent back to the scheduler which
+                 randomly, but deterministically using a seed, assigns arrival
+                 times for the new messages, which simulates concurrency, and
+                 then the process continues until there are no messages left or
+                 some max execution time has been reached. See the following
+                 [document](doc/pseudo_code_for_discrete-event_simulator.md) for
+                 pseudo code of the scheduler implementation;
+
+* `sut/register`: example test-suite for a simple distributed register;
+
+* `sut/broadcast`: example test-suite for a simple broadcast protocol, taken
+                      from the lineage-driven fault injection paper.
+
+Because everything is deterministic, there are a few parameters which uniquely
+determine the outcome of a test run. They are:
+
+  * the test case;
+  * the git commit hashes of the SUT and all above components;
+  * the scheduler seed;
+  * the faults that get injected.
+
+A single test case might be executed using different (but compatible) versions
+(git commits) of the SUT or project components, or using different scheduler
+seed. Likewise a single test case exeuction might be analysed several times
+using different checkers for example.
+
+The database is basically organised to facilitate the above and enable as much
+caching as possible. The components log everything that they are doing to the db
+in a way that can be reproduced. In the future we hope to enable sharing of the
+db between developers and CI, to avoid rerunning the same tests.
 
 ### How to contribute
 
@@ -197,7 +263,8 @@ workflow related stuff.
 * [Simulant](https://github.com/Datomic/simulant);
 * [Jepsen](https://github.com/jepsen-io/jepsen) and
   [Maelstrom](https://github.com/jepsen-io/maelstrom);
-* [stateright](https://github.com/stateright/stateright).
+* [stateright](https://github.com/stateright/stateright);
+* [Spritely goblins](https://spritelyproject.org/#goblins).
 
 ### License
 
