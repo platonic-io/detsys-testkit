@@ -55,7 +55,8 @@ var messageView = tview.NewTextView().
 var wMessageView = tview.ANSIWriter(messageView)
 
 var logView = tview.NewTextView().
-	SetWrap(false).
+	SetWrap(true).
+	SetWordWrap(true).
 	SetDynamicColors(true)
 var wLogView = tview.ANSIWriter(logView)
 
