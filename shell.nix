@@ -11,7 +11,6 @@ let
       -r) echo "nixos";;
     esac
   '';
-  conventional-changelog = pkgs.callPackage ./nix/conventional-changelog/default.nix {};
 in
 
 pkgs.mkShell {
@@ -33,7 +32,6 @@ pkgs.mkShell {
     haskellPackages.ormolu # Haskell code formatting, to format all files in the
                            # current directory: `ormolu --mode inplace $(find . -name '*.hs')`.
     nixpkgs-fmt # Nix code formatting, example invocation: `nixpkgs-fmt default.nix`.
-    conventional-changelog # Run `conventional-changelog -p angular` to generate changelog.
     git
     nix
     niv
