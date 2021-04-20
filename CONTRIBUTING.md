@@ -38,6 +38,12 @@ with the next version, then tag and push the new version with:
     git commit -m "docs: update changelog for release v${NEW_VERSION}"
     gh pr create # Or create a PR via the web UI.
 
+    # Merge the PR.
+
+    git checkout main
+    git pull
+    git branch -d update-changelog-"${NEW_VERSION}"
+
     git tag -a "v${NEW_VERSION}" -m "tag: v${NEW_VERISON}"
     git push origin "v${NEW_VERSION}"
 ```
