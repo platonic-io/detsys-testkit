@@ -33,8 +33,10 @@ with the next version, then tag and push the new version with:
     mv /tmp/NEW_CHANGELOG.md CHANGELOG.md
 
     git diff # Check that everything looks alright.
+    git checkout -b update-changelog-"${NEW_VERSION}"
     git add CHANGELOG.md
     git commit -m "docs: update changelog for release v${NEW_VERSION}"
+    gh pr create # Or create a PR via the web UI.
 
     git tag -a "v${NEW_VERSION}" -m "tag: v${NEW_VERISON}"
     git push origin "v${NEW_VERSION}"
