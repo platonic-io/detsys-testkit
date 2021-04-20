@@ -16,6 +16,7 @@ import (
 
 type HeapDiff struct {
 	Reactor string
+	At      int
 	Diff    []byte
 }
 
@@ -37,19 +38,14 @@ func GetInitHeap(testId lib.TestId) []HeapDiff {
 }
 
 func GetHeapTrace(testId lib.TestId, runId lib.RunId) []HeapDiff {
-	query := fmt.Sprintf(`SELECT reactor,heap_diff
-                              FROM execution_step
-                              WHERE test_id = %d
-                                AND run_id = %d`, testId.TestId, runId.RunId)
-	return helper(query)
-}
-
-func helper(query string) []HeapDiff {
 	db := lib.OpenDB()
 	defer db.Close()
 
-	// TODO(stevan): We are not using the `at` field from the database.
-	rows, err := db.Query(query)
+	rows, err := db.Query(
+		`SELECT reactor,heap_diff, logical_time
+                 FROM execution_step
+                 WHERE test_id = ?
+                 AND run_id = ?`, testId.TestId, runId.RunId)
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +54,7 @@ func helper(query string) []HeapDiff {
 	var diffs []HeapDiff
 	for rows.Next() {
 		diff := HeapDiff{}
-		err := rows.Scan(&diff.Reactor, &diff.Diff)
+		err := rows.Scan(&diff.Reactor, &diff.Diff, &diff.At)
 		if err != nil {
 			panic(err)
 		}
@@ -166,31 +162,42 @@ func Heaps(testId lib.TestId, runId lib.RunId) []map[string][]byte {
 	network := GetNetworkTrace(testId, runId)
 
 	heaps := make([]map[string][]byte, len(network)+1)
+	current := make(map[string][]byte)
 
-	m := make(map[string][]byte)
-	for _, init := range inits {
-		m[init.Reactor] = []byte(init.Diff)
-	}
-	heaps[0] = m
-
-	dropped := 0
-	for i, event := range network {
-		if event.Dropped || strings.HasPrefix(event.To, "client") {
-			dropped++
+	{
+		first := make(map[string][]byte)
+		for _, init := range inits {
+			current[init.Reactor] = []byte(init.Diff)
+			first[init.Reactor] = []byte(init.Diff)
 		}
-		// The `Max` below is needed in case the first message is
-		// dropped.
-		j := Max(0, i-dropped)
+		heaps[0] = first
+	}
+	changeMap := make(map[int]HeapDiff)
+	{
+		for _, hd := range changes {
+			changeMap[hd.At] = hd
+		}
+	}
 
-		old := heaps[i][changes[j].Reactor]
-		new := applyDiff(old, changes[j].Diff)
-		m2 := make(map[string][]byte)
-		m2[changes[j].Reactor] = []byte(new)
-		heaps[i+1] = m2
-		for reactor, heap := range heaps[i] {
-			if reactor != changes[j].Reactor {
-				heaps[i+1][reactor] = heap
+	for i, event := range network {
+		hd, found := changeMap[event.RecvAt]
+		if found {
+			old := current[hd.Reactor]
+			current[hd.Reactor] = applyDiff(old, hd.Diff)
+
+		}
+		// we don't have a heap diff, could be because:
+		// 1. The event was dropped
+		// 2. The event was sent to a client
+		// 3. SUT crashed
+		// Either way we copy the previous state
+		{
+			cp := make(map[string][]byte)
+			for k, v := range current {
+				cp[k] = v
 			}
+			heaps[i+1] = cp
+
 		}
 	}
 	return heaps
@@ -268,7 +275,7 @@ func GetCrashes(testId lib.TestId, runId lib.RunId) CrashInformation {
 	found_one := false
 	for rows.Next() {
 		if found_one {
-			panic(errors.New(fmt.Sprintf("Foun multiple runs with same id: %d - %d", testId.TestId, runId.RunId)))
+			panic(errors.New(fmt.Sprintf("Found multiple runs with same id: %d - %d", testId.TestId, runId.RunId)))
 		}
 		found_one = true
 
@@ -281,10 +288,6 @@ func GetCrashes(testId lib.TestId, runId lib.RunId) CrashInformation {
 		if err != nil {
 			panic(err)
 		}
-	}
-
-	for _, f := range faults {
-		fmt.Printf("Found fault: %v\n", f)
 	}
 
 	crashInformation := make(map[int][]string)
