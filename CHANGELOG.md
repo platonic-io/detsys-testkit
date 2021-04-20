@@ -1,3 +1,20 @@
+## [v0.0.3](https://github.com/symbiont-io/detsys-testkit/compare/v0.0.2...v0.0.3) (2021-04-20)
+
+### Bug fixes
+* **debugger**: More gracious handling of missing heap diffs ([5f66d5b](https://github.com/symbiont-io/detsys-testkit/commit/5f66d5b63b5a9e37b74d73bd2181a464da6238bd))
+
+### Documentation improvements
+* add steps to commit the changelog changes ([0439616](https://github.com/symbiont-io/detsys-testkit/commit/043961632f0de30b18717137bde4a93c733d8351))
+* document the steps involved in a release ([06bcbda](https://github.com/symbiont-io/detsys-testkit/commit/06bcbdac0e8bcac3cc45b5687d298928faa31b51))
+* add changes for v0.0.2 release ([cd765c9](https://github.com/symbiont-io/detsys-testkit/commit/cd765c929e6b6caef85fbd0a0fbcd79dd8286379))
+
+### New features
+* add simplified changelog generator ([ed16441](https://github.com/symbiont-io/detsys-testkit/commit/ed16441accacc45cb7a291a5d5106b0912afbfff))
+
+### Removed features
+* conventional-changelog ([69428d3](https://github.com/symbiont-io/detsys-testkit/commit/69428d39e0508afa819ff0729ac64c1d4fb99fba))
+
+
 ## [v0.0.2](https://github.com/symbiont-io/detsys-testkit/compare/v0.0.1...v0.0.2) (2021-04-19)
 
 ### Bug fixes
