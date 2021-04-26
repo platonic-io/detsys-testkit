@@ -89,8 +89,23 @@ easier.
 
 #### Protocols
 
-* Type system? Dynamic session types!
+This is an idea that comes from the sessions types community, but instead of
+statically checking it at compile-time it's checked during run-time. As far as I
+know checking it at run-time instead is due to Joe Armstrong (Erlang).
 
+When an actor communicates via messages with an other then typically some
+protocol should be followed.
+
+For example if the protocol is some IRC-like chat protocol and if the first
+actor is the client and the second the server, then we'd expect the first
+message from the client to be some kind of CONNECT message, followed by picking
+a name using some NICK message, followed by joining a channel using JOIN (you
+can't join a channel before connecting), once in the channel you can set the
+TOPIC (but you can't do that before joining) and so on.
+
+A protocol is actually just another state machine. It keeps track of what
+messages have been sent and from there can ensure which messages are allowed or
+not.
 
 #### Capabilities
 

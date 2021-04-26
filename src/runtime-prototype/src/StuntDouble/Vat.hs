@@ -97,6 +97,14 @@ makeVat channel = do
                  , vatStateResponses = responsesTVar
                  , vatStateNextRequestId = nextRequestIdTVar
                  }
+  -- We want to spawn several threads here:
+  --   1. That listens for external replies, like `tid` below;
+  --   2. That listens for remote send requests, created by `makeRemoteCall`;
+  --   3. That polls ongoing asyncs and tells the main event loop that the
+  --      handler is ready to be called once the async finishes;
+  --   4. The main event loop, listens for events from the other threads on some
+  --      stm channel.
+
   tid <- forkIO $ forever $ do
     Response rid msg <- channelReceive channel
     -- XXX: handle `send`s here also?
@@ -104,8 +112,12 @@ makeVat channel = do
       responses <- readTVar responsesTVar
       let actorId = 0 -- XXX: should be part of response?
       actor <- fmap (IntMap.! actorId) (readTVar actorsTVar)
-      resp <- runActor vatState (actor msg)
-      putTMVar (responses IntMap.! getRequestId rid) resp
+      cont <- runActor vatState (actor msg)
+      case cont of
+        Now resp -> putTMVar (responses IntMap.! getRequestId rid) resp
+        Later a h -> undefined
+        -- ^ XXX: register that `h` should be called once `a` finishes somewhere
+        -- in the VatState.
 
   return Vat
     { vatId = VatId (show tid) -- XXX: unused? perhaps useful for showing?
@@ -140,11 +152,13 @@ runActor vatState actor = iterM go actor
     go :: ActorF (STM a) -> STM a
     go (Call lref msg k) = do
       callee <- lookupActor vatState lref
-      k =<< runActor vatState (callee msg)
+      cont <- runActor vatState (callee msg)
+      case cont of
+        Now resp -> k resp
+        Later a h -> undefined
+
     go (RemoteCall rref msg k) = do
       k =<< makeRemoteCall vatState rref msg
-
-    go (On amsg handler k) = undefined
     go (Get k) = undefined
     go (Put state' k) = undefined
 
@@ -178,14 +192,14 @@ exitVat = killThread . vatThreadId
 ------------------------------------------------------------------------
 
 localActor :: RemoteRef -> Message -> Actor
-localActor ref (Message "hello") = return (Message "hi!")
+localActor ref (Message "hello") = return (Now (Message "hi!"))
 localActor ref (Message "hello2") = do
   a <- Free (RemoteCall ref (Message "hello") return)
-  return (Message "hi2!")
+  return (Now (Message "hi2!"))
 
 
 remoteActor :: Message -> Actor
-remoteActor (Message "hello") = return (Message "oh hiiiiii!")
+remoteActor (Message "hello") = return (Now (Message "oh hiiiiii!"))
 
 test = do
   (channel1, channel2) <- stmChannel
