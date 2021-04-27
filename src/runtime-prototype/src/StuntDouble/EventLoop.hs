@@ -26,7 +26,8 @@ type AsyncRef = (Async Message, RequestId)
 
 data Event = Command Command | Response Response
 
-data EventLoopRef = EventLoopRef (Async ())
+newtype EventLoopRef = EventLoopRef
+  { loopRefLoopState :: LoopState }
 
 data LoopState = LoopState
   { loopStateAsync :: TMVar (Async ()) -- | Hold the `Async` of the event loop itself.
@@ -48,7 +49,7 @@ makeEventLoop = do
   -- tid' <- forkIO $ forever $ undefined loopState
   a <- async (handleEvents loopState)
   atomically (putTMVar (loopStateAsync loopState) a)
-  return (EventLoopRef a)
+  return (EventLoopRef loopState)
 
 handleEvents :: LoopState -> IO ()
 handleEvents ls = go
@@ -65,3 +66,11 @@ handleCommand :: Command -> LoopState -> IO ()
 handleCommand Quit ls = do
   a <- atomically (takeTMVar (loopStateAsync ls))
   cancel a
+
+quit :: EventLoopRef -> IO ()
+quit r = atomically $
+  writeTBQueue (loopStateQueue (loopRefLoopState r)) (Command Quit)
+
+test = do
+  r <- makeEventLoop
+  quit r
