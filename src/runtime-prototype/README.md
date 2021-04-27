@@ -23,11 +23,12 @@ easier.
 
 #### Interfaces (a.k.a. "behaviours")
 
-* Joe Armstrong's PhD thesis "Making reliable distributed systems in the
-  presence of software errors" written in 2003 when he was 53 years old, he
-  started working on telecom systems in 1981. Quite different from a typical PhD
-  thesis written by a 20-something year old person with no or very little
-  experience from industry...
+* Joe Armstrong's PhD
+  [thesis](https://erlang.org/download/armstrong_thesis_2003.pdf) "Making
+  reliable distributed systems in the presence of software errors" written in
+  2003 when he was 53 years old, he started working on telecom systems in 1981.
+  Quite different from a typical PhD thesis written by a 20-something year old
+  person with no or very little experience from industry...
 
 * Anyway, the thesis can perhaps best be summarised by "the big idea in Erlang
   isn't messaging/actors for concurrency, but using interfaces (a.k.a.
