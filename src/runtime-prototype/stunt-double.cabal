@@ -21,6 +21,7 @@ library
     StuntDouble.Actor
     StuntDouble.EventLoop
     StuntDouble.EventLoop.AsyncHandler
+    StuntDouble.EventLoop.RequestHandler
     StuntDouble.Message
     StuntDouble.Reference
     StuntDouble.Supervisor
@@ -38,6 +39,7 @@ library
       async
     , free
     , random
+    , unix
 
   default-language: Haskell2010
 

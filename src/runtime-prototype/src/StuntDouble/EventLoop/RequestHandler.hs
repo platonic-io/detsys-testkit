@@ -30,7 +30,7 @@ data Envelope = Envelope
   , envelopeMessage  :: Message
   , envelopeReceiver :: RemoteRef
   }
-  deriving (Show, Read)
+  deriving (Eq, Show, Read)
 
 data Transport m = Transport
   { send    :: Envelope -> m ()
@@ -44,8 +44,8 @@ namedPipeTransport fp = do
            then Just ()
            else Nothing)
     (createNamedPipe fp (namedPipeMode `unionFileModes`
-                       ownerReadMode `unionFileModes`
-                       ownerWriteMode))
+                         ownerReadMode `unionFileModes`
+                         ownerWriteMode))
     return
   h <- openFile fp ReadWriteMode
   hSetBuffering h LineBuffering
@@ -71,8 +71,8 @@ handleRequest (Request e) ls = undefined
 test :: IO ()
 test = do
   t <- namedPipeTransport "/tmp/test_request.pipe"
-  let msg = Envelope "from" "msg" "to"
-  a <- async (send t msg)
-  e <- receive t
-  print e
+  let e = Envelope "from" "msg" "to"
+  a <- async (send t e)
+  e' <- receive t
   cancel a
+  assert (e' == e) (return ())
