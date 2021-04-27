@@ -20,6 +20,7 @@ library
   exposed-modules:
     StuntDouble.Actor
     StuntDouble.EventLoop
+    StuntDouble.EventLoop.AsyncHandler
     StuntDouble.Message
     StuntDouble.Reference
     StuntDouble.Supervisor
