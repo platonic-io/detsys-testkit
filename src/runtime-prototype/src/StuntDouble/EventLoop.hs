@@ -32,6 +32,10 @@ newtype EventLoopRef = EventLoopRef
 data LoopState = LoopState
   { loopStateAsync :: TMVar (Async ()) -- | Hold the `Async` of the event loop itself.
   , loopStateQueue :: TBQueue Event
+  , loopStateActors :: TVar (Map InternalActorRef (Message -> Actor))
+  , loopStateHandlers :: TVar (Map RequestId (Message -> Actor))
+  -- , loopStateBlockedResponses :: TVar
+  -- we also need to have the state for each actor..
   }
 
 ------------------------------------------------------------------------
@@ -63,9 +67,31 @@ handleEvent :: Event -> LoopState -> IO ()
 handleEvent (Command c) ls = handleCommand c ls
 
 handleCommand :: Command -> LoopState -> IO ()
+handleCommand (Spawn actor) ls = do
+  undefined
+handleCommand (Invoke lr m) ls = do
+  undefined
+handleCommand (Send rr m) ls = do
+  undefined
 handleCommand Quit ls = do
   a <- atomically (takeTMVar (loopStateAsync ls))
   cancel a
+
+runActor :: LoopState -> Actor -> IO ()
+runActor ls = iterM go
+  where
+    go :: ActorF (IO a) -> IO a
+    go (Call lref msg k) = do
+      undefined
+    go (RemoteCall rref msg k) = do
+      undefined
+    go (AsyncIO m k) = do
+      x <- async m -- this should probably register this somewhere?
+      k x
+    go (Get k) =  do
+      undefined
+    go (Put state' k) = do
+      undefined
 
 quit :: EventLoopRef -> IO ()
 quit r = atomically $
