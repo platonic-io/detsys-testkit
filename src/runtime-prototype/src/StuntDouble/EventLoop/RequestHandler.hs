@@ -4,38 +4,17 @@ import Control.Monad
 import Control.Exception
 import Control.Concurrent.Async
 import Control.Concurrent.STM
-
 import System.IO
 import System.IO.Error
 import System.Posix.Files
 
-------------------------------------------------------------------------
-
--- XXX: dup
-type Message = String
-type RemoteRef = String
-data LoopState = LoopState
-  { loopStateQueue  :: TBQueue Event
-  , loopStateAsyncs :: TVar [Async Message]
-  , loopStateTransport :: Transport IO -- Will not change once created, so
-                                       -- doesn't need STM?
-  }
-data Event = Receive Request
-data Request = Request Envelope
+import StuntDouble.EventLoop.State
+import StuntDouble.EventLoop.Event
+import StuntDouble.EventLoop.Transport
+import StuntDouble.Reference
+import StuntDouble.Message
 
 ------------------------------------------------------------------------
-
-data Envelope = Envelope
-  { envelopeSender   :: RemoteRef
-  , envelopeMessage  :: Message
-  , envelopeReceiver :: RemoteRef
-  }
-  deriving (Eq, Show, Read)
-
-data Transport m = Transport
-  { send    :: Envelope -> m ()
-  , receive :: m Envelope
-  }
 
 namedPipeTransport :: FilePath -> IO (Transport IO)
 namedPipeTransport fp = do
@@ -71,7 +50,7 @@ handleRequest (Request e) ls = undefined
 test :: IO ()
 test = do
   t <- namedPipeTransport "/tmp/test_request.pipe"
-  let e = Envelope "from" "msg" "to"
+  let e = Envelope (RemoteRef "from" 0) (Message "msg") (RemoteRef "to" 1)
   a <- async (send t e)
   e' <- receive t
   cancel a

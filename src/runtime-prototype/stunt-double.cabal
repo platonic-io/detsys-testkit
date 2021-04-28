@@ -22,6 +22,9 @@ library
     StuntDouble.EventLoop
     StuntDouble.EventLoop.AsyncHandler
     StuntDouble.EventLoop.RequestHandler
+    StuntDouble.EventLoop.State
+    StuntDouble.EventLoop.Event
+    StuntDouble.EventLoop.Transport
     StuntDouble.Message
     StuntDouble.Reference
     StuntDouble.Supervisor

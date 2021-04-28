@@ -1,3 +1,4 @@
+{-# LANGUAGE ExistentialQuantification #-}
 module StuntDouble.EventLoop where
 
 import Data.Map (Map)
@@ -9,36 +10,14 @@ import Control.Concurrent.STM.TBQueue
 import StuntDouble.Actor
 import StuntDouble.Message
 import StuntDouble.Reference
+import StuntDouble.EventLoop.State
+import StuntDouble.EventLoop.Event
+import StuntDouble.EventLoop.RequestHandler
 
 ------------------------------------------------------------------------
 
-data Command
-  = Spawn (Message -> Actor) (TMVar LocalRef)
-  | Invoke LocalRef Message  (TMVar Message)
-  | Send RemoteRef Message
-  | Quit
-
-data Response
-  = Receive AsyncRef Message
-
--- XXX:
-type RequestId = Int
-type AsyncRef = (Async Message, RequestId)
-type InternalActorRef = Int
-
-data Event = Command Command | Response Response
-
 newtype EventLoopRef = EventLoopRef
   { loopRefLoopState :: LoopState }
-
-data LoopState = LoopState
-  { loopStateAsync :: TMVar (Async ()) -- | Hold the `Async` of the event loop itself.
-  , loopStateQueue :: TBQueue Event
-  , loopStateActors :: TVar (Map InternalActorRef (Message -> Actor))
-  , loopStateHandlers :: TVar (Map RequestId (Message -> Actor))
-  -- , loopStateBlockedResponses :: TVar
-  -- we also need to have the state for each actor..
-  }
 
 ------------------------------------------------------------------------
 
@@ -46,12 +25,12 @@ initLoopState :: IO LoopState
 initLoopState = do
   a <- newEmptyTMVarIO
   queue <- newTBQueueIO 128
-  return (LoopState a queue undefined undefined)
+  return (LoopState a queue undefined undefined undefined undefined)
 
 makeEventLoop :: IO EventLoopRef
 makeEventLoop = do
   loopState <- initLoopState
-  -- tid <- forkIO $ forever $ undefined loopState
+  aReqHandler <- async (handleRequests loopState)
   -- tid' <- forkIO $ forever $ undefined loopState
   a <- async (handleEvents loopState)
   atomically (putTMVar (loopStateAsync loopState) a)
@@ -67,6 +46,7 @@ handleEvents ls = go
 
 handleEvent :: Event -> LoopState -> IO ()
 handleEvent (Command c) ls = handleCommand c ls
+handleEvent (Receive r) ls = handleReceive r ls
 
 handleCommand :: Command -> LoopState -> IO ()
 handleCommand (Spawn actor respVar) ls = do
@@ -75,10 +55,17 @@ handleCommand (Invoke lr m respVar) ls = do
   -- actor <- findActor ls lr
   undefined
 handleCommand (Send rr m) ls = do
+  -- a <- async (makeHttpRequest (translateToUrl rr) (seralise m))
+  -- atomically (modifyTVar (loopStateAsyncs ls) (a :))
   undefined
 handleCommand Quit ls = do
   a <- atomically (takeTMVar (loopStateAsync ls))
   cancel a
+
+handleReceive :: Receive -> LoopState -> IO ()
+handleReceive (Request e) ls = do
+  actor <- undefined -- findActor ls (envelopeReceiver e)
+  runActor ls (actor (envelopeMessage e))
 
 runActor :: LoopState -> Actor -> IO ()
 runActor ls = undefined -- iterM go
@@ -89,8 +76,9 @@ runActor ls = undefined -- iterM go
     go (RemoteCall rref msg k) = do
       undefined
     go (AsyncIO m k) = do
-      x <- async m -- this should probably register this somewhere?
-      k x
+      a <- async m
+      atomically (modifyTVar (loopStateIOAsyncs ls) (a :))
+      k a
     go (Get k) =  do
       undefined
     go (Put state' k) = do
