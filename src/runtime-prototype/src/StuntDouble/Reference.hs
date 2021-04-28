@@ -1,6 +1,7 @@
 module StuntDouble.Reference where
 
 data LocalRef = LocalRef Int
+  deriving (Eq, Ord)
 
 data RemoteRef = RemoteRef
   { address :: String
@@ -11,4 +12,5 @@ data RemoteRef = RemoteRef
 localToRemoteRef :: String -> LocalRef -> RemoteRef
 localToRemoteRef address (LocalRef i) = RemoteRef address i
 
-type InternalActorRef = Int
+remoteToLocalRef :: RemoteRef -> LocalRef
+remoteToLocalRef = LocalRef . index

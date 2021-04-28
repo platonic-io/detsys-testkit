@@ -52,8 +52,9 @@ handleCommand :: Command -> LoopState -> IO ()
 handleCommand (Spawn actor respVar) ls = do
   undefined
 handleCommand (Invoke lr m respVar) ls = do
-  -- actor <- findActor ls lr
-  undefined
+  Just actor <- lookupActor lr (loopStateActors ls)
+  Now reply <- runActor ls (actor m)
+  atomically (putTMVar respVar reply)
 handleCommand (Send rr m) ls = do
   -- a <- async (makeHttpRequest (translateToUrl rr) (seralise m))
   -- atomically (modifyTVar (loopStateAsyncs ls) (a :))
@@ -62,12 +63,21 @@ handleCommand Quit ls = do
   a <- atomically (takeTMVar (loopStateAsync ls))
   cancel a
 
-handleReceive :: Receive -> LoopState -> IO ()
-handleReceive (Request e) ls = do
-  actor <- undefined -- findActor ls (envelopeReceiver e)
-  runActor ls (actor (envelopeMessage e))
+data ActorNotFound = ActorNotFound RemoteRef
+  deriving Show
 
-runActor :: LoopState -> Actor -> IO ()
+instance Exception ActorNotFound where
+
+handleReceive :: Request -> LoopState -> IO ()
+handleReceive (Request e) ls = do
+  mActor <- lookupActor (remoteToLocalRef (envelopeReceiver e)) (loopStateActors ls)
+  case mActor of
+    Nothing -> throwIO (ActorNotFound (envelopeReceiver e)) -- XXX: Throw here or just log and continue?
+    Just actor -> do
+      _ <- runActor ls (actor (envelopeMessage e))
+      return ()
+
+runActor :: LoopState -> Free ActorF a -> IO a
 runActor ls = undefined -- iterM go
   where
     go :: ActorF (IO a) -> IO a
