@@ -37,7 +37,6 @@ library
 
   build-depends:
       async
-    , free
     , random
     , unix
 

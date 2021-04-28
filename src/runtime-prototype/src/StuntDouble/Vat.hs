@@ -10,7 +10,6 @@ import Control.Concurrent.STM
 import Control.Concurrent.STM.TMVar
 import Control.Concurrent
 import Control.Monad
-import Control.Monad.Free
 
 import StuntDouble.Actor
 import StuntDouble.Message
@@ -147,7 +146,7 @@ processRemoteCalls vs channel = do
     return resp
 
 runActor :: VatState -> Free ActorF a -> STM a
-runActor vatState actor = iterM go actor
+runActor vatState actor = undefined -- iterM go actor
   where
     go :: ActorF (STM a) -> STM a
     go (Call lref msg k) = do
