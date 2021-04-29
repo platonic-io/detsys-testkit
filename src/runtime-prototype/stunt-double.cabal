@@ -23,7 +23,7 @@ library
     StuntDouble.EventLoop
     StuntDouble.EventLoop.AsyncHandler
     StuntDouble.EventLoop.Event
-    StuntDouble.EventLoop.RequestHandler
+    StuntDouble.EventLoop.InboundHandler
     StuntDouble.EventLoop.State
     StuntDouble.EventLoop.Transport
     StuntDouble.FreeMonad

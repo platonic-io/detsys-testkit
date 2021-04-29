@@ -1,4 +1,5 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module StuntDouble.EventLoop where
@@ -18,7 +19,7 @@ import StuntDouble.EventLoop.Transport
 import StuntDouble.FreeMonad
 import StuntDouble.EventLoop.State
 import StuntDouble.EventLoop.Event
-import StuntDouble.EventLoop.RequestHandler
+import StuntDouble.EventLoop.InboundHandler
 
 ------------------------------------------------------------------------
 
@@ -27,23 +28,26 @@ newtype EventLoopRef = EventLoopRef
 
 ------------------------------------------------------------------------
 
-initLoopState :: Transport IO -> IO LoopState
-initLoopState transport =
+initLoopState :: EventLoopName -> Transport IO -> IO LoopState
+initLoopState name transport =
   LoopState
-    <$> newTVarIO []
+    <$> pure name
+    <*> newTVarIO []
     <*> newTBQueueIO 128
     <*> newTVarIO Map.empty
     <*> newTVarIO Map.empty
     <*> newTVarIO []
     <*> pure transport
+    <*> newTVarIO 0
+    <*> newTVarIO Map.empty
 
-makeEventLoop :: FilePath -> IO EventLoopRef
-makeEventLoop fp = do
+makeEventLoop :: EventLoopName -> FilePath -> IO EventLoopRef
+makeEventLoop name fp = do
   transport <- namedPipeTransport fp
-  ls <- initLoopState transport
-  aReqHandler <- async (handleRequests ls)
+  ls <- initLoopState name transport
+  aInHandler <- async (handleInbound ls)
   aEvHandler <- async (handleEvents ls)
-  atomically (modifyTVar' (loopStatePids ls) ([aReqHandler, aEvHandler] ++ ))
+  atomically (modifyTVar' (loopStatePids ls) ([aInHandler, aEvHandler] ++ ))
   return (EventLoopRef ls)
 
 handleEvents :: LoopState -> IO ()
@@ -51,14 +55,19 @@ handleEvents ls = go
   where
     go = do
       e <- atomically (readTBQueue (loopStateQueue ls))
+      putStr (getEventLoopName (loopStateName ls) ++ "> ")
       putStrLn (eventName e)
       handleEvent e ls
         `catch` \(exception :: SomeException) -> print exception
       go
 
 handleEvent :: Event -> LoopState -> IO ()
-handleEvent (Command c) ls = handleCommand c ls
-handleEvent (Receive r) ls = handleReceive r ls
+handleEvent (Command c)  ls = handleCommand c ls
+handleEvent (Response r) ls = handleResponse r ls
+handleEvent (Receive r)  ls = handleReceive r ls
+
+dummyDeveloperRef :: RemoteRef
+dummyDeveloperRef = RemoteRef "dev" 0
 
 handleCommand :: Command -> LoopState -> IO ()
 handleCommand (Spawn actor respVar) ls = atomically $ do
@@ -70,14 +79,29 @@ handleCommand (Invoke lref msg respVar) ls = do
   Just actor <- lookupActor lref (loopStateActors ls)
   Now reply <- runActor ls (actor msg)
   atomically (putTMVar respVar reply)
-handleCommand (Send rr m) ls = do
-  -- a <- async (makeHttpRequest (translateToUrl rr) (seralise m))
-  -- atomically (modifyTVar (loopStateAsyncs ls) (a :))
-  undefined
+handleCommand (Send rref msg respVar) ls = do
+  (corrId, respTMVar) <- atomically $ do
+    corrId <- readTVar (loopStateNextCorrelationId ls)
+    modifyTVar' (loopStateNextCorrelationId ls) succ
+    respTMVar <- newEmptyTMVar
+    modifyTVar' (loopStateResponses ls) (Map.insert corrId respTMVar)
+    return (corrId, respTMVar)
+  transportSend (loopStateTransport ls) (Envelope dummyDeveloperRef msg rref corrId)
+  a <- async $ atomically $ do
+    resp <- takeTMVar respTMVar -- XXX: timeout?
+    modifyTVar' (loopStateResponses ls) (Map.delete corrId)
+    return resp
+  atomically (putTMVar respVar a)
 handleCommand Quit ls = do
   pids <- atomically (readTVar (loopStatePids ls))
   threadDelay 100000
   mapM_ cancel pids
+
+handleResponse :: Response -> LoopState -> IO ()
+handleResponse (Reply respTMVar e) ls
+  | envelopeSender e == dummyDeveloperRef =
+      atomically (putTMVar respTMVar (envelopeMessage e))
+  | otherwise = undefined
 
 data ActorNotFound = ActorNotFound RemoteRef
   deriving Show
@@ -93,8 +117,8 @@ handleReceive (Request e) ls = do
     -- going to known actors, i.e. that the remote refs are valid.
     Nothing -> throwIO (ActorNotFound (envelopeReceiver e))
     Just actor -> do
-      _ <- runActor ls (actor (envelopeMessage e))
-      return ()
+      Now replyMsg <- runActor ls (actor (envelopeMessage e))
+      transportSend (loopStateTransport ls) (reply e replyMsg)
 
 runActor :: LoopState -> Free ActorF a -> IO a
 runActor ls = iterM go return
@@ -108,7 +132,7 @@ runActor ls = iterM go return
       undefined
     go (AsyncIO m k) = do
       a <- async m
-      atomically (modifyTVar (loopStateIOAsyncs ls) (a :))
+      atomically (modifyTVar' (loopStateIOAsyncs ls) (a :))
       k a
     go (Get k) =  do
       undefined
@@ -133,14 +157,23 @@ spawn r actor = helper r (Spawn actor)
 invoke :: EventLoopRef -> LocalRef -> Message -> IO Message
 invoke r lref msg = helper r (Invoke lref msg)
 
+send :: EventLoopRef -> RemoteRef -> Message -> IO (Async Message)
+send r rref msg = helper r (Send rref msg)
+
 testActor :: Message -> Actor
 testActor (Message "hi") = return (Now (Message "bye!"))
 
 test :: IO ()
 test = do
-  r <- makeEventLoop "/tmp/a"
-  lref <- spawn r testActor
+  el1 <- makeEventLoop "a" "/tmp/a"
+  el2 <- makeEventLoop "b" "/tmp/b"
+  lref <- spawn el1 testActor
   let msg = Message "hi"
-  reply <- invoke r lref msg
+  reply <- invoke el1 lref msg
   print reply
-  quit r
+  a <- send el2 (localToRemoteRef "dummy" lref) msg
+  reply' <- wait a
+  print reply'
+  threadDelay 10000
+  quit el1
+  quit el2
