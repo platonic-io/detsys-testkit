@@ -49,7 +49,7 @@ data Expr
   = Variable Var
   | Constant Json
   | IntLang IntExpr
-  -- This will also have somethin to look at the event
+  | EEvent JQ
   deriving (Eq, Show)
 
 data Predicate
@@ -82,6 +82,7 @@ concreteE :: [Node] -> Expr -> Expr
 concreteE nodes (Variable (Var t n jq)) = Variable (Var t (concreteN nodes n) jq)
 concreteE nodes j@(Constant{}) = j
 concreteE nodes i@(IntLang{}) = i
+concreteE nodes e@(EEvent{}) = e
 
 concreteP :: [Node] -> Predicate -> Predicate
 concreteP nodes (Eq l r) = Eq (concreteE nodes l) (concreteE nodes r)

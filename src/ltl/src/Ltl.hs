@@ -28,6 +28,9 @@ evalExpr state sb (Variable (Var t n e)) =
         After  -> after sb
   in jq e (fromMaybe Aeson.Null $ Map.lookup (evalNode (nodeEnv state) n) s)
 evalExpr state _ (IntLang e) = Aeson.Number $ fromInteger $ evalInt (intEnv state) e
+evalExpr state sb (EEvent e) =
+  let Event js = action sb
+  in jq e js
 
 checkPredicate :: CheckState -> Predicate -> StateBehaviour -> Dec
 checkPredicate state p sb = case p of
@@ -95,7 +98,7 @@ exampleTrace =
   sb 1 [(a, sa2), (b, sb2)] [(a,sa3), (b,sb3)],
   sb 2 [(a, sa3), (b, sb3)] [(a,sa4), (b,sb4)]]
   where
-    sb i x y = StateBehaviour (State (Map.fromList x)) i Event (State (Map.fromList y))
+    sb i x y = StateBehaviour (State (Map.fromList x)) i (Event Aeson.Null) (State (Map.fromList y))
     a = "NodeA"
     b = "NodeB"
     sa1 = Aeson.object [("state", Aeson.Bool True)]

@@ -2,15 +2,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Ltl.Storage where
 
--- import Data.Aeson (FromJSON(..))
+import Database.SQLite.Simple
 import qualified Data.Aeson as Aeson
 import Data.ByteString.Lazy (ByteString)
-import Database.SQLite.Simple
+import qualified Data.HashMap.Strict as HashMap
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Data.Text.Lazy (Text)
+import qualified Data.Text.Lazy as Text
 import qualified Data.Text.Lazy.Encoding as TextEncoding
 
 import Control.Exception (throwIO)
@@ -47,22 +48,34 @@ getDbPath = do
 data ExecutionStep = ExecutionStep
   { esReactor :: String,
     esLogicalTime :: Int,
-    esHeapDiff :: Text
+    esHeapDiff :: Text,
+    esMessage :: Text,
+    esEvent :: Text
   }
 
 instance FromRow ExecutionStep where
-  fromRow = ExecutionStep <$> field <*> field <*> field
+  fromRow = ExecutionStep <$> field <*> field <*> field <*> field <*> field
 
 sqliteLoadExecutionSteps:: TestId -> RunId -> IO [ExecutionStep]
 sqliteLoadExecutionSteps testId runId = do
   path <- getDbPath
   conn <- open path
   queryNamed conn
-       "SELECT reactor, logical_time, heap_diff FROM execution_step \
-       \ WHERE test_id = :testId \
-       \ AND run_id = :runId \
-       \ ORDER BY logical_time ASC"
-       [":testId" := testId, ":runId" := runId]
+    "SELECT execution_step.reactor, \
+    \       execution_step.logical_time, \
+    \       execution_step.heap_diff, \
+    \       network_trace.message, \
+    \       network_trace.args \
+    \FROM execution_step \
+    \INNER JOIN network_trace \
+    \ON (execution_step.test_id=network_trace.test_id \
+    \   AND execution_step.run_id = network_trace.run_id \
+    \   AND execution_step.logical_time=network_trace.recv_logical_time) \
+    \WHERE \
+    \  execution_step.test_id=:testId \
+    \  AND execution_step.run_id=:runId \
+    \ORDER BY execution_step.logical_time ASC"
+    [":testId" := testId, ":runId" := runId]
 
 data DeploymentInfo = DeploymentInfo
   { diReactor :: String,
@@ -102,7 +115,9 @@ mkTrace es s = case go es s of
         sb = StateBehaviour
           { before = State state
           , worldTime = esLogicalTime es
-          , action = Event
+          , action = Event $ Aeson.Object (HashMap.fromList [
+                                              ("message", Aeson.String $ Text.toStrict $ esMessage es),
+                                              ("event", Maybe.fromMaybe "(Can't decode event)" $ Aeson.decode $ TextEncoding.encodeUtf8 $ esEvent es)])
           , after = State state'
           }
       in sb : go ess state'
