@@ -30,6 +30,7 @@ data Cont a
 
 -- XXX: dup
 data IOResult = Unit | String String
+  deriving Show
 
 data ActorF x
   = Call LocalRef Message (Message -> x)

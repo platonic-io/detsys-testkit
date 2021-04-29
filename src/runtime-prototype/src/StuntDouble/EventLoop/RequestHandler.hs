@@ -41,7 +41,7 @@ handleRequests ls = forever go
       e <- receive (loopStateTransport ls)
       atomically (writeTBQueue (loopStateQueue ls) (Receive (Request e)))
 
-handleRequest :: Request -> LoopState -> IO ()
+handleRequest :: Receive -> LoopState -> IO ()
 handleRequest (Request e) ls = undefined
   -- Treat this like a `Send (envelopeReceiver e) (envelopeMessage e)`?
 

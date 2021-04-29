@@ -1,9 +1,12 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module StuntDouble.EventLoop where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Exception
+import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TBQueue
@@ -39,7 +42,6 @@ makeEventLoop fp = do
   transport <- namedPipeTransport fp
   loopState <- initLoopState transport
   aReqHandler <- async (handleRequests loopState)
-  -- tid' <- forkIO $ forever $ undefined loopState
   a <- async (handleEvents loopState)
   atomically (putTMVar (loopStateAsync loopState) a)
   return (EventLoopRef loopState)
@@ -49,7 +51,9 @@ handleEvents ls = go
   where
     go = do
       e <- atomically (readTBQueue (loopStateQueue ls))
+      putStrLn (eventName e)
       handleEvent e ls
+        `catch` \(exception :: SomeException) -> print exception
       go
 
 handleEvent :: Event -> LoopState -> IO ()
@@ -57,11 +61,14 @@ handleEvent (Command c) ls = handleCommand c ls
 handleEvent (Receive r) ls = handleReceive r ls
 
 handleCommand :: Command -> LoopState -> IO ()
-handleCommand (Spawn actor respVar) ls = do
-  undefined
-handleCommand (Invoke lr m respVar) ls = do
-  Just actor <- lookupActor lr (loopStateActors ls)
-  Now reply <- runActor ls (actor m)
+handleCommand (Spawn actor respVar) ls = atomically $ do
+  actors <- readTVar (loopStateActors ls)
+  let lref = LocalRef (Map.size actors)
+  writeTVar (loopStateActors ls) (Map.insert lref actor actors)
+  putTMVar respVar lref
+handleCommand (Invoke lref msg respVar) ls = do
+  Just actor <- lookupActor lref (loopStateActors ls)
+  Now reply <- runActor ls (actor msg)
   atomically (putTMVar respVar reply)
 handleCommand (Send rr m) ls = do
   -- a <- async (makeHttpRequest (translateToUrl rr) (seralise m))
@@ -69,6 +76,7 @@ handleCommand (Send rr m) ls = do
   undefined
 handleCommand Quit ls = do
   a <- atomically (takeTMVar (loopStateAsync ls))
+  threadDelay 100000
   cancel a
 
 data ActorNotFound = ActorNotFound RemoteRef
@@ -76,11 +84,14 @@ data ActorNotFound = ActorNotFound RemoteRef
 
 instance Exception ActorNotFound where
 
-handleReceive :: Request -> LoopState -> IO ()
+handleReceive :: Receive -> LoopState -> IO ()
 handleReceive (Request e) ls = do
   mActor <- lookupActor (remoteToLocalRef (envelopeReceiver e)) (loopStateActors ls)
   case mActor of
-    Nothing -> throwIO (ActorNotFound (envelopeReceiver e)) -- XXX: Throw here or just log and continue?
+    -- XXX: Throw here or just log and continue? Or take care of this at one
+    -- layer above transport where we authenticate and verify messages are only
+    -- going to known actors, i.e. that the remote refs are valid.
+    Nothing -> throwIO (ActorNotFound (envelopeReceiver e))
     Just actor -> do
       _ <- runActor ls (actor (envelopeMessage e))
       return ()
@@ -90,7 +101,9 @@ runActor ls = iterM go return
   where
     go :: ActorF (IO a) -> IO a
     go (Call lref msg k) = do
-      undefined
+      Just actor <- lookupActor lref (loopStateActors ls)
+      Now reply <- runActor ls (actor msg)
+      k reply
     go (RemoteCall rref msg k) = do
       undefined
     go (AsyncIO m k) = do
@@ -107,10 +120,12 @@ quit r = atomically $
   writeTBQueue (loopStateQueue (loopRefLoopState r)) (Command Quit)
 
 helper :: EventLoopRef -> (TMVar a -> Command) -> IO a
-helper r cmd = atomically $ do
-  respVar <- newEmptyTMVar
-  writeTBQueue (loopStateQueue (loopRefLoopState r)) (Command (cmd respVar))
-  takeTMVar respVar
+helper r cmd = do
+  respVar <- atomically $ do
+    respVar <- newEmptyTMVar
+    writeTBQueue (loopStateQueue (loopRefLoopState r)) (Command (cmd respVar))
+    return respVar
+  atomically (takeTMVar respVar)
 
 spawn :: EventLoopRef -> (Message -> Actor) -> IO LocalRef
 spawn r actor = helper r (Spawn actor)

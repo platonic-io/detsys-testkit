@@ -9,7 +9,13 @@ import StuntDouble.Reference
 
 ------------------------------------------------------------------------
 
-data Event = Command Command | Response Response | Receive Request
+data Event
+  = Command  Command
+  | Response Response
+  | Receive  Receive
+
+eventName :: Event -> String
+eventName (Command cmd) = "Command/" ++ commandName cmd
 
 data Command
   = Spawn (Message -> Actor) (TMVar LocalRef)
@@ -17,16 +23,22 @@ data Command
   | Send RemoteRef Message
   | Quit
 
+commandName :: Command -> String
+commandName Spawn {} = "Spawn"
+commandName Invoke {} = "Invoke"
+commandName Send {} = "Send"
+commandName Quit {} = "Quit"
+
 data Response
   = IOReady (Async IOResult)
   -- Receive (Async Message) Message
 
-data Request = Request Envelope
-  
+data Receive
+  = Request Envelope
+
 data Envelope = Envelope
   { envelopeSender   :: RemoteRef
   , envelopeMessage  :: Message
   , envelopeReceiver :: RemoteRef
   }
   deriving (Eq, Show, Read)
-
