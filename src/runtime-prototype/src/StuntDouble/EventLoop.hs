@@ -41,9 +41,9 @@ initLoopState name transport =
     <*> newTVarIO 0
     <*> newTVarIO Map.empty
 
-makeEventLoop :: EventLoopName -> FilePath -> IO EventLoopRef
-makeEventLoop name fp = do
-  transport <- namedPipeTransport fp
+makeEventLoop :: FilePath -> EventLoopName -> IO EventLoopRef
+makeEventLoop fp name = do
+  transport <- namedPipeTransport fp name
   ls <- initLoopState name transport
   aInHandler <- async (handleInbound ls)
   aEvHandler <- async (handleEvents ls)
@@ -66,8 +66,8 @@ handleEvent (Command c)  ls = handleCommand c ls
 handleEvent (Response r) ls = handleResponse r ls
 handleEvent (Receive r)  ls = handleReceive r ls
 
-dummyDeveloperRef :: RemoteRef
-dummyDeveloperRef = RemoteRef "dev" 0
+dummyDeveloperRef :: LoopState -> RemoteRef
+dummyDeveloperRef ls = RemoteRef (getEventLoopName (loopStateName ls)) 0
 
 handleCommand :: Command -> LoopState -> IO ()
 handleCommand (Spawn actor respVar) ls = atomically $ do
@@ -86,7 +86,7 @@ handleCommand (Send rref msg respVar) ls = do
     respTMVar <- newEmptyTMVar
     modifyTVar' (loopStateResponses ls) (Map.insert corrId respTMVar)
     return (corrId, respTMVar)
-  transportSend (loopStateTransport ls) (Envelope dummyDeveloperRef msg rref corrId)
+  transportSend (loopStateTransport ls) (Envelope (dummyDeveloperRef ls) msg rref corrId)
   a <- async $ atomically $ do
     resp <- takeTMVar respTMVar -- XXX: timeout?
     modifyTVar' (loopStateResponses ls) (Map.delete corrId)
@@ -99,7 +99,7 @@ handleCommand Quit ls = do
 
 handleResponse :: Response -> LoopState -> IO ()
 handleResponse (Reply respTMVar e) ls
-  | envelopeSender e == dummyDeveloperRef =
+  | envelopeReceiver e == dummyDeveloperRef ls =
       atomically (putTMVar respTMVar (envelopeMessage e))
   | otherwise = undefined
 
@@ -165,13 +165,13 @@ testActor (Message "hi") = return (Now (Message "bye!"))
 
 test :: IO ()
 test = do
-  el1 <- makeEventLoop "a" "/tmp/a"
-  el2 <- makeEventLoop "b" "/tmp/b"
+  el1 <- makeEventLoop "/tmp" "a"
+  el2 <- makeEventLoop "/tmp" "b"
   lref <- spawn el1 testActor
   let msg = Message "hi"
   reply <- invoke el1 lref msg
   print reply
-  a <- send el2 (localToRemoteRef "dummy" lref) msg
+  a <- send el2 (localToRemoteRef "a" lref) msg
   reply' <- wait a
   print reply'
   threadDelay 10000

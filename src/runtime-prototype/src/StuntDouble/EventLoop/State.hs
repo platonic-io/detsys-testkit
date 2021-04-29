@@ -1,8 +1,5 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 module StuntDouble.EventLoop.State where
 
-import Data.String
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Concurrent.STM
@@ -15,9 +12,6 @@ import StuntDouble.Reference
 import StuntDouble.Message
 
 ------------------------------------------------------------------------
-
-newtype EventLoopName = EventLoopName { getEventLoopName :: String }
-  deriving IsString
 
 data LoopState = LoopState
   { loopStateName :: EventLoopName

@@ -1,4 +1,10 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module StuntDouble.Reference where
+
+import Data.String
+
+------------------------------------------------------------------------
 
 data LocalRef = LocalRef Int
   deriving (Eq, Ord)
@@ -14,3 +20,6 @@ localToRemoteRef address (LocalRef i) = RemoteRef address i
 
 remoteToLocalRef :: RemoteRef -> LocalRef
 remoteToLocalRef = LocalRef . index
+
+newtype EventLoopName = EventLoopName { getEventLoopName :: String }
+  deriving IsString

@@ -19,6 +19,7 @@ data Event
 eventName :: Event -> String
 eventName (Command cmd)  = "Command/" ++ commandName cmd
 eventName (Response resp) = "Response/" ++ responseName resp
+eventName (Receive recv) = "Receive/" ++ receiveName recv
 
 data Command
   = Spawn (Message -> Actor) (TMVar LocalRef)
@@ -42,6 +43,9 @@ responseName Reply   {} = "Reply"
 
 data Receive
   = Request Envelope
+
+receiveName :: Receive -> String
+receiveName Request {} = "Request"
 
 newtype CorrelationId = CorrelationId Int
   deriving (Eq, Ord, Show, Read, Num, Enum)
