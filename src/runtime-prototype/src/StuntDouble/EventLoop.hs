@@ -30,7 +30,7 @@ newtype EventLoopRef = EventLoopRef
 initLoopState :: Transport IO -> IO LoopState
 initLoopState transport =
   LoopState
-    <$> newEmptyTMVarIO
+    <$> newTVarIO []
     <*> newTBQueueIO 128
     <*> newTVarIO Map.empty
     <*> newTVarIO Map.empty
@@ -40,11 +40,11 @@ initLoopState transport =
 makeEventLoop :: FilePath -> IO EventLoopRef
 makeEventLoop fp = do
   transport <- namedPipeTransport fp
-  loopState <- initLoopState transport
-  aReqHandler <- async (handleRequests loopState)
-  a <- async (handleEvents loopState)
-  atomically (putTMVar (loopStateAsync loopState) a)
-  return (EventLoopRef loopState)
+  ls <- initLoopState transport
+  aReqHandler <- async (handleRequests ls)
+  aEvHandler <- async (handleEvents ls)
+  atomically (modifyTVar' (loopStatePids ls) ([aReqHandler, aEvHandler] ++ ))
+  return (EventLoopRef ls)
 
 handleEvents :: LoopState -> IO ()
 handleEvents ls = go
@@ -75,9 +75,9 @@ handleCommand (Send rr m) ls = do
   -- atomically (modifyTVar (loopStateAsyncs ls) (a :))
   undefined
 handleCommand Quit ls = do
-  a <- atomically (takeTMVar (loopStateAsync ls))
+  pids <- atomically (readTVar (loopStatePids ls))
   threadDelay 100000
-  cancel a
+  mapM_ cancel pids
 
 data ActorNotFound = ActorNotFound RemoteRef
   deriving Show

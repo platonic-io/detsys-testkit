@@ -15,7 +15,8 @@ import StuntDouble.Message
 
 
 data LoopState = LoopState
-  { loopStateAsync :: TMVar (Async ()) -- | Hold the `Async` of the event loop itself.
+  { loopStatePids :: TVar [Async ()] -- | Holds the `Async`s (or PIDs) of the
+                                     --   event loop itself.
   , loopStateQueue :: TBQueue Event
   , loopStateActors :: TVar (Map LocalRef (Message -> Actor)) -- XXX: Only changed by main loop, so no need for STM?
   -- , loopStateHandlers :: TVar (Map (Async Message) (Message -> Actor))
