@@ -2,6 +2,7 @@
 module StuntDouble.EventLoop where
 
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Control.Exception
 import Control.Concurrent.Async
 import Control.Concurrent.STM
@@ -10,6 +11,7 @@ import Control.Concurrent.STM.TBQueue
 import StuntDouble.Actor
 import StuntDouble.Message
 import StuntDouble.Reference
+import StuntDouble.EventLoop.Transport
 import StuntDouble.FreeMonad
 import StuntDouble.EventLoop.State
 import StuntDouble.EventLoop.Event
@@ -22,15 +24,20 @@ newtype EventLoopRef = EventLoopRef
 
 ------------------------------------------------------------------------
 
-initLoopState :: IO LoopState
-initLoopState = do
-  a <- newEmptyTMVarIO
-  queue <- newTBQueueIO 128
-  return (LoopState a queue undefined undefined undefined undefined)
+initLoopState :: Transport IO -> IO LoopState
+initLoopState transport =
+  LoopState
+    <$> newEmptyTMVarIO
+    <*> newTBQueueIO 128
+    <*> newTVarIO Map.empty
+    <*> newTVarIO Map.empty
+    <*> newTVarIO []
+    <*> pure transport
 
-makeEventLoop :: IO EventLoopRef
-makeEventLoop = do
-  loopState <- initLoopState
+makeEventLoop :: FilePath -> IO EventLoopRef
+makeEventLoop fp = do
+  transport <- namedPipeTransport fp
+  loopState <- initLoopState transport
   aReqHandler <- async (handleRequests loopState)
   -- tid' <- forkIO $ forever $ undefined loopState
   a <- async (handleEvents loopState)
@@ -79,7 +86,7 @@ handleReceive (Request e) ls = do
       return ()
 
 runActor :: LoopState -> Free ActorF a -> IO a
-runActor ls = undefined -- iterM go
+runActor ls = iterM go return
   where
     go :: ActorF (IO a) -> IO a
     go (Call lref msg k) = do
@@ -116,7 +123,7 @@ testActor (Message "hi") = return (Now (Message "bye!"))
 
 test :: IO ()
 test = do
-  r <- makeEventLoop
+  r <- makeEventLoop "/tmp/a"
   lref <- spawn r testActor
   let msg = Message "hi"
   reply <- invoke r lref msg

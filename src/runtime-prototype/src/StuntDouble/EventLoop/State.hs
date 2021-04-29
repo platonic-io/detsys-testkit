@@ -17,7 +17,7 @@ import StuntDouble.Message
 data LoopState = LoopState
   { loopStateAsync :: TMVar (Async ()) -- | Hold the `Async` of the event loop itself.
   , loopStateQueue :: TBQueue Event
-  , loopStateActors :: TVar (Map LocalRef (Message -> Actor))
+  , loopStateActors :: TVar (Map LocalRef (Message -> Actor)) -- XXX: Only changed by main loop, so no need for STM?
   -- , loopStateHandlers :: TVar (Map (Async Message) (Message -> Actor))
   , loopStateIOHandlers :: TVar (Map (Async IOResult) (LocalRef, IOResult -> Actor))
   , loopStateIOAsyncs :: TVar [Async IOResult]
@@ -25,6 +25,6 @@ data LoopState = LoopState
   }
 
 
-lookupActor :: LocalRef -> TVar (Map LocalRef (Message -> Actor)) 
+lookupActor :: LocalRef -> TVar (Map LocalRef (Message -> Actor))
             -> IO (Maybe (Message -> Actor))
 lookupActor key var = Map.lookup key <$> atomically (readTVar var)
