@@ -10,6 +10,7 @@ import Control.Concurrent.STM.TBQueue
 import StuntDouble.Actor
 import StuntDouble.Message
 import StuntDouble.Reference
+import StuntDouble.FreeMonad
 import StuntDouble.EventLoop.State
 import StuntDouble.EventLoop.Event
 import StuntDouble.EventLoop.RequestHandler

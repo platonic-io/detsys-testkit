@@ -4,6 +4,7 @@ version:            0.0.0
 synopsis:           Actors that can be faked.
 description:
   See README at <https://github.com/symbiont-io/detsys-testkit/tree/main/src/runtime-prototype#readme>
+
 bug-reports:        https://github.com/symbiont-io/detsys-testkit/issues
 license:            AllRightsReserved
 license-file:       LICENSE
@@ -21,10 +22,11 @@ library
     StuntDouble.Actor
     StuntDouble.EventLoop
     StuntDouble.EventLoop.AsyncHandler
+    StuntDouble.EventLoop.Event
     StuntDouble.EventLoop.RequestHandler
     StuntDouble.EventLoop.State
-    StuntDouble.EventLoop.Event
     StuntDouble.EventLoop.Transport
+    StuntDouble.FreeMonad
     StuntDouble.Message
     StuntDouble.Reference
     StuntDouble.Supervisor

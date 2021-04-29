@@ -9,15 +9,12 @@ import Control.Concurrent.Async
 
 import StuntDouble.Message
 import StuntDouble.Reference
+import StuntDouble.FreeMonad
 
 ------------------------------------------------------------------------
 
-data Free f a = Pure a | Free (f (Free f a))
-instance Functor (Free f) where
-instance Applicative (Free f) where
-instance Monad (Free f) where
-
 type Actor = Free ActorF (Cont Message)
+
 data Cont a
   = Now a
   | Later (Async a) (a -> Actor)
@@ -74,7 +71,7 @@ actorA :: RemoteRef -> Message -> Actor
 actorA bref (Message "init") = do
   a <- Free (RemoteCall bref (Message "hi") return)
   return (Later a (\reply -> return (Now reply)))
-  
+
 actorB :: RemoteRef -> Message -> Actor
 actorB aref (Message "hi") = do
   -- a <- Free (RemoteCall bref (Message "init") return)

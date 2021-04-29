@@ -12,6 +12,7 @@ import Control.Concurrent
 import Control.Monad
 
 import StuntDouble.Actor
+import StuntDouble.FreeMonad
 import StuntDouble.Message
 import StuntDouble.Reference
 
