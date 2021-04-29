@@ -9,7 +9,7 @@ type Node = String
 
 data State = State (Map Node Json) deriving (Show)
 
-data Event = Event -- we will extend this later
+data Event = Event Json
   deriving (Show)
 
 data StateBehaviour = StateBehaviour

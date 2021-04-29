@@ -35,6 +35,8 @@ pVar = f <$ (P.satisfy (== '@')) <*> stringVar <*> PL.lexeme space (P.option Bef
   where
     f x temp = Var temp (VariableNode x)
 
+pEvent = PL.symbol space "$" *> PL.lexeme space pJQ
+
 pInt = P.choice
   [ IConst <$> decimal,
     IVarAdd <$> PL.lexeme space stringVar <*> (PL.symbol space "+" *> decimal <|> pure 0)
@@ -42,7 +44,7 @@ pInt = P.choice
 
 pConst :: Parser Json
 pConst = do
-   t <- P.char '`' *> P.takeWhileP (Just "json") (/= '`') <* P.char '`'
+   t <- P.char '`' *> P.takeWhileP (Just "json") (/= '`') <* PL.symbol space "`"
    case Json.decode t of
      Left reason -> fail reason
      Right x -> pure x
@@ -51,7 +53,8 @@ pExpr :: Parser Expr
 pExpr = P.choice
   [ Variable <$> pVar,
     Constant <$> pConst,
-    IntLang <$> pInt
+    IntLang <$> pInt,
+    EEvent <$> pEvent
   ]
 
 pPredicate :: Parser Formula

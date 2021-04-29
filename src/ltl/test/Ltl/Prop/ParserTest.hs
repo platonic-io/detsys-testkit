@@ -2,10 +2,18 @@
 module Ltl.Prop.ParserTest where
 
 import Data.Text (Text)
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Text as AesonText
+import qualified Data.HashMap.Strict as Hashmap
+import Data.Scientific (Scientific)
+import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
-import qualified Test.QuickCheck as QC
+import qualified Data.Text.Lazy as LazyText
+import qualified Data.Vector as Vector
 import Test.HUnit
+import qualified Test.QuickCheck as QC
 
+import Ltl.Json
 import Ltl.Prop
 import Ltl.Prop.Parser
 
@@ -17,9 +25,22 @@ ppI (IVarAdd v 0) = QC.elements
 ppI (IVarAdd v k) = pure $ Text.pack v <> "+" <> Text.pack (show k)
 ppI (IConst k) = pure $ Text.pack (show k)
 
+ppJq :: JQ -> QC.Gen Text
+ppJq This = pure $ ""
+ppJq (Lookup jq t) = do
+  r <- ppJq jq
+  pure $ "." <> t <> r
+ppJq (Index jq i) = do
+  r <- ppJq jq
+  pure $ "[" <> Text.pack (show i) <> "]" <> r
 
 ppE :: Expr -> QC.Gen Text
 ppE (IntLang ie) = ppI ie
+ppE (EEvent jq) = do
+  r <- ppJq jq
+  pure $ "$" <> r
+ppE (Constant json) =
+  pure $ "`" <> LazyText.toStrict (AesonText.encodeToLazyText json) <> "`"
 
 ppP :: Predicate -> QC.Gen Text
 ppP (Eq l r) = do
@@ -81,6 +102,9 @@ pp f = maybeParens $ case f of
 stringVar :: QC.Gen String
 stringVar = QC.elements ["x", "y", "z"] -- do better
 
+jsonKey :: QC.Gen Text
+jsonKey = Text.pack <$> stringVar -- do better
+
 -- TODO we should have no spaces in the var
 genI :: QC.Gen IntExpr
 genI = QC.oneof
@@ -89,9 +113,44 @@ genI = QC.oneof
     IConst <$> QC.arbitrary
   ]
 
+genJq :: QC.Gen JQ
+genJq = QC.sized $ go
+  where
+    go 0 = return This
+    go n = QC.oneof
+      [ go 0
+      , Lookup <$> go (n `div` 2) <*> jsonKey
+      , Index <$> go (n `div` 2) <*> QC.arbitrary]
+
+genText :: QC.Gen Text
+genText = pure "h " -- Text.pack <$> QC.arbitrary
+
+genNumber :: QC.Gen Scientific
+genNumber = Scientific.scientific <$> QC.arbitrary <*> QC.arbitrary
+
+genJson :: QC.Gen Json
+genJson = QC.sized $ go
+  where
+    go 0 = QC.oneof
+      [ pure $ Aeson.Null
+      , Aeson.Bool <$> QC.arbitrary
+      , Aeson.Number <$> genNumber
+      , Aeson.String <$> genText]
+    go n = QC.oneof
+      [ go 0
+      , do
+          a <- QC.listOf (go $ n `div` 10)
+          pure $ Aeson.Array (Vector.fromList a)
+      , do
+          m <- QC.listOf (QC.liftArbitrary2 jsonKey (go $ n `div` 10))
+          pure $ Aeson.Object (Hashmap.fromList m)
+      ]
+
 genE :: QC.Gen Expr
 genE = QC.oneof
   [ IntLang <$> genI
+  , Constant <$> genJson
+  , EEvent <$> genJq
   ]
 
 genP :: QC.Gen Predicate

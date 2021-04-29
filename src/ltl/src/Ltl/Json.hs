@@ -22,7 +22,8 @@ jq :: JQ -> Json -> Json
 jq This js = js
 jq (Lookup f k) js = case js of
   Aeson.Object hm -> case HashMap.lookup k hm of
-    Nothing -> error $ "Unknown key " ++ show k-- Aeson.Null
+    --Nothing -> error $ "Unknown key " ++ show k ++ " of possible keys: "  ++ show (HashMap.keys hm)
+    Nothing -> Aeson.Null
     Just js' -> jq f js'
   _ -> Aeson.Null -- or fail?
 jq (Index f i) js = case js of
