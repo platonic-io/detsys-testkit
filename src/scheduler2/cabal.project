@@ -1,0 +1,11 @@
+packages: .
+
+with-compiler: ghc-8.10.4
+
+reject-unconstrained-dependencies: all
+
+package scheduler2
+  ghc-options: -Wall
+
+allow-older: *
+allow-newer: *

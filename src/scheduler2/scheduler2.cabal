@@ -1,0 +1,58 @@
+cabal-version:      >=1.10
+name:               scheduler2
+version:            0.0.0
+synopsis: Scheduler for detsys
+description:
+  See README at <https://github.com/symbiont-io/detsys-testkit/tree/main/src/ltl#readme>
+
+bug-reports:        https://github.com/symbiont-io/detsys-testkit
+license:            AllRightsReserved
+license-file:       LICENSE
+author:             Daniel Gustafsson
+maintainer:         daniel.gustafsson@symbiont.io
+copyright: Copyright (c) 2021 Symbiont Inc
+category: Testing, Distributed Systems
+build-type: Simple
+-- A copyright notice.
+-- copyright:
+-- category:
+extra-source-files: CHANGELOG.md
+
+library
+    hs-source-dirs: src/
+    exposed-modules:
+      Scheduler
+      Scheduler.Agenda
+      Scheduler.Client
+      Scheduler.Event
+      Scheduler.Executor
+      Scheduler.Json
+      Scheduler.Random
+      Scheduler.Time
+      Scheduler.Trace
+      Scheduler.Types
+      
+    build-depends:
+      base  >=4.14 && <4.15
+      , aeson
+      , containers
+      , heaps
+    default-language: Haskell2010
+
+executable scheduler
+    main-is:          Main.hs
+
+    -- Modules included in this executable, other than Main.
+    -- other-modules:
+
+    -- LANGUAGE extensions used by modules in this package.
+    -- other-extensions:
+    build-depends:
+      base
+      , containers
+      , lens
+      , optparse-generic
+      , scheduler2
+      , transformers
+    hs-source-dirs:   app
+    default-language: Haskell2010
