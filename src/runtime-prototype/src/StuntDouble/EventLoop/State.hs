@@ -54,6 +54,14 @@ correlateAsync :: CorrelationId -> Async Message -> LoopState -> IO ()
 correlateAsync cid a ls = atomically $
   modifyTVar' (loopStateWaitingAsyncs ls) (Map.insert cid a)
 
+reverseCorrelateAsync :: Async Message -> LoopState -> IO (Maybe CorrelationId)
+reverseCorrelateAsync a ls = atomically $ do
+  m <- readTVar (loopStateWaitingAsyncs ls)
+  let m' = Map.fromList (map swap (Map.toList m))
+  return (Map.lookup a m')
+    where
+      swap (x, y) = (y, x)
+
 say' :: TVar [String] -> String -> IO ()
 say' logs s = atomically (modifyTVar' logs (s :))
 
@@ -71,3 +79,23 @@ displayLogs' :: TVar [String] -> IO ()
 displayLogs' logsVar = do
   logs <- readTVarIO logsVar
   mapM_ putStrLn (reverse logs)
+
+dumpState :: LoopState -> IO ()
+dumpState ls = do
+  putStrLn ""
+  putStrLn "=== LOOPSTATE DUMP ==="
+  putStr "loopStateName = "
+  putStrLn (getEventLoopName (loopStateName ls))
+  corrId <- readTVarIO (loopStateNextCorrelationId ls)
+  putStr "loopStateNextCorrelationId = "
+  print corrId
+  putStr "loopStateResponses.keys = "
+  responses <- readTVarIO (loopStateResponses ls)
+  print (Map.keys responses)
+  putStr "loopStateWaitingAsyncs.keys = "
+  asyncs <- readTVarIO (loopStateWaitingAsyncs ls)
+  print (Map.keys asyncs)
+  putStr "loopStateContinuations.keys.length = "
+  conts <- readTVarIO (loopStateContinuations ls)
+  print (length (Map.keys conts))
+  putStrLn "=== END OF LOOPSTATE DUMP ==="
