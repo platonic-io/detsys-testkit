@@ -10,7 +10,6 @@ import StuntDouble.EventLoop.State
 import StuntDouble.EventLoop.Event
 import StuntDouble.EventLoop.Transport
 import StuntDouble.Reference
-import StuntDouble.Message
 
 ------------------------------------------------------------------------
 
@@ -26,10 +25,6 @@ handleInbound ls = forever go
           Nothing ->
             writeTBQueue (loopStateQueue ls) (Receive (Request e))
           Just respTMVar -> do
-            -- XXX:
-            -- if envelopeSender e == dummyDeveloperRef ls
-            -- then writeTBQueue (loopStateQueue ls) (Receive (Request e))
-            -- else do
               waitingAsyncs <- readTVar (loopStateWaitingAsyncs ls)
               case Map.lookup corrId waitingAsyncs of
                 Nothing -> writeTBQueue (loopStateQueue ls) (Response (Reply respTMVar e))

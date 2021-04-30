@@ -11,6 +11,7 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TBQueue
+import System.Timeout
 
 import StuntDouble.Actor
 import StuntDouble.Message
@@ -92,13 +93,13 @@ handleCommand (Send rref msg respVar) ls = do
     return (corrId, respTMVar)
   let e = Envelope (dummyDeveloperRef ls) msg rref corrId
   say ls ("Send: " ++ show e)
-  -- transportSend (loopStateTransport ls) e
   atomically (writeTBQueue (loopStateQueue ls) (Receive (Request e)))
   a <- async $ atomically $ do
     resp <- takeTMVar respTMVar -- XXX: timeout?
     modifyTVar' (loopStateResponses ls) (Map.delete corrId)
     return resp
   atomically (putTMVar respVar a)
+  say ls "Done with send"
 handleCommand Quit ls = do
   pids <- atomically (readTVar (loopStatePids ls))
   threadDelay 100000
@@ -119,6 +120,7 @@ handleResponse (AsyncReply respTMVar a e) ls = do
     Now replyMsg -> do
       say ls ("Now: " ++ show replyMsg)
       atomically (putTMVar respTMVar replyMsg)
+      say ls "Done!"
     Later {} -> do
       say ls "Later"
       undefined
@@ -213,16 +215,15 @@ testActor2 rref (Message "init") = do
   a <- remoteCall rref (Message "hi")
   return (Later a (\(Message msg) -> return (Now (Message ("Got: " ++ msg)))))
 
-test :: IO ()
-test = do
-  logs <- newTVarIO []
+test1 :: TVar [String] -> IO ()
+test1 logs = do
   el1 <- makeEventLoop "/tmp" "a" logs
   el2 <- makeEventLoop "/tmp" "b" logs
   lref <- spawn el1 testActor
   let msg = Message "hi"
   reply' <- invoke el1 lref msg
   say' logs (show reply')
-  a <- send el2 (localToRemoteRef "a" lref) msg
+  a <- send el1 (localToRemoteRef "a" lref) msg
   reply'' <- wait a
   say' logs (show reply'')
   threadDelay 10000
@@ -237,6 +238,7 @@ test2 logs = do
   lref1 <- spawn el1 testActor
   lref2 <- spawn el2 (testActor2 (localToRemoteRef "a" lref1))
   a <- send el2 (localToRemoteRef "b" lref2) (Message "init")
+  say' logs "send done, waiting..."
   done <- wait a
   say' logs (show done)
   threadDelay 10000
