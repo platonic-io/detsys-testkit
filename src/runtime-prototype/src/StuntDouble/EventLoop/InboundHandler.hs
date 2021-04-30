@@ -21,8 +21,16 @@ handleInbound ls = forever go
       e <- transportReceive (loopStateTransport ls)
       atomically $ do
         responses <- readTVar (loopStateResponses ls)
-        case Map.lookup (envelopeCorrelationId e) responses of
+        let corrId = envelopeCorrelationId e
+        case Map.lookup corrId responses of
           Nothing ->
             writeTBQueue (loopStateQueue ls) (Receive (Request e))
-          Just respTMVar ->
-            writeTBQueue (loopStateQueue ls) (Response (Reply respTMVar e))
+          Just respTMVar -> do
+            -- XXX:
+            -- if envelopeSender e == dummyDeveloperRef ls
+            -- then writeTBQueue (loopStateQueue ls) (Receive (Request e))
+            -- else do
+              waitingAsyncs <- readTVar (loopStateWaitingAsyncs ls)
+              case Map.lookup corrId waitingAsyncs of
+                Nothing -> writeTBQueue (loopStateQueue ls) (Response (Reply respTMVar e))
+                Just a  -> writeTBQueue (loopStateQueue ls) (Response (AsyncReply respTMVar a e))

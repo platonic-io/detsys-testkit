@@ -22,4 +22,4 @@ remoteToLocalRef :: RemoteRef -> LocalRef
 remoteToLocalRef = LocalRef . index
 
 newtype EventLoopName = EventLoopName { getEventLoopName :: String }
-  deriving IsString
+  deriving (Eq, IsString)

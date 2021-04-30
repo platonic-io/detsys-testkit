@@ -36,10 +36,12 @@ commandName Quit   {} = "Quit"
 data Response
   = IOReady (Async IOResult)
   | Reply (TMVar Message) Envelope
+  | AsyncReply (TMVar Message) (Async Message) Envelope
 
 responseName :: Response -> String
-responseName IOReady {} = "IOReady"
-responseName Reply   {} = "Reply"
+responseName IOReady    {} = "IOReady"
+responseName Reply      {} = "Reply"
+responseName AsyncReply {} = "AsyncReply"
 
 data Receive
   = Request Envelope
