@@ -20,16 +20,17 @@ data Transport m = Transport
 
 ------------------------------------------------------------------------
 
--- XXX:
 namedPipeTransport :: FilePath -> EventLoopName -> IO (Transport IO)
 namedPipeTransport fp name = do
   catchJust
     (\e -> if isAlreadyExistsErrorType (ioeGetErrorType e)
            then Just ()
            else Nothing)
-    (createNamedPipe fp (namedPipeMode `unionFileModes`
-                         ownerReadMode `unionFileModes`
-                         ownerWriteMode))
+    (createNamedPipe
+      (fp </> getEventLoopName name)
+      (namedPipeMode `unionFileModes`
+       ownerReadMode `unionFileModes`
+       ownerWriteMode))
     return
   h <- openFile (fp </> getEventLoopName name) ReadWriteMode
   hSetBuffering h LineBuffering
@@ -46,7 +47,7 @@ namedPipeTransport fp name = do
 test :: IO ()
 test = do
   t <- namedPipeTransport "/tmp" (EventLoopName "a")
-  let e = Envelope (RemoteRef "from" 0) (Message "msg") (RemoteRef "to" 1) 0
+  let e = Envelope (RemoteRef "from" 0) (Message "msg") (RemoteRef "a" 1) 0
   a <- async (transportSend t e)
   e' <- transportReceive t
   cancel a
