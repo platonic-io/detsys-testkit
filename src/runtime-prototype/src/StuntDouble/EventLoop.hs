@@ -39,10 +39,10 @@ initLoopState name transport logs =
     <*> newTVarIO Map.empty
     <*> newTVarIO []
     <*> pure transport
-    <*> newTVarIO (if name == EventLoopName "a" then 0 else 100) -- XXX: fix by
-                                                                 -- namespacing
-                                                                 -- corr ids by
-                                                                 -- loop name?
+    <*> newTVarIO (if name == eventLoopA then 0 else 100) -- XXX: fix by
+                                                          -- namespacing
+                                                          -- corr ids by
+                                                          -- loop name?
     <*> newTVarIO Map.empty
     <*> newTVarIO Map.empty
     <*> newTVarIO Map.empty
@@ -98,7 +98,8 @@ handleCommand (Send rref msg respVar) ls = do
     modifyTVar' (loopStateResponses ls) (Map.delete corrId)
     return resp
   say ls ("correlating send with `" ++ show corrId ++ "'")
-  correlateAsync corrId a ls
+  -- XXX: the following call to correlateAsync breaks `t1`, why?
+  -- correlateAsync corrId a ls
   atomically (putTMVar respVar a)
   say ls "Done with send"
 handleCommand Quit ls = do
@@ -175,7 +176,7 @@ runActor ls = iterM go return
         modifyTVar' (loopStateResponses ls) (Map.insert corrId respTMVar)
         return (corrId, respTMVar)
       -- XXX: we need to remote ref of the actor currently run here...
-      let from = RemoteRef "b" 0
+      let from = RemoteRef (getEventLoopName eventLoopB) 0
           envelope = Envelope from msg rref corrId
       say ls ("RemoteCall: " ++ show envelope)
       transportSend (loopStateTransport ls) envelope
@@ -226,15 +227,21 @@ testActor2 rref (Message "init") = do
   a <- remoteCall rref (Message "hi")
   return (Later a (\(Message msg) -> return (Now (Message ("Got: " ++ msg)))))
 
+eventLoopA :: EventLoopName
+eventLoopA = "event-loop-a"
+
+eventLoopB :: EventLoopName
+eventLoopB = "event-loop-b"
+
 test1 :: TVar [String] -> IO ()
 test1 logs = do
-  el1 <- makeEventLoop "/tmp" "a" logs
-  el2 <- makeEventLoop "/tmp" "b" logs
+  el1 <- makeEventLoop "/tmp" eventLoopA logs
+  el2 <- makeEventLoop "/tmp" eventLoopB logs
   lref <- spawn el1 testActor
   let msg = Message "hi"
   reply' <- invoke el1 lref msg
   say' logs (show reply')
-  a <- send el1 (localToRemoteRef "a" lref) msg
+  a <- send el1 (localToRemoteRef eventLoopA lref) msg
   reply'' <- wait a
   say' logs (show reply'')
   threadDelay 10000
@@ -245,8 +252,8 @@ test1 logs = do
 test2 :: EventLoopRef -> EventLoopRef -> TVar [String] -> IO ()
 test2 el1 el2 logs = do
   lref1 <- spawn el1 testActor
-  lref2 <- spawn el2 (testActor2 (localToRemoteRef "a" lref1))
-  a <- send el2 (localToRemoteRef "b" lref2) (Message "init")
+  lref2 <- spawn el2 (testActor2 (localToRemoteRef eventLoopA lref1))
+  a <- send el2 (localToRemoteRef eventLoopB lref2) (Message "init")
   say' logs "send done, waiting..."
   done <- wait a
   say' logs (show done)
@@ -266,8 +273,8 @@ t1 = do
 t2 :: IO ()
 t2 = do
   logs <- newTVarIO []
-  el1 <- makeEventLoop "/tmp" "a" logs
-  el2 <- makeEventLoop "/tmp" "b" logs
+  el1 <- makeEventLoop "/tmp" eventLoopA logs
+  el2 <- makeEventLoop "/tmp" eventLoopB logs
   test2 el1 el2 logs
     `catch` (\(e :: SomeException) -> do
                 dumpState (loopRefLoopState el1)

@@ -25,11 +25,12 @@ handleInbound ls = forever go
           Nothing ->
             writeTBQueue (loopStateQueue ls) (Receive (Request e))
           Just respTMVar -> do
-              waitingAsyncs <- readTVar (loopStateWaitingAsyncs ls)
-              case Map.lookup corrId waitingAsyncs of
-                Nothing -> do
-                  -- writeTVar (loopStateWaitingAsyncs ls) (Map.delete corrId waitingAsyncs)
-                  writeTBQueue (loopStateQueue ls) (Response (Reply respTMVar e))
-                Just a  -> do
-                  -- writeTVar (loopStateWaitingAsyncs ls) (Map.delete corrId waitingAsyncs)
-                  writeTBQueue (loopStateQueue ls) (Response (AsyncReply respTMVar a e))
+            -- writeTVar (loopStateResponses ls) (Map.delete corrId responses)
+            waitingAsyncs <- readTVar (loopStateWaitingAsyncs ls)
+            case Map.lookup corrId waitingAsyncs of
+              Nothing -> do
+                -- writeTVar (loopStateWaitingAsyncs ls) (Map.delete corrId waitingAsyncs)
+                writeTBQueue (loopStateQueue ls) (Response (Reply respTMVar e))
+              Just a  -> do
+                -- writeTVar (loopStateWaitingAsyncs ls) (Map.delete corrId waitingAsyncs)
+                writeTBQueue (loopStateQueue ls) (Response (AsyncReply respTMVar a e))

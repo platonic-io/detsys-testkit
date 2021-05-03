@@ -23,7 +23,7 @@ data LoopState = LoopState
   , loopStateIOAsyncs :: TVar [Async IOResult]
   , loopStateTransport :: Transport IO -- Will not change once created, so doesn't need STM?
   , loopStateNextCorrelationId :: TVar CorrelationId
-  , loopStateResponses :: TVar (Map CorrelationId (TMVar Message))
+  , loopStateResponses     :: TVar (Map CorrelationId (TMVar Message))
   , loopStateWaitingAsyncs :: TVar (Map CorrelationId (Async Message))
   , loopStateContinuations :: TVar (Map (Async Message) (Message -> Actor))
   , loopStateLogs :: TVar [String]

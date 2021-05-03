@@ -206,13 +206,13 @@ test = do
   vat1 <- makeVat channel1
   vat2 <- makeVat channel2
   ref2 <- spawn vat2 remoteActor
-  ref1 <- spawn vat1 (localActor (localToRemoteRef "localhost" ref2))
+  ref1 <- undefined -- spawn vat1 (localActor (localToRemoteRef "localhost" ref2))
   let hello = Message "hello"
   resp1 <- call vat1 ref1 hello
   print resp1
-  aresp2 <- send vat2 channel1 (localToRemoteRef "localhost" ref2)  hello
+  aresp2 <- undefined -- send vat2 channel1 (localToRemoteRef "localhost" ref2)  hello
   resp2 <- wait aresp2
-  print resp2
+  -- print resp2
   resp3 <- call vat1 ref1 (Message "hello2")
   print resp3
  --  resp3 <- call vat1 ref1 hello

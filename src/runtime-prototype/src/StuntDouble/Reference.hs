@@ -15,8 +15,8 @@ data RemoteRef = RemoteRef
   }
   deriving (Eq, Show, Read)
 
-localToRemoteRef :: String -> LocalRef -> RemoteRef
-localToRemoteRef address (LocalRef i) = RemoteRef address i
+localToRemoteRef :: EventLoopName -> LocalRef -> RemoteRef
+localToRemoteRef name (LocalRef i) = RemoteRef (getEventLoopName name) i
 
 remoteToLocalRef :: RemoteRef -> LocalRef
 remoteToLocalRef = LocalRef . index
