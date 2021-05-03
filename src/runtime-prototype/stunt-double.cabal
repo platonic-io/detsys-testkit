@@ -30,7 +30,6 @@ library
     StuntDouble.Message
     StuntDouble.Reference
     StuntDouble.Supervisor
-    StuntDouble.Vat
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
