@@ -25,24 +25,20 @@ data LoopState = LoopState
   , loopStateNextCorrelationId :: TVar CorrelationId
   , loopStateResponses     :: TVar (Map CorrelationId (TMVar Message))
   , loopStateWaitingAsyncs :: TVar (Map CorrelationId (Async Message))
-  , loopStateContinuations :: TVar (Map (Async Message) (Message -> Actor))
+  , loopStateContinuations :: TVar (Map (Async Message) (RemoteRef, Message -> Actor))
   , loopStateLogs :: TVar [String]
+  , loopStateEventLog :: TVar EventLog
   }
-
-dummyDeveloperRef :: LoopState -> RemoteRef
-dummyDeveloperRef ls = RemoteRef (getEventLoopName (loopStateName ls)) dummyIndex
-  where
-    dummyIndex = -1
 
 lookupActor :: LocalRef -> TVar (Map LocalRef (Message -> Actor))
             -> IO (Maybe (Message -> Actor))
 lookupActor key var = Map.lookup key <$> atomically (readTVar var)
 
-installContinuation :: Async Message -> (Message -> Actor) -> LoopState -> IO ()
-installContinuation a k ls = atomically $
-  modifyTVar' (loopStateContinuations ls) (Map.insert a k)
+installContinuation :: Async Message -> RemoteRef -> (Message -> Actor) -> LoopState -> IO ()
+installContinuation a self k ls = atomically $
+  modifyTVar' (loopStateContinuations ls) (Map.insert a (self, k))
 
-recallContinuation :: Async Message -> LoopState -> IO (Message -> Actor)
+recallContinuation :: Async Message -> LoopState -> IO (RemoteRef, Message -> Actor)
 recallContinuation a ls = do
   ks <- atomically $ do
     ks <- readTVar (loopStateContinuations ls)
@@ -54,8 +50,8 @@ correlateAsync :: CorrelationId -> Async Message -> LoopState -> IO ()
 correlateAsync cid a ls = atomically $
   modifyTVar' (loopStateWaitingAsyncs ls) (Map.insert cid a)
 
-reverseCorrelateAsync :: Async Message -> LoopState -> IO (Maybe CorrelationId)
-reverseCorrelateAsync a ls = atomically $ do
+reverseCorrelateAsync :: Async Message -> LoopState -> STM (Maybe CorrelationId)
+reverseCorrelateAsync a ls = do
   m <- readTVar (loopStateWaitingAsyncs ls)
   let m' = Map.fromList (map swap (Map.toList m))
   return (Map.lookup a m')
@@ -69,6 +65,11 @@ say :: LoopState -> String -> IO ()
 say ls s = do
   let name = getEventLoopName (loopStateName ls)
   atomically (modifyTVar' (loopStateLogs ls) ((name ++ "> " ++ s) :))
+
+saySTM :: LoopState -> String -> STM ()
+saySTM ls s = do
+  let name = getEventLoopName (loopStateName ls)
+  modifyTVar' (loopStateLogs ls) ((name ++ "> " ++ s) :)
 
 displayLogs :: LoopState -> IO ()
 displayLogs ls = do
@@ -99,3 +100,9 @@ dumpState ls = do
   conts <- readTVarIO (loopStateContinuations ls)
   print (length (Map.keys conts))
   putStrLn "=== END OF LOOPSTATE DUMP ==="
+
+emitSTM :: LoopState -> (EventLoopName -> LogEntry) -> STM ()
+emitSTM ls e = modifyTVar' (loopStateEventLog ls) (e (loopStateName ls) :)
+
+emit :: LoopState -> (EventLoopName -> LogEntry) -> IO ()
+emit ls e = atomically (emitSTM ls e)

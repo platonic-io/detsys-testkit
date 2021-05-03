@@ -7,13 +7,13 @@ import Data.String
 ------------------------------------------------------------------------
 
 data LocalRef = LocalRef Int
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 data RemoteRef = RemoteRef
   { address :: String
   , index :: Int
   }
-  deriving (Eq, Show, Read)
+  deriving (Eq, Ord, Show, Read)
 
 localToRemoteRef :: EventLoopName -> LocalRef -> RemoteRef
 localToRemoteRef name (LocalRef i) = RemoteRef (getEventLoopName name) i
@@ -22,4 +22,4 @@ remoteToLocalRef :: RemoteRef -> LocalRef
 remoteToLocalRef = LocalRef . index
 
 newtype EventLoopName = EventLoopName { getEventLoopName :: String }
-  deriving (Eq, IsString)
+  deriving (Eq, Ord, Show, IsString)

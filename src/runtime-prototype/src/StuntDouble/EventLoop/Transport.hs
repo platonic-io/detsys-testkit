@@ -47,7 +47,7 @@ namedPipeTransport fp name = do
 test :: IO ()
 test = do
   t <- namedPipeTransport "/tmp" (EventLoopName "a")
-  let e = Envelope (RemoteRef "from" 0) (Message "msg") (RemoteRef "a" 1) 0
+  let e = Envelope RequestKind (RemoteRef "from" 0) (Message "msg") (RemoteRef "a" 1) 0
   a <- async (transportSend t e)
   e' <- transportReceive t
   cancel a

@@ -18,19 +18,4 @@ handleInbound ls = forever go
   where
     go = do
       e <- transportReceive (loopStateTransport ls)
-      atomically $ do
-        responses <- readTVar (loopStateResponses ls)
-        let corrId = envelopeCorrelationId e
-        case Map.lookup corrId responses of
-          Nothing ->
-            writeTBQueue (loopStateQueue ls) (Receive (Request e))
-          Just respTMVar -> do
-            -- writeTVar (loopStateResponses ls) (Map.delete corrId responses)
-            waitingAsyncs <- readTVar (loopStateWaitingAsyncs ls)
-            case Map.lookup corrId waitingAsyncs of
-              Nothing -> do
-                -- writeTVar (loopStateWaitingAsyncs ls) (Map.delete corrId waitingAsyncs)
-                writeTBQueue (loopStateQueue ls) (Response (Reply respTMVar e))
-              Just a  -> do
-                -- writeTVar (loopStateWaitingAsyncs ls) (Map.delete corrId waitingAsyncs)
-                writeTBQueue (loopStateQueue ls) (Response (AsyncReply respTMVar a e))
+      atomically (writeTBQueue (loopStateQueue ls) (Receive e))
