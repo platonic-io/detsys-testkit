@@ -50,11 +50,13 @@ data ExecutionStep = ExecutionStep
     esLogicalTime :: Int,
     esHeapDiff :: Text,
     esMessage :: Text,
-    esEvent :: Text
+    esEvent :: Text,
+    esReceiver :: Text,
+    esSender :: Text
   }
 
 instance FromRow ExecutionStep where
-  fromRow = ExecutionStep <$> field <*> field <*> field <*> field <*> field
+  fromRow = ExecutionStep <$> field <*> field <*> field <*> field <*> field <*> field <*> field
 
 sqliteLoadExecutionSteps:: TestId -> RunId -> IO [ExecutionStep]
 sqliteLoadExecutionSteps testId runId = do
@@ -65,7 +67,9 @@ sqliteLoadExecutionSteps testId runId = do
     \       execution_step.logical_time, \
     \       execution_step.heap_diff, \
     \       network_trace.message, \
-    \       network_trace.args \
+    \       network_trace.args, \
+    \       network_trace.receiver, \
+    \       network_trace.sender \
     \FROM execution_step \
     \INNER JOIN network_trace \
     \ON (execution_step.test_id=network_trace.test_id \
@@ -108,6 +112,8 @@ mkTrace es s = case go es s of
   (x:xs) -> x :| xs
   where
     updateState es = Map.adjust (\v -> mergePatch v (Maybe.fromMaybe ("Can't decode heap") $ Aeson.decode $ TextEncoding.encodeUtf8 $ esHeapDiff es)) (esReactor es)
+    jsStr = Aeson.String . Text.toStrict
+    (#>) = (,)
     go [] _ = []
     go (es:ess) state =
       let
@@ -116,8 +122,10 @@ mkTrace es s = case go es s of
           { before = State state
           , worldTime = esLogicalTime es
           , action = Event $ Aeson.Object (HashMap.fromList [
-                                              ("message", Aeson.String $ Text.toStrict $ esMessage es),
-                                              ("event", Maybe.fromMaybe "(Can't decode event)" $ Aeson.decode $ TextEncoding.encodeUtf8 $ esEvent es)])
+                                              "message" #> jsStr (esMessage es),
+                                              "receiver" #> jsStr (esReceiver es),
+                                              "sender" #> jsStr (esSender es),
+                                              "event" #>Maybe.fromMaybe "(Can't decode event)" (Aeson.decode $ TextEncoding.encodeUtf8 $ esEvent es)])
           , after = State state'
           }
       in sb : go ess state'
