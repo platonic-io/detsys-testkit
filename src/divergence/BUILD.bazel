@@ -1,0 +1,52 @@
+package(default_visibility = ["//visibility:public"])
+
+load(
+  "@rules_haskell//haskell:defs.bzl",
+  "haskell_binary",
+  "haskell_library",
+)
+
+haskell_library(
+    name = "divergence_lib",
+    src_strip_prefix = "src",
+    srcs = glob(['src/**/*.hs']),
+    deps = [
+        "@stackage//:aeson",
+        "@stackage//:base",
+        "@stackage//:bytestring",
+        "@stackage//:containers",
+        "@stackage//:filepath",
+        "@stackage//:sqlite-simple",
+        "@stackage//:text",
+    ],
+)
+
+genrule(
+    name = "divergence_version",
+    srcs = [],
+    outs = ["app/GitHash.hs"],
+    cmd = ";".join([
+        "( echo 'module GitHash (gitHash) where'",
+        "echo 'gitHash :: String'",
+        "echo -n 'gitHash = \"'",
+        "awk '/STABLE_GIT_COMMIT/ { printf $$2 }' bazel-out/stable-status.txt",
+        "echo '\"'",
+        ") > \"$@\"",
+    ]),
+    stamp = True,
+    message = "Generating version file",
+    visibility = ['//visibility:public'],
+)
+
+haskell_binary(
+    name = "ltl",
+    srcs = ["app/Main.hs"] + [":divergence_version"],
+    compiler_flags = ["-D__BAZEL_BUILD__"],
+    deps = [
+        "@stackage//:aeson",
+        "@stackage//:base",
+        "@stackage//:optparse-generic",
+        "@stackage//:text",
+        ":divergence_lib",
+    ],
+)
