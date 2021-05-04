@@ -39,7 +39,10 @@ namedPipeTransport fp name = do
                        withFile (fp </> address (envelopeReceiver e)) WriteMode $ \h' -> do
                          hSetBuffering h' LineBuffering
                          hPutStrLn h' (show e)
-                   , transportReceive = fmap read (hGetLine h)
+                   , transportReceive =
+                       -- withFile (fp </> getEventLoopName name) ReadWriteMode $ \h -> do
+                       --   hSetBuffering h LineBuffering
+                         fmap read (hGetLine h)
                    }
 
 ------------------------------------------------------------------------

@@ -28,16 +28,24 @@ newtype EventLoopRef = EventLoopRef
 eventLog :: EventLoopRef -> IO EventLog
 eventLog = fmap reverse . readTVarIO . loopStateEventLog . loopRefLoopState
 
+emptyEventLog :: IO (TVar EventLog)
+emptyEventLog = newTVarIO []
+
+dump :: EventLoopRef -> IO ()
+dump = dumpState . loopRefLoopState
+
 dummyDeveloperRef :: EventLoopRef -> RemoteRef
-dummyDeveloperRef r = RemoteRef (getEventLoopName (loopStateName ls)) dummyIndex
+dummyDeveloperRef r = dummyDeveloperRef' (loopRefLoopState r)
+
+dummyDeveloperRef' :: LoopState -> RemoteRef
+dummyDeveloperRef' ls = RemoteRef (getEventLoopName (loopStateName ls)) dummyIndex
   where
-    ls = loopRefLoopState r
     dummyIndex = -1
 
 ------------------------------------------------------------------------
 
-initLoopState :: EventLoopName -> Transport IO -> TVar [String] -> IO LoopState
-initLoopState name transport logs =
+initLoopState :: EventLoopName -> Transport IO -> TVar EventLog -> IO LoopState
+initLoopState name transport elog =
   LoopState
     <$> pure name
     <*> newTVarIO []
@@ -46,21 +54,16 @@ initLoopState name transport logs =
     <*> newTVarIO Map.empty
     <*> newTVarIO []
     <*> pure transport
-    <*> newTVarIO (if name == eventLoopA then 0 else 100) -- XXX: fix by
-                                                          -- namespacing
-                                                          -- corr ids by
-                                                          -- loop name?
+    <*> newTVarIO 0
     <*> newTVarIO Map.empty
     <*> newTVarIO Map.empty
     <*> newTVarIO Map.empty
-    <*> pure logs
-    <*> newTVarIO []
+    <*> pure elog
 
-makeEventLoop :: FilePath -> EventLoopName -> IO EventLoopRef
-makeEventLoop fp name = do
+makeEventLoop :: FilePath -> EventLoopName -> TVar EventLog -> IO EventLoopRef
+makeEventLoop fp name elog = do
   transport <- namedPipeTransport fp name
-  logs <- newTVarIO []
-  ls <- initLoopState name transport logs
+  ls <- initLoopState name transport elog
   aInHandler <- async (handleInbound ls)
   aEvHandler <- async (handleEvents ls)
   atomically (modifyTVar' (loopStatePids ls) ([aInHandler, aEvHandler] ++ ))
@@ -79,7 +82,6 @@ handleEvents ls = go
 
 handleEvent :: Event -> LoopState -> IO ()
 handleEvent (Command c)  ls = handleCommand c ls
--- handleEvent (Response r) ls = handleResponse r ls
 handleEvent (Receive r)  ls = handleReceive r ls
 
 handleCommand :: Command -> LoopState -> IO ()
@@ -92,31 +94,6 @@ handleCommand Quit ls = do
   pids <- atomically (readTVar (loopStatePids ls))
   threadDelay 100000
   mapM_ cancel pids
-
-  {-
-handleResponse :: Response -> LoopState -> IO ()
-handleResponse (Reply respTMVar e) ls = do
-  say ls ("handleResponse: Reply: " ++ show e)
-  atomically (putTMVar respTMVar (envelopeMessage e))
-handleResponse (AsyncReply respTMVar a e) ls = do
-  say ls ("handleResponse: AsyncReply: " ++ show e)
-  say ls "recalling continuation"
-  (self, k) <- recallContinuation a ls
-  cont <- runActor ls self (k (envelopeMessage e))
-  case cont of
-    Now replyMsg -> do
-      say ls ("Now: " ++ show replyMsg)
-      -- Just corrId <- reverseCorrelateAsync a ls
-      -- say ls ("Now: CorrId: " ++ show corrId)
-      -- resps <- readTVarIO (loopStateResponses ls)
-      -- let respVar = resps Map.! corrId
-      -- say ls ("Now: loopStateResponses.keys = " ++ show (Map.keys resps))
-      atomically (putTMVar respTMVar replyMsg)
-      say ls "Done!"
-    Later {} -> do
-      say ls "Later"
-      undefined
--}
 
 data ActorNotFound = ActorNotFound RemoteRef
   deriving Show
@@ -139,27 +116,40 @@ handleReceive e ls = case envelopeKind e of
           Now replyMsg -> do
             emit ls (LogRequest (envelopeSender e) (envelopeReceiver e) (envelopeMessage e)
                      replyMsg)
-            transportSend (loopStateTransport ls) (reply e replyMsg)
+            say ls (show (replyEnvelope e replyMsg))
+            transportSend (loopStateTransport ls) (replyEnvelope e replyMsg)
           Later async k -> do
             -- The actor has to talk to other remote actors before being able to reply.
+            say ls "installing continuation"
             installContinuation async (envelopeReceiver e) k ls
 
   ResponseKind -> do
+    emit ls (LogReceive (envelopeSender e) (envelopeReceiver e) (envelopeMessage e)
+              (envelopeCorrelationId e))
     resps <- readTVarIO (loopStateResponses ls)
     let respVar = resps Map.! envelopeCorrelationId e
     asyncs <- readTVarIO (loopStateWaitingAsyncs ls)
     let async = asyncs Map.! envelopeCorrelationId e
-    -- XXX: check if continuation exist
-    -- (self, k) <- recallContinuation async ls
-    -- cont <- runActor ls self (k (envelopeMessage e))
-    emit ls (LogSendFinish (envelopeCorrelationId e) (envelopeMessage e))
-    atomically (putTMVar respVar (envelopeMessage e))
-    -- case cont of
-    --   Now replyMsg -> do
-    --     emit ls (LogSendFinish (envelopeCorrelationId e) replyMsg)
-    --     atomically (putTMVar respVar replyMsg)
-    --   Later {} -> do
-    --     undefined
+    mResumption <- recallContinuation async ls
+    case mResumption of
+      Nothing -> do
+        emit ls (LogSendFinish (envelopeCorrelationId e) (envelopeMessage e))
+        atomically (putTMVar respVar (envelopeMessage e))
+      Just (self, k) -> do
+        emit ls (LogComment (show (envelopeCorrelationId e)))
+        cont <- runActor ls self (k (envelopeMessage e))
+        case cont of
+          Now replyMsg -> do
+            emit ls (LogSendFinish (envelopeCorrelationId e) replyMsg)
+            -- XXX: envelopeCorrelationId e = 1 there, but we need 0:
+            let respVar' = resps Map.! 0
+            -- XXX: why do we not even need to write to the other respVar?
+            -- Because we already thread the answer to those via Later?!
+
+            -- atomically (putTMVar respVar replyMsg)
+            atomically (putTMVar respVar' replyMsg)
+          Later {} -> do
+            undefined
 
 runActor :: LoopState -> RemoteRef -> Free ActorF a -> IO a
 runActor ls self = iterM go return
@@ -183,6 +173,7 @@ runActor ls self = iterM go return
       a <- async $ atomically $ do
         resp <- takeTMVar respTMVar -- XXX: timeout?
         modifyTVar' (loopStateResponses ls) (Map.delete corrId)
+        modifyTVar' (loopStateWaitingAsyncs ls) (Map.delete corrId)
         return resp
       -- Associate the correlation id with the `Async` `a`, so that we can later
       -- install continuations for it.
@@ -227,61 +218,3 @@ send r rref msg =
     (loopRefLoopState r)
     (dummyDeveloperRef r)
     (Free (RemoteCall rref msg return))
-
-testActor :: Message -> Actor
-testActor (Message "hi") = return (Now (Message "bye!"))
-
-testActor2 :: RemoteRef -> Message -> Actor
-testActor2 rref (Message "init") = do
-  a <- remoteCall rref (Message "hi")
-  return (Later a (\(Message msg) -> return (Now (Message ("Got: " ++ msg)))))
-
-eventLoopA :: EventLoopName
-eventLoopA = EventLoopName "event-loop-a"
-
-eventLoopB :: EventLoopName
-eventLoopB = EventLoopName "event-loop-b"
-
-test1 :: IO ()
-test1 = do
-  el1 <- makeEventLoop "/tmp" eventLoopA
-  el2 <- makeEventLoop "/tmp" eventLoopB
-  lref <- spawn el1 testActor
-  let msg = Message "hi"
-  reply' <- invoke el1 lref msg
-  -- say' logs (show reply')
-  a <- send el1 (localToRemoteRef eventLoopA lref) msg
-  reply'' <- wait a
-  -- say' logs (show reply'')
-  threadDelay 10000
-  quit el1
-  quit el2
-  displayLogs (loopRefLoopState el1)
-
-test2 :: EventLoopRef -> EventLoopRef -> IO ()
-test2 el1 el2 = do
-  lref1 <- spawn el1 testActor
-  lref2 <- spawn el2 (testActor2 (localToRemoteRef eventLoopA lref1))
-  a <- send el2 (localToRemoteRef eventLoopB lref2) (Message "init")
-  -- say' logs "send done, waiting..."
-  done <- wait a
-  -- say' logs (show done)
-  threadDelay 10000
-  quit el1
-  quit el2
-  dumpState (loopRefLoopState el1)
-  dumpState (loopRefLoopState el2)
-  displayLogs (loopRefLoopState el1)
-
-t1 :: IO ()
-t1 = test1 `catch` (\(e :: SomeException) -> displayLogs undefined)
-
-t2 :: IO ()
-t2 = do
-  el1 <- makeEventLoop "/tmp" eventLoopA
-  el2 <- makeEventLoop "/tmp" eventLoopB
-  test2 el1 el2
-    `catch` (\(e :: SomeException) -> do
-                dumpState (loopRefLoopState el1)
-                dumpState (loopRefLoopState el2)
-                displayLogs (loopRefLoopState el2))

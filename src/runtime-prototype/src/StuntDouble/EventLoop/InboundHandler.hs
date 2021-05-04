@@ -18,4 +18,5 @@ handleInbound ls = forever go
   where
     go = do
       e <- transportReceive (loopStateTransport ls)
+      say ls ("<<< RECEIVED: " ++ show e)
       atomically (writeTBQueue (loopStateQueue ls) (Receive e))

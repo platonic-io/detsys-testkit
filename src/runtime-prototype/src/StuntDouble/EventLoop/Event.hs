@@ -42,8 +42,8 @@ data Envelope = Envelope
   }
   deriving (Eq, Show, Read)
 
-reply :: Envelope -> Message -> Envelope
-reply e msg
+replyEnvelope :: Envelope -> Message -> Envelope
+replyEnvelope e msg
   | envelopeKind e == RequestKind =
     e { envelopeKind = ResponseKind
       , envelopeSender   = envelopeReceiver e
@@ -59,6 +59,12 @@ data LogEntry
   | LogSendStart RemoteRef RemoteRef Message CorrelationId EventLoopName
   | LogSendFinish CorrelationId Message EventLoopName
   | LogRequest RemoteRef RemoteRef Message Message EventLoopName
+  | LogReceive RemoteRef RemoteRef Message CorrelationId EventLoopName
   | LogRequestStart RemoteRef RemoteRef Message CorrelationId EventLoopName
   | LogRequestFinish CorrelationId Message EventLoopName
+  | LogComment String EventLoopName
   deriving (Eq, Show)
+
+isComment :: LogEntry -> Bool
+isComment LogComment {} = True
+isComment _otherwise    = False
