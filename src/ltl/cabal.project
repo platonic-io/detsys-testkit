@@ -6,7 +6,7 @@ reject-unconstrained-dependencies: all
 
 constraints: QuickCheck +old-random
 
-package ldfi
+package ltl
   ghc-options: -Wall
 
 allow-older: *
