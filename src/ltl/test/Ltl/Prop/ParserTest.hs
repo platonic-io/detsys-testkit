@@ -1,27 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Ltl.Prop.ParserTest where
 
-import Data.Text (Text)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Text as AesonText
 import qualified Data.HashMap.Strict as Hashmap
 import Data.Scientific (Scientific)
 import qualified Data.Scientific as Scientific
+import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LazyText
 import qualified Data.Vector as Vector
-import Test.HUnit
-import qualified Test.QuickCheck as QC
-
 import Ltl.Json
 import Ltl.Prop
 import Ltl.Prop.Parser
+import Test.HUnit
+import qualified Test.QuickCheck as QC
 
 ppI :: IntExpr -> QC.Gen Text
-ppI (IVarAdd v 0) = QC.elements
-  [ Text.pack v,
-    Text.pack v <> "+0"
-  ]
+ppI (IVarAdd v 0) =
+  QC.elements
+    [ Text.pack v,
+      Text.pack v <> "+0"
+    ]
 ppI (IVarAdd v k) = pure $ Text.pack v <> "+" <> Text.pack (show k)
 ppI (IConst k) = pure $ Text.pack (show k)
 
@@ -96,8 +97,9 @@ pp f = maybeParens $ case f of
     -- Would be good to not always have the parens
     pure $ "(" <> lr <> ")" <> "->" <> "(" <> rr <> ")"
   where
-    maybeParens g = QC.frequency
-      [ (1, g >>= \x -> pure $ "(" <> x <> ")"), (10, g)]
+    maybeParens g =
+      QC.frequency
+        [(1, g >>= \x -> pure $ "(" <> x <> ")"), (10, g)]
 
 stringVar :: QC.Gen String
 stringVar = QC.elements ["x", "y", "z"] -- do better
@@ -107,20 +109,23 @@ jsonKey = Text.pack <$> stringVar -- do better
 
 -- TODO we should have no spaces in the var
 genI :: QC.Gen IntExpr
-genI = QC.oneof
-  [ IVarAdd <$> stringVar <*> QC.arbitrary,
-    IVarAdd <$> stringVar <*> pure 0,
-    IConst <$> QC.arbitrary
-  ]
+genI =
+  QC.oneof
+    [ IVarAdd <$> stringVar <*> QC.arbitrary,
+      IVarAdd <$> stringVar <*> pure 0,
+      IConst <$> QC.arbitrary
+    ]
 
 genJq :: QC.Gen JQ
 genJq = QC.sized $ go
   where
     go 0 = return This
-    go n = QC.oneof
-      [ go 0
-      , Lookup <$> go (n `div` 2) <*> jsonKey
-      , Index <$> go (n `div` 2) <*> QC.arbitrary]
+    go n =
+      QC.oneof
+        [ go 0,
+          Lookup <$> go (n `div` 2) <*> jsonKey,
+          Index <$> go (n `div` 2) <*> QC.arbitrary
+        ]
 
 genText :: QC.Gen Text
 genText = pure "h " -- Text.pack <$> QC.arbitrary
@@ -131,27 +136,31 @@ genNumber = Scientific.scientific <$> QC.arbitrary <*> QC.arbitrary
 genJson :: QC.Gen Json
 genJson = QC.sized $ go
   where
-    go 0 = QC.oneof
-      [ pure $ Aeson.Null
-      , Aeson.Bool <$> QC.arbitrary
-      , Aeson.Number <$> genNumber
-      , Aeson.String <$> genText]
-    go n = QC.oneof
-      [ go 0
-      , do
-          a <- QC.listOf (go $ n `div` 10)
-          pure $ Aeson.Array (Vector.fromList a)
-      , do
-          m <- QC.listOf (QC.liftArbitrary2 jsonKey (go $ n `div` 10))
-          pure $ Aeson.Object (Hashmap.fromList m)
-      ]
+    go 0 =
+      QC.oneof
+        [ pure $ Aeson.Null,
+          Aeson.Bool <$> QC.arbitrary,
+          Aeson.Number <$> genNumber,
+          Aeson.String <$> genText
+        ]
+    go n =
+      QC.oneof
+        [ go 0,
+          do
+            a <- QC.listOf (go $ n `div` 10)
+            pure $ Aeson.Array (Vector.fromList a),
+          do
+            m <- QC.listOf (QC.liftArbitrary2 jsonKey (go $ n `div` 10))
+            pure $ Aeson.Object (Hashmap.fromList m)
+        ]
 
 genE :: QC.Gen Expr
-genE = QC.oneof
-  [ IntLang <$> genI
-  , Constant <$> genJson
-  , EEvent <$> genJq
-  ]
+genE =
+  QC.oneof
+    [ IntLang <$> genI,
+      Constant <$> genJson,
+      EEvent <$> genJq
+    ]
 
 genP :: QC.Gen Predicate
 genP = Eq <$> genE <*> genE
@@ -159,27 +168,29 @@ genP = Eq <$> genE <*> genE
 genF :: QC.Gen Formula
 genF = QC.sized $ go
   where
-    go 0 = QC.oneof
-      [ pure TT,
-        pure FF,
-        P <$> genP
-       ]
-    go n = QC.oneof
-      [ go 0,
-        QC.elements [Always, Eventually, Neg] <*> go (n `div` 2),
-        QC.elements [Imp, And, Or] <*> go (n `div` 2) <*> go (n `div` 2),
-        QC.elements [ForallNode, ExistsNode] <*> stringVar <*> go (n `div` 2),
-        QC.elements [ForallInt, ExistsInt] <*> QC.arbitrary <*> stringVar <*> go (n `div` 2)
-      ]
+    go 0 =
+      QC.oneof
+        [ pure TT,
+          pure FF,
+          P <$> genP
+        ]
+    go n =
+      QC.oneof
+        [ go 0,
+          QC.elements [Always, Eventually, Neg] <*> go (n `div` 2),
+          QC.elements [Imp, And, Or] <*> go (n `div` 2) <*> go (n `div` 2),
+          QC.elements [ForallNode, ExistsNode] <*> stringVar <*> go (n `div` 2),
+          QC.elements [ForallInt, ExistsInt] <*> QC.arbitrary <*> stringVar <*> go (n `div` 2)
+        ]
 
 prop_can_parse :: QC.Property
 prop_can_parse =
   QC.forAll genF $ \f ->
-  QC.forAll (pp f) $ \ repr ->
-  QC.counterexample ("String repr: " ++ show repr) $
-  case parse repr of
-    Left _ -> False
-    Right f' -> f == f'
+    QC.forAll (pp f) $ \repr ->
+      QC.counterexample ("String repr: " ++ show repr) $
+        case parse repr of
+          Left _ -> False
+          Right f' -> f == f'
 
 unit_imp_right_assoc :: Assertion
 unit_imp_right_assoc = case parse "TT -> FF -> TT" of

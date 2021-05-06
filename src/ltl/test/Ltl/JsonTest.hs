@@ -1,12 +1,13 @@
 {-# LANGUAGE QuasiQuotes #-}
+
 module Ltl.JsonTest where
 
-import Test.HUnit
 import Data.Aeson.QQ.Simple
-
 import Ltl.Json
+import Test.HUnit
 
-ex_target = [aesonQQ|{
+ex_target =
+  [aesonQQ|{
      "title": "Goodbye!",
      "author" : {
        "givenName" : "John",
@@ -16,7 +17,8 @@ ex_target = [aesonQQ|{
      "content": "This will be unchanged"
    }|]
 
-ex_patch = [aesonQQ| {
+ex_patch =
+  [aesonQQ| {
      "title": "Hello!",
      "phoneNumber": "+01-123-456-7890",
      "author": {
@@ -26,7 +28,8 @@ ex_patch = [aesonQQ| {
    }
 |]
 
-ex_result = [aesonQQ| {
+ex_result =
+  [aesonQQ| {
      "title": "Hello!",
      "author" : {
        "givenName" : "John"

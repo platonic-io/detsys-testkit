@@ -3,10 +3,8 @@ module Ltl.Prop where
 import Data.List ((\\))
 import Data.Map (Map)
 import qualified Data.Map as Map
-
 import Ltl.Json (JQ, Json)
-import Ltl.Traces(Node)
-
+import Ltl.Traces (Node)
 
 data VTemporal = Before | After
   deriving (Eq, Show)
@@ -22,13 +20,13 @@ evalNode :: NodeEnvironment -> NodeExpression -> Node
 evalNode _ (ConcreteNode node) = node
 evalNode env (VariableNode var) = env Map.! var
 
-bindNodeEnvironment :: NodeVar ->  Node -> NodeEnvironment -> NodeEnvironment
+bindNodeEnvironment :: NodeVar -> Node -> NodeEnvironment -> NodeEnvironment
 bindNodeEnvironment = Map.insert
 
 data Var = Var
-  { time :: VTemporal
-  , node :: NodeExpression
-  , expr :: JQ
+  { time :: VTemporal,
+    node :: NodeExpression,
+    expr :: JQ
   }
   deriving (Eq, Show)
 
@@ -73,16 +71,16 @@ data Formula
   deriving (Eq, Show)
 
 concreteN :: [Node] -> NodeExpression -> NodeExpression
-concreteN nodes n@(ConcreteNode{}) = n
+concreteN nodes n@(ConcreteNode {}) = n
 concreteN nodes (VariableNode n)
   | n `elem` nodes = ConcreteNode n
   | otherwise = VariableNode n
 
 concreteE :: [Node] -> Expr -> Expr
 concreteE nodes (Variable (Var t n jq)) = Variable (Var t (concreteN nodes n) jq)
-concreteE nodes j@(Constant{}) = j
-concreteE nodes i@(IntLang{}) = i
-concreteE nodes e@(EEvent{}) = e
+concreteE nodes j@(Constant {}) = j
+concreteE nodes i@(IntLang {}) = i
+concreteE nodes e@(EEvent {}) = e
 
 concreteP :: [Node] -> Predicate -> Predicate
 concreteP nodes (Eq l r) = Eq (concreteE nodes l) (concreteE nodes r)

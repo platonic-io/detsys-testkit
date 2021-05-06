@@ -1,8 +1,7 @@
 module Ltl.Traces where
 
-import Data.Map(Map)
 import Data.List.NonEmpty (NonEmpty)
-
+import Data.Map (Map)
 import Ltl.Json
 
 type Node = String
@@ -13,10 +12,11 @@ data Event = Event Json
   deriving (Show)
 
 data StateBehaviour = StateBehaviour
-  { before :: State
-  , worldTime :: Int
-  , action :: Event
-  , after  :: State
-  } deriving (Show)
+  { before :: State,
+    worldTime :: Int,
+    action :: Event,
+    after :: State
+  }
+  deriving (Show)
 
 type Trace = NonEmpty StateBehaviour

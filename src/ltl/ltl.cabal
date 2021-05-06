@@ -19,18 +19,18 @@ tested-with:        GHC ==8.10.4
 library
   hs-source-dirs:   src/
   exposed-modules:
-      Ltl
-    , Ltl.Json
-    , Ltl.Proof
-    , Ltl.Prop
-    , Ltl.Prop.Parser
-    , Ltl.Storage
-    , Ltl.Traces
+    Ltl
+    Ltl.Json
+    Ltl.Proof
+    Ltl.Prop
+    Ltl.Prop.Parser
+    Ltl.Storage
+    Ltl.Traces
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
   build-depends:
-      base              >=4.14 && <4.15
+      base        >=4.14 && <4.15
     , bytestring
     , containers
     , filepath
@@ -80,8 +80,8 @@ executable detsys-ltl
   hs-source-dirs:   app/
   main-is:          Main.hs
   build-depends:
-      base
-    , aeson
+      aeson
+    , base
     , ltl
     , optparse-generic
     , text
