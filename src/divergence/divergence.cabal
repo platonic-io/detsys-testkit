@@ -18,13 +18,12 @@ tested-with:        GHC ==8.10.4
 
 library
   hs-source-dirs:   src/
-  exposed-modules:
-    Divergence
+  exposed-modules:  Divergence
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
   build-depends:
-      base              >=4.14 && <4.15
+      base        >=4.14 && <4.15
     , bytestring
     , containers
     , filepath
