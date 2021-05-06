@@ -19,6 +19,7 @@ let
   cli = callPackage ./src/cli/default.nix {};
   db = callPackage ./src/db/default.nix {};
   debugger = callPackage ./src/debugger/default.nix {};
+  divergence = callPackage ./src/divergence/default.nix {};
   generator = callPackage ./src/generator/default.nix {};
   ldfi = callPackage ./src/ldfi/default.nix {};
   ltl = callPackage ./src/ltl/default.nix {};
@@ -48,6 +49,7 @@ stdenv.mkDerivation {
                           ++ lib.optional (nix-build-all || nix-build-cli)       [ cli ]
                           ++ lib.optional (nix-build-all || nix-build-db)        [ db ]
                           ++ lib.optional (nix-build-all || nix-build-debugger)  [ debugger ]
+                          ++ [ divergence ] # currently don't have bazel build for this
                           ++ lib.optional (nix-build-all || nix-build-generator) [ generator ]
                           ++ lib.optional (nix-build-all || nix-build-ldfi)      [ ldfi ]
                           ++ lib.optional (nix-build-all || nix-build-ltl)       [ ltl ]
@@ -87,6 +89,8 @@ stdenv.mkDerivation {
                $out/bin/detsys-debug
     ''
     }
+    # We currently don't have bazel builds for divergence so install via nix
+    install -D ${divergence.out}/bin/detsys-divergence $out/bin
     ${if nix-build-generator || nix-build-all then ''
     install -D ${generator.out}/bin/detsys-generator $out/bin
     install -D ${generator.out}/bin/detsys-generator-version $out/bin
@@ -137,7 +141,7 @@ stdenv.mkDerivation {
   postInstall = ''
     export DUMMY_VERSION="0000000000000000000000000000000000000000-nix"
     export REAL_VERSION="${pkgs.lib.commitIdFromGitRepo ./.git + "-nix"}"
-    for component in checker db debug ldfi ltl scheduler; do
+    for component in checker db debug divergence ldfi ltl scheduler; do
         # TODO(stevan): only do the next steps if --version returns the dummy version?
         bbe -e "s/$DUMMY_VERSION/$REAL_VERSION/" $out/bin/detsys-$component -o $out/bin/detsys-$component-patched
         mv $out/bin/detsys-$component-patched $out/bin/detsys-$component
