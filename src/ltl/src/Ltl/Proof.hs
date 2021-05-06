@@ -70,7 +70,7 @@ allDec :: (r -> Dec) -> [r] -> (r -> Refutation -> Refutation) -> Proof -> Dec
 allDec pred xs ref pro = go xs
   where
     go [] = Yes pro
-    go (x:xs) = case pred x of
+    go (x : xs) = case pred x of
       Yes _ -> go xs
       No r -> No $ ref x r
 
@@ -78,7 +78,7 @@ anyDec :: (r -> Dec) -> [r] -> (r -> Proof -> Proof) -> Refutation -> Dec
 anyDec pred xs pro ref = go xs
   where
     go [] = No ref
-    go (x:xs) = case pred x of
+    go (x : xs) = case pred x of
       Yes p -> Yes $ pro x p
       No _ -> go xs
 

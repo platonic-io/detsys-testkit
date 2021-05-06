@@ -5,18 +5,18 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
+
 module Main where
 
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Text as AesonText
 import qualified Data.Text.Lazy.IO as TextIO
-import Options.Generic
-
 import Ltl
 import Ltl.Json
 import qualified Ltl.Proof as Proof
 import Ltl.Prop.Parser (parse)
 import qualified Ltl.Storage as Storage
+import Options.Generic
 
 ------------------------------------------------------------------------
 
@@ -38,21 +38,23 @@ gitHash = "unknown"
 
 data Config
   = Check
-    { testId  :: Int <?> "Which TestId to test",
-      runId   :: Int <?> "Which RunId to test",
-      formula :: Text <?> "LTL Formula to check"
-    }
+      { testId :: Int <?> "Which TestId to test",
+        runId :: Int <?> "Which RunId to test",
+        formula :: Text <?> "LTL Formula to check"
+      }
   | Version
   deriving (Generic)
 
 instance ParseRecord Config
 
 data Result = Result
-  { result :: Bool
-  , reason :: String
-  } deriving (Generic)
+  { result :: Bool,
+    reason :: String
+  }
+  deriving (Generic)
 
 instance Aeson.FromJSON Result
+
 instance Aeson.ToJSON Result
 
 main :: IO ()
@@ -60,15 +62,14 @@ main = do
   (cfg, help) <- getWithHelp "LTL checker"
   case cfg of
     Version -> putStrLn gitHash
-    Check{..} -> do
+    Check {..} -> do
       trace <- Storage.sqliteLoad (unHelpful testId) (unHelpful runId)
       testFormula <- case parse (unHelpful formula) of
-        Left s  -> error s
+        Left s -> error s
         Right x -> pure x
-      let
-        dec = check testFormula trace
-        result = case dec of
-          Proof.No{} -> False
-          Proof.Yes{} -> True
-        r = Result result (Proof.reason dec)
+      let dec = check testFormula trace
+          result = case dec of
+            Proof.No {} -> False
+            Proof.Yes {} -> True
+          r = Result result (Proof.reason dec)
       TextIO.putStrLn $ AesonText.encodeToLazyText r
