@@ -36,4 +36,9 @@ buildGoModule rec {
     # enable json support for sqlite
     export CGO_CFLAGS="-DSQLITE_ENABLE_JSON1"
   '';
+
+  checkPhase = ''
+    cd internal/
+    go test
+  '';
 }
