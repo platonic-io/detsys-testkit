@@ -8,7 +8,7 @@ module Main where
 
 import qualified Data.Text.IO as T
 import qualified Ldfi
-import Ldfi.FailureSpec (FailureSpec(FailureSpec))
+import Ldfi.FailureSpec (FailureSpec (FailureSpec))
 import Ldfi.Sat (z3Solver)
 import Ldfi.Storage
 import Options.Generic

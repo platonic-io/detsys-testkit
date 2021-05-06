@@ -38,10 +38,10 @@ pkg.overrideAttrs (attrs: {
   # this should probably check that attrs.checkInputs doesn't exist
   checkInputs = [
     nixpkgs.pkgs.haskell.packages.${compiler}.cabal-fmt
+    nixpkgs.pkgs.haskell.packages.${compiler}.ormolu
     nixpkgs.pkgs.haskell.packages.${compiler}.tasty-discover
   ];
-  checkStyleInfo = ''
-    cabal-fmt --check ldfi.cabal
-  '';
-  preConfigurePhases = ["checkStyleInfo"] ++ attrs.preConfigurePhases;
+  checkCabalFmt = "cabal-fmt --check ldfi.cabal";
+  checkOrmolu = "ormolu --mode check $(find . -name '*.hs')";
+  preConfigurePhases = ["checkCabalFmt" "checkOrmolu"] ++ attrs.preConfigurePhases;
 })
