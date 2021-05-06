@@ -26,6 +26,8 @@
            :clj-kondo {:main-opts ["-m" "clj-kondo.main" "--lint" "src" "test"]
                        :extra-deps {clj-kondo/clj-kondo {:mvn/version "2020.05.09"}}
                        :jvm-opts ["-Dclojure.main.report=stderr"]}
+           :cljfmt-check {:main-opts ["-m" "cljfmt.main" "check" "--indents" ".cljfmt.edn"]
+                    :extra-deps {cljfmt/cljfmt {:mvn/version "0.6.8"}}}
            :cljfmt {:main-opts ["-m" "cljfmt.main" "fix" "--indents" ".cljfmt.edn"]
                     :extra-deps {cljfmt/cljfmt {:mvn/version "0.6.8"}}}}
  :mvn/repos {"central" {:url "https://repo1.maven.org/maven2/"}

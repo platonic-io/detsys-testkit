@@ -1,0 +1,4 @@
+{:linters
+ {:lint-as {scheduler.spec/>defn clojure.core/defn
+            ghostwheel.core/>defn clojure.core/defn
+            }}}

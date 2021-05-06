@@ -1,6 +1,5 @@
 (ns scheduler.db
   (:require [clojure.java.shell :as shell]
-            [scheduler.spec :refer [>defn =>]]
             [next.jdbc :as jdbc]
             [next.jdbc.sql :as sql]
             [next.jdbc.result-set :as rs]
@@ -55,15 +54,15 @@
 
 (defn append-event!
   [test-id run-id event data]
-   (jdbc/execute-one!
-    ds
-    ["INSERT INTO event_log (event, meta, data) VALUES (?,?,?)"
-     event
-     (json/write {:component "scheduler"
-                  :test-id test-id
-                  :run-id run-id})
-     (json/write data)]
-    {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
+  (jdbc/execute-one!
+   ds
+   ["INSERT INTO event_log (event, meta, data) VALUES (?,?,?)"
+    event
+    (json/write {:component "scheduler"
+                 :test-id test-id
+                 :run-id run-id})
+    (json/write data)]
+   {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
 
 (defn append-network-trace!
   [test-id run-id data]

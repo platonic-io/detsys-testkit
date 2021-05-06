@@ -139,8 +139,7 @@
                    (assoc :kind "omission"
                           :at (:logical-clock data)))]
     (or (some? ((set faults) entry'))
-        (component-crashed? data entry')
-        )))
+        (component-crashed? data entry'))))
 
 (comment
   (should-drop? {:faults [{:from "a", :to "b", :kind "omission", :at 0}]
@@ -173,7 +172,7 @@
                  :logical-clock 1}
                 {:from "a", :to "b"})
   ;; => true
-)
+  )
 
 (defn from-client?
   [body]
@@ -239,7 +238,7 @@
       (load-test! {:test-id 1})
       first
       (register-executor! {:executor-id "http://localhost:3000/api/v1/event"
-                          :components ["node1" "node2"]})
+                           :components ["node1" "node2"]})
       first
       (create-run! {:test-id 1})
       first
@@ -259,7 +258,6 @@
                    #(not (#{"timer"} (:kind %)))))
 
 (def entries? (s/coll-of entry? :kind vector?))
-
 
 (s/def :ext/to
   (s/or :singleton string?
@@ -291,15 +289,15 @@
 (def events? (s/coll-of event? :kind vector?))
 
 (>defn expand-events
-       [events]
-       [(s/coll-of ext-event?) => (s/coll-of event? :kind vector?)]
-       (let [up (fn [event]
-                  (case (:kind event)
-                    "timer" [event]
-                    (if (string? (:to event))
-                      [event]
-                      (mapv #(assoc event :to %) (:to event)))))]
-         (vec (mapcat up events))))
+  [events]
+  [(s/coll-of ext-event?) => (s/coll-of event? :kind vector?)]
+  (let [up (fn [event]
+             (case (:kind event)
+               "timer" [event]
+               (if (string? (:to event))
+                 [event]
+                 (mapv #(assoc event :to %) (:to event)))))]
+    (vec (mapcat up events))))
 (s/def ::events events?)
 
 (defn error-state?
@@ -347,8 +345,8 @@
   [data current-time]
   [::data time/instant? => (s/tuple ::data (s/coll-of agenda/entry?))]
   (let [expired? (fn [body] (time/before? (time/plus-millis (:at body)
-                                                           (:client-timeout-ms data))
-                                         current-time))
+                                                            (:client-timeout-ms data))
+                                          current-time))
         [to-drop to-keep] (partition-haskell expired? (-> data :client-requests))]
     [(assoc data :client-requests to-keep)
      to-drop]))
@@ -357,6 +355,8 @@
 ;; TODO(stevan): move to other module, since isn't pure?
 ;; TODO(stevan): can we avoid using nilable here? Return `Error + Data *
 ;; Response` instead of always `Data * Response`? Or `Data * Error + Data * Response`?
+
+
 (>defn execute!
   [data]
   [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
@@ -394,11 +394,11 @@
                   [data' {:events []}])
                 (let ;; TODO(stevan): Retry on failure, this possibly needs changes to executor
                     ;; so that we don't end up executing the same command twice.
-                    [events (-> (client/post (str url (if (= (:kind body) "timer") "timer" "event"))
-                                             {:body (json/write body) :content-type "application/json; charset=utf-8"})
-                                :body
-                                json/read
-                                (update :events expand-events))]
+                 [events (-> (client/post (str url (if (= (:kind body) "timer") "timer" "event"))
+                                          {:body (json/write body) :content-type "application/json; charset=utf-8"})
+                             :body
+                             json/read
+                             (update :events expand-events))]
                   ;; TODO(stevan): go into error state if response body is of form {"error": ...}
                   ;; (if (:error events) true false)
 
@@ -449,7 +449,7 @@
         (load-test! {:test-id 1})
         first
         (register-executor! {:executor-id "http://localhost:3001/api/v1/event"
-                            :components ["node1" "node2"]})
+                             :components ["node1" "node2"]})
         first
         (create-run! {:test-id 1})
         first
@@ -491,7 +491,7 @@
          :to "inc"
          :from "client"}]
        (time/init-clock))
-      second) )
+      second))
 
 (>defn enqueue-entry
   [data timestamped-entry]
@@ -656,35 +656,34 @@
                        (replicate (count components)
                                   executor-id)))))
 
-
 (>defn tick!
- [data]
- [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
- (assert (or (not (empty? (:agenda data)))
-             (not (min-time? data))))
- (let [all-events (transient [])]
-   (doseq [[reactor url] (:topology data)]
-     (let [url (str url "tick")
-           events (-> (client/put url
-                                  {:body (json/write {:at (:next-tick data)
-                                                      :reactor reactor})
-                                   :content-type "application/json; charset=utf-8"})
-                      :body
-                      json/read
-                      (update :events expand-events))]
-       (assert (= (keys events) '(:events))
-               (str "execute!: unexpected response body: " events))
-       (doseq [event (:events events)]
-         (conj! all-events event))))
-   (let [events (->> all-events
-                     persistent!
-                     (mapv #(assoc % :sent-logical-time (-> data :logical-clock inc))))]
-     [(-> data
-          (update :next-tick (fn [c] (time/plus-millis c (:tick-frequency data))))
-          (update :logical-clock (if (empty? events) identity inc))
-          (assoc :state :responding) ;; probably??
-          (assoc :clock (:next-tick data)))
-      {:events events}])))
+  [data]
+  [::data => (s/tuple ::data (s/nilable (s/keys :req-un [::events])))]
+  (assert (or (not (empty? (:agenda data)))
+              (not (min-time? data))))
+  (let [all-events (transient [])]
+    (doseq [[reactor url] (:topology data)]
+      (let [url (str url "tick")
+            events (-> (client/put url
+                                   {:body (json/write {:at (:next-tick data)
+                                                       :reactor reactor})
+                                    :content-type "application/json; charset=utf-8"})
+                       :body
+                       json/read
+                       (update :events expand-events))]
+        (assert (= (keys events) '(:events))
+                (str "execute!: unexpected response body: " events))
+        (doseq [event (:events events)]
+          (conj! all-events event))))
+    (let [events (->> all-events
+                      persistent!
+                      (mapv #(assoc % :sent-logical-time (-> data :logical-clock inc))))]
+      [(-> data
+           (update :next-tick (fn [c] (time/plus-millis c (:tick-frequency data))))
+           (update :logical-clock (if (empty? events) identity inc))
+           (assoc :state :responding) ;; probably??
+           (assoc :clock (:next-tick data)))
+       {:events events}])))
 
 (>defn execute-or-tick!
   [data]
@@ -739,7 +738,7 @@
         (load-test! {:test-id 1})
         first
         (register-executor! {:executor-id "http://localhost:3001/api/v1/event"
-                            :components ["node1"]})
+                             :components ["node1"]})
         first
         (create-run! {:test-id 1})
         first
@@ -765,7 +764,7 @@
         (load-test! {:test-id 1})
         first
         (register-executor! {:executor-id "http://localhost:3001/api/v1/event"
-                            :components ["node1"]})
+                             :components ["node1"]})
         first
         (create-run! {:test-id 1})
         first

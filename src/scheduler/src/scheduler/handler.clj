@@ -1,6 +1,5 @@
 (ns scheduler.handler
   (:require [taoensso.timbre :as log]
-            [scheduler.db :as db]
             [scheduler.json :as json]
             [scheduler.pure :as pure]
             [clojure.spec.alpha :as s]))

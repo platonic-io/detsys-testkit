@@ -13,6 +13,7 @@ in stdenv.mkDerivation rec {
   version = "latest";
   name = "${pname}-${version}";
   src = gitignoreSource ./.;
+  doCheck = true;
 
   buildInputs = [ clojure jdk11_headless graalvm11-ce ];
 
@@ -28,11 +29,6 @@ in stdenv.mkDerivation rec {
     javac java/src/lockfix/LockFix.java -cp $CLASSPATH -d $builddir
 
     echo "compiling clojure sources"
-    # On Darwin `clj` tries to create some folder in the home directory...
-    ${lib.optionalString stdenv.isDarwin ''
-    export HOME=$TMP/home
-    mkdir -p $HOME
-    ''}
     clj -Scp src:$CLASSPATH:$builddir \
       -J-Dclojure.compile.path=$builddir \
       -M -e "(compile (quote ${pname}.core))"
@@ -73,6 +69,28 @@ in stdenv.mkDerivation rec {
       --verbose \
       --no-fallback \
       --no-server
+  '';
+
+  darwinFixup = ''
+    # On Darwin `clj` tries to create some folder in the home directory...
+    export HOME=$TMP/home
+    mkdir -p $HOME
+  '';
+
+  checkFormatting = ''
+    clj -A:cljfmt-check || (EXIT=$?; echo "You can run \`clj -A:cljfmt\` to fix this."; exit $EXIT)
+  '';
+
+  linting = ''
+    clj -A:clj-kondo
+  '';
+
+  preConfigurePhases =
+    lib.optionals stdenv.isDarwin ["darwinFixup"] ++ ["checkFormatting" "linting"];
+
+  preCheck = ''
+    # We do this as a preCheck rather than preconfigure since we need to compile the lockfix
+    clj -A:eastwood
   '';
 
   installPhase = ''

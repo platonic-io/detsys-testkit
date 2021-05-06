@@ -33,4 +33,4 @@
 (comment
   (before? (init-clock) (java.time.Instant/now))
   (plus-millis (init-clock) 18.22324)
-  (instant "1970-10-10T00:00:00Z") )
+  (instant "1970-10-10T00:00:00Z"))
