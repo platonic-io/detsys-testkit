@@ -138,7 +138,6 @@ func TestSequenceCrash(t *testing.T) {
 	arrows := arrows_2
 	outcome := outcome_2
 	settings := settings_2
-	fmt.Println(outcome_3)
 	goldenTest(t, settings, arrows, outcome)
 }
 
