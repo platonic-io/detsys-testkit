@@ -4,11 +4,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
+
 module Main where
 
-import Options.Generic
-
 import Divergence
+import Options.Generic
 
 ------------------------------------------------------------------------
 
@@ -30,23 +30,23 @@ gitHash = "unknown"
 
 data Config
   = Check
-    { one :: Int <?> "The first  TestID"
-    , two :: Int <?> "The second TestID"
-    }
+      { one :: Int <?> "The first  TestID",
+        two :: Int <?> "The second TestID"
+      }
   | Version
-  deriving Generic
+  deriving (Generic)
 
 instance ParseRecord Config
 
 main :: IO ()
 main = do
-  (cfg,  _help) <- getWithHelp "Divergence checker"
+  (cfg, _help) <- getWithHelp "Divergence checker"
   case cfg of
     Version -> putStrLn gitHash
-    Check{..} -> do
+    Check {..} -> do
       mdiff <- divergence (unHelpful one) (unHelpful two)
       case mdiff of
         Nothing -> putStrLn "The tests are equivalent"
-        Just x  -> do
+        Just x -> do
           putStrLn $ "The tests are different:"
           putStrLn $ prettyError x
