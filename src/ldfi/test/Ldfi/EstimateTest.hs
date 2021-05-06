@@ -1,15 +1,13 @@
 -- |
 -- Ported from:
 -- https://github.com/palvaro/molly/blob/a3a6d7950814e1154253357a03e7d64754c464b8/src/test/scala/edu/berkeley/cs/boom/molly/FailureSpecSuite.scala
---
-
 module Ldfi.EstimateTest where
 
+import Ldfi.Estimate
 import Test.HUnit
 
-import Ldfi.Estimate
-
 ------------------------------------------------------------------------
+
 -- * The failure free scenario
 
 -- should only be one such scenario.
@@ -18,6 +16,7 @@ unit_estFailureFree =
   grossEstimate (Eot 3) (Eff 0) (MaxCrashes 0) nodes3 @=? 1
 
 ------------------------------------------------------------------------
+
 -- * Fail-stop scenarios
 
 -- should treat failures independently
@@ -58,6 +57,7 @@ unit_estRespectMaxCrashes =
 -- (executions of crash prone nodes)
 
 ------------------------------------------------------------------------
+
 -- * Omission-only scenarios
 
 -- should allow omissions until eff
@@ -69,6 +69,7 @@ unit_estOmissionsEff' :: Assertion
 unit_estOmissionsEff' = grossEstimate (Eot 3) (Eff 1) (MaxCrashes 0) nodes2 @=? 4
 
 ------------------------------------------------------------------------
+
 -- * Scenarios with both crashes and omissions
 
 -- should prevent crashed nodes from sending messages.
@@ -91,27 +92,30 @@ unit_estCrashesPreventSending = grossEstimate (Eot 3) (Eff 2) (MaxCrashes 2) nod
 -- So 11 ^ 2 = 121 possible failure scenarios.
 
 unit_estNoOverflow :: Assertion
-unit_estNoOverflow = assertBool
-  "Shouldn't overflow and estimate zero scenarios"
-  (grossEstimate 6 4 1 nodes5 /= 0)
+unit_estNoOverflow =
+  assertBool
+    "Shouldn't overflow and estimate zero scenarios"
+    (grossEstimate 6 4 1 nodes5 /= 0)
 
 ------------------------------------------------------------------------
 
 unit_estTreatFailuresIndependently' :: Assertion
 unit_estTreatFailuresIndependently' =
-  possibleCrashFaultsCount nodes2 (MaxCrashes 2) (NetworkTrace [1,2,3]) @=? 25
+  possibleCrashFaultsCount nodes2 (MaxCrashes 2) (NetworkTrace [1, 2, 3]) @=? 25
 -- ^ NOTE: this should be 16 according to `grossEstimate`.
 
 unit_estCrashOnceOrNever' :: Assertion
 unit_estCrashOnceOrNever' =
-  possibleCrashFaultsCount nodes1 (MaxCrashes 1) (NetworkTrace [1,2,3]) @=? 4
+  possibleCrashFaultsCount nodes1 (MaxCrashes 1) (NetworkTrace [1, 2, 3]) @=? 4
 
 unit_estCrashOnceOrNever2' :: Assertion
 unit_estCrashOnceOrNever2' =
-  possibleCrashFaultsCount nodes2 (MaxCrashes 1) (NetworkTrace [1,2,3]) @=? 7
-  -- NOTE: should be 8.
+  possibleCrashFaultsCount nodes2 (MaxCrashes 1) (NetworkTrace [1, 2, 3]) @=? 7
+
+-- NOTE: should be 8.
 
 unit_estCrashOnceOrNever3' :: Assertion
 unit_estCrashOnceOrNever3' =
-  possibleCrashFaultsCount nodes3 (MaxCrashes 1) (NetworkTrace [1,2,3]) @=? 10
-  -- NOTE: should be 12.
+  possibleCrashFaultsCount nodes3 (MaxCrashes 1) (NetworkTrace [1, 2, 3]) @=? 10
+
+-- NOTE: should be 12.

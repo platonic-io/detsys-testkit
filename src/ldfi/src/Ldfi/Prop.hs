@@ -80,7 +80,7 @@ simplify1 (And fs)
 simplify1 (Or []) = FF
 simplify1 (Or [f]) = f
 simplify1 (Or fs)
-  | not (null [()| TT <- fs]) = TT
+  | not (null [() | TT <- fs]) = TT
   | otherwise = Or (map simplify1 $ filter (not . isFF) fs)
 simplify1 (Neg FF) = TT
 simplify1 (Neg TT) = FF
