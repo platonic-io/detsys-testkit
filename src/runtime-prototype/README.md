@@ -121,3 +121,8 @@ not.
 
 * Erlang's [supervisors](https://erlang.org/doc/man/supervisor.html);
 * https://capnproto.org/
+
+#### How to run tests
+
+cabal configure test --test-option='--timeout=1' --test-option='--color=always'
+cabal test
