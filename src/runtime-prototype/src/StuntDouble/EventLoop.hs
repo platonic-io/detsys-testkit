@@ -120,8 +120,12 @@ handleReceive e ls = case envelopeKind e of
             transportSend (loopStateTransport ls) (replyEnvelope e replyMsg)
           Later async k -> do
             -- The actor has to talk to other remote actors before being able to reply.
+
+            -- We need to save the correlation id of the original request, so
+            -- that we can write the response to it once we resume our
+            -- continuation.
             say ls "installing continuation"
-            installContinuation async (envelopeReceiver e) k ls
+            installContinuation async (envelopeReceiver e) (envelopeCorrelationId e) k ls
 
   ResponseKind -> do
     emit ls (LogReceive (envelopeSender e) (envelopeReceiver e) (envelopeMessage e)
@@ -135,18 +139,13 @@ handleReceive e ls = case envelopeKind e of
       Nothing -> do
         emit ls (LogSendFinish (envelopeCorrelationId e) (envelopeMessage e))
         atomically (putTMVar respVar (envelopeMessage e))
-      Just (self, k) -> do
+      Just (self, corrId', k) -> do
         emit ls (LogComment (show (envelopeCorrelationId e)))
         cont <- runActor ls self (k (envelopeMessage e))
         case cont of
           Now replyMsg -> do
             emit ls (LogSendFinish (envelopeCorrelationId e) replyMsg)
-            -- XXX: envelopeCorrelationId e = 1 there, but we need 0:
-            let respVar' = resps Map.! 0
-            -- XXX: why do we not even need to write to the other respVar?
-            -- Because we already thread the answer to those via Later?!
-
-            -- atomically (putTMVar respVar replyMsg)
+            let respVar' = resps Map.! corrId'
             atomically (putTMVar respVar' replyMsg)
           Later {} -> do
             undefined

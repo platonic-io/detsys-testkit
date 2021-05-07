@@ -25,7 +25,8 @@ data LoopState = LoopState
   , loopStateNextCorrelationId :: TVar CorrelationId
   , loopStateResponses     :: TVar (Map CorrelationId (TMVar Message))
   , loopStateWaitingAsyncs :: TVar (Map CorrelationId (Async Message))
-  , loopStateContinuations :: TVar (Map (Async Message) (RemoteRef, Message -> Actor))
+  , loopStateContinuations :: TVar (Map (Async Message)
+                                        (RemoteRef, CorrelationId, Message -> Actor))
   , loopStateEventLog :: TVar EventLog
   }
 
@@ -33,11 +34,13 @@ lookupActor :: LocalRef -> TVar (Map LocalRef (Message -> Actor))
             -> IO (Maybe (Message -> Actor))
 lookupActor key var = Map.lookup key <$> atomically (readTVar var)
 
-installContinuation :: Async Message -> RemoteRef -> (Message -> Actor) -> LoopState -> IO ()
-installContinuation a self k ls = atomically $
-  modifyTVar' (loopStateContinuations ls) (Map.insert a (self, k))
+installContinuation :: Async Message -> RemoteRef -> CorrelationId
+                    -> (Message -> Actor) -> LoopState -> IO ()
+installContinuation a self corrId k ls = atomically $
+  modifyTVar' (loopStateContinuations ls) (Map.insert a (self, corrId, k))
 
-recallContinuation :: Async Message -> LoopState -> IO (Maybe (RemoteRef, Message -> Actor))
+recallContinuation :: Async Message -> LoopState
+                   -> IO (Maybe (RemoteRef, CorrelationId, Message -> Actor))
 recallContinuation a ls = do
   ks <- atomically $ do
     ks <- readTVar (loopStateContinuations ls)

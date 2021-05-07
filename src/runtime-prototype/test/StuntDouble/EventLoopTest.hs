@@ -70,13 +70,15 @@ unit_sendLater = do
   reply <- wait a
   reply @?= Message "Got: bye!"
 
-  -- catch
-  --   (do lref1 <- spawn el1 testActor
-  --       lref2 <- spawn el2 (testActor2 (localToRemoteRef eventLoopA lref1))
-  --       a <- send el2 (localToRemoteRef eventLoopB lref2) (Message "init")
-  --       reply <- wait a
-  --       reply @?= Message "ot: bye!")
-  --   (\(e :: SomeException) -> dump el1 >> dump el2 >> eventLog el1 >>= mapM_ print)
+  {-
+  catch
+    (do lref1 <- spawn el1 testActor
+        lref2 <- spawn el2 (testActor2 (localToRemoteRef eventLoopA lref1))
+        a <- send el2 (localToRemoteRef eventLoopB lref2) (Message "init")
+        reply <- wait a
+        reply @?= Message "Got: bye!")
+    (\(e :: SomeException) -> dump el1 >> dump el2 >> eventLog el1 >>= mapM_ print)
+  -}
 
   dump el1
   dump el2
