@@ -76,7 +76,7 @@ dumpState ls = do
   putStr "loopStateContinuations.keys.length = "
   conts <- readTVarIO (loopStateContinuations ls)
   print (length (Map.keys conts))
-  putStr "loopStateQueue = []"
+  putStr "loopStateQueue = ["
   events <- atomically (flushTBQueue (loopStateQueue ls))
   mapM_ (\e -> putStrLn (eventName e ++ ",")) events
   putStrLn "]"
