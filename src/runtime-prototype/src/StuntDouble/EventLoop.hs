@@ -19,6 +19,7 @@ import StuntDouble.FreeMonad
 import StuntDouble.EventLoop.State
 import StuntDouble.EventLoop.Event
 import StuntDouble.EventLoop.InboundHandler
+import StuntDouble.EventLoop.AsyncIOHandler
 
 ------------------------------------------------------------------------
 
@@ -51,8 +52,8 @@ initLoopState name transport elog =
     <*> newTVarIO []
     <*> newTBQueueIO 128
     <*> newTVarIO Map.empty
-    <*> newTVarIO Map.empty
     <*> newTVarIO []
+    <*> newTVarIO Map.empty
     <*> pure transport
     <*> newTVarIO 0
     <*> newTVarIO Map.empty
@@ -65,8 +66,10 @@ makeEventLoop fp name elog = do
   transport <- namedPipeTransport fp name
   ls <- initLoopState name transport elog
   aInHandler <- async (handleInbound ls)
+  aAsyncIOHandler <- async (handleAsyncIO ls)
   aEvHandler <- async (handleEvents ls)
-  atomically (modifyTVar' (loopStatePids ls) ([aInHandler, aEvHandler] ++ ))
+  atomically (modifyTVar' (loopStatePids ls)
+               ([aInHandler, aEvHandler, aAsyncIOHandler] ++))
   return (EventLoopRef ls)
 
 handleEvents :: LoopState -> IO ()
@@ -83,6 +86,7 @@ handleEvents ls = go
 handleEvent :: Event -> LoopState -> IO ()
 handleEvent (Command c)  ls = handleCommand c ls
 handleEvent (Receive r)  ls = handleReceive r ls
+handleEvent (AsyncIODone a r) ls = handleAsyncIODone a r ls
 
 handleCommand :: Command -> LoopState -> IO ()
 handleCommand (Spawn actor respVar) ls = atomically $ do
@@ -126,6 +130,9 @@ handleReceive e ls = case envelopeKind e of
             -- continuation.
             say ls "installing continuation"
             installContinuation async (envelopeReceiver e) (envelopeCorrelationId e) k ls
+          LaterIO async k -> do
+            say ls "installing i/o continuation"
+            -- installIOContinuation async ...
 
   ResponseKind -> do
     emit ls (LogReceive (envelopeSender e) (envelopeReceiver e) (envelopeMessage e)
@@ -149,6 +156,9 @@ handleReceive e ls = case envelopeKind e of
             atomically (putTMVar respVar' replyMsg)
           Later {} -> do
             undefined
+
+handleAsyncIODone :: Async IOResult -> IOResult -> LoopState -> IO ()
+handleAsyncIODone a r ls = undefined
 
 runActor :: LoopState -> RemoteRef -> Free ActorF a -> IO a
 runActor ls self = iterM go return
@@ -181,7 +191,8 @@ runActor ls self = iterM go return
       emit ls (LogSendStart self rref msg corrId)
       k a
     go (AsyncIO m k) = do
-      a <- async m
+      a <- async m -- XXX: Use `asyncOn` a different capability than the main
+                   -- event loop is running on.
       atomically (modifyTVar' (loopStateIOAsyncs ls) (a :))
       k a
     go (Get k) =  do

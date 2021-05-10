@@ -19,8 +19,8 @@ data LoopState = LoopState
                                      --   event loop itself.
   , loopStateQueue :: TBQueue Event
   , loopStateActors :: TVar (Map LocalRef (Message -> Actor)) -- XXX: Only changed by main loop, so no need for STM?
-  , loopStateIOHandlers :: TVar (Map (Async IOResult) (LocalRef, IOResult -> Actor))
   , loopStateIOAsyncs :: TVar [Async IOResult]
+  , loopStateIOHandlers :: TVar (Map (Async IOResult) (LocalRef, IOResult -> Actor))
   , loopStateTransport :: Transport IO -- Will not change once created, so doesn't need STM?
   , loopStateNextCorrelationId :: TVar CorrelationId
   , loopStateResponses     :: TVar (Map CorrelationId (TMVar Message))

@@ -3,6 +3,7 @@
 module StuntDouble.EventLoopTest where
 
 import Control.Exception
+import Control.Concurrent
 import Control.Concurrent.Async
 import Test.HUnit
 
@@ -17,6 +18,11 @@ testActor2 :: RemoteRef -> Message -> Actor
 testActor2 rref (Message "init") = do
   a <- remoteCall rref (Message "hi")
   return (Later a (\(Message msg) -> return (Now (Message ("Got: " ++ msg)))))
+
+testActor3 :: Message -> Actor
+testActor3 (Message "init") = do
+  a <- asyncIO (threadDelay 1000000 >> return (String "result"))
+  return (LaterIO a (\(String result) -> return (Now (Message ("Got: " ++ result)))))
 
 eventLoopA :: String -> EventLoopName
 eventLoopA suffix = EventLoopName ("event-loop-a" ++ "-" ++ suffix)
@@ -89,3 +95,14 @@ unit_sendLater = do
 
   quit el1
   quit el2
+
+unit_asyncIO :: Assertion
+unit_asyncIO = do
+  elog <- emptyEventLog
+  let ev = eventLoopA "asyncIO"
+  el <- makeEventLoop "/tmp" ev elog
+  catch (do lref <- spawn el testActor3
+            a <- send el (localToRemoteRef ev lref) (Message "init")
+            reply <- wait a
+            reply @?= Message "Got: result")
+    (\(e :: SomeException) -> dump el >> eventLog el >>= mapM_ print >> print e)
