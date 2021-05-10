@@ -44,14 +44,3 @@ namedPipeTransport fp name = do
                        --   hSetBuffering h LineBuffering
                          fmap read (hGetLine h)
                    }
-
-------------------------------------------------------------------------
-
-test :: IO ()
-test = do
-  t <- namedPipeTransport "/tmp" (EventLoopName "a")
-  let e = Envelope RequestKind (RemoteRef "from" 0) (Message "msg") (RemoteRef "a" 1) 0
-  a <- async (transportSend t e)
-  e' <- transportReceive t
-  cancel a
-  assert (e' == e) (return ())
