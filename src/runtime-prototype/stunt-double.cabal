@@ -4,6 +4,7 @@ version:            0.0.0
 synopsis:           Actors that can be faked.
 description:
   See README at <https://github.com/symbiont-io/detsys-testkit/tree/main/src/runtime-prototype#readme>
+
 bug-reports:        https://github.com/symbiont-io/detsys-testkit/issues
 license:            AllRightsReserved
 license-file:       LICENSE
@@ -18,25 +19,32 @@ tested-with:        GHC ==8.10.4
 library
   hs-source-dirs:   src/
   exposed-modules:
+    StuntDouble
     StuntDouble.Actor
     StuntDouble.EventLoop
+    StuntDouble.EventLoop.AsyncHandler
+    StuntDouble.EventLoop.Event
+    StuntDouble.EventLoop.InboundHandler
+    StuntDouble.EventLoop.State
+    StuntDouble.EventLoop.Transport
+    StuntDouble.FreeMonad
     StuntDouble.Message
     StuntDouble.Reference
     StuntDouble.Supervisor
-    StuntDouble.Vat
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
   build-depends:
       base        >=4.14 && <4.15
     , containers
+    , filepath
     , mtl
     , stm
 
   build-depends:
       async
-    , free
     , random
+    , unix
 
   default-language: Haskell2010
 
@@ -45,16 +53,16 @@ test-suite test
   hs-source-dirs:   test/
   main-is:          Main.hs
   build-depends:
-      base
+      async
+    , base
     , containers
     , HUnit
-    , QuickCheck
     , stunt-double
     , tasty
     , tasty-hunit
-    , tasty-quickcheck
 
   other-modules:
+    StuntDouble.EventLoop.TransportTest
     StuntDouble.EventLoopTest
     TastyDiscover
 
