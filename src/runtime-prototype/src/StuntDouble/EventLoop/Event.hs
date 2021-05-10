@@ -12,7 +12,6 @@ import StuntDouble.Reference
 
 data Event
   = Command  Command
---  | Response Response
   | Receive Envelope
 
 eventName :: Event -> String
