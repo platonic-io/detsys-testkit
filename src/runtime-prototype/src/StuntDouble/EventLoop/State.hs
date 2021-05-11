@@ -19,8 +19,9 @@ data LoopState = LoopState
                                      --   event loop itself.
   , loopStateQueue :: TBQueue Event
   , loopStateActors :: TVar (Map LocalRef (Message -> Actor)) -- XXX: Only changed by main loop, so no need for STM?
-  , loopStateIOHandlers :: TVar (Map (Async IOResult) (LocalRef, IOResult -> Actor))
   , loopStateIOAsyncs :: TVar [Async IOResult]
+  , loopStateIOContinuations :: TVar (Map (Async IOResult)
+                                          (RemoteRef, CorrelationId, IOResult -> Actor))
   , loopStateTransport :: Transport IO -- Will not change once created, so doesn't need STM?
   , loopStateNextCorrelationId :: TVar CorrelationId
   , loopStateResponses     :: TVar (Map CorrelationId (TMVar Message))
@@ -47,6 +48,20 @@ recallContinuation a ls = do
     writeTVar (loopStateContinuations ls) (Map.delete a ks)
     return ks
   return (Map.lookup a ks)
+
+installIOContinuation :: Async IOResult -> RemoteRef -> CorrelationId
+                      -> (IOResult -> Actor) -> LoopState -> IO ()
+installIOContinuation a self corrId k ls = atomically $
+    modifyTVar' (loopStateIOContinuations ls) (Map.insert a (self, corrId, k))
+
+recallIOContinuation :: Async IOResult -> LoopState
+                     -> IO (RemoteRef, CorrelationId, IOResult -> Actor)
+recallIOContinuation a ls = do
+  ks <- atomically $ do
+    ks <- readTVar (loopStateIOContinuations ls)
+    writeTVar (loopStateIOContinuations ls) (Map.delete a ks)
+    return ks
+  return (ks Map.! a)
 
 correlateAsync :: CorrelationId -> Async Message -> LoopState -> IO ()
 correlateAsync cid a ls = atomically $

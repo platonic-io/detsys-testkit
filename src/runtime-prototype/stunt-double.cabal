@@ -22,7 +22,7 @@ library
     StuntDouble
     StuntDouble.Actor
     StuntDouble.EventLoop
-    StuntDouble.EventLoop.AsyncHandler
+    StuntDouble.EventLoop.AsyncIOHandler
     StuntDouble.EventLoop.Event
     StuntDouble.EventLoop.InboundHandler
     StuntDouble.EventLoop.State

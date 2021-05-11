@@ -3,6 +3,7 @@
 module StuntDouble.EventLoop.Event where
 
 import Control.Concurrent.STM
+import Control.Concurrent.Async
 
 import StuntDouble.Actor
 import StuntDouble.Message
@@ -11,20 +12,22 @@ import StuntDouble.Reference
 ------------------------------------------------------------------------
 
 data Event
-  = Command  Command
+  = Command Command
   | Receive Envelope
+  | AsyncIODone (Async IOResult) IOResult
 
 eventName :: Event -> String
 eventName (Command cmd) = "Command/" ++ commandName cmd
 eventName (Receive e)   = "Receive/" ++ show e
+eventName (AsyncIODone _a ioResult) = "AsyncIODone/" ++ show ioResult
 
 data Command
   = Spawn (Message -> Actor) (TMVar LocalRef)
   | Quit
 
 commandName :: Command -> String
-commandName Spawn  {} = "Spawn"
-commandName Quit   {} = "Quit"
+commandName Spawn {} = "Spawn"
+commandName Quit  {} = "Quit"
 
 newtype CorrelationId = CorrelationId Int
   deriving (Eq, Ord, Show, Read, Num, Enum)
@@ -62,6 +65,7 @@ data LogEntry
   | LogRequestStart RemoteRef RemoteRef Message CorrelationId EventLoopName
   | LogRequestFinish CorrelationId Message EventLoopName
   | LogComment String EventLoopName
+  | LogAsyncIOFinish CorrelationId IOResult EventLoopName
   deriving (Eq, Show)
 
 isComment :: LogEntry -> Bool
