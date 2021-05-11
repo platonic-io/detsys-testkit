@@ -65,6 +65,7 @@ data LogEntry
   | LogRequestStart RemoteRef RemoteRef Message CorrelationId EventLoopName
   | LogRequestFinish CorrelationId Message EventLoopName
   | LogComment String EventLoopName
+  | LogAsyncIOFinish CorrelationId IOResult EventLoopName
   deriving (Eq, Show)
 
 isComment :: LogEntry -> Bool

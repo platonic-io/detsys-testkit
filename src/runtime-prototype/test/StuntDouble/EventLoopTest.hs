@@ -21,7 +21,7 @@ testActor2 rref (Message "init") = do
 
 testActor3 :: Message -> Actor
 testActor3 (Message "init") = do
-  a <- asyncIO (threadDelay 1000000 >> return (String "result"))
+  a <- asyncIO (threadDelay 300000 >> return (String "result"))
   return (LaterIO a (\(String result) -> return (Now (Message ("Got: " ++ result)))))
 
 eventLoopA :: String -> EventLoopName
@@ -88,10 +88,9 @@ unit_sendLater = do
         reply <- wait a
         reply @?= Message "Got: bye!")
     (\(e :: SomeException) -> dump el1 >> dump el2 >> eventLog el1 >>= mapM_ print)
-  -}
-
   dump el1
   dump el2
+  -}
 
   quit el1
   quit el2
@@ -101,8 +100,15 @@ unit_asyncIO = do
   elog <- emptyEventLog
   let ev = eventLoopA "asyncIO"
   el <- makeEventLoop "/tmp" ev elog
+  lref <- spawn el testActor3
+  a <- send el (localToRemoteRef ev lref) (Message "init")
+  reply <- wait a
+  reply @?= Message "Got: result"
+  quit el
+  {-
   catch (do lref <- spawn el testActor3
             a <- send el (localToRemoteRef ev lref) (Message "init")
             reply <- wait a
             reply @?= Message "Got: result")
     (\(e :: SomeException) -> dump el >> eventLog el >>= mapM_ print >> print e)
+-}

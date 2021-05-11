@@ -132,7 +132,7 @@ handleReceive e ls = case envelopeKind e of
             installContinuation async (envelopeReceiver e) (envelopeCorrelationId e) k ls
           LaterIO async k -> do
             say ls "installing i/o continuation"
-            -- installIOContinuation async ...
+            installIOContinuation async (envelopeReceiver e) (envelopeCorrelationId e) k ls
 
   ResponseKind -> do
     emit ls (LogReceive (envelopeSender e) (envelopeReceiver e) (envelopeMessage e)
@@ -158,7 +158,17 @@ handleReceive e ls = case envelopeKind e of
             undefined
 
 handleAsyncIODone :: Async IOResult -> IOResult -> LoopState -> IO ()
-handleAsyncIODone a r ls = undefined
+handleAsyncIODone a r ls = do
+  (self, corrId, k) <- recallIOContinuation a ls
+  emit ls (LogAsyncIOFinish corrId r)
+  cont <- runActor ls self (k r)
+  case cont of
+    Now replyMsg -> do
+      resps <- readTVarIO (loopStateResponses ls)
+      let respVar = resps Map.! corrId
+      atomically (putTMVar respVar replyMsg)
+    Later {} -> do
+      undefined
 
 runActor :: LoopState -> RemoteRef -> Free ActorF a -> IO a
 runActor ls self = iterM go return

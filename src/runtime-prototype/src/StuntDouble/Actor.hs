@@ -30,7 +30,7 @@ data Cont a
   --   | ...
 
 data IOResult = Unit | String String
-  deriving Show
+  deriving (Eq, Ord, Show)
 
 data ActorF x
   = Call LocalRef Message (Message -> x)
