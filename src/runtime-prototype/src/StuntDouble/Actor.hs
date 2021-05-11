@@ -54,7 +54,15 @@ remoteCall rr m = Free (RemoteCall rr m return)
 asyncIO :: IO IOResult -> Free ActorF (Async IOResult)
 asyncIO m = Free (AsyncIO m return)
 
+get :: Free ActorF State
+get = Free (Get return)
+
+put :: State -> Free ActorF ()
+put state' = Free (Put state' return)
 
 -- XXX:
-newtype State = State Int
-  deriving Num
+newtype State = State { getState :: Int }
+  deriving (Show, Num)
+
+initState :: State
+initState = State 0

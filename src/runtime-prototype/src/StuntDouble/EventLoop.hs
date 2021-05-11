@@ -52,6 +52,7 @@ initLoopState name transport elog =
     <*> newTVarIO []
     <*> newTBQueueIO 128
     <*> newTVarIO Map.empty
+    <*> newTVarIO Map.empty
     <*> newTVarIO []
     <*> newTVarIO Map.empty
     <*> pure transport
@@ -93,6 +94,7 @@ handleCommand (Spawn actor respVar) ls = atomically $ do
   actors <- readTVar (loopStateActors ls)
   let lref = LocalRef (Map.size actors)
   writeTVar (loopStateActors ls) (Map.insert lref actor actors)
+  modifyTVar' (loopStateActorState ls) (Map.insert lref initState)
   putTMVar respVar lref
 handleCommand Quit ls = do
   pids <- atomically (readTVar (loopStatePids ls))
@@ -176,7 +178,7 @@ runActor ls self = iterM go return
     go :: ActorF (IO a) -> IO a
     go (Call lref msg k) = do
       Just actor <- lookupActor lref (loopStateActors ls)
-      Now reply <- runActor ls self (actor msg)
+      Now reply <- runActor ls (localToRemoteRef (loopStateName ls) lref) (actor msg)
       emit ls (LogInvoke self lref msg reply)
       k reply
     go (RemoteCall rref msg k) = do
@@ -205,10 +207,14 @@ runActor ls self = iterM go return
                    -- event loop is running on.
       atomically (modifyTVar' (loopStateIOAsyncs ls) (a :))
       k a
-    go (Get k) =  do
-      undefined
+    go (Get k) = do
+     states <- readTVarIO (loopStateActorState ls)
+     let state = states Map.! remoteToLocalRef self
+     k state
     go (Put state' k) = do
-      undefined
+      atomically (modifyTVar' (loopStateActorState ls)
+                   (Map.insert (remoteToLocalRef self) state'))
+      k ()
 
 quit :: EventLoopRef -> IO ()
 quit r = atomically $

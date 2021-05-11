@@ -19,6 +19,7 @@ data LoopState = LoopState
                                      --   event loop itself.
   , loopStateQueue :: TBQueue Event
   , loopStateActors :: TVar (Map LocalRef (Message -> Actor)) -- XXX: Only changed by main loop, so no need for STM?
+  , loopStateActorState :: TVar (Map LocalRef State)
   , loopStateIOAsyncs :: TVar [Async IOResult]
   , loopStateIOContinuations :: TVar (Map (Async IOResult)
                                           (RemoteRef, CorrelationId, IOResult -> Actor))
@@ -79,6 +80,9 @@ dumpState ls = do
   putStrLn "=== LOOPSTATE DUMP ==="
   putStr "loopStateName = "
   putStrLn (getEventLoopName (loopStateName ls))
+  putStr "loopStateActorState = "
+  states <- readTVarIO (loopStateActorState ls)
+  print states
   corrId <- readTVarIO (loopStateNextCorrelationId ls)
   putStr "loopStateNextCorrelationId = "
   print corrId

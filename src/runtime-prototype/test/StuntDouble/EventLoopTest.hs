@@ -5,7 +5,7 @@ module StuntDouble.EventLoopTest where
 import Control.Exception
 import Control.Concurrent
 import Control.Concurrent.Async
-import Test.HUnit
+import Test.HUnit hiding (State)
 
 import StuntDouble
 
@@ -112,3 +112,25 @@ unit_asyncIO = do
             reply @?= Message "Got: result")
     (\(e :: SomeException) -> dump el >> eventLog el >>= mapM_ print >> print e)
 -}
+
+statefulActor :: Message -> Actor
+statefulActor (Message intStr) = do
+  s <- get
+  let int :: Int
+      int = read intStr
+      s' :: State
+      s' = State int + s
+  put s'
+  return (Now (Message (show (getState s'))))
+
+unit_state :: Assertion
+unit_state = do
+  elog <- emptyEventLog
+  let ev = eventLoopA "state"
+  el <- makeEventLoop "/tmp" ev elog
+  lref <- spawn el statefulActor
+  reply <- invoke el lref (Message "1")
+  reply @?= Message "1"
+  reply2 <- invoke el lref (Message "2")
+  reply2 @?= Message "3"
+  quit el
