@@ -16,6 +16,10 @@ build-type:         Simple
 extra-source-files: CHANGELOG.md
 tested-with:        GHC ==8.10.4
 
+flag http
+    description: Enable http transport support
+    default: True
+
 library
   hs-source-dirs:   src/
   exposed-modules:
@@ -32,6 +36,10 @@ library
     StuntDouble.Reference
     StuntDouble.Supervisor
 
+  if flag(http)
+     exposed-modules:
+       StuntDouble.EventLoop.Transport.Http
+
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
   build-depends:
@@ -45,6 +53,17 @@ library
       async
     , random
     , unix
+
+  if flag(http)
+    build-depends:
+        aeson
+      , bytestring
+      , http-client
+      , http-types
+      , unordered-containers
+      , text
+      , wai
+      , warp
 
   default-language: Haskell2010
 
@@ -65,6 +84,9 @@ test-suite test
     StuntDouble.EventLoop.TransportTest
     StuntDouble.EventLoopTest
     TastyDiscover
+  if flag(http)
+    other-modules:
+      StuntDouble.EventLoop.Transport.HttpTest
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
   default-language: Haskell2010
