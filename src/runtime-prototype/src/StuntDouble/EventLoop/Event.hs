@@ -32,6 +32,9 @@ commandName Quit  {} = "Quit"
 newtype CorrelationId = CorrelationId Int
   deriving (Eq, Ord, Show, Read, Num, Enum)
 
+getCorrelationId :: CorrelationId -> Int
+getCorrelationId (CorrelationId i) = i
+
 data EnvelopeKind = RequestKind | ResponseKind
   deriving (Eq, Show, Read)
 
