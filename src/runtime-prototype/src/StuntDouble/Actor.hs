@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
 module StuntDouble.Actor where
@@ -10,6 +9,7 @@ import Control.Concurrent.Async
 import StuntDouble.Message
 import StuntDouble.Reference
 import StuntDouble.FreeMonad
+import StuntDouble.Actor.State
 
 ------------------------------------------------------------------------
 
@@ -38,8 +38,11 @@ data ActorF x
   | AsyncIO (IO IOResult) (Async IOResult -> x)
   -- | On [(Async a)] Strategy ([a] -> x) (() -> x)
   -- | On (Async IOResult) (IOResult -> x) (() -> x)
+  | On    (Either (Async Message) (Async IOResult)) (Either Message IOResult -> x) (() -> x)
+  | Await (Either (Async Message) (Async IOResult)) (Either Message IOResult -> x)
   | Get (State -> x)
   | Put State (() -> x)
+  -- | Throw Reason (Void -> x)
 deriving instance Functor ActorF
 
 on :: Async a -> (a -> Free ActorF ()) -> Free ActorF ()
@@ -59,10 +62,3 @@ get = Free (Get return)
 
 put :: State -> Free ActorF ()
 put state' = Free (Put state' return)
-
--- XXX:
-newtype State = State { getState :: Int }
-  deriving (Show, Num)
-
-initState :: State
-initState = State 0

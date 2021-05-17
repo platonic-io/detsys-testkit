@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module StuntDouble.EventLoopTest where
@@ -116,10 +117,10 @@ unit_asyncIO = do
 statefulActor :: Message -> Actor
 statefulActor (Message intStr) = do
   s <- get
-  let int :: Int
+  let int :: Integer
       int = read intStr
       s' :: State
-      s' = State int + s
+      s' = add "x" int s
   put s'
   return (Now (Message (show (getState s'))))
 
@@ -130,7 +131,7 @@ unit_state = do
   el <- makeEventLoop "/tmp" ev elog
   lref <- spawn el statefulActor
   reply <- invoke el lref (Message "1")
-  reply @?= Message "1"
+  reply @?= Message "Object (fromList [(\"x\",Number 1.0)])"
   reply2 <- invoke el lref (Message "2")
-  reply2 @?= Message "3"
+  reply2 @?= Message "Object (fromList [(\"x\",Number 3.0)])"
   quit el

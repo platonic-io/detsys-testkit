@@ -8,6 +8,7 @@ import Control.Concurrent.Async
 import StuntDouble.EventLoop.Event
 import StuntDouble.EventLoop.Transport
 import StuntDouble.Actor
+import StuntDouble.Actor.State
 import StuntDouble.Reference
 import StuntDouble.Message
 

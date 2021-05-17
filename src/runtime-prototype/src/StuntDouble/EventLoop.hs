@@ -12,6 +12,7 @@ import Control.Concurrent.STM.TBQueue
 import System.Timeout
 
 import StuntDouble.Actor
+import StuntDouble.Actor.State
 import StuntDouble.Message
 import StuntDouble.Reference
 import StuntDouble.EventLoop.Transport
@@ -204,9 +205,23 @@ runActor ls self = iterM go return
       k a
     go (AsyncIO m k) = do
       a <- async m -- XXX: Use `asyncOn` a different capability than the main
-                   -- event loop is running on.
+                   -- event loop is running on. Or queue up the async to some
+                   -- queue which a worker pool, running on different
+                   -- capabilities, process.
       atomically (modifyTVar' (loopStateIOAsyncs ls) (a :))
       k a
+    go (On (Left a) c k) = do
+      let c' = \msg -> c (Left msg)
+      -- XXX: install continuation
+      undefined
+      k ()
+    go (On (Right a) c k) = undefined
+    go (Await (Left a) k) = do
+      reply <- wait a
+      k (Left reply)
+    go (Await (Right a) k) = do
+      x <- wait a
+      k (Right x)
     go (Get k) = do
      states <- readTVarIO (loopStateActorState ls)
      let state = states Map.! remoteToLocalRef self
