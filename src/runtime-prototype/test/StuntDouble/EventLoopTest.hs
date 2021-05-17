@@ -131,7 +131,7 @@ unit_state = do
   el <- makeEventLoop "/tmp" ev elog
   lref <- spawn el statefulActor
   reply <- invoke el lref (Message "1")
-  reply @?= Message "Object (fromList [(\"x\",Number 1.0)])"
+  reply @?= Message "fromList [(\"x\",Integer 1)]"
   reply2 <- invoke el lref (Message "2")
-  reply2 @?= Message "Object (fromList [(\"x\",Number 3.0)])"
+  reply2 @?= Message "fromList [(\"x\",Integer 3)]"
   quit el
