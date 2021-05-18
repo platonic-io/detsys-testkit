@@ -9,7 +9,7 @@ import StuntDouble.Datatype
 
 ------------------------------------------------------------------------
 
-newtype State = State { getState :: HashMap Text Datatype }
+newtype State = State { getHashMap :: HashMap Text Datatype }
   deriving Show
 
 initState :: State
@@ -25,6 +25,9 @@ setField k v = withHashMap (HashMap.insert k v)
 getField :: Text -> State -> Datatype
 getField k (State hm)  = hm HashMap.! k
 getField _k _otherwise = error "getField: impossible, invalid state."
+
+modifyField :: Text -> (Datatype -> Datatype) -> State -> State
+modifyField k f = withHashMap (HashMap.adjust f k)
 
 add :: Text -> Integer -> State -> State
 add k v = withHashMap (HashMap.alter (Just . maybe (Integer v) (plus (Integer v))) k)

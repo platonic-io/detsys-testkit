@@ -48,15 +48,16 @@ library
       base        >=4.14 && <4.15
     , containers
     , filepath
+    , text
+    , time
     , mtl
+    , unix
     , stm
 
   build-depends:
       aeson
     , async
     , random
-    , unix
-    , text
     , unordered-containers
     , heaps
 
@@ -82,6 +83,7 @@ test-suite test
     , stunt-double
     , tasty
     , tasty-hunit
+    , text
 
   other-modules:
     StuntDouble.EventLoop.TransportTest
