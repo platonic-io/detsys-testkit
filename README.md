@@ -265,7 +265,8 @@ workflow related stuff.
   [Maelstrom](https://github.com/jepsen-io/maelstrom);
 * [stateright](https://github.com/stateright/stateright);
 * [Spritely goblins](https://spritelyproject.org/#goblins);
-* [seaslug](https://github.com/spacejam/seaslug).
+* [seaslug](https://github.com/spacejam/seaslug);
+* [Syndicate](https://syndicate-lang.org/).
 
 ### License
 

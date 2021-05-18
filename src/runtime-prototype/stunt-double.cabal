@@ -18,13 +18,15 @@ tested-with:        GHC ==8.10.4
 
 flag http
     description: Enable http transport support
-    default: False
+    default: True
 
 library
   hs-source-dirs:   src/
   exposed-modules:
     StuntDouble
     StuntDouble.Actor
+    StuntDouble.Actor.State
+    StuntDouble.Datatype
     StuntDouble.EventLoop
     StuntDouble.EventLoop.AsyncIOHandler
     StuntDouble.EventLoop.Event
@@ -50,18 +52,19 @@ library
     , stm
 
   build-depends:
-      async
+      aeson
+    , async
     , random
     , unix
+    , text
+    , unordered-containers
+    , heaps
 
   if flag(http)
     build-depends:
-        aeson
-      , bytestring
+        bytestring
       , http-client
       , http-types
-      , unordered-containers
-      , text
       , wai
       , warp
 
@@ -83,7 +86,10 @@ test-suite test
   other-modules:
     StuntDouble.EventLoop.TransportTest
     StuntDouble.EventLoopTest
+    StuntDouble.SchedulerTest
     TastyDiscover
+  -- TODO(stevan: This doesn't work, because tasty-discovery finds the module
+  -- and tells cabal it's needed...
   if flag(http)
     other-modules:
       StuntDouble.EventLoop.Transport.HttpTest
