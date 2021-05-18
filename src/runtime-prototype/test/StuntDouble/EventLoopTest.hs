@@ -116,13 +116,13 @@ unit_asyncIO = do
 
 statefulActor :: Message -> Actor
 statefulActor (Message intStr) = do
-  s <- get
+  s <- getState
   let int :: Integer
       int = read intStr
       s' :: State
       s' = add "x" int s
-  put s'
-  return (Now (Message (show (getState s'))))
+  putState s'
+  return (Now (Message (show (getHashMap s'))))
 
 unit_state :: Assertion
 unit_state = do

@@ -1,5 +1,8 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module StuntDouble.SchedulerTest where
 
+import Data.Text (Text)
 import Control.Concurrent.Async
 import Test.HUnit
 
@@ -7,10 +10,12 @@ import StuntDouble
 
 ------------------------------------------------------------------------
 
+executorPort :: Int
+executorPort = 3004
+
 fakeExecutor :: IO ()
 fakeExecutor = do
-  let port = 3004
-  t <- httpTransport port
+  t <- httpTransport executorPort
   e <- transportReceive t
   envelopeMessage e @?= envelopeMessage e -- XXX: check if cmd is of the right shape
   let resp = replyEnvelope e (Message "XXX: needs the right shape")
@@ -18,15 +23,23 @@ fakeExecutor = do
 
 fakeScheduler :: RemoteRef -> Message -> Actor
 fakeScheduler executor (Message "step") = do
-  cmd <- undefined -- popHeap
-  a <- remoteCall executor cmd
-  resp <- unsafeAwait (Left a)
+  (cmd, heap') <- "heap" ^. pop
+  "heap" .= (heap' :: Datatype)
+  a <- remoteCall executor (Message (prettyCommand cmd))
+  Left resp <- unsafeAwait (Left a)
   -- assert resp -- XXX: check if of the right shape
-  now <- undefined -- get "time" from state
-  seed <- undefined -- get "seed"
-  arrivalTime <- undefined -- genArrivalTime now seed
-  -- pushHeap arrivalTime resp
+  now <- get "time"
+  seed <- get "seed"
+  arrivalTime <- genArrivalTime now seed
+  op2 push arrivalTime (parseCommand resp) %= "heap"
   return (Now (Message "stepped"))
+
+  where
+    parseCommand :: Message -> Datatype
+    parseCommand (Message m) = Pair (Text "command") (Map undefined {- XXX: args -})
+
+    prettyCommand :: Text -> String
+    prettyCommand _ = "XXX: command"
 
 unit_scheduler :: Assertion
 unit_scheduler = do
@@ -35,7 +48,7 @@ unit_scheduler = do
   let ev = EventLoopName "scheduler"
   el <- makeEventLoop "/tmp" ev elog
 
-  let executorRef = RemoteRef "http://localhost:3004" 0
+  let executorRef = RemoteRef ("http://localhost:" ++ show executorPort) 0
   lref <- spawn el (fakeScheduler executorRef)
   a <- send el (localToRemoteRef ev lref) (Message "step")
   reply <- wait a
