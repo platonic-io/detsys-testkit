@@ -39,7 +39,7 @@ data ActorF x
   -- | On [(Async a)] Strategy ([a] -> x) (() -> x)
   -- | On (Async IOResult) (IOResult -> x) (() -> x)
   | On    (Either (Async Message) (Async IOResult)) (Either Message IOResult -> x) (() -> x)
-  | Await (Either (Async Message) (Async IOResult)) (Either Message IOResult -> x)
+  | UnsafeAwait (Either (Async Message) (Async IOResult)) (Either Message IOResult -> x)
   | Get (State -> x)
   | Put State (() -> x)
   -- | Throw Reason (Void -> x)
@@ -53,6 +53,10 @@ call lr m = Free (Call lr m return)
 
 remoteCall :: RemoteRef -> Message -> Free ActorF (Async Message)
 remoteCall rr m = Free (RemoteCall rr m return)
+
+unsafeAwait :: Either (Async Message) (Async IOResult)
+            -> Free ActorF (Either Message IOResult)
+unsafeAwait a = Free (UnsafeAwait a return)
 
 asyncIO :: IO IOResult -> Free ActorF (Async IOResult)
 asyncIO m = Free (AsyncIO m return)

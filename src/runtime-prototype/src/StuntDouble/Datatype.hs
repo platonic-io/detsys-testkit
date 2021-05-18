@@ -12,6 +12,11 @@ data Datatype
   | Double Double
   | Bool Bool
   | Text Text
+  | Enum [Text]
+  | Pair Datatype Datatype
+  | Inl Datatype
+  | Inr Datatype
+  -- | Timestamp UTCTime
   | Map (Map Datatype Datatype)
   | List [Datatype]
   | Heap (Heap Datatype)

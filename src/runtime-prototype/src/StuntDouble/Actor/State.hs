@@ -27,7 +27,4 @@ getField k (State hm)  = hm HashMap.! k
 getField _k _otherwise = error "getField: impossible, invalid state."
 
 add :: Text -> Integer -> State -> State
-add k v = withHashMap
-  (\hm -> case HashMap.lookup k hm of
-            Nothing          -> HashMap.insert k (Integer (fromInteger v)) hm
-            Just (Integer i) -> HashMap.insert k (Integer (i + v)) hm)
+add k v = withHashMap (HashMap.alter (Just . maybe (Integer v) (plus (Integer v))) k)

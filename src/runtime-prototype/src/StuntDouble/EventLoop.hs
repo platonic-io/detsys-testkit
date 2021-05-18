@@ -216,10 +216,10 @@ runActor ls self = iterM go return
       undefined
       k ()
     go (On (Right a) c k) = undefined
-    go (Await (Left a) k) = do
+    go (UnsafeAwait (Left a) k) = do
       reply <- wait a
       k (Left reply)
-    go (Await (Right a) k) = do
+    go (UnsafeAwait (Right a) k) = do
       x <- wait a
       k (Right x)
     go (Get k) = do
