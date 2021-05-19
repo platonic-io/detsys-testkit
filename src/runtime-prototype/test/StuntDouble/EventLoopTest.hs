@@ -56,7 +56,7 @@ unit_send = do
         let rref = localToRemoteRef ev lref
         a <- send el rref (Message "hi")
         reply <- wait a
-        reply @?= Message "bye!"
+        reply @?= Just (Message "bye!")
         l <- fmap (filter (not . isComment)) (eventLog el)
         quit el
         l @?=
@@ -79,7 +79,7 @@ unit_sendLater = do
   lref2 <- spawn el2 (testActor2 (localToRemoteRef evA lref1)) emptyState
   a <- send el2 (localToRemoteRef evB lref2) (Message "init")
   reply <- wait a
-  reply @?= Message "Got: bye!"
+  reply @?= Just (Message "Got: bye!")
 
   {-
   catch
@@ -104,7 +104,7 @@ unit_asyncIO = do
   lref <- spawn el testActor3 emptyState
   a <- send el (localToRemoteRef ev lref) (Message "init")
   reply <- wait a
-  reply @?= Message "Got: result"
+  reply @?= Just (Message "Got: result")
   quit el
   {-
   catch (do lref <- spawn el testActor3

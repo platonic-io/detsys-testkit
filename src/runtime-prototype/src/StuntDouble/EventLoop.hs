@@ -192,8 +192,8 @@ runActor ls self = iterM go return
       let envelope = Envelope RequestKind self msg rref corrId
       say ls ("RemoteCall: " ++ show envelope)
       transportSend (loopStateTransport ls) envelope
-      a <- async $ atomically $ do
-        resp <- takeTMVar respTMVar -- XXX: timeout?
+      a <- async $ timeout 1000000 $ atomically $ do
+        resp <- takeTMVar respTMVar
         modifyTVar' (loopStateResponses ls) (Map.delete corrId)
         modifyTVar' (loopStateWaitingAsyncs ls) (Map.delete corrId)
         return resp
@@ -253,7 +253,7 @@ invoke r lref msg =
     (dummyDeveloperRef r)
     (Free (Call lref msg return))
 
-send :: EventLoopRef -> RemoteRef -> Message -> IO (Async Message)
+send :: EventLoopRef -> RemoteRef -> Message -> IO (Async (Maybe Message))
 send r rref msg =
   runActor
     (loopRefLoopState r)

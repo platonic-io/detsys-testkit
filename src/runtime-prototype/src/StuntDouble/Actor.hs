@@ -24,7 +24,7 @@ instance MonadFail (Free ActorF) where
 
 data Cont a
   = Now a
-  | Later (Async a) (a -> Actor)
+  | Later (Async (Maybe a)) (a -> Actor)
   | LaterIO (Async IOResult) (IOResult -> Actor)
 
   -- Sketch of later extension:
@@ -41,12 +41,12 @@ data IOResult = IOUnit | String String
 
 data ActorF x
   = Call LocalRef Message (Message -> x)
-  | RemoteCall RemoteRef Message (Async Message -> x)
+  | RemoteCall RemoteRef Message (Async (Maybe Message) -> x)
   | AsyncIO (IO IOResult) (Async IOResult -> x)
   -- | On [(Async a)] Strategy ([a] -> x) (() -> x)
   -- | On (Async IOResult) (IOResult -> x) (() -> x)
   | On    (Either (Async Message) (Async IOResult)) (Either Message IOResult -> x) (() -> x)
-  | UnsafeAwait (Either (Async Message) (Async IOResult)) (Either Message IOResult -> x)
+  | UnsafeAwait (Either (Async (Maybe Message)) (Async IOResult)) (Either (Maybe Message) IOResult -> x)
   | Get (State -> x)
   | Put State (() -> x)
   -- | Throw Reason (Void -> x)
@@ -58,11 +58,11 @@ on = undefined
 call :: LocalRef -> Message -> Free ActorF Message
 call lr m = Free (Call lr m return)
 
-remoteCall :: RemoteRef -> Message -> Free ActorF (Async Message)
+remoteCall :: RemoteRef -> Message -> Free ActorF (Async (Maybe Message))
 remoteCall rr m = Free (RemoteCall rr m return)
 
-unsafeAwait :: Either (Async Message) (Async IOResult)
-            -> Free ActorF (Either Message IOResult)
+unsafeAwait :: Either (Async (Maybe Message)) (Async IOResult)
+            -> Free ActorF (Either (Maybe Message) IOResult)
 unsafeAwait a = Free (UnsafeAwait a return)
 
 asyncIO :: IO IOResult -> Free ActorF (Async IOResult)
