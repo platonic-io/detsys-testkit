@@ -91,7 +91,7 @@ handleEvent (Receive r)  ls = handleReceive r ls
 handleEvent (AsyncIODone a r) ls = handleAsyncIODone a r ls
 
 handleCommand :: Command -> LoopState -> IO ()
-handleCommand (Spawn actor respVar) ls = atomically $ do
+handleCommand (Spawn actor initState respVar) ls = atomically $ do
   actors <- readTVar (loopStateActors ls)
   let lref = LocalRef (Map.size actors)
   writeTVar (loopStateActors ls) (Map.insert lref actor actors)
@@ -192,8 +192,8 @@ runActor ls self = iterM go return
       let envelope = Envelope RequestKind self msg rref corrId
       say ls ("RemoteCall: " ++ show envelope)
       transportSend (loopStateTransport ls) envelope
-      a <- async $ atomically $ do
-        resp <- takeTMVar respTMVar -- XXX: timeout?
+      a <- async $ timeout 1000000 $ atomically $ do
+        resp <- takeTMVar respTMVar
         modifyTVar' (loopStateResponses ls) (Map.delete corrId)
         modifyTVar' (loopStateWaitingAsyncs ls) (Map.delete corrId)
         return resp
@@ -243,8 +243,8 @@ helper r cmd = do
     return respVar
   atomically (takeTMVar respVar)
 
-spawn :: EventLoopRef -> (Message -> Actor) -> IO LocalRef
-spawn r actor = helper r (Spawn actor)
+spawn :: EventLoopRef -> (Message -> Actor) -> State -> IO LocalRef
+spawn r actor initState = helper r (Spawn actor initState)
 
 invoke :: EventLoopRef -> LocalRef -> Message -> IO Message
 invoke r lref msg =
@@ -253,7 +253,7 @@ invoke r lref msg =
     (dummyDeveloperRef r)
     (Free (Call lref msg return))
 
-send :: EventLoopRef -> RemoteRef -> Message -> IO (Async Message)
+send :: EventLoopRef -> RemoteRef -> Message -> IO (Async (Maybe Message))
 send r rref msg =
   runActor
     (loopRefLoopState r)

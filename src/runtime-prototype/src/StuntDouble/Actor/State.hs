@@ -12,8 +12,11 @@ import StuntDouble.Datatype
 newtype State = State { getHashMap :: HashMap Text Datatype }
   deriving Show
 
-initState :: State
-initState = State HashMap.empty
+stateFromList :: [(Text, Datatype)] -> State
+stateFromList = State . HashMap.fromList
+
+emptyState :: State
+emptyState = State HashMap.empty
 
 withHashMap :: (HashMap Text Datatype -> HashMap Text Datatype) -> State -> State
 withHashMap f (State hm) = State (f hm)

@@ -38,7 +38,7 @@ unit_invoke = do
   elog <- emptyEventLog
   let ev = eventLoopA "invoke"
   el <- makeEventLoop "/tmp" ev elog
-  lref <- spawn el testActor
+  lref <- spawn el testActor emptyState
   reply <- invoke el lref (Message "hi")
   reply @?= Message "bye!"
   l <- fmap (filter (not . isComment)) (eventLog el)
@@ -52,11 +52,11 @@ unit_send = do
   let ev = eventLoopA "send"
   el <- makeEventLoop "/tmp" ev elog
   catch
-    (do lref <- spawn el testActor
+    (do lref <- spawn el testActor emptyState
         let rref = localToRemoteRef ev lref
         a <- send el rref (Message "hi")
         reply <- wait a
-        reply @?= Message "bye!"
+        reply @?= Just (Message "bye!")
         l <- fmap (filter (not . isComment)) (eventLog el)
         quit el
         l @?=
@@ -75,11 +75,11 @@ unit_sendLater = do
   el1 <- makeEventLoop "/tmp" evA elog
   el2 <- makeEventLoop "/tmp" evB elog
 
-  lref1 <- spawn el1 testActor
-  lref2 <- spawn el2 (testActor2 (localToRemoteRef evA lref1))
+  lref1 <- spawn el1 testActor emptyState
+  lref2 <- spawn el2 (testActor2 (localToRemoteRef evA lref1)) emptyState
   a <- send el2 (localToRemoteRef evB lref2) (Message "init")
   reply <- wait a
-  reply @?= Message "Got: bye!"
+  reply @?= Just (Message "Got: bye!")
 
   {-
   catch
@@ -101,10 +101,10 @@ unit_asyncIO = do
   elog <- emptyEventLog
   let ev = eventLoopA "asyncIO"
   el <- makeEventLoop "/tmp" ev elog
-  lref <- spawn el testActor3
+  lref <- spawn el testActor3 emptyState
   a <- send el (localToRemoteRef ev lref) (Message "init")
   reply <- wait a
-  reply @?= Message "Got: result"
+  reply @?= Just (Message "Got: result")
   quit el
   {-
   catch (do lref <- spawn el testActor3
@@ -129,7 +129,7 @@ unit_state = do
   elog <- emptyEventLog
   let ev = eventLoopA "state"
   el <- makeEventLoop "/tmp" ev elog
-  lref <- spawn el statefulActor
+  lref <- spawn el statefulActor (stateFromList [("x", Integer 0)])
   reply <- invoke el lref (Message "1")
   reply @?= Message "fromList [(\"x\",Integer 1)]"
   reply2 <- invoke el lref (Message "2")

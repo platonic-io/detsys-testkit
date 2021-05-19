@@ -26,7 +26,7 @@ fakeScheduler executor (Message "step") = do
   (cmd, heap') <- "heap" ^. pop
   "heap" .= (heap' :: Datatype)
   a <- remoteCall executor (Message (prettyCommand cmd))
-  Left resp <- unsafeAwait (Left a)
+  Left (Just resp) <- unsafeAwait (Left a)
   -- assert resp -- XXX: check if of the right shape
   now <- get "time"
   seed <- get "seed"
@@ -49,10 +49,14 @@ unit_scheduler = do
   el <- makeEventLoop "/tmp" ev elog
 
   let executorRef = RemoteRef ("http://localhost:" ++ show executorPort) 0
-  lref <- spawn el (fakeScheduler executorRef)
+      initState = stateFromList [ ("heap", emptyHeap)
+                                , ("time", Timestamp undefined)
+                                , ("seed", Integer 0)
+                                ]
+  lref <- spawn el (fakeScheduler executorRef) initState
   a <- send el (localToRemoteRef ev lref) (Message "step")
   reply <- wait a
-  reply @?= Message "stepped"
+  reply @?= Just (Message "stepped")
 
   quit el
   cancel aExecutor

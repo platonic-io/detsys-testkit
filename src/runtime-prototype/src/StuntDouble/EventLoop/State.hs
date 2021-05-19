@@ -27,8 +27,8 @@ data LoopState = LoopState
   , loopStateTransport :: Transport IO -- Will not change once created, so doesn't need STM?
   , loopStateNextCorrelationId :: TVar CorrelationId
   , loopStateResponses     :: TVar (Map CorrelationId (TMVar Message))
-  , loopStateWaitingAsyncs :: TVar (Map CorrelationId (Async Message))
-  , loopStateContinuations :: TVar (Map (Async Message)
+  , loopStateWaitingAsyncs :: TVar (Map CorrelationId (Async (Maybe Message)))
+  , loopStateContinuations :: TVar (Map (Async (Maybe Message))
                                         (RemoteRef, CorrelationId, Message -> Actor))
   , loopStateEventLog :: TVar EventLog
   }
@@ -37,12 +37,12 @@ lookupActor :: LocalRef -> TVar (Map LocalRef (Message -> Actor))
             -> IO (Maybe (Message -> Actor))
 lookupActor key var = Map.lookup key <$> atomically (readTVar var)
 
-installContinuation :: Async Message -> RemoteRef -> CorrelationId
+installContinuation :: Async (Maybe Message) -> RemoteRef -> CorrelationId
                     -> (Message -> Actor) -> LoopState -> IO ()
 installContinuation a self corrId k ls = atomically $
   modifyTVar' (loopStateContinuations ls) (Map.insert a (self, corrId, k))
 
-recallContinuation :: Async Message -> LoopState
+recallContinuation :: Async (Maybe Message) -> LoopState
                    -> IO (Maybe (RemoteRef, CorrelationId, Message -> Actor))
 recallContinuation a ls = do
   ks <- atomically $ do
@@ -65,7 +65,7 @@ recallIOContinuation a ls = do
     return ks
   return (ks Map.! a)
 
-correlateAsync :: CorrelationId -> Async Message -> LoopState -> IO ()
+correlateAsync :: CorrelationId -> Async (Maybe Message) -> LoopState -> IO ()
 correlateAsync cid a ls = atomically $
   modifyTVar' (loopStateWaitingAsyncs ls) (Map.insert cid a)
 

@@ -30,7 +30,7 @@ import StuntDouble.Message
 httpTransport :: Port -> IO (Transport IO)
 httpTransport port = do
   manager <- newManager defaultManagerSettings
-  queue <- newTBQueueIO 128
+  queue <- newTBQueueIO 128 -- XXX: when/how does this grow?
   _tid <- forkFinally (run port (app queue)) (const (return ()))
   return Transport { transportSend = transportSend' manager
                    , transportReceive = atomically (readTBQueue queue)
