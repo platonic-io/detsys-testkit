@@ -49,7 +49,11 @@ unit_scheduler = do
   el <- makeEventLoop "/tmp" ev elog
 
   let executorRef = RemoteRef ("http://localhost:" ++ show executorPort) 0
-  lref <- spawn el (fakeScheduler executorRef)
+      initState = stateFromList [ ("heap", emptyHeap)
+                                , ("time", Timestamp undefined)
+                                , ("seed", Integer 0)
+                                ]
+  lref <- spawn el (fakeScheduler executorRef) initState
   a <- send el (localToRemoteRef ev lref) (Message "step")
   reply <- wait a
   reply @?= Message "stepped"

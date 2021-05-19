@@ -6,6 +6,7 @@ import Control.Concurrent.STM
 import Control.Concurrent.Async
 
 import StuntDouble.Actor
+import StuntDouble.Actor.State
 import StuntDouble.Message
 import StuntDouble.Reference
 
@@ -22,7 +23,7 @@ eventName (Receive e)   = "Receive/" ++ show e
 eventName (AsyncIODone _a ioResult) = "AsyncIODone/" ++ show ioResult
 
 data Command
-  = Spawn (Message -> Actor) (TMVar LocalRef)
+  = Spawn (Message -> Actor) State (TMVar LocalRef)
   | Quit
 
 commandName :: Command -> String

@@ -91,7 +91,7 @@ handleEvent (Receive r)  ls = handleReceive r ls
 handleEvent (AsyncIODone a r) ls = handleAsyncIODone a r ls
 
 handleCommand :: Command -> LoopState -> IO ()
-handleCommand (Spawn actor respVar) ls = atomically $ do
+handleCommand (Spawn actor initState respVar) ls = atomically $ do
   actors <- readTVar (loopStateActors ls)
   let lref = LocalRef (Map.size actors)
   writeTVar (loopStateActors ls) (Map.insert lref actor actors)
@@ -243,8 +243,8 @@ helper r cmd = do
     return respVar
   atomically (takeTMVar respVar)
 
-spawn :: EventLoopRef -> (Message -> Actor) -> IO LocalRef
-spawn r actor = helper r (Spawn actor)
+spawn :: EventLoopRef -> (Message -> Actor) -> State -> IO LocalRef
+spawn r actor initState = helper r (Spawn actor initState)
 
 invoke :: EventLoopRef -> LocalRef -> Message -> IO Message
 invoke r lref msg =

@@ -4,7 +4,7 @@ import Data.Time
 import Data.Heap (Heap)
 import qualified Data.Heap as Heap
 import Data.Map (Map)
-import Data.Text
+import Data.Text (Text)
 
 ------------------------------------------------------------------------
 
@@ -30,6 +30,12 @@ data Datatype
 
 plus :: Datatype -> Datatype -> Datatype
 plus (Integer i) (Integer j) = Integer (i + j)
+
+emptyHeap :: Datatype
+emptyHeap = Heap Heap.empty
+
+heapFromList :: [(Datatype, Datatype)] -> Datatype
+heapFromList = Heap . Heap.fromList . map (\(p, x) -> Heap.Entry p x)
 
 pop :: Datatype -> Datatype
 pop (Heap h) = case Heap.uncons h of
