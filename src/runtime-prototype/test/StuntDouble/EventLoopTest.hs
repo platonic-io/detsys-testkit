@@ -37,7 +37,7 @@ unit_invoke :: Assertion
 unit_invoke = do
   elog <- emptyEventLog
   let ev = eventLoopA "invoke"
-  el <- makeEventLoop "/tmp" ev elog
+  el <- makeEventLoop (NamedPipe "/tmp") ev elog
   lref <- spawn el testActor emptyState
   reply <- invoke el lref (Message "hi")
   reply @?= Message "bye!"
@@ -50,7 +50,7 @@ unit_send :: Assertion
 unit_send = do
   elog <- emptyEventLog
   let ev = eventLoopA "send"
-  el <- makeEventLoop "/tmp" ev elog
+  el <- makeEventLoop (NamedPipe "/tmp") ev elog
   catch
     (do lref <- spawn el testActor emptyState
         let rref = localToRemoteRef ev lref
@@ -72,8 +72,8 @@ unit_sendLater = do
   elog <- emptyEventLog
   let evA = eventLoopA "sendLater"
       evB = eventLoopB "sendLater"
-  el1 <- makeEventLoop "/tmp" evA elog
-  el2 <- makeEventLoop "/tmp" evB elog
+  el1 <- makeEventLoop (NamedPipe "/tmp") evA elog
+  el2 <- makeEventLoop (NamedPipe "/tmp") evB elog
 
   lref1 <- spawn el1 testActor emptyState
   lref2 <- spawn el2 (testActor2 (localToRemoteRef evA lref1)) emptyState
@@ -100,7 +100,7 @@ unit_asyncIO :: Assertion
 unit_asyncIO = do
   elog <- emptyEventLog
   let ev = eventLoopA "asyncIO"
-  el <- makeEventLoop "/tmp" ev elog
+  el <- makeEventLoop (NamedPipe "/tmp") ev elog
   lref <- spawn el testActor3 emptyState
   a <- send el (localToRemoteRef ev lref) (Message "init")
   reply <- wait a
@@ -128,7 +128,7 @@ unit_state :: Assertion
 unit_state = do
   elog <- emptyEventLog
   let ev = eventLoopA "state"
-  el <- makeEventLoop "/tmp" ev elog
+  el <- makeEventLoop (NamedPipe "/tmp") ev elog
   lref <- spawn el statefulActor (stateFromList [("x", Integer 0)])
   reply <- invoke el lref (Message "1")
   reply @?= Message "fromList [(\"x\",Integer 1)]"

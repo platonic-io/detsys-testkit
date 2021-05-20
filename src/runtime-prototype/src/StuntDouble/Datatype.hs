@@ -44,3 +44,6 @@ pop (Heap h) = case Heap.uncons h of
 
 push :: Datatype -> Datatype -> Datatype -> Datatype
 push p x (Heap h) = Heap (Heap.insert (Heap.Entry p x) h)
+
+epoch :: Datatype
+epoch = Timestamp (UTCTime (toEnum 0) 0)
