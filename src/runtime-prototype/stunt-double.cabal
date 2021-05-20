@@ -25,6 +25,7 @@ library
   exposed-modules:
     StuntDouble
     StuntDouble.Actor
+    StuntDouble.ActorMap
     StuntDouble.Actor.State
     StuntDouble.Datatype
     StuntDouble.EventLoop
