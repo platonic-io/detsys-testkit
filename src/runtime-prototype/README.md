@@ -124,5 +124,9 @@ not.
 
 #### How to run tests
 
-cabal configure test --test-option='--timeout=1' --test-option='--color=always'
+cabal configure test \
+    --test-option='--timeout=1' \
+    --test-option='--color=always' \
+    --test-show-details=streaming \
+    # --test-option='--pattern=/$pattern/
 cabal test

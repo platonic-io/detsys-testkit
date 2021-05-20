@@ -16,6 +16,7 @@ import StuntDouble.Actor.State
 import StuntDouble.Message
 import StuntDouble.Reference
 import StuntDouble.EventLoop.Transport
+import StuntDouble.EventLoop.Transport.Http
 import StuntDouble.FreeMonad
 import StuntDouble.EventLoop.State
 import StuntDouble.EventLoop.Event
@@ -63,9 +64,13 @@ initLoopState name transport elog =
     <*> newTVarIO Map.empty
     <*> pure elog
 
-makeEventLoop :: FilePath -> EventLoopName -> TVar EventLog -> IO EventLoopRef
-makeEventLoop fp name elog = do
-  transport <- namedPipeTransport fp name
+data TransportKind = NamedPipe FilePath | Http Int
+
+makeEventLoop :: TransportKind -> EventLoopName -> TVar EventLog -> IO EventLoopRef
+makeEventLoop transportKind name elog = do
+  transport <- case transportKind of
+                 NamedPipe fp -> namedPipeTransport fp name
+                 Http port    -> httpTransport port
   ls <- initLoopState name transport elog
   aInHandler <- async (handleInbound ls)
   aAsyncIOHandler <- async (handleAsyncIO ls)
