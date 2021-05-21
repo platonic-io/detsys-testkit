@@ -13,6 +13,8 @@ import StuntDouble.Message
 
 ------------------------------------------------------------------------
 
+data TransportKind = NamedPipe FilePath | Http Int
+
 data Transport m = Transport
   { transportSend    :: Envelope -> m ()
   , transportReceive :: m Envelope

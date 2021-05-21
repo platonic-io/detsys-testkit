@@ -1,12 +1,14 @@
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module StuntDouble.ActorMap where
 
-import Control.Monad
+import Control.Exception
 import Control.Concurrent.Async
 import Control.Concurrent.STM
+import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -14,9 +16,15 @@ import qualified Data.Set as Set
 
 import StuntDouble.Actor (IOResult)
 import StuntDouble.Actor.State
-import StuntDouble.FreeMonad
-import StuntDouble.EventLoop.Event (Envelope(..), EnvelopeKind(..), CorrelationId(..))
+import StuntDouble.EventLoop.Event
+       ( CorrelationId(..)
+       , Envelope(..)
+       , EnvelopeKind(..)
+       , getCorrelationId
+       )
 import StuntDouble.EventLoop.Transport
+import StuntDouble.EventLoop.Transport.Http
+import StuntDouble.FreeMonad
 import StuntDouble.Message
 import StuntDouble.Reference
 
@@ -40,6 +48,9 @@ deriving instance Functor ActorF
 
 newtype ActorMap = ActorMap (Map LocalRef (Message -> Actor, State))
 
+emptyActorMap :: ActorMap
+emptyActorMap = ActorMap Map.empty
+
 actorMapLookup :: LocalRef -> ActorMap -> Maybe (Message -> Actor, State)
 actorMapLookup lref (ActorMap m) = Map.lookup lref m
 
@@ -47,9 +58,6 @@ actorMapUnsafeLookup :: LocalRef -> ActorMap -> (Message -> Actor, State)
 actorMapUnsafeLookup lref am = case actorMapLookup lref am of
   Nothing -> error ("actorMapUnsafeLookup: `" ++ show lref ++ "' not in actor map.")
   Just v  -> v
-
-emptyActorMap :: ActorMap
-emptyActorMap = ActorMap Map.empty
 
 actorMapSpawn :: (Message -> Actor) -> State -> ActorMap -> (LocalRef, ActorMap)
 actorMapSpawn a s (ActorMap m) =
@@ -150,6 +158,9 @@ data AsyncState = AsyncState
   -- , asyncStateDeveloperSend   :: Map Promise (TMVar Message)
   }
 
+emptyAsyncState :: AsyncState
+emptyAsyncState = AsyncState Map.empty Map.empty
+
 madePromises :: [Action] -> Set Int
 madePromises = foldMap go
   where
@@ -168,7 +179,7 @@ act name as s0 t = foldM go s0 as
       transportSend t
         (Envelope RequestKind (localToRemoteRef name from) msg to (CorrelationId i))
       return s -- XXX: make a note of when we sent so we can timeout.
-    go s (AsyncIOAction io p)       = do
+    go s (AsyncIOAction io p) = do
       a <- async io -- XXX: Use `asyncOn` a different capability than main loop.
       return (s { asyncStateAsyncIO = Map.insert a p (asyncStateAsyncIO s) })
     go s (OnAction p@(Promise i) k lref)
@@ -178,11 +189,11 @@ act name as s0 t = foldM go s0 as
       | otherwise =
           error "act: impossible, `On` must be supplied with a promise that was just made."
 
-data Event
+data Reaction
   = Response Promise Message
   | AsyncIOFinished (Async IOResult) IOResult
 
-react :: Event -> AsyncState -> (Maybe (Actor, LocalRef), AsyncState)
+react :: Reaction -> AsyncState -> (Maybe (Actor, LocalRef), AsyncState)
 react (Response p msg) s =
   case Map.lookup p (asyncStateContinuations s) of
     Just (k, lref) ->  (Just (k (Right msg), lref),
@@ -205,3 +216,81 @@ react (AsyncIOFinished a result) s =
                          s { asyncStateAsyncIO       = Map.delete a (asyncStateAsyncIO s)
                            , asyncStateContinuations = Map.delete p (asyncStateContinuations s)
                            })
+
+reactIO :: Reaction -> TVar AsyncState -> IO (Maybe (Actor, LocalRef))
+reactIO r v = atomically (stateTVar v (react r))
+
+------------------------------------------------------------------------
+
+data Event
+  = Action Action
+  | Reaction Reaction
+
+data EventLoop = EventLoop
+  { lsActorMap   :: TVar ActorMap
+  , lsAsyncState :: TVar AsyncState
+  , lsQueue      :: TBQueue Event
+  , lsTransport  :: Transport IO
+  , lsPids       :: TVar [Async ()]
+  }
+
+initLoopState :: Transport IO -> IO EventLoop
+initLoopState t =
+  EventLoop
+    <$> newTVarIO emptyActorMap
+    <*> newTVarIO emptyAsyncState
+    <*> newTBQueueIO 128
+    <*> pure t
+    <*> newTVarIO []
+
+makeEventLoop :: TransportKind -> EventLoopName -> IO EventLoop
+makeEventLoop tk name = do
+  t <- case tk of
+         NamedPipe fp -> namedPipeTransport fp name
+         Http port    -> httpTransport port
+  ls <- initLoopState t
+  aInHandler <- async (handleInbound ls)
+  aAsyncIOHandler <- async (handleAsyncIO ls)
+  aEvHandler <- async (handleEvents ls)
+  atomically (modifyTVar' (lsPids ls)
+               ([aInHandler, aEvHandler, aAsyncIOHandler] ++))
+  return ls
+
+handleInbound :: EventLoop -> IO ()
+handleInbound ls = forever go
+  where
+    go = do
+      e <- transportReceive (lsTransport ls)
+      let p = Promise (getCorrelationId (envelopeCorrelationId e))
+      atomically (writeTBQueue (lsQueue ls) (Reaction (Response p (envelopeMessage e))))
+
+handleAsyncIO :: EventLoop -> IO ()
+handleAsyncIO ls = forever go
+  where
+    go = atomically $ do
+      -- XXX: Use waitAnyCatchSTM and handle exceptions appropriately here, e.g.
+      -- by extending `AsyncIODone` with `Fail` and `Info`.
+      as <- readTVar (lsAsyncState ls)
+      (a, ioResult) <- waitAnySTM (Map.keys (asyncStateAsyncIO as))
+      writeTBQueue (lsQueue ls) (Reaction (AsyncIOFinished a ioResult))
+      writeTVar (lsAsyncState ls)
+        (as { asyncStateAsyncIO = Map.delete a (asyncStateAsyncIO as) })
+
+handleEvents :: EventLoop -> IO ()
+handleEvents ls = forever go
+  where
+    go = do
+      e <- atomically (readTBQueue (lsQueue ls))
+      handleEvent e ls
+        `catch` \(ex :: SomeException) ->
+                  putStrLn ("handleEvents: exception: " ++ show ex)
+
+handleEvent :: Event -> EventLoop -> IO ()
+handleEvent (Action a) ls = undefined
+-- XXX: act :: EventLoopName -> [Action] -> AsyncState -> Transport IO -> IO AsyncState
+handleEvent (Reaction r) ls = do
+  m <- reactIO r (lsAsyncState ls)
+  case m of
+    Nothing -> return ()
+    Just (a, lref) -> undefined
+    -- XXX: need a variant of actorMapTurn which doesn't take a message...
