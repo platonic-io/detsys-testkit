@@ -1,32 +1,37 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE ExistentialQuantification #-}
 
 module StuntDouble.ActorMap where
 
+import Control.Monad
+import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import StuntDouble.Actor (IOResult)
 import StuntDouble.Actor.State
 import StuntDouble.FreeMonad
+import StuntDouble.EventLoop.Event (Envelope(..), EnvelopeKind(..), CorrelationId(..))
+import StuntDouble.EventLoop.Transport
 import StuntDouble.Message
 import StuntDouble.Reference
 
 ------------------------------------------------------------------------
 
-newtype Promise a = Promise Int
-  deriving Num
+newtype Promise = Promise Int
+  deriving (Eq, Ord, Num)
 
 newtype Actor = Actor { unActor :: Free ActorF Message }
 
 data ActorF x
   = Invoke LocalRef Message (Message -> x)
-  | Send RemoteRef Message (Promise Message -> x)
-  | AsyncIO (IO IOResult) (Promise IOResult -> x)
-  | forall a. On (Promise a) (a -> x) (() -> x)
+  | Send RemoteRef Message (Promise -> x)
+  | AsyncIO (IO IOResult) (Promise -> x)
+  | On Promise (Either IOResult Message -> x) (() -> x)
   | Get (State -> x)
   | Put State (() -> x)
 deriving instance Functor ActorF
@@ -54,9 +59,9 @@ actorMapSpawn a s (ActorMap m) =
     (lref, ActorMap (Map.insert lref (a, s) m))
 
 data Action
-  = SendAction RemoteRef Message (Promise Message)
-  | AsyncIOAction (IO IOResult) (Promise IOResult)
-  | forall a. OnAction (Promise a) (a -> Actor) LocalRef
+  = SendAction LocalRef Message RemoteRef Promise
+  | AsyncIOAction (IO IOResult) Promise
+  | OnAction Promise (Either IOResult Message -> Actor) LocalRef
 
 -- XXX: what about exceptions? transactional in state, but also in actions?!
 actorMapTurn :: LocalRef -> Message -> ActorMap -> ((Message, ActorMap, [Action]), ActorMap)
@@ -64,6 +69,8 @@ actorMapTurn lref0 msg0 am0 =
   let
     a = fst (actorMapUnsafeLookup lref0 am0)
   in
+    -- XXX: Promises should not always start from 0, or they will overlap each
+    -- other if more than one turn happens...
     (go 0 [] lref0 (unActor (a msg0)) am0, am0)
   where
     go _pc acc _lref (Pure msg) am = (msg, am, reverse acc)
@@ -78,7 +85,7 @@ actorMapTurn lref0 msg0 am0 =
         let
           p = Promise pc
         in
-          go (pc + 1) (SendAction rref msg p : acc) lref (k p) am
+          go (pc + 1) (SendAction lref msg rref p : acc) lref (k p) am
       AsyncIO io k ->
         let
           p = Promise pc
@@ -125,3 +132,76 @@ actorMapPeekIO lref msg am = atomically (stateTVar am (actorMapPeek lref msg))
 
 actorMapPokeIO :: LocalRef -> Message -> ActorMapTVar -> IO Message
 actorMapPokeIO lref msg am = atomically (stateTVar am (actorMapPoke lref msg))
+
+------------------------------------------------------------------------
+
+devSend :: {- EventLoopRef-} RemoteRef -> Message -> IO (Async Message)
+devSend = undefined
+  -- p <- createPromise
+  -- v <- newEmptyTMVar
+  -- insertDeveloperSend p v
+  -- async (atomically (takeTMVar v))
+
+------------------------------------------------------------------------
+
+data AsyncState = AsyncState
+  { asyncStateAsyncIO         :: Map (Async IOResult) Promise
+  , asyncStateContinuations   :: Map Promise (Either IOResult Message -> Actor, LocalRef)
+  -- , asyncStateDeveloperSend   :: Map Promise (TMVar Message)
+  }
+
+madePromises :: [Action] -> Set Int
+madePromises = foldMap go
+  where
+    go (SendAction _from _msg _to (Promise i)) = Set.singleton i
+    go (AsyncIOAction _io (Promise i)) = Set.singleton i
+    go OnAction {} = Set.empty
+
+act :: EventLoopName -> [Action] -> AsyncState -> Transport IO -> IO AsyncState
+act name as s0 t = foldM go s0 as
+  where
+    is :: Set Int
+    is = madePromises as
+
+    go :: AsyncState -> Action -> IO AsyncState
+    go s (SendAction from msg to (Promise i)) = do
+      transportSend t
+        (Envelope RequestKind (localToRemoteRef name from) msg to (CorrelationId i))
+      return s -- XXX: make a note of when we sent so we can timeout.
+    go s (AsyncIOAction io p)       = do
+      a <- async io -- XXX: Use `asyncOn` a different capability than main loop.
+      return (s { asyncStateAsyncIO = Map.insert a p (asyncStateAsyncIO s) })
+    go s (OnAction p@(Promise i) k lref)
+      | i `Set.member` is = do
+          return (s { asyncStateContinuations =
+                      Map.insert p (k, lref) (asyncStateContinuations s) })
+      | otherwise =
+          error "act: impossible, `On` must be supplied with a promise that was just made."
+
+data Event
+  = Response Promise Message
+  | AsyncIOFinished (Async IOResult) IOResult
+
+react :: Event -> AsyncState -> (Maybe (Actor, LocalRef), AsyncState)
+react (Response p msg) s =
+  case Map.lookup p (asyncStateContinuations s) of
+    Just (k, lref) ->  (Just (k (Right msg), lref),
+                        s { asyncStateContinuations =
+                              Map.delete p (asyncStateContinuations s) })
+    Nothing ->
+      -- XXX: Map.lookup p (developerSend s)?
+
+      -- We got a response for something we are not (longer) waiting for.
+      (Nothing, s)
+react (AsyncIOFinished a result) s =
+  case Map.lookup a (asyncStateAsyncIO s) of
+    Nothing -> error "react: impossible, unknown async finished."
+    Just p -> case Map.lookup p (asyncStateContinuations s) of
+      Nothing ->
+        -- No continuation was registered for this async.
+        -- XXX: the async handler should take care for this map deletion...
+        (Nothing, s { asyncStateAsyncIO = Map.delete a (asyncStateAsyncIO s) })
+      Just (k, lref) -> (Just (k (Left result), lref),
+                         s { asyncStateAsyncIO       = Map.delete a (asyncStateAsyncIO s)
+                           , asyncStateContinuations = Map.delete p (asyncStateContinuations s)
+                           })
