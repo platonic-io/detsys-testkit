@@ -132,12 +132,12 @@ actorMapPeek lref msg am =
   in
     (reply, am)
 
-actorMapPoke :: LocalRef -> Message -> ActorMap -> (Message, ActorMap)
+actorMapPoke :: LocalRef -> Message -> ActorMap -> ((Message, [Action]), ActorMap)
 actorMapPoke lref msg am =
   let
-    ((reply, _p, am', _as), _am) = actorMapTurn lref msg am
+    ((reply, _p, am', as), _am) = actorMapTurn lref msg am
   in
-    (reply, am')
+    ((reply, as), am')
 
 ------------------------------------------------------------------------
 
@@ -154,8 +154,21 @@ actorMapTurnIO lref msg am = atomically (stateTVar am (actorMapTurn lref msg))
 actorMapPeekIO :: LocalRef -> Message -> TVar ActorMap -> IO Message
 actorMapPeekIO lref msg am = atomically (stateTVar am (actorMapPeek lref msg))
 
-actorMapPokeIO :: LocalRef -> Message -> TVar ActorMap -> IO Message
+actorMapPokeIO :: LocalRef -> Message -> TVar ActorMap -> IO (Message, [Action])
 actorMapPokeIO lref msg am = atomically (stateTVar am (actorMapPoke lref msg))
+
+actorPokeIO :: EventLoop -> LocalRef -> Message -> IO Message
+actorPokeIO ls lref msg = do
+  (reply, as) <- actorMapPokeIO lref msg (lsActorMap ls)
+  act' ls as
+  return reply
+
+act' :: EventLoop -> [Action] -> IO ()
+act' ls as = do
+  -- XXX: non-atomic update of the async state?!
+  s <- readTVarIO (lsAsyncState ls)
+  s' <- act (lsName ls) as (lsTransport ls) s
+  atomically (writeTVar (lsAsyncState ls) s')
 
 ------------------------------------------------------------------------
 
@@ -345,20 +358,14 @@ handleEvents ls = forever go
                   putStrLn ("handleEvents: exception: " ++ show ex)
 
 handleEvent :: Event -> EventLoop -> IO ()
-handleEvent (Action a) ls = do
-  -- XXX:
-  -- XXX: Non-atomic update of `lsAsyncState`, should be fixed...
-  -- XXX
-  s <- readTVarIO (lsAsyncState ls)
-  s' <- act (lsName ls) [a] (lsTransport ls) s
-  atomically (writeTVar (lsAsyncState ls) s')
+handleEvent (Action a) ls = act' ls [a]
 handleEvent (Reaction r) ls = do
   m <- reactIO r (lsAsyncState ls)
   case m of
     NothingToDo -> return ()
     Request e -> do
       let lref = remoteToLocalRef (envelopeReceiver e)
-      reply <- actorMapPeekIO lref (envelopeMessage e) (lsActorMap ls)
+      reply <- actorPokeIO ls lref (envelopeMessage e)
       transportSend (lsTransport ls) (replyEnvelope e reply)
     ResumeContinuation a lref -> do
       as <- atomically $ do
@@ -368,12 +375,7 @@ handleEvent (Reaction r) ls = do
         writeTVar (lsActorMap ls) am'
         writeTVar (lsNextPromise ls) p'
         return as
-      -- XXX:
-      -- XXX: Non-atomic update of `lsAsyncState`, should be fixed...
-      -- XXX
-      s <- readTVarIO (lsAsyncState ls)
-      s' <- act (lsName ls) as (lsTransport ls) s
-      atomically (writeTVar (lsAsyncState ls) s')
+      act' ls as
     AdminSendResponse returnVar msg ->
       atomically (putTMVar returnVar msg)
 handleEvent (Admin cmd) ls = case cmd of
@@ -381,7 +383,7 @@ handleEvent (Admin cmd) ls = case cmd of
     lref <- actorMapSpawnIO a s (lsActorMap ls)
     atomically (putTMVar returnVar lref)
   AdminInvoke lref msg returnVar -> do
-    reply <- actorMapPokeIO lref msg (lsActorMap ls)
+    reply <- actorPokeIO ls lref msg
     atomically (putTMVar returnVar reply)
   AdminSend rref msg p returnVar -> do
     let dummyAdminRef = localToRemoteRef (lsName ls) (LocalRef (-1))
