@@ -64,8 +64,6 @@ initLoopState name transport elog =
     <*> newTVarIO Map.empty
     <*> pure elog
 
-data TransportKind = NamedPipe FilePath | Http Int
-
 makeEventLoop :: TransportKind -> EventLoopName -> TVar EventLog -> IO EventLoopRef
 makeEventLoop transportKind name elog = do
   transport <- case transportKind of

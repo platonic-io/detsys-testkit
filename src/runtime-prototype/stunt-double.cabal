@@ -87,6 +87,7 @@ test-suite test
     , text
 
   other-modules:
+    StuntDouble.ActorMapTest
     StuntDouble.EventLoop.TransportTest
     StuntDouble.EventLoopTest
     StuntDouble.SchedulerTest
