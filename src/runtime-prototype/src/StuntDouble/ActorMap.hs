@@ -49,6 +49,21 @@ data ActorF x
   | Put State (() -> x)
 deriving instance Functor ActorF
 
+invoke :: LocalRef -> Message -> Free ActorF Message
+invoke lref msg = Free (Invoke lref msg return)
+
+send :: RemoteRef -> Message -> Free ActorF Promise
+send rref msg = Free (Send rref msg return)
+
+on :: Promise -> (Either IOResult Message -> Free ActorF ()) -> Free ActorF ()
+on p k = Free (On p k return)
+
+get :: Free ActorF State
+get = Free (Get return)
+
+put :: State -> Free ActorF ()
+put s' = Free (Put s' return)
+
 ------------------------------------------------------------------------
 
 newtype ActorMap = ActorMap (Map LocalRef (Message -> Actor, State))
@@ -96,7 +111,7 @@ actorMapTurn' p acc  lref (Free op)  am = case op of
       a' = fst (actorMapUnsafeLookup lref' am)
       (reply, p', am', acc') = actorMapTurn' p acc lref' (unActor (a' msg)) am
     in
-      actorMapTurn' p' acc' lref (k reply) am'
+     actorMapTurn' p' acc' lref (k reply) am'
   Send rref msg k ->
     actorMapTurn' (p + 1) (SendAction lref msg rref p : acc) lref (k p) am
   AsyncIO io k ->
@@ -144,14 +159,14 @@ actorMapPokeIO lref msg am = atomically (stateTVar am (actorMapPoke lref msg))
 
 ------------------------------------------------------------------------
 
-invoke :: EventLoop -> LocalRef -> Message -> IO Message
-invoke ls lref msg = do
+ainvoke :: EventLoop -> LocalRef -> Message -> IO Message
+ainvoke ls lref msg = do
   returnVar <- newEmptyTMVarIO
   atomically (writeTBQueue (lsQueue ls) (Admin (AdminInvoke lref msg returnVar)))
   atomically (takeTMVar returnVar)
 
-send :: EventLoop -> RemoteRef -> Message -> IO (Async Message)
-send ls rref msg = do
+asend :: EventLoop -> RemoteRef -> Message -> IO (Async Message)
+asend ls rref msg = do
   p <- atomically (stateTVar (lsNextPromise ls) (\p -> (p, p + 1)))
   returnVar <- newEmptyTMVarIO
   atomically (writeTBQueue (lsQueue ls) (Admin (AdminSend rref msg p returnVar)))
@@ -221,7 +236,7 @@ data ReactTask
 react :: Reaction -> AsyncState -> (ReactTask, AsyncState)
 react (Receive p e) s =
   case envelopeKind e of
-    RequestKind -> (Request e, s)
+    RequestKind  -> (Request e, s)
     ResponseKind ->
       case Map.lookup p (asyncStateContinuations s) of
         Just (k, lref) ->  (ResumeContinuation (k (Right (envelopeMessage e))) lref,
@@ -269,7 +284,11 @@ data EventLoop = EventLoop
   , lsTransport   :: Transport IO
   , lsPids        :: TVar [Async ()]
   , lsNextPromise :: TVar Promise
+  , lsLog         :: TVar [LogEntry]
   }
+
+data LogEntry
+  = LogEntry
 
 initLoopState :: EventLoopName -> Transport IO -> IO EventLoop
 initLoopState name t =
@@ -281,6 +300,7 @@ initLoopState name t =
     <*> pure t
     <*> newTVarIO []
     <*> newTVarIO (Promise 0)
+    <*> newTVarIO []
 
 makeEventLoop :: TransportKind -> EventLoopName -> IO EventLoop
 makeEventLoop tk name = do
