@@ -39,7 +39,6 @@ httpTransport port = do
 transportSend' :: Manager -> Envelope -> IO ()
 transportSend' manager e = do
   request <- envelopeToRequest e
-  print request
   responseBody <$> httpNoBody request manager
 
 envelopeToRequest :: Envelope -> IO Request

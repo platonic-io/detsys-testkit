@@ -1,13 +1,14 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module StuntDouble.ActorMap where
 
-import Control.Exception
+import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
+import Control.Exception
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -21,6 +22,7 @@ import StuntDouble.EventLoop.Event
        , Envelope(..)
        , EnvelopeKind(..)
        , getCorrelationId
+       , replyEnvelope
        )
 import StuntDouble.EventLoop.Transport
 import StuntDouble.EventLoop.Transport.Http
@@ -142,6 +144,12 @@ actorMapPokeIO lref msg am = atomically (stateTVar am (actorMapPoke lref msg))
 
 ------------------------------------------------------------------------
 
+invoke :: EventLoop -> LocalRef -> Message -> IO Message
+invoke ls lref msg = do
+  returnVar <- newEmptyTMVarIO
+  atomically (writeTBQueue (lsQueue ls) (Admin (AdminInvoke lref msg returnVar)))
+  atomically (takeTMVar returnVar)
+
 send :: EventLoop -> RemoteRef -> Message -> IO (Async Message)
 send ls rref msg = do
   p <- atomically (stateTVar (lsNextPromise ls) (\p -> (p, p + 1)))
@@ -154,6 +162,9 @@ spawn ls a s = do
   returnVar <- newEmptyTMVarIO
   atomically (writeTBQueue (lsQueue ls) (Admin (Spawn a s returnVar)))
   atomically (takeTMVar returnVar)
+
+quit :: EventLoop -> IO ()
+quit ls = atomically (writeTBQueue (lsQueue ls) (Admin Quit))
 
 ------------------------------------------------------------------------
 
@@ -198,30 +209,33 @@ act name as t s0 = foldM go s0 as
           error "act: impossible, `On` must be supplied with a promise that was just made."
 
 data Reaction
-  = Response Promise Message
+  = Receive Promise Envelope
   | AsyncIOFinished Promise IOResult
 
 data ReactTask
   = NothingToDo
+  | Request Envelope
   | ResumeContinuation (Free ActorF ()) LocalRef
   | AdminSendResponse (TMVar Message) Message
 
 react :: Reaction -> AsyncState -> (ReactTask, AsyncState)
-react (Response p msg) s =
-  case Map.lookup p (asyncStateContinuations s) of
-    Just (k, lref) ->  (ResumeContinuation (k (Right msg)) lref,
-                        s { asyncStateContinuations =
-                              Map.delete p (asyncStateContinuations s) })
-    Nothing ->
-      case Map.lookup p (asyncStateAdminSend s) of
+react (Receive p e) s =
+  case envelopeKind e of
+    RequestKind -> (Request e, s)
+    ResponseKind ->
+      case Map.lookup p (asyncStateContinuations s) of
+        Just (k, lref) ->  (ResumeContinuation (k (Right (envelopeMessage e))) lref,
+                            s { asyncStateContinuations =
+                                  Map.delete p (asyncStateContinuations s) })
         Nothing ->
-          -- We got a response for something we are not (longer) waiting for.
-          (NothingToDo, s)
-        Just returnVar ->
-          (AdminSendResponse returnVar msg,
-            s { asyncStateAdminSend =
-                  Map.delete p (asyncStateAdminSend s) })
-
+          case Map.lookup p (asyncStateAdminSend s) of
+            Nothing ->
+              -- We got a response for something we are not (longer) waiting for.
+              (NothingToDo, s)
+            Just returnVar ->
+              (AdminSendResponse returnVar (envelopeMessage e),
+                s { asyncStateAdminSend =
+                      Map.delete p (asyncStateAdminSend s) })
 react (AsyncIOFinished p result) s =
   case Map.lookup p (asyncStateContinuations s) of
     Nothing ->
@@ -245,6 +259,7 @@ data Command
   = Spawn (Message -> Actor) State (TMVar LocalRef)
   | AdminInvoke LocalRef Message (TMVar Message)
   | AdminSend RemoteRef Message Promise (TMVar Message)
+  | Quit
 
 data EventLoop = EventLoop
   { lsName        :: EventLoopName
@@ -286,7 +301,7 @@ handleInbound ls = forever go
     go = do
       e <- transportReceive (lsTransport ls)
       let p = Promise (getCorrelationId (envelopeCorrelationId e))
-      atomically (writeTBQueue (lsQueue ls) (Reaction (Response p (envelopeMessage e))))
+      atomically (writeTBQueue (lsQueue ls) (Reaction (Receive p e)))
 
 handleAsyncIO :: EventLoop -> IO ()
 handleAsyncIO ls = forever go
@@ -321,6 +336,10 @@ handleEvent (Reaction r) ls = do
   m <- reactIO r (lsAsyncState ls)
   case m of
     NothingToDo -> return ()
+    Request e -> do
+      let lref = remoteToLocalRef (envelopeReceiver e)
+      reply <- actorMapPeekIO lref (envelopeMessage e) (lsActorMap ls)
+      transportSend (lsTransport ls) (replyEnvelope e reply)
     ResumeContinuation a lref -> do
       as <- atomically $ do
         am <- readTVar (lsActorMap ls)
@@ -345,11 +364,13 @@ handleEvent (Admin cmd) ls = case cmd of
     reply <- actorMapPokeIO lref msg (lsActorMap ls)
     atomically (putTMVar returnVar reply)
   AdminSend rref msg p returnVar -> do
-    -- XXX: is the `from` field in `Envelope` ever used? If it can be removed
-    -- then this `dummyAdminRef` hack can be removed too...
     let dummyAdminRef = localToRemoteRef (lsName ls) (LocalRef (-1))
     transportSend (lsTransport ls)
       (Envelope RequestKind dummyAdminRef msg rref (CorrelationId (unPromise p)))
     atomically (modifyTVar' (lsAsyncState ls)
                 (\as -> as { asyncStateAdminSend =
                              Map.insert p returnVar (asyncStateAdminSend as) }))
+  Quit -> do
+    pids <- atomically (readTVar (lsPids ls))
+    threadDelay 100000
+    mapM_ cancel pids

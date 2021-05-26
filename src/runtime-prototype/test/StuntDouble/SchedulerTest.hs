@@ -60,7 +60,8 @@ unit_scheduler = do
             a <- send el (localToRemoteRef ev lref) (Message "step")
             reply <- wait a
             reply @?= Just (Message "stepped"))
-    (\(e :: SomeException) -> dump el >> eventLog el >>= mapM_ print >> print e)
+    -- (\(e :: SomeException) -> dump el >> eventLog el >>= mapM_ print >> print e)
+    (\(e :: SomeException) -> putStrLn "failed")
 
   quit el
   cancel aExecutor
