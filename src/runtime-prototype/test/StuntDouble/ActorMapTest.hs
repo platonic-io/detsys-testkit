@@ -1,22 +1,29 @@
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module StuntDouble.ActorMapTest where
 
-import Control.Exception
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Exception
 import Test.HUnit hiding (State)
 
+import StuntDouble.Actor (IOResult(IOUnit, String))
 import StuntDouble.Actor.State
 import StuntDouble.ActorMap
 import StuntDouble.Datatype
 import StuntDouble.EventLoop.Transport
-import StuntDouble.Message
 import StuntDouble.FreeMonad
+import StuntDouble.Message
 import StuntDouble.Reference
 
 ------------------------------------------------------------------------
+
+withEventLoop :: EventLoopName -> (EventLoop -> IO ()) -> IO ()
+withEventLoop name k = do
+  el <- makeEventLoop (NamedPipe "/tmp") name
+  k el
+  quit el
 
 eventLoopA :: String -> EventLoopName
 eventLoopA suffix = EventLoopName ("event-loop-actormap-a" ++ "-" ++ suffix)
@@ -27,24 +34,20 @@ testActor (Message "hi") = Actor (return (Message "bye!"))
 ------------------------------------------------------------------------
 
 unit_actorMapInvoke :: Assertion
-unit_actorMapInvoke = do
-  let ev = eventLoopA "invoke"
-  el <- makeEventLoop (NamedPipe "/tmp") ev
+unit_actorMapInvoke = withEventLoop (eventLoopA "invoke") $ \el -> do
   lref <- spawn el testActor emptyState
   reply <- ainvoke el lref (Message "hi")
   reply @?= Message "bye!"
-  quit el
 
 unit_actorMapSend :: Assertion
 unit_actorMapSend = do
   let ev = eventLoopA "send"
-  el <- makeEventLoop (NamedPipe "/tmp") ev
-  lref <- spawn el testActor emptyState
-  let rref = localToRemoteRef ev lref
-  a <- asend el rref (Message "hi")
-  reply <- wait a
-  reply @?= Message "bye!"
-  quit el
+  withEventLoop ev $ \el -> do
+    lref <- spawn el testActor emptyState
+    let rref = localToRemoteRef ev lref
+    a <- asend el rref (Message "hi")
+    reply <- wait a
+    reply @?= Message "bye!"
 
 ------------------------------------------------------------------------
 
@@ -54,9 +57,7 @@ testActor1 (Message "inc") = Actor (return (Message "ack"))
 testActor2 :: RemoteRef -> Message -> Actor
 testActor2 rref msg@(Message "inc") = Actor $ do
   p <- send rref msg
-  on p (\(Right (Message "ack")) -> do
-           s <- get
-           put (add "x" 1 s))
+  on p (\(Right (Right (Message "ack"))) -> modify (add "x" 1))
   return (Message "inced")
 testActor2 _rref (Message "sum") = Actor $ do
   s <- get
@@ -85,3 +86,33 @@ unit_actorMapOnAndState = do
                       return reply2)
     (\(e :: SomeException) -> return (Message (show e)))
   reply2 @?= Message "Integer 1"
+
+------------------------------------------------------------------------
+
+testActor3 :: Message -> Actor
+testActor3 (Message "go") = Actor $ do
+  p <- asyncIO (threadDelay 1000 >> return (String "io done"))
+  on p (\(Right (Left (String "io done"))) -> modify (add "x" 1))
+  return (Message "done")
+
+unit_actorMapIO :: Assertion
+unit_actorMapIO = withEventLoop (eventLoopA "io") $ \el -> do
+  lref <- spawn el testActor3 (stateFromList [("x", Integer 0)])
+  _done <- ainvoke el lref (Message "go")
+  threadDelay 10000
+  s <- getActorState el lref
+  s @?= stateFromList [("x", Integer 1)]
+
+testActor4 :: Message -> Actor
+testActor4 (Message "go") = Actor $ do
+  p <- asyncIO (threadDelay 1000 >> error "failed")
+  on p (\(Left _exception) -> modify (add "x" 1))
+  return (Message "done")
+
+unit_actorMapIOFail :: Assertion
+unit_actorMapIOFail = withEventLoop (eventLoopA "io_fail") $ \el -> do
+  lref <- spawn el testActor4 (stateFromList [("x", Integer 0)])
+  _done <- ainvoke el lref (Message "go")
+  threadDelay 10000
+  s <- getActorState el lref
+  s @?= stateFromList [("x", Integer 1)]

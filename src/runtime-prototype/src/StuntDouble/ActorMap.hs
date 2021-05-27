@@ -40,11 +40,13 @@ unPromise (Promise i) = i
 
 newtype Actor = Actor { unActor :: Free ActorF Message }
 
+type Resolution = Either SomeException (Either IOResult Message)
+
 data ActorF x
   = Invoke LocalRef Message (Message -> x)
   | Send RemoteRef Message (Promise -> x)
   | AsyncIO (IO IOResult) (Promise -> x)
-  | On Promise (Either IOResult Message -> Free ActorF ()) (() -> x)
+  | On Promise (Resolution -> Free ActorF ()) (() -> x)
   | Get (State -> x)
   | Put State (() -> x)
 deriving instance Functor ActorF
@@ -55,7 +57,10 @@ invoke lref msg = Free (Invoke lref msg return)
 send :: RemoteRef -> Message -> Free ActorF Promise
 send rref msg = Free (Send rref msg return)
 
-on :: Promise -> (Either IOResult Message -> Free ActorF ()) -> Free ActorF ()
+asyncIO :: IO IOResult -> Free ActorF Promise
+asyncIO io = Free (AsyncIO io return)
+
+on :: Promise -> (Resolution -> Free ActorF ()) -> Free ActorF ()
 on p k = Free (On p k return)
 
 get :: Free ActorF State
@@ -63,6 +68,9 @@ get = Free (Get return)
 
 put :: State -> Free ActorF ()
 put s' = Free (Put s' return)
+
+modify :: (State -> State) -> Free ActorF ()
+modify f = put . f =<< get
 
 ------------------------------------------------------------------------
 
@@ -89,7 +97,7 @@ actorMapSpawn a s (ActorMap m) =
 data Action
   = SendAction LocalRef Message RemoteRef Promise
   | AsyncIOAction (IO IOResult) Promise
-  | OnAction Promise (Either IOResult Message -> Free ActorF ()) LocalRef
+  | OnAction Promise (Resolution -> Free ActorF ()) LocalRef
 
 -- XXX: what about exceptions? transactional in state, but also in actions?!
 actorMapTurn :: LocalRef -> Message -> ActorMap
@@ -111,7 +119,7 @@ actorMapTurn' p acc  lref (Free op)  am = case op of
       a' = fst (actorMapUnsafeLookup lref' am)
       (reply, p', am', acc') = actorMapTurn' p acc lref' (unActor (a' msg)) am
     in
-     actorMapTurn' p' acc' lref (k reply) am'
+      actorMapTurn' p' acc' lref (k reply) am'
   Send rref msg k ->
     actorMapTurn' (p + 1) (SendAction lref msg rref p : acc) lref (k p) am
   AsyncIO io k ->
@@ -138,6 +146,9 @@ actorMapPoke lref msg am =
     ((reply, _p, am', as), _am) = actorMapTurn lref msg am
   in
     ((reply, as), am')
+
+actorMapGetState :: LocalRef -> ActorMap -> (State, ActorMap)
+actorMapGetState lref am = (snd (actorMapUnsafeLookup lref am), am)
 
 ------------------------------------------------------------------------
 
@@ -170,6 +181,12 @@ act' ls as = do
   s' <- act (lsName ls) as (lsTransport ls) s
   atomically (writeTVar (lsAsyncState ls) s')
 
+actorMapGetStateIO :: LocalRef -> TVar ActorMap -> IO State
+actorMapGetStateIO lref am = atomically (stateTVar am (actorMapGetState lref))
+
+getActorState :: EventLoop -> LocalRef -> IO State
+getActorState ls lref = actorMapGetStateIO lref (lsActorMap ls)
+
 ------------------------------------------------------------------------
 
 ainvoke :: EventLoop -> LocalRef -> Message -> IO Message
@@ -197,14 +214,13 @@ quit ls = atomically (writeTBQueue (lsQueue ls) (Admin Quit))
 ------------------------------------------------------------------------
 
 data AsyncState = AsyncState
-  { asyncStateAsyncIO       :: Set (Async (Promise, IOResult))
-  , asyncStateContinuations :: Map Promise (Either IOResult Message -> Free ActorF (),
-                                            LocalRef)
+  { asyncStateAsyncIO       :: Map (Async IOResult) Promise
+  , asyncStateContinuations :: Map Promise (Resolution -> Free ActorF (), LocalRef)
   , asyncStateAdminSend     :: Map Promise (TMVar Message)
   }
 
 emptyAsyncState :: AsyncState
-emptyAsyncState = AsyncState Set.empty Map.empty Map.empty
+emptyAsyncState = AsyncState Map.empty Map.empty Map.empty
 
 madePromises :: [Action] -> Set Int
 madePromises = foldMap go
@@ -227,8 +243,8 @@ act name as t s0 = foldM go s0 as
       return s
     go s (AsyncIOAction io p) = do
       -- XXX: Use `asyncOn` a different capability than main loop.
-      a <- fmap (fmap (\x -> (p, x))) (async io)
-      return (s { asyncStateAsyncIO = Set.insert a (asyncStateAsyncIO s) })
+      a <- async io
+      return (s { asyncStateAsyncIO = Map.insert a p (asyncStateAsyncIO s) })
     go s (OnAction p@(Promise i) k lref)
       | i `Set.member` is =
           return (s { asyncStateContinuations =
@@ -239,6 +255,7 @@ act name as t s0 = foldM go s0 as
 data Reaction
   = Receive Promise Envelope
   | AsyncIOFinished Promise IOResult
+  | AsyncIOFailed Promise SomeException
 
 data ReactTask
   = NothingToDo
@@ -252,7 +269,7 @@ react (Receive p e) s =
     RequestKind  -> (Request e, s)
     ResponseKind ->
       case Map.lookup p (asyncStateContinuations s) of
-        Just (k, lref) ->  (ResumeContinuation (k (Right (envelopeMessage e))) lref,
+        Just (k, lref) ->  (ResumeContinuation (k (Right (Right (envelopeMessage e)))) lref,
                             s { asyncStateContinuations =
                                   Map.delete p (asyncStateContinuations s) })
         Nothing ->
@@ -269,7 +286,15 @@ react (AsyncIOFinished p result) s =
     Nothing ->
       -- No continuation was registered for this async.
       (NothingToDo, s)
-    Just (k, lref) -> (ResumeContinuation (k (Left result)) lref,
+    Just (k, lref) -> (ResumeContinuation (k (Right (Left result))) lref,
+                        s { asyncStateContinuations =
+                            Map.delete p (asyncStateContinuations s) })
+react (AsyncIOFailed p exception) s =
+  case Map.lookup p (asyncStateContinuations s) of
+    Nothing ->
+      -- No continuation was registered for this async.
+      (NothingToDo, s)
+    Just (k, lref) -> (ResumeContinuation (k (Left exception)) lref,
                         s { asyncStateContinuations =
                             Map.delete p (asyncStateContinuations s) })
 
@@ -337,16 +362,40 @@ handleInbound ls = forever go
       atomically (writeTBQueue (lsQueue ls) (Reaction (Receive p e)))
 
 handleAsyncIO :: EventLoop -> IO ()
-handleAsyncIO ls = forever go
+handleAsyncIO ls = forever (go >> threadDelay 1000 {- 1 ms -})
   where
+    go :: IO ()
     go = atomically $ do
-      -- XXX: Use waitAnyCatchSTM and handle exceptions appropriately here, e.g.
-      -- by extending `AsyncIOFinished` with `Fail` and `Info`.
       s <- readTVar (lsAsyncState ls)
-      (a, (p, ioResult)) <- waitAnySTM (Set.toList (asyncStateAsyncIO s))
-      writeTBQueue (lsQueue ls) (Reaction (AsyncIOFinished p ioResult))
-      writeTVar (lsAsyncState ls)
-        (s { asyncStateAsyncIO = Set.delete a (asyncStateAsyncIO s) })
+      -- We want to be non-blocking here, otherwise we can get into a situation
+      -- where we schedule a slow I/O operation and block waiting for it while
+      -- other quicker I/O operation could get scheduled, but won't be polled
+      -- until after the slow one finishes.
+      mr <- pollAnySTM (Map.keys (asyncStateAsyncIO s))
+      case mr of
+        Nothing -> return ()
+        Just (a, Right ioResult) -> do
+          let p = asyncStateAsyncIO s Map.! a
+          writeTBQueue (lsQueue ls) (Reaction (AsyncIOFinished p ioResult))
+          writeTVar (lsAsyncState ls)
+            (s { asyncStateAsyncIO = Map.delete a (asyncStateAsyncIO s) })
+        -- XXX: We probably need to store a map from async to promises,
+        -- otherwise we will not be able to call the right exception
+        -- continuation...
+        Just (a, Left exception) -> do
+          let p = asyncStateAsyncIO s Map.! a
+          writeTBQueue (lsQueue ls) (Reaction (AsyncIOFailed p exception))
+          writeTVar (lsAsyncState ls)
+            (s { asyncStateAsyncIO = Map.delete a (asyncStateAsyncIO s) })
+
+-- | Check if any async finished in a non-blocking way.
+pollAnySTM :: [Async a] -> STM (Maybe (Async a, Either SomeException a))
+pollAnySTM []       = return Nothing
+pollAnySTM (a : as) = do
+  mr <- pollSTM a
+  case mr of
+    Nothing -> pollAnySTM as
+    Just r  -> return (Just (a, r))
 
 handleEvents :: EventLoop -> IO ()
 handleEvents ls = forever go
