@@ -28,6 +28,7 @@ library
     StuntDouble.ActorMap
     StuntDouble.Actor.State
     StuntDouble.Datatype
+    StuntDouble.Time
     StuntDouble.EventLoop
     StuntDouble.EventLoop.AsyncIOHandler
     StuntDouble.EventLoop.Event

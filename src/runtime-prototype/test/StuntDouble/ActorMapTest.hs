@@ -16,12 +16,14 @@ import StuntDouble.EventLoop.Transport
 import StuntDouble.FreeMonad
 import StuntDouble.Message
 import StuntDouble.Reference
+import StuntDouble.Time
 
 ------------------------------------------------------------------------
 
 withEventLoop :: EventLoopName -> (EventLoop -> IO ()) -> IO ()
 withEventLoop name k = do
-  el <- makeEventLoop (NamedPipe "/tmp") name
+  (time, h) <- fakeTimeEpoch
+  el <- makeEventLoop time (NamedPipe "/tmp") name
   k el
   quit el
 
@@ -70,10 +72,11 @@ eventLoopB suffix = EventLoopName ("event-loop-actormap-b" ++ "-" ++ suffix)
 
 unit_actorMapOnAndState :: Assertion
 unit_actorMapOnAndState = do
+  (time, h) <- fakeTimeEpoch
   reply2 <- catch (do let evA = eventLoopA "onAndState"
                           evB = eventLoopB "onAndState"
-                      elA <- makeEventLoop (NamedPipe "/tmp") evA
-                      elB <- makeEventLoop (NamedPipe "/tmp") evB
+                      elA <- makeEventLoop time (NamedPipe "/tmp") evA
+                      elB <- makeEventLoop time (NamedPipe "/tmp") evB
                       lref1 <- spawn elA testActor1 emptyState
                       let rref1 = localToRemoteRef evA lref1
                       lref2 <- spawn elB (testActor2 rref1) (stateFromList [("x", Integer 0)])
