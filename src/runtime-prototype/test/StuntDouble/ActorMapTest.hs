@@ -91,7 +91,7 @@ unit_actorMapOnAndState = do
 
 testActor3 :: Message -> Actor
 testActor3 (Message "go") = Actor $ do
-  p <- asyncIO (threadDelay 1000 >> return (String "io done"))
+  p <- asyncIO (return (String "io done"))
   on p (\(Right (Left (String "io done"))) -> modify (add "x" 1))
   return (Message "done")
 
@@ -99,13 +99,13 @@ unit_actorMapIO :: Assertion
 unit_actorMapIO = withEventLoop (eventLoopA "io") $ \el -> do
   lref <- spawn el testActor3 (stateFromList [("x", Integer 0)])
   _done <- ainvoke el lref (Message "go")
-  threadDelay 10000
+  threadDelay 100000
   s <- getActorState el lref
   s @?= stateFromList [("x", Integer 1)]
 
 testActor4 :: Message -> Actor
 testActor4 (Message "go") = Actor $ do
-  p <- asyncIO (threadDelay 1000 >> error "failed")
+  p <- asyncIO (error "failed")
   on p (\(Left _exception) -> modify (add "x" 1))
   return (Message "done")
 
@@ -113,6 +113,6 @@ unit_actorMapIOFail :: Assertion
 unit_actorMapIOFail = withEventLoop (eventLoopA "io_fail") $ \el -> do
   lref <- spawn el testActor4 (stateFromList [("x", Integer 0)])
   _done <- ainvoke el lref (Message "go")
-  threadDelay 10000
+  threadDelay 100000
   s <- getActorState el lref
   s @?= stateFromList [("x", Integer 1)]

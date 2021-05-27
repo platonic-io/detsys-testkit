@@ -349,8 +349,9 @@ makeEventLoop tk name = do
   aInHandler <- async (handleInbound ls)
   aAsyncIOHandler <- async (handleAsyncIO ls)
   aEvHandler <- async (handleEvents ls)
-  atomically (modifyTVar' (lsPids ls)
-               ([aInHandler, aEvHandler, aAsyncIOHandler] ++))
+  let pids = [aInHandler, aEvHandler, aAsyncIOHandler]
+  atomically (modifyTVar' (lsPids ls) (pids ++))
+  mapM_ link pids
   return ls
 
 handleInbound :: EventLoop -> IO ()
@@ -375,15 +376,12 @@ handleAsyncIO ls = forever (go >> threadDelay 1000 {- 1 ms -})
       case mr of
         Nothing -> return ()
         Just (a, Right ioResult) -> do
-          let p = asyncStateAsyncIO s Map.! a
+          let p = asyncStateAsyncIO s Map.! a -- XXX: partial function
           writeTBQueue (lsQueue ls) (Reaction (AsyncIOFinished p ioResult))
           writeTVar (lsAsyncState ls)
             (s { asyncStateAsyncIO = Map.delete a (asyncStateAsyncIO s) })
-        -- XXX: We probably need to store a map from async to promises,
-        -- otherwise we will not be able to call the right exception
-        -- continuation...
         Just (a, Left exception) -> do
-          let p = asyncStateAsyncIO s Map.! a
+          let p = asyncStateAsyncIO s Map.! a -- XXX: partial function
           writeTBQueue (lsQueue ls) (Reaction (AsyncIOFailed p exception))
           writeTVar (lsAsyncState ls)
             (s { asyncStateAsyncIO = Map.delete a (asyncStateAsyncIO s) })
@@ -442,6 +440,6 @@ handleEvent (Admin cmd) ls = case cmd of
                 (\as -> as { asyncStateAdminSend =
                              Map.insert p returnVar (asyncStateAdminSend as) }))
   Quit -> do
-    pids <- atomically (readTVar (lsPids ls))
+    pids <- readTVarIO (lsPids ls)
     threadDelay 100000
     mapM_ cancel pids
