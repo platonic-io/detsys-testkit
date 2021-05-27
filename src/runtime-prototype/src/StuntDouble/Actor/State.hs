@@ -10,7 +10,7 @@ import StuntDouble.Datatype
 ------------------------------------------------------------------------
 
 newtype State = State { getHashMap :: HashMap Text Datatype }
-  deriving Show
+  deriving (Eq, Ord, Show)
 
 stateFromList :: [(Text, Datatype)] -> State
 stateFromList = State . HashMap.fromList
