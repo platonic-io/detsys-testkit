@@ -25,9 +25,9 @@ fakeTimeEpoch = do
   v <- newTVarIO t0
   return (Time (readTVarIO v), FakeTimeHandle v)
 
-advanceFakeTime :: FakeTimeHandle -> IO ()
-advanceFakeTime (FakeTimeHandle v) =
-  atomically (modifyTVar' v (Time.addUTCTime 1))
+advanceFakeTime :: FakeTimeHandle -> Time.NominalDiffTime -> IO ()
+advanceFakeTime (FakeTimeHandle v) seconds =
+  atomically (modifyTVar' v (Time.addUTCTime seconds))
 
 -- XXX: move to test directory.
 test :: IO ()
@@ -36,5 +36,5 @@ test = do
   (time, h) <- fakeTime t
   print =<< getCurrentTime time
   print =<< getCurrentTime time
-  advanceFakeTime h
+  advanceFakeTime h 1
   print =<< getCurrentTime time

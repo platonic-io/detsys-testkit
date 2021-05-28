@@ -20,11 +20,11 @@ import StuntDouble.Time
 
 ------------------------------------------------------------------------
 
-withEventLoop :: EventLoopName -> (EventLoop -> IO ()) -> IO ()
+withEventLoop :: EventLoopName -> (EventLoop -> FakeTimeHandle -> IO ()) -> IO ()
 withEventLoop name k = do
   (time, h) <- fakeTimeEpoch
   el <- makeEventLoop time (NamedPipe "/tmp") name
-  k el
+  k el h
   quit el
 
 eventLoopA :: String -> EventLoopName
@@ -36,7 +36,7 @@ testActor (Message "hi") = Actor (return (Message "bye!"))
 ------------------------------------------------------------------------
 
 unit_actorMapInvoke :: Assertion
-unit_actorMapInvoke = withEventLoop (eventLoopA "invoke") $ \el -> do
+unit_actorMapInvoke = withEventLoop (eventLoopA "invoke") $ \el _h -> do
   lref <- spawn el testActor emptyState
   reply <- ainvoke el lref (Message "hi")
   reply @?= Message "bye!"
@@ -44,7 +44,7 @@ unit_actorMapInvoke = withEventLoop (eventLoopA "invoke") $ \el -> do
 unit_actorMapSend :: Assertion
 unit_actorMapSend = do
   let ev = eventLoopA "send"
-  withEventLoop ev $ \el -> do
+  withEventLoop ev $ \el _h -> do
     lref <- spawn el testActor emptyState
     let rref = localToRemoteRef ev lref
     a <- asend el rref (Message "hi")
@@ -99,7 +99,7 @@ testActor3 (Message "go") = Actor $ do
   return (Message "done")
 
 unit_actorMapIO :: Assertion
-unit_actorMapIO = withEventLoop (eventLoopA "io") $ \el -> do
+unit_actorMapIO = withEventLoop (eventLoopA "io") $ \el _h -> do
   lref <- spawn el testActor3 (stateFromList [("x", Integer 0)])
   _done <- ainvoke el lref (Message "go")
   threadDelay 100000
@@ -113,11 +113,34 @@ testActor4 (Message "go") = Actor $ do
   return (Message "done")
 
 unit_actorMapIOFail :: Assertion
-unit_actorMapIOFail = withEventLoop (eventLoopA "io_fail") $ \el -> do
+unit_actorMapIOFail = withEventLoop (eventLoopA "io_fail") $ \el _h -> do
   lref <- spawn el testActor4 (stateFromList [("x", Integer 0)])
   _done <- ainvoke el lref (Message "go")
   threadDelay 100000
   s <- getActorState el lref
   s @?= stateFromList [("x", Integer 1)]
 
--- XXX: timeout tests
+------------------------------------------------------------------------
+
+testActor5 :: RemoteRef -> Message -> Actor
+testActor5 rref (Message "go") = Actor $ do
+  p <- send rref (Message "hi")
+  on p (\(Left _exception) -> modify (add "x" 1))
+  return (Message "done")
+
+unit_actorMapSendTimeout :: Assertion
+unit_actorMapSendTimeout = do
+  let ev = eventLoopA "send_timeout"
+  withEventLoop ev $ \el h -> do
+    let rref = RemoteRef "doesnt_exist" 0
+    lref <- spawn el (testActor5 rref) (stateFromList [("x", Integer 0)])
+    _done <- ainvoke el lref (Message "go")
+    -- Timeout happens after 60 seconds.
+    advanceFakeTime h 59
+    threadDelay 100000
+    s <- getActorState el lref
+    s @?= stateFromList [("x", Integer 0)]
+    advanceFakeTime h 1
+    threadDelay 100000
+    s' <- getActorState el lref
+    s' @?= stateFromList [("x", Integer 1)]
