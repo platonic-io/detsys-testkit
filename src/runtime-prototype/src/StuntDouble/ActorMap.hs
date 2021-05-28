@@ -10,6 +10,12 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
+import Data.Foldable (toList)
+import Data.Maybe (catMaybes)
+import Data.Heap (Heap, Entry(Entry))
+import qualified Data.Heap as Heap
+import Data.Time (UTCTime)
+import qualified Data.Time as Time
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -27,6 +33,7 @@ import StuntDouble.EventLoop.Event
 import StuntDouble.EventLoop.Transport
 import StuntDouble.EventLoop.Transport.Http
 import StuntDouble.FreeMonad
+import StuntDouble.Time
 import StuntDouble.Message
 import StuntDouble.Reference
 
@@ -40,6 +47,8 @@ unPromise (Promise i) = i
 
 newtype Actor = Actor { unActor :: Free ActorF Message }
 
+-- XXX: Introduce new datatype rather than nested eithers. Should we always
+-- force the user to supply an exception continuation?
 type Resolution = Either SomeException (Either IOResult Message)
 
 data ActorF x
@@ -49,6 +58,9 @@ data ActorF x
   | On Promise (Resolution -> Free ActorF ()) (() -> x)
   | Get (State -> x)
   | Put State (() -> x)
+  -- XXX: Random?
+  -- XXX: GetTime?
+  -- XXX: Throw?
 deriving instance Functor ActorF
 
 invoke :: LocalRef -> Message -> Free ActorF Message
@@ -168,6 +180,7 @@ actorMapPeekIO lref msg am = atomically (stateTVar am (actorMapPeek lref msg))
 actorMapPokeIO :: LocalRef -> Message -> TVar ActorMap -> IO (Message, [Action])
 actorMapPokeIO lref msg am = atomically (stateTVar am (actorMapPoke lref msg))
 
+-- XXX: Promise counter should be used...
 actorPokeIO :: EventLoop -> LocalRef -> Message -> IO Message
 actorPokeIO ls lref msg = do
   (reply, as) <- actorMapPokeIO lref msg (lsActorMap ls)
@@ -178,7 +191,7 @@ act' :: EventLoop -> [Action] -> IO ()
 act' ls as = do
   -- XXX: non-atomic update of the async state?!
   s <- readTVarIO (lsAsyncState ls)
-  s' <- act (lsName ls) as (lsTransport ls) s
+  s' <- act (lsName ls) as (lsTime ls) (lsTransport ls) s
   atomically (writeTVar (lsAsyncState ls) s')
 
 actorMapGetStateIO :: LocalRef -> TVar ActorMap -> IO State
@@ -217,10 +230,11 @@ data AsyncState = AsyncState
   { asyncStateAsyncIO       :: Map (Async IOResult) Promise
   , asyncStateContinuations :: Map Promise (Resolution -> Free ActorF (), LocalRef)
   , asyncStateAdminSend     :: Map Promise (TMVar Message)
+  , asyncStateTimeouts      :: Heap (Entry UTCTime Promise)
   }
 
 emptyAsyncState :: AsyncState
-emptyAsyncState = AsyncState Map.empty Map.empty Map.empty
+emptyAsyncState = AsyncState Map.empty Map.empty Map.empty Heap.empty
 
 madePromises :: [Action] -> Set Int
 madePromises = foldMap go
@@ -229,21 +243,25 @@ madePromises = foldMap go
     go (AsyncIOAction _io (Promise i)) = Set.singleton i
     go OnAction {} = Set.empty
 
-act :: EventLoopName -> [Action] -> Transport IO -> AsyncState -> IO AsyncState
-act name as t s0 = foldM go s0 as
+act :: EventLoopName -> [Action] -> Time -> Transport IO -> AsyncState -> IO AsyncState
+act name as time transport s0 = foldM go s0 as
   where
     is :: Set Int
     is = madePromises as
 
     go :: AsyncState -> Action -> IO AsyncState
-    go s (SendAction from msg to (Promise i)) = do
-      transportSend t
+    go s (SendAction from msg to p@(Promise i)) = do
+      transportSend transport
         (Envelope RequestKind (localToRemoteRef name from) msg to (CorrelationId i))
-      -- XXX: make a note of when we sent so we can timeout.
-      return s
+      t <- getCurrentTime time
+      -- XXX: make it possible to specify when a send request should timeout.
+      let timeoutAfter = Time.addUTCTime 60 t
+      return s { asyncStateTimeouts =
+                   Heap.insert (Entry timeoutAfter p) (asyncStateTimeouts s) }
     go s (AsyncIOAction io p) = do
       -- XXX: Use `asyncOn` a different capability than main loop.
       a <- async io
+      -- XXX: make it possible for async I/O to timeout as well?
       return (s { asyncStateAsyncIO = Map.insert a p (asyncStateAsyncIO s) })
     go s (OnAction p@(Promise i) k lref)
       | i `Set.member` is =
@@ -254,6 +272,7 @@ act name as t s0 = foldM go s0 as
 
 data Reaction
   = Receive Promise Envelope
+  | SendTimeout (Free ActorF ()) LocalRef
   | AsyncIOFinished Promise IOResult
   | AsyncIOFailed Promise SomeException
 
@@ -269,7 +288,7 @@ react (Receive p e) s =
     RequestKind  -> (Request e, s)
     ResponseKind ->
       case Map.lookup p (asyncStateContinuations s) of
-        Just (k, lref) ->  (ResumeContinuation (k (Right (Right (envelopeMessage e)))) lref,
+        Just (k, lref) -> (ResumeContinuation (k (Right (Right (envelopeMessage e)))) lref,
                             s { asyncStateContinuations =
                                   Map.delete p (asyncStateContinuations s) })
         Nothing ->
@@ -281,6 +300,7 @@ react (Receive p e) s =
               (AdminSendResponse returnVar (envelopeMessage e),
                 s { asyncStateAdminSend =
                       Map.delete p (asyncStateAdminSend s) })
+react (SendTimeout a lref) s = (ResumeContinuation a lref, s)
 react (AsyncIOFinished p result) s =
   case Map.lookup p (asyncStateContinuations s) of
     Nothing ->
@@ -319,6 +339,7 @@ data EventLoop = EventLoop
   , lsActorMap    :: TVar ActorMap
   , lsAsyncState  :: TVar AsyncState
   , lsQueue       :: TBQueue Event
+  , lsTime        :: Time
   , lsTransport   :: Transport IO
   , lsPids        :: TVar [Async ()]
   , lsNextPromise :: TVar Promise
@@ -328,29 +349,32 @@ data EventLoop = EventLoop
 data LogEntry
   = LogEntry
 
-initLoopState :: EventLoopName -> Transport IO -> IO EventLoop
-initLoopState name t =
+initLoopState :: EventLoopName -> Time -> Transport IO -> IO EventLoop
+initLoopState name time t =
   EventLoop
     <$> pure name
     <*> newTVarIO emptyActorMap
     <*> newTVarIO emptyAsyncState
     <*> newTBQueueIO 128
+    <*> pure time
     <*> pure t
     <*> newTVarIO []
     <*> newTVarIO (Promise 0)
     <*> newTVarIO []
 
-makeEventLoop :: TransportKind -> EventLoopName -> IO EventLoop
-makeEventLoop tk name = do
+makeEventLoop :: Time -> TransportKind -> EventLoopName -> IO EventLoop
+makeEventLoop time tk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
-  ls <- initLoopState name t
+  ls <- initLoopState name time t
   aInHandler <- async (handleInbound ls)
   aAsyncIOHandler <- async (handleAsyncIO ls)
   aEvHandler <- async (handleEvents ls)
-  atomically (modifyTVar' (lsPids ls)
-               ([aInHandler, aEvHandler, aAsyncIOHandler] ++))
+  aTimeoutHandler <- async (handleTimeouts ls)
+  let pids = [aInHandler, aAsyncIOHandler, aEvHandler, aTimeoutHandler]
+  atomically (modifyTVar' (lsPids ls) (pids ++))
+  mapM_ link pids
   return ls
 
 handleInbound :: EventLoop -> IO ()
@@ -375,15 +399,12 @@ handleAsyncIO ls = forever (go >> threadDelay 1000 {- 1 ms -})
       case mr of
         Nothing -> return ()
         Just (a, Right ioResult) -> do
-          let p = asyncStateAsyncIO s Map.! a
+          let p = asyncStateAsyncIO s Map.! a -- XXX: partial function
           writeTBQueue (lsQueue ls) (Reaction (AsyncIOFinished p ioResult))
           writeTVar (lsAsyncState ls)
             (s { asyncStateAsyncIO = Map.delete a (asyncStateAsyncIO s) })
-        -- XXX: We probably need to store a map from async to promises,
-        -- otherwise we will not be able to call the right exception
-        -- continuation...
         Just (a, Left exception) -> do
-          let p = asyncStateAsyncIO s Map.! a
+          let p = asyncStateAsyncIO s Map.! a -- XXX: partial function
           writeTBQueue (lsQueue ls) (Reaction (AsyncIOFailed p exception))
           writeTVar (lsAsyncState ls)
             (s { asyncStateAsyncIO = Map.delete a (asyncStateAsyncIO s) })
@@ -396,6 +417,32 @@ pollAnySTM (a : as) = do
   case mr of
     Nothing -> pollAnySTM as
     Just r  -> return (Just (a, r))
+
+handleTimeouts :: EventLoop -> IO ()
+handleTimeouts ls = forever go
+  where
+    go :: IO ()
+    go = do
+      now <- getCurrentTime (lsTime ls)
+      als <- atomically (stateTVar (lsAsyncState ls) (findTimedout now))
+      mapM_ (\(a, lref) ->
+               atomically (writeTBQueue (lsQueue ls) (Reaction (SendTimeout a lref))))
+        als
+
+findTimedout :: UTCTime -> AsyncState
+             -> ([(Free ActorF (), LocalRef)], AsyncState)
+findTimedout now s =
+  let
+    (timedout, heap') = Heap.span (\(Entry t _p) -> t <= now) (asyncStateTimeouts s)
+    ps = map Heap.payload (toList timedout)
+    cs = catMaybes (map (\p -> Map.lookup p (asyncStateContinuations s)) ps)
+    als = map ((\(c, lref) -> (c (Left (error "XXX: timeout")), lref))) cs
+    ks = foldr Map.delete (asyncStateContinuations s) ps
+  in
+    (als, s { asyncStateContinuations = ks
+            , asyncStateTimeouts      = heap'
+            })
+
 
 handleEvents :: EventLoop -> IO ()
 handleEvents ls = forever go
@@ -442,6 +489,6 @@ handleEvent (Admin cmd) ls = case cmd of
                 (\as -> as { asyncStateAdminSend =
                              Map.insert p returnVar (asyncStateAdminSend as) }))
   Quit -> do
-    pids <- atomically (readTVar (lsPids ls))
+    pids <- readTVarIO (lsPids ls)
     threadDelay 100000
     mapM_ cancel pids
