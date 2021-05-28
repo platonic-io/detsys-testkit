@@ -119,3 +119,5 @@ unit_actorMapIOFail = withEventLoop (eventLoopA "io_fail") $ \el -> do
   threadDelay 100000
   s <- getActorState el lref
   s @?= stateFromList [("x", Integer 1)]
+
+-- XXX: timeout tests

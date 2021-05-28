@@ -10,6 +10,10 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
+import Data.Foldable (toList)
+import Data.Maybe (catMaybes)
+import Data.Heap (Heap, Entry(Entry))
+import qualified Data.Heap as Heap
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import Data.Map (Map)
@@ -176,6 +180,7 @@ actorMapPeekIO lref msg am = atomically (stateTVar am (actorMapPeek lref msg))
 actorMapPokeIO :: LocalRef -> Message -> TVar ActorMap -> IO (Message, [Action])
 actorMapPokeIO lref msg am = atomically (stateTVar am (actorMapPoke lref msg))
 
+-- XXX: Promise counter should be used...
 actorPokeIO :: EventLoop -> LocalRef -> Message -> IO Message
 actorPokeIO ls lref msg = do
   (reply, as) <- actorMapPokeIO lref msg (lsActorMap ls)
@@ -225,11 +230,11 @@ data AsyncState = AsyncState
   { asyncStateAsyncIO       :: Map (Async IOResult) Promise
   , asyncStateContinuations :: Map Promise (Resolution -> Free ActorF (), LocalRef)
   , asyncStateAdminSend     :: Map Promise (TMVar Message)
-  , asyncStateTimeouts      :: [(UTCTime, Promise)] -- XXX: min heap?
+  , asyncStateTimeouts      :: Heap (Entry UTCTime Promise)
   }
 
 emptyAsyncState :: AsyncState
-emptyAsyncState = AsyncState Map.empty Map.empty Map.empty []
+emptyAsyncState = AsyncState Map.empty Map.empty Map.empty Heap.empty
 
 madePromises :: [Action] -> Set Int
 madePromises = foldMap go
@@ -251,7 +256,8 @@ act name as time transport s0 = foldM go s0 as
       t <- getCurrentTime time
       -- XXX: make it possible to specify when a send request should timeout.
       let timeoutAfter = Time.addUTCTime 60 t
-      return s { asyncStateTimeouts = (timeoutAfter, p) : asyncStateTimeouts s }
+      return s { asyncStateTimeouts =
+                   Heap.insert (Entry timeoutAfter p) (asyncStateTimeouts s) }
     go s (AsyncIOAction io p) = do
       -- XXX: Use `asyncOn` a different capability than main loop.
       a <- async io
@@ -266,6 +272,7 @@ act name as time transport s0 = foldM go s0 as
 
 data Reaction
   = Receive Promise Envelope
+  | SendTimeout (Free ActorF ()) LocalRef
   | AsyncIOFinished Promise IOResult
   | AsyncIOFailed Promise SomeException
 
@@ -293,6 +300,7 @@ react (Receive p e) s =
               (AdminSendResponse returnVar (envelopeMessage e),
                 s { asyncStateAdminSend =
                       Map.delete p (asyncStateAdminSend s) })
+react (SendTimeout a lref) s = (ResumeContinuation a lref, s)
 react (AsyncIOFinished p result) s =
   case Map.lookup p (asyncStateContinuations s) of
     Nothing ->
@@ -411,9 +419,30 @@ pollAnySTM (a : as) = do
     Just r  -> return (Just (a, r))
 
 handleTimeouts :: EventLoop -> IO ()
-handleTimeouts ls = do
-  -- XXX: implement
-  return ()
+handleTimeouts ls = forever go
+  where
+    go :: IO ()
+    go = do
+      now <- getCurrentTime (lsTime ls)
+      als <- atomically (stateTVar (lsAsyncState ls) (findTimedout now))
+      mapM_ (\(a, lref) ->
+               atomically (writeTBQueue (lsQueue ls) (Reaction (SendTimeout a lref))))
+        als
+
+findTimedout :: UTCTime -> AsyncState
+             -> ([(Free ActorF (), LocalRef)], AsyncState)
+findTimedout now s =
+  let
+    (timedout, heap') = Heap.span (\(Entry t _p) -> t <= now) (asyncStateTimeouts s)
+    ps = map Heap.payload (toList timedout)
+    cs = catMaybes (map (\p -> Map.lookup p (asyncStateContinuations s)) ps)
+    als = map ((\(c, lref) -> (c (Left (error "XXX: timeout")), lref))) cs
+    ks = foldr Map.delete (asyncStateContinuations s) ps
+  in
+    (als, s { asyncStateContinuations = ks
+            , asyncStateTimeouts      = heap'
+            })
+
 
 handleEvents :: EventLoop -> IO ()
 handleEvents ls = forever go
