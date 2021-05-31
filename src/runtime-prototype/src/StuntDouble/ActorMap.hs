@@ -34,6 +34,7 @@ import StuntDouble.EventLoop.Transport
 import StuntDouble.EventLoop.Transport.Http
 import StuntDouble.FreeMonad
 import StuntDouble.Time
+import StuntDouble.Random
 import StuntDouble.Message
 import StuntDouble.Reference
 
@@ -47,9 +48,13 @@ unPromise (Promise i) = i
 
 newtype Actor = Actor { unActor :: Free ActorF Message }
 
--- XXX: Introduce new datatype rather than nested eithers. Should we always
--- force the user to supply an exception continuation?
-type Resolution = Either SomeException (Either IOResult Message)
+-- XXX: Should we always force the user to supply an exception continuation?
+data Resolution
+  = TimeoutR
+  | TimerR
+  | IOResultR IOResult
+  | MessageR Message
+  | ExceptionR SomeException
 
 data ActorF x
   = Invoke LocalRef Message (Message -> x)
@@ -58,8 +63,9 @@ data ActorF x
   | On Promise (Resolution -> Free ActorF ()) (() -> x)
   | Get (State -> x)
   | Put State (() -> x)
-  -- XXX: Random?
-  -- XXX: GetTime?
+  | GetTime (UTCTime -> x)
+  | Random (Double -> x)
+  | SetTimer Time.NominalDiffTime (Promise -> x)
   -- XXX: Throw?
 deriving instance Functor ActorF
 
@@ -84,106 +90,137 @@ put s' = Free (Put s' return)
 modify :: (State -> State) -> Free ActorF ()
 modify f = put . f =<< get
 
+getTime :: Free ActorF UTCTime
+getTime = Free (GetTime return)
+
+random :: Free ActorF Double
+random = Free (Random return)
+
+setTimer :: Time.NominalDiffTime -> Free ActorF Promise
+setTimer ndt = Free (SetTimer ndt return)
+
 ------------------------------------------------------------------------
 
-newtype ActorMap = ActorMap (Map LocalRef (Message -> Actor, State))
+newtype ActorMap = ActorMap (Map LocalRef ActorData)
+
+data ActorData = ActorData
+  { adActor :: Message -> Actor
+  , adState :: State
+  , adTime  :: Time
+  }
 
 emptyActorMap :: ActorMap
 emptyActorMap = ActorMap Map.empty
 
-actorMapLookup :: LocalRef -> ActorMap -> Maybe (Message -> Actor, State)
+actorMapLookup :: LocalRef -> ActorMap -> Maybe ActorData
 actorMapLookup lref (ActorMap m) = Map.lookup lref m
 
-actorMapUnsafeLookup :: LocalRef -> ActorMap -> (Message -> Actor, State)
+actorMapUnsafeLookup :: LocalRef -> ActorMap -> ActorData
 actorMapUnsafeLookup lref am = case actorMapLookup lref am of
   Nothing -> error ("actorMapUnsafeLookup: `" ++ show lref ++ "' not in actor map.")
   Just v  -> v
 
-actorMapSpawn :: (Message -> Actor) -> State -> ActorMap -> (LocalRef, ActorMap)
-actorMapSpawn a s (ActorMap m) =
+actorMapSpawn :: (Message -> Actor) -> State -> Time -> ActorMap -> (LocalRef, ActorMap)
+actorMapSpawn a s t (ActorMap m) =
   let
     lref = LocalRef (Map.size m)
   in
-    (lref, ActorMap (Map.insert lref (a, s) m))
+    (lref, ActorMap (Map.insert lref (ActorData a s t) m))
 
 data Action
   = SendAction LocalRef Message RemoteRef Promise
   | AsyncIOAction (IO IOResult) Promise
   | OnAction Promise (Resolution -> Free ActorF ()) LocalRef
+  | SetTimerAction Time.NominalDiffTime Promise
 
 -- XXX: what about exceptions? transactional in state, but also in actions?!
-actorMapTurn :: LocalRef -> Message -> ActorMap
-             -> ((Message, Promise, ActorMap, [Action]), ActorMap)
-actorMapTurn lref0 msg0 am0 =
+actorMapTurn :: LocalRef -> Message -> UTCTime -> Seed -> ActorMap
+             -> ((Message, Promise, Seed, ActorMap, [Action]), ActorMap)
+actorMapTurn lref msg t seed am =
   let
-    a = fst (actorMapUnsafeLookup lref0 am0)
+    a = adActor (actorMapUnsafeLookup lref am)
   in
     -- XXX: Promises should not always start from 0, or they will overlap each
     -- other if more than one turn happens...
-    (actorMapTurn' (Promise 0) [] lref0 (unActor (a msg0)) am0, am0)
+    (actorMapTurn' (Promise 0) [] lref t seed (unActor (a msg)) am, am)
 
-actorMapTurn' :: Promise -> [Action] -> LocalRef -> Free ActorF a -> ActorMap
-              -> (a, Promise, ActorMap, [Action])
-actorMapTurn' p acc _lref (Pure msg) am = (msg, p, am, reverse acc)
-actorMapTurn' p acc  lref (Free op)  am = case op of
+actorMapTurn' :: Promise -> [Action] -> LocalRef -> UTCTime -> Seed -> Free ActorF a
+              -> ActorMap -> (a, Promise, Seed, ActorMap, [Action])
+actorMapTurn' p acc _lref _t seed (Pure msg) am = (msg, p, seed, am, reverse acc)
+actorMapTurn' p acc  lref  t seed (Free op)  am = case op of
   Invoke lref' msg k ->
     let
-      a' = fst (actorMapUnsafeLookup lref' am)
-      (reply, p', am', acc') = actorMapTurn' p acc lref' (unActor (a' msg)) am
+      a' = adActor (actorMapUnsafeLookup lref' am)
+      (reply, p', seed', am', acc') = actorMapTurn' p acc lref' t seed (unActor (a' msg)) am
     in
-      actorMapTurn' p' acc' lref (k reply) am'
+      actorMapTurn' p' acc' lref t seed' (k reply) am'
   Send rref msg k ->
-    actorMapTurn' (p + 1) (SendAction lref msg rref p : acc) lref (k p) am
+    actorMapTurn' (p + 1) (SendAction lref msg rref p : acc) lref t seed (k p) am
   AsyncIO io k ->
-    actorMapTurn' (p + 1) (AsyncIOAction io p : acc) lref (k p) am
+    actorMapTurn' (p + 1) (AsyncIOAction io p : acc) lref t seed (k p) am
   On q c k ->
-    actorMapTurn' p (OnAction q c lref : acc) lref (k ()) am
+    actorMapTurn' p (OnAction q c lref : acc) lref t seed (k ()) am
   Get k ->
-    actorMapTurn' p acc lref (k (snd (actorMapUnsafeLookup lref am))) am
+    actorMapTurn' p acc lref t seed (k (adState (actorMapUnsafeLookup lref am))) am
   Put s' k ->
     case am of
       ActorMap m ->
-        actorMapTurn' p acc lref (k ()) (ActorMap (Map.adjust (\(a, _s) -> (a, s')) lref m))
+        actorMapTurn' p acc lref t seed (k ())
+        (ActorMap (Map.adjust (\(ActorData a _s t') -> ActorData a s' t') lref m))
+  GetTime k -> do
+    actorMapTurn' p acc lref t seed (k t) am
+  Random k ->
+    let
+      (d, seed') = uniform seed
+    in
+      actorMapTurn' p acc lref t seed' (k d) am
+  SetTimer ndt k ->
+    actorMapTurn' (p + 1) (SetTimerAction ndt p : acc) lref t seed (k p) am
 
-actorMapPeek :: LocalRef -> Message -> ActorMap -> (Message, ActorMap)
-actorMapPeek lref msg am =
+actorMapPeek :: LocalRef -> Message -> UTCTime -> Seed -> ActorMap -> (Message, ActorMap)
+actorMapPeek lref msg t seed am =
   let
-    ((reply, _p, _am', _as), _am) = actorMapTurn lref msg am
+    ((reply, _p, _seed, _am', _as), _am) = actorMapTurn lref msg t seed am
   in
     (reply, am)
 
-actorMapPoke :: LocalRef -> Message -> ActorMap -> ((Message, [Action]), ActorMap)
-actorMapPoke lref msg am =
+actorMapPoke :: LocalRef -> Message -> UTCTime -> Seed -> ActorMap
+             -> ((Message, [Action]), ActorMap)
+actorMapPoke lref msg t seed am =
   let
-    ((reply, _p, am', as), _am) = actorMapTurn lref msg am
+    ((reply, _p, _seed', am', as), _am) = actorMapTurn lref msg t seed am
   in
     ((reply, as), am')
 
 actorMapGetState :: LocalRef -> ActorMap -> (State, ActorMap)
-actorMapGetState lref am = (snd (actorMapUnsafeLookup lref am), am)
+actorMapGetState lref am = (adState (actorMapUnsafeLookup lref am), am)
 
 ------------------------------------------------------------------------
 
 makeActorMapIO :: IO (TVar ActorMap)
 makeActorMapIO = newTVarIO emptyActorMap
 
-actorMapSpawnIO :: (Message -> Actor) -> State -> TVar ActorMap -> IO LocalRef
-actorMapSpawnIO a s am = atomically (stateTVar am (actorMapSpawn a s))
+actorMapSpawnIO :: (Message -> Actor) -> State -> Time -> TVar ActorMap -> IO LocalRef
+actorMapSpawnIO a s t am = atomically (stateTVar am (actorMapSpawn a s t))
 
-actorMapTurnIO :: LocalRef -> Message -> TVar ActorMap
-               -> IO (Message, Promise, ActorMap, [Action])
-actorMapTurnIO lref msg am = atomically (stateTVar am (actorMapTurn lref msg))
+actorMapTurnIO :: LocalRef -> Message -> UTCTime -> Seed -> TVar ActorMap
+               -> IO (Message, Promise, Seed, ActorMap, [Action])
+actorMapTurnIO lref msg t seed am = atomically (stateTVar am (actorMapTurn lref msg t seed))
 
-actorMapPeekIO :: LocalRef -> Message -> TVar ActorMap -> IO Message
-actorMapPeekIO lref msg am = atomically (stateTVar am (actorMapPeek lref msg))
+actorMapPeekIO :: LocalRef -> Message -> UTCTime -> Seed -> TVar ActorMap -> IO Message
+actorMapPeekIO lref msg t seed am = atomically (stateTVar am (actorMapPeek lref msg t seed))
 
-actorMapPokeIO :: LocalRef -> Message -> TVar ActorMap -> IO (Message, [Action])
-actorMapPokeIO lref msg am = atomically (stateTVar am (actorMapPoke lref msg))
+actorMapPokeIO :: LocalRef -> Message -> UTCTime -> Seed -> TVar ActorMap
+               -> IO (Message, [Action])
+actorMapPokeIO lref msg t seed am = atomically (stateTVar am (actorMapPoke lref msg t seed))
 
 -- XXX: Promise counter should be used...
+-- XXX: Seed should be updated...
 actorPokeIO :: EventLoop -> LocalRef -> Message -> IO Message
 actorPokeIO ls lref msg = do
-  (reply, as) <- actorMapPokeIO lref msg (lsActorMap ls)
+  now <- getCurrentTime (lsTime ls)
+  seed <- readTVarIO (lsSeed ls)
+  (reply, as) <- actorMapPokeIO lref msg now seed (lsActorMap ls)
   act' ls as
   return reply
 
@@ -230,8 +267,12 @@ data AsyncState = AsyncState
   { asyncStateAsyncIO       :: Map (Async IOResult) Promise
   , asyncStateContinuations :: Map Promise (Resolution -> Free ActorF (), LocalRef)
   , asyncStateAdminSend     :: Map Promise (TMVar Message)
-  , asyncStateTimeouts      :: Heap (Entry UTCTime Promise)
+  , asyncStateTimeouts      :: Heap (Entry UTCTime (TimeoutKind, Promise))
   }
+
+data TimeoutKind
+  = SendTimeout
+  | TimerTimeout
 
 emptyAsyncState :: AsyncState
 emptyAsyncState = AsyncState Map.empty Map.empty Map.empty Heap.empty
@@ -242,6 +283,7 @@ madePromises = foldMap go
     go (SendAction _from _msg _to (Promise i)) = Set.singleton i
     go (AsyncIOAction _io (Promise i)) = Set.singleton i
     go OnAction {} = Set.empty
+    go (SetTimerAction _ndt (Promise i)) = Set.singleton i
 
 act :: EventLoopName -> [Action] -> Time -> Transport IO -> AsyncState -> IO AsyncState
 act name as time transport s0 = foldM go s0 as
@@ -257,7 +299,7 @@ act name as time transport s0 = foldM go s0 as
       -- XXX: make it possible to specify when a send request should timeout.
       let timeoutAfter = Time.addUTCTime 60 t
       return s { asyncStateTimeouts =
-                   Heap.insert (Entry timeoutAfter p) (asyncStateTimeouts s) }
+                   Heap.insert (Entry timeoutAfter (SendTimeout, p)) (asyncStateTimeouts s) }
     go s (AsyncIOAction io p) = do
       -- XXX: Use `asyncOn` a different capability than main loop.
       a <- async io
@@ -269,10 +311,15 @@ act name as time transport s0 = foldM go s0 as
                       Map.insert p (k, lref) (asyncStateContinuations s) })
       | otherwise =
           error "act: impossible, `On` must be supplied with a promise that was just made."
+    go s (SetTimerAction ndt p) = do
+      t <- getCurrentTime time
+      let timeoutAfter = Time.addUTCTime ndt t
+      return s { asyncStateTimeouts =
+                   Heap.insert (Entry timeoutAfter (TimerTimeout, p)) (asyncStateTimeouts s) }
 
 data Reaction
   = Receive Promise Envelope
-  | SendTimeout (Free ActorF ()) LocalRef
+  | SendTimeoutReaction (Free ActorF ()) LocalRef
   | AsyncIOFinished Promise IOResult
   | AsyncIOFailed Promise SomeException
 
@@ -288,7 +335,7 @@ react (Receive p e) s =
     RequestKind  -> (Request e, s)
     ResponseKind ->
       case Map.lookup p (asyncStateContinuations s) of
-        Just (k, lref) -> (ResumeContinuation (k (Right (Right (envelopeMessage e)))) lref,
+        Just (k, lref) -> (ResumeContinuation (k (MessageR (envelopeMessage e))) lref,
                             s { asyncStateContinuations =
                                   Map.delete p (asyncStateContinuations s) })
         Nothing ->
@@ -300,13 +347,13 @@ react (Receive p e) s =
               (AdminSendResponse returnVar (envelopeMessage e),
                 s { asyncStateAdminSend =
                       Map.delete p (asyncStateAdminSend s) })
-react (SendTimeout a lref) s = (ResumeContinuation a lref, s)
+react (SendTimeoutReaction a lref) s = (ResumeContinuation a lref, s)
 react (AsyncIOFinished p result) s =
   case Map.lookup p (asyncStateContinuations s) of
     Nothing ->
       -- No continuation was registered for this async.
       (NothingToDo, s)
-    Just (k, lref) -> (ResumeContinuation (k (Right (Left result))) lref,
+    Just (k, lref) -> (ResumeContinuation (k (IOResultR result)) lref,
                         s { asyncStateContinuations =
                             Map.delete p (asyncStateContinuations s) })
 react (AsyncIOFailed p exception) s =
@@ -314,7 +361,7 @@ react (AsyncIOFailed p exception) s =
     Nothing ->
       -- No continuation was registered for this async.
       (NothingToDo, s)
-    Just (k, lref) -> (ResumeContinuation (k (Left exception)) lref,
+    Just (k, lref) -> (ResumeContinuation (k (ExceptionR exception)) lref,
                         s { asyncStateContinuations =
                             Map.delete p (asyncStateContinuations s) })
 
@@ -340,6 +387,7 @@ data EventLoop = EventLoop
   , lsAsyncState  :: TVar AsyncState
   , lsQueue       :: TBQueue Event
   , lsTime        :: Time
+  , lsSeed        :: TVar Seed
   , lsTransport   :: Transport IO
   , lsPids        :: TVar [Async ()]
   , lsNextPromise :: TVar Promise
@@ -349,25 +397,26 @@ data EventLoop = EventLoop
 data LogEntry
   = LogEntry
 
-initLoopState :: EventLoopName -> Time -> Transport IO -> IO EventLoop
-initLoopState name time t =
+initLoopState :: EventLoopName -> Time -> Seed -> Transport IO -> IO EventLoop
+initLoopState name time seed t =
   EventLoop
     <$> pure name
     <*> newTVarIO emptyActorMap
     <*> newTVarIO emptyAsyncState
     <*> newTBQueueIO 128
     <*> pure time
+    <*> newTVarIO seed
     <*> pure t
     <*> newTVarIO []
     <*> newTVarIO (Promise 0)
     <*> newTVarIO []
 
-makeEventLoop :: Time -> TransportKind -> EventLoopName -> IO EventLoop
-makeEventLoop time tk name = do
+makeEventLoop :: Time -> Seed -> TransportKind -> EventLoopName -> IO EventLoop
+makeEventLoop time seed tk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
-  ls <- initLoopState name time t
+  ls <- initLoopState name time seed t
   aInHandler <- async (handleInbound ls)
   aAsyncIOHandler <- async (handleAsyncIO ls)
   aEvHandler <- async (handleEvents ls)
@@ -426,7 +475,7 @@ handleTimeouts ls = forever go
       now <- getCurrentTime (lsTime ls)
       als <- atomically (stateTVar (lsAsyncState ls) (findTimedout now))
       mapM_ (\(a, lref) ->
-               atomically (writeTBQueue (lsQueue ls) (Reaction (SendTimeout a lref))))
+               atomically (writeTBQueue (lsQueue ls) (Reaction (SendTimeoutReaction a lref))))
         als
 
 findTimedout :: UTCTime -> AsyncState
@@ -434,15 +483,17 @@ findTimedout :: UTCTime -> AsyncState
 findTimedout now s =
   let
     (timedout, heap') = Heap.span (\(Entry t _p) -> t <= now) (asyncStateTimeouts s)
-    ps = map Heap.payload (toList timedout)
-    cs = catMaybes (map (\p -> Map.lookup p (asyncStateContinuations s)) ps)
-    als = map ((\(c, lref) -> (c (Left (error "XXX: timeout")), lref))) cs
-    ks = foldr Map.delete (asyncStateContinuations s) ps
+    ts = map Heap.payload (toList timedout)
+    cs = catMaybes (map (\(tk, p) ->
+                           fmap (\c -> (tk, c)) (Map.lookup p (asyncStateContinuations s))) ts)
+    als = map ((\(tk, (c, lref)) -> case tk of
+                   SendTimeout  -> (c TimeoutR, lref)
+                   TimerTimeout -> (c TimerR, lref))) cs
+    ks = foldr Map.delete (asyncStateContinuations s) (map snd ts)
   in
     (als, s { asyncStateContinuations = ks
             , asyncStateTimeouts      = heap'
             })
-
 
 handleEvents :: EventLoop -> IO ()
 handleEvents ls = forever go
@@ -464,19 +515,22 @@ handleEvent (Reaction r) ls = do
       reply <- actorPokeIO ls lref (envelopeMessage e)
       transportSend (lsTransport ls) (replyEnvelope e reply)
     ResumeContinuation a lref -> do
+      now <- getCurrentTime (lsTime ls)
+      seed <- readTVarIO (lsSeed ls)
       as <- atomically $ do
         am <- readTVar (lsActorMap ls)
         p  <- readTVar (lsNextPromise ls)
-        let ((), p', am', as) = actorMapTurn' p [] lref a am
+        let ((), p', seed', am', as) = actorMapTurn' p [] lref now seed a am
         writeTVar (lsActorMap ls) am'
         writeTVar (lsNextPromise ls) p'
+        writeTVar (lsSeed ls) seed'
         return as
       act' ls as
     AdminSendResponse returnVar msg ->
       atomically (putTMVar returnVar msg)
 handleEvent (Admin cmd) ls = case cmd of
   Spawn a s returnVar -> do
-    lref <- actorMapSpawnIO a s (lsActorMap ls)
+    lref <- actorMapSpawnIO a s (lsTime ls) (lsActorMap ls)
     atomically (putTMVar returnVar lref)
   AdminInvoke lref msg returnVar -> do
     reply <- actorPokeIO ls lref msg
