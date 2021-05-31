@@ -34,6 +34,7 @@ import StuntDouble.EventLoop.Transport
 import StuntDouble.EventLoop.Transport.Http
 import StuntDouble.FreeMonad
 import StuntDouble.Time
+import StuntDouble.Random
 import StuntDouble.Message
 import StuntDouble.Reference
 
@@ -129,57 +130,61 @@ data Action
   | SetTimerAction Time.NominalDiffTime Promise
 
 -- XXX: what about exceptions? transactional in state, but also in actions?!
-actorMapTurn :: LocalRef -> Message -> UTCTime -> ActorMap
-             -> ((Message, Promise, ActorMap, [Action]), ActorMap)
-actorMapTurn lref msg t am =
+actorMapTurn :: LocalRef -> Message -> UTCTime -> Seed -> ActorMap
+             -> ((Message, Promise, Seed, ActorMap, [Action]), ActorMap)
+actorMapTurn lref msg t seed am =
   let
     a = adActor (actorMapUnsafeLookup lref am)
   in
     -- XXX: Promises should not always start from 0, or they will overlap each
     -- other if more than one turn happens...
-    (actorMapTurn' (Promise 0) [] lref t (unActor (a msg)) am, am)
+    (actorMapTurn' (Promise 0) [] lref t seed (unActor (a msg)) am, am)
 
-actorMapTurn' :: Promise -> [Action] -> LocalRef -> UTCTime -> Free ActorF a -> ActorMap
-              -> (a, Promise, ActorMap, [Action])
-actorMapTurn' p acc _lref _t (Pure msg) am = (msg, p, am, reverse acc)
-actorMapTurn' p acc  lref  t (Free op)  am = case op of
+actorMapTurn' :: Promise -> [Action] -> LocalRef -> UTCTime -> Seed -> Free ActorF a
+              -> ActorMap -> (a, Promise, Seed, ActorMap, [Action])
+actorMapTurn' p acc _lref _t seed (Pure msg) am = (msg, p, seed, am, reverse acc)
+actorMapTurn' p acc  lref  t seed (Free op)  am = case op of
   Invoke lref' msg k ->
     let
       a' = adActor (actorMapUnsafeLookup lref' am)
-      (reply, p', am', acc') = actorMapTurn' p acc lref' t (unActor (a' msg)) am
+      (reply, p', seed', am', acc') = actorMapTurn' p acc lref' t seed (unActor (a' msg)) am
     in
-      actorMapTurn' p' acc' lref t (k reply) am'
+      actorMapTurn' p' acc' lref t seed' (k reply) am'
   Send rref msg k ->
-    actorMapTurn' (p + 1) (SendAction lref msg rref p : acc) lref t (k p) am
+    actorMapTurn' (p + 1) (SendAction lref msg rref p : acc) lref t seed (k p) am
   AsyncIO io k ->
-    actorMapTurn' (p + 1) (AsyncIOAction io p : acc) lref t (k p) am
+    actorMapTurn' (p + 1) (AsyncIOAction io p : acc) lref t seed (k p) am
   On q c k ->
-    actorMapTurn' p (OnAction q c lref : acc) lref t (k ()) am
+    actorMapTurn' p (OnAction q c lref : acc) lref t seed (k ()) am
   Get k ->
-    actorMapTurn' p acc lref t (k (adState (actorMapUnsafeLookup lref am))) am
+    actorMapTurn' p acc lref t seed (k (adState (actorMapUnsafeLookup lref am))) am
   Put s' k ->
     case am of
       ActorMap m ->
-        actorMapTurn' p acc lref t (k ())
+        actorMapTurn' p acc lref t seed (k ())
         (ActorMap (Map.adjust (\(ActorData a _s t') -> ActorData a s' t') lref m))
   GetTime k -> do
-    actorMapTurn' p acc lref t (k t) am
+    actorMapTurn' p acc lref t seed (k t) am
   Random k ->
-    error "XXX: need seed from `EventLoop`..."
+    let
+      (d, seed') = uniform seed
+    in
+      actorMapTurn' p acc lref t seed' (k d) am
   SetTimer ndt k ->
-    actorMapTurn' (p + 1) (SetTimerAction ndt p : acc) lref t (k p) am
+    actorMapTurn' (p + 1) (SetTimerAction ndt p : acc) lref t seed (k p) am
 
-actorMapPeek :: LocalRef -> Message -> UTCTime -> ActorMap -> (Message, ActorMap)
-actorMapPeek lref msg t am =
+actorMapPeek :: LocalRef -> Message -> UTCTime -> Seed -> ActorMap -> (Message, ActorMap)
+actorMapPeek lref msg t seed am =
   let
-    ((reply, _p, _am', _as), _am) = actorMapTurn lref msg t am
+    ((reply, _p, _seed, _am', _as), _am) = actorMapTurn lref msg t seed am
   in
     (reply, am)
 
-actorMapPoke :: LocalRef -> Message -> UTCTime -> ActorMap -> ((Message, [Action]), ActorMap)
-actorMapPoke lref msg t am =
+actorMapPoke :: LocalRef -> Message -> UTCTime -> Seed -> ActorMap
+             -> ((Message, [Action]), ActorMap)
+actorMapPoke lref msg t seed am =
   let
-    ((reply, _p, am', as), _am) = actorMapTurn lref msg t am
+    ((reply, _p, _seed', am', as), _am) = actorMapTurn lref msg t seed am
   in
     ((reply, as), am')
 
@@ -194,21 +199,24 @@ makeActorMapIO = newTVarIO emptyActorMap
 actorMapSpawnIO :: (Message -> Actor) -> State -> Time -> TVar ActorMap -> IO LocalRef
 actorMapSpawnIO a s t am = atomically (stateTVar am (actorMapSpawn a s t))
 
-actorMapTurnIO :: LocalRef -> Message -> UTCTime -> TVar ActorMap
-               -> IO (Message, Promise, ActorMap, [Action])
-actorMapTurnIO lref msg t am = atomically (stateTVar am (actorMapTurn lref msg t))
+actorMapTurnIO :: LocalRef -> Message -> UTCTime -> Seed -> TVar ActorMap
+               -> IO (Message, Promise, Seed, ActorMap, [Action])
+actorMapTurnIO lref msg t seed am = atomically (stateTVar am (actorMapTurn lref msg t seed))
 
-actorMapPeekIO :: LocalRef -> Message -> UTCTime -> TVar ActorMap -> IO Message
-actorMapPeekIO lref msg t am = atomically (stateTVar am (actorMapPeek lref msg t))
+actorMapPeekIO :: LocalRef -> Message -> UTCTime -> Seed -> TVar ActorMap -> IO Message
+actorMapPeekIO lref msg t seed am = atomically (stateTVar am (actorMapPeek lref msg t seed))
 
-actorMapPokeIO :: LocalRef -> Message -> UTCTime -> TVar ActorMap -> IO (Message, [Action])
-actorMapPokeIO lref msg t am = atomically (stateTVar am (actorMapPoke lref msg t))
+actorMapPokeIO :: LocalRef -> Message -> UTCTime -> Seed -> TVar ActorMap
+               -> IO (Message, [Action])
+actorMapPokeIO lref msg t seed am = atomically (stateTVar am (actorMapPoke lref msg t seed))
 
 -- XXX: Promise counter should be used...
+-- XXX: Seed should be updated...
 actorPokeIO :: EventLoop -> LocalRef -> Message -> IO Message
 actorPokeIO ls lref msg = do
   now <- getCurrentTime (lsTime ls)
-  (reply, as) <- actorMapPokeIO lref msg now (lsActorMap ls)
+  seed <- readTVarIO (lsSeed ls)
+  (reply, as) <- actorMapPokeIO lref msg now seed (lsActorMap ls)
   act' ls as
   return reply
 
@@ -375,6 +383,7 @@ data EventLoop = EventLoop
   , lsAsyncState  :: TVar AsyncState
   , lsQueue       :: TBQueue Event
   , lsTime        :: Time
+  , lsSeed        :: TVar Seed
   , lsTransport   :: Transport IO
   , lsPids        :: TVar [Async ()]
   , lsNextPromise :: TVar Promise
@@ -384,25 +393,26 @@ data EventLoop = EventLoop
 data LogEntry
   = LogEntry
 
-initLoopState :: EventLoopName -> Time -> Transport IO -> IO EventLoop
-initLoopState name time t =
+initLoopState :: EventLoopName -> Time -> Seed -> Transport IO -> IO EventLoop
+initLoopState name time seed t =
   EventLoop
     <$> pure name
     <*> newTVarIO emptyActorMap
     <*> newTVarIO emptyAsyncState
     <*> newTBQueueIO 128
     <*> pure time
+    <*> newTVarIO seed
     <*> pure t
     <*> newTVarIO []
     <*> newTVarIO (Promise 0)
     <*> newTVarIO []
 
-makeEventLoop :: Time -> TransportKind -> EventLoopName -> IO EventLoop
-makeEventLoop time tk name = do
+makeEventLoop :: Time -> Seed -> TransportKind -> EventLoopName -> IO EventLoop
+makeEventLoop time seed tk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
-  ls <- initLoopState name time t
+  ls <- initLoopState name time seed t
   aInHandler <- async (handleInbound ls)
   aAsyncIOHandler <- async (handleAsyncIO ls)
   aEvHandler <- async (handleEvents ls)
@@ -503,12 +513,14 @@ handleEvent (Reaction r) ls = do
       transportSend (lsTransport ls) (replyEnvelope e reply)
     ResumeContinuation a lref -> do
       now <- getCurrentTime (lsTime ls)
+      seed <- readTVarIO (lsSeed ls)
       as <- atomically $ do
         am <- readTVar (lsActorMap ls)
         p  <- readTVar (lsNextPromise ls)
-        let ((), p', am', as) = actorMapTurn' p [] lref now a am
+        let ((), p', seed', am', as) = actorMapTurn' p [] lref now seed a am
         writeTVar (lsActorMap ls) am'
         writeTVar (lsNextPromise ls) p'
+        writeTVar (lsSeed ls) seed'
         return as
       act' ls as
     AdminSendResponse returnVar msg ->
