@@ -52,6 +52,13 @@ newtype Actor = Actor { unActor :: Free ActorF Message }
 -- force the user to supply an exception continuation?
 type Resolution = Either SomeException (Either IOResult Message)
 
+data Resolution'
+  = TimeoutR
+  | TimerR
+  | IOResultR IOResult
+  | MessageR Message
+  | ExceptionR SomeException
+
 data ActorF x
   = Invoke LocalRef Message (Message -> x)
   | Send RemoteRef Message (Promise -> x)

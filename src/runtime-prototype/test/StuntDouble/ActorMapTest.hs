@@ -15,6 +15,7 @@ import StuntDouble.Datatype
 import StuntDouble.EventLoop.Transport
 import StuntDouble.FreeMonad
 import StuntDouble.Message
+import StuntDouble.Random
 import StuntDouble.Reference
 import StuntDouble.Time
 
@@ -23,7 +24,7 @@ import StuntDouble.Time
 withEventLoop :: EventLoopName -> (EventLoop -> FakeTimeHandle -> IO ()) -> IO ()
 withEventLoop name k = do
   (time, h) <- fakeTimeEpoch
-  el <- makeEventLoop time (NamedPipe "/tmp") name
+  el <- makeEventLoop time (makeSeed 0) (NamedPipe "/tmp") name
   k el h
   quit el
 
@@ -75,8 +76,8 @@ unit_actorMapOnAndState = do
   (time, h) <- fakeTimeEpoch
   reply2 <- catch (do let evA = eventLoopA "onAndState"
                           evB = eventLoopB "onAndState"
-                      elA <- makeEventLoop time (NamedPipe "/tmp") evA
-                      elB <- makeEventLoop time (NamedPipe "/tmp") evB
+                      elA <- makeEventLoop time (makeSeed 0) (NamedPipe "/tmp") evA
+                      elB <- makeEventLoop time (makeSeed 0) (NamedPipe "/tmp") evB
                       lref1 <- spawn elA testActor1 emptyState
                       let rref1 = localToRemoteRef evA lref1
                       lref2 <- spawn elB (testActor2 rref1) (stateFromList [("x", Integer 0)])
@@ -144,3 +145,25 @@ unit_actorMapSendTimeout = do
     threadDelay 100000
     s' <- getActorState el lref
     s' @?= stateFromList [("x", Integer 1)]
+
+------------------------------------------------------------------------
+
+testActor6 :: Message -> Actor
+testActor6 (Message "go") = Actor $ do
+  d <- random
+  t <- getTime
+  return (Message (show d ++ " " ++ show t))
+
+unit_actorMapRandomAndTime :: Assertion
+unit_actorMapRandomAndTime = do
+  let ev = eventLoopA "random_and_time"
+  withEventLoop ev $ \el h -> do
+    lref <- spawn el testActor6 emptyState
+    result <- ainvoke el lref (Message "go")
+    result @?= Message "0.9871468153391151 1970-01-01 00:00:00 UTC"
+    advanceFakeTime h 1
+    result2 <- ainvoke el lref (Message "go")
+    -- XXX: This is wrong, because seed doesn't get updated...
+    result2 @?= Message "0.9871468153391151 1970-01-01 00:00:01 UTC"
+
+-- XXX: Test timers...
