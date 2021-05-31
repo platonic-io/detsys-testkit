@@ -166,4 +166,24 @@ unit_actorMapRandomAndTime = do
     -- XXX: This is wrong, because seed doesn't get updated...
     result2 @?= Message "0.9871468153391151 1970-01-01 00:00:01 UTC"
 
--- XXX: Test timers...
+testActor7 :: Message -> Actor
+testActor7 (Message "go") = Actor $ do
+  p <- setTimer 10
+  on p (\TimerR -> modify (add "x" 1))
+  return (Message "done")
+
+unit_actorMapTimer :: Assertion
+unit_actorMapTimer = do
+  let ev = eventLoopA "timer"
+  withEventLoop ev $ \el h -> do
+    lref <- spawn el testActor7 (stateFromList [("x", Integer 0)])
+    _done <- ainvoke el lref (Message "go")
+    -- Timer happens after 10 seconds.
+    advanceFakeTime h 9
+    threadDelay 10000
+    s <- getActorState el lref
+    s @?= stateFromList [("x", Integer 0)]
+    advanceFakeTime h 1
+    threadDelay 10000
+    s' <- getActorState el lref
+    s' @?= stateFromList [("x", Integer 1)]
