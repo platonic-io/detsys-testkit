@@ -96,25 +96,31 @@ setTimer ndt = Free (SetTimer ndt return)
 
 ------------------------------------------------------------------------
 
-newtype ActorMap = ActorMap (Map LocalRef (Message -> Actor, State))
+newtype ActorMap = ActorMap (Map LocalRef ActorData)
+
+data ActorData = ActorData
+  { adActor :: Message -> Actor
+  , adState :: State
+  , adTime  :: Time
+  }
 
 emptyActorMap :: ActorMap
 emptyActorMap = ActorMap Map.empty
 
-actorMapLookup :: LocalRef -> ActorMap -> Maybe (Message -> Actor, State)
+actorMapLookup :: LocalRef -> ActorMap -> Maybe ActorData
 actorMapLookup lref (ActorMap m) = Map.lookup lref m
 
-actorMapUnsafeLookup :: LocalRef -> ActorMap -> (Message -> Actor, State)
+actorMapUnsafeLookup :: LocalRef -> ActorMap -> ActorData
 actorMapUnsafeLookup lref am = case actorMapLookup lref am of
   Nothing -> error ("actorMapUnsafeLookup: `" ++ show lref ++ "' not in actor map.")
   Just v  -> v
 
-actorMapSpawn :: (Message -> Actor) -> State -> ActorMap -> (LocalRef, ActorMap)
-actorMapSpawn a s (ActorMap m) =
+actorMapSpawn :: (Message -> Actor) -> State -> Time -> ActorMap -> (LocalRef, ActorMap)
+actorMapSpawn a s t (ActorMap m) =
   let
     lref = LocalRef (Map.size m)
   in
-    (lref, ActorMap (Map.insert lref (a, s) m))
+    (lref, ActorMap (Map.insert lref (ActorData a s t) m))
 
 data Action
   = SendAction LocalRef Message RemoteRef Promise
@@ -123,88 +129,86 @@ data Action
   | SetTimerAction Time.NominalDiffTime Promise
 
 -- XXX: what about exceptions? transactional in state, but also in actions?!
-actorMapTurn :: LocalRef -> Message -> ActorMap
+actorMapTurn :: LocalRef -> Message -> UTCTime -> ActorMap
              -> ((Message, Promise, ActorMap, [Action]), ActorMap)
-actorMapTurn lref0 msg0 am0 =
+actorMapTurn lref msg t am =
   let
-    a = fst (actorMapUnsafeLookup lref0 am0)
+    a = adActor (actorMapUnsafeLookup lref am)
   in
     -- XXX: Promises should not always start from 0, or they will overlap each
     -- other if more than one turn happens...
-    (actorMapTurn' (Promise 0) [] lref0 (unActor (a msg0)) am0, am0)
+    (actorMapTurn' (Promise 0) [] lref t (unActor (a msg)) am, am)
 
-actorMapTurn' :: Promise -> [Action] -> LocalRef -> Free ActorF a -> ActorMap
+actorMapTurn' :: Promise -> [Action] -> LocalRef -> UTCTime -> Free ActorF a -> ActorMap
               -> (a, Promise, ActorMap, [Action])
-actorMapTurn' p acc _lref (Pure msg) am = (msg, p, am, reverse acc)
-actorMapTurn' p acc  lref (Free op)  am = case op of
+actorMapTurn' p acc _lref _t (Pure msg) am = (msg, p, am, reverse acc)
+actorMapTurn' p acc  lref  t (Free op)  am = case op of
   Invoke lref' msg k ->
     let
-      a' = fst (actorMapUnsafeLookup lref' am)
-      (reply, p', am', acc') = actorMapTurn' p acc lref' (unActor (a' msg)) am
+      a' = adActor (actorMapUnsafeLookup lref' am)
+      (reply, p', am', acc') = actorMapTurn' p acc lref' t (unActor (a' msg)) am
     in
-      actorMapTurn' p' acc' lref (k reply) am'
+      actorMapTurn' p' acc' lref t (k reply) am'
   Send rref msg k ->
-    actorMapTurn' (p + 1) (SendAction lref msg rref p : acc) lref (k p) am
+    actorMapTurn' (p + 1) (SendAction lref msg rref p : acc) lref t (k p) am
   AsyncIO io k ->
-    actorMapTurn' (p + 1) (AsyncIOAction io p : acc) lref (k p) am
+    actorMapTurn' (p + 1) (AsyncIOAction io p : acc) lref t (k p) am
   On q c k ->
-    actorMapTurn' p (OnAction q c lref : acc) lref (k ()) am
+    actorMapTurn' p (OnAction q c lref : acc) lref t (k ()) am
   Get k ->
-    actorMapTurn' p acc lref (k (snd (actorMapUnsafeLookup lref am))) am
+    actorMapTurn' p acc lref t (k (adState (actorMapUnsafeLookup lref am))) am
   Put s' k ->
     case am of
       ActorMap m ->
-        actorMapTurn' p acc lref (k ()) (ActorMap (Map.adjust (\(a, _s) -> (a, s')) lref m))
-  GetTime k ->
-    -- XXX: Should time live in the actor map (so each actor can have a
-    -- different perception of what the time is), or should time live in the
-    -- event loop? The former can be useful for simulating time scews even
-    -- though all actors are run in the same event loop.
-    actorMapTurn' p acc lref (k (error "XXX: need current time here...")) am
+        actorMapTurn' p acc lref t (k ())
+        (ActorMap (Map.adjust (\(ActorData a _s t') -> ActorData a s' t') lref m))
+  GetTime k -> do
+    actorMapTurn' p acc lref t (k t) am
   Random k ->
     error "XXX: need seed from `EventLoop`..."
   SetTimer ndt k ->
-    actorMapTurn' (p + 1) (SetTimerAction ndt p : acc) lref (k p) am
+    actorMapTurn' (p + 1) (SetTimerAction ndt p : acc) lref t (k p) am
 
-actorMapPeek :: LocalRef -> Message -> ActorMap -> (Message, ActorMap)
-actorMapPeek lref msg am =
+actorMapPeek :: LocalRef -> Message -> UTCTime -> ActorMap -> (Message, ActorMap)
+actorMapPeek lref msg t am =
   let
-    ((reply, _p, _am', _as), _am) = actorMapTurn lref msg am
+    ((reply, _p, _am', _as), _am) = actorMapTurn lref msg t am
   in
     (reply, am)
 
-actorMapPoke :: LocalRef -> Message -> ActorMap -> ((Message, [Action]), ActorMap)
-actorMapPoke lref msg am =
+actorMapPoke :: LocalRef -> Message -> UTCTime -> ActorMap -> ((Message, [Action]), ActorMap)
+actorMapPoke lref msg t am =
   let
-    ((reply, _p, am', as), _am) = actorMapTurn lref msg am
+    ((reply, _p, am', as), _am) = actorMapTurn lref msg t am
   in
     ((reply, as), am')
 
 actorMapGetState :: LocalRef -> ActorMap -> (State, ActorMap)
-actorMapGetState lref am = (snd (actorMapUnsafeLookup lref am), am)
+actorMapGetState lref am = (adState (actorMapUnsafeLookup lref am), am)
 
 ------------------------------------------------------------------------
 
 makeActorMapIO :: IO (TVar ActorMap)
 makeActorMapIO = newTVarIO emptyActorMap
 
-actorMapSpawnIO :: (Message -> Actor) -> State -> TVar ActorMap -> IO LocalRef
-actorMapSpawnIO a s am = atomically (stateTVar am (actorMapSpawn a s))
+actorMapSpawnIO :: (Message -> Actor) -> State -> Time -> TVar ActorMap -> IO LocalRef
+actorMapSpawnIO a s t am = atomically (stateTVar am (actorMapSpawn a s t))
 
-actorMapTurnIO :: LocalRef -> Message -> TVar ActorMap
+actorMapTurnIO :: LocalRef -> Message -> UTCTime -> TVar ActorMap
                -> IO (Message, Promise, ActorMap, [Action])
-actorMapTurnIO lref msg am = atomically (stateTVar am (actorMapTurn lref msg))
+actorMapTurnIO lref msg t am = atomically (stateTVar am (actorMapTurn lref msg t))
 
-actorMapPeekIO :: LocalRef -> Message -> TVar ActorMap -> IO Message
-actorMapPeekIO lref msg am = atomically (stateTVar am (actorMapPeek lref msg))
+actorMapPeekIO :: LocalRef -> Message -> UTCTime -> TVar ActorMap -> IO Message
+actorMapPeekIO lref msg t am = atomically (stateTVar am (actorMapPeek lref msg t))
 
-actorMapPokeIO :: LocalRef -> Message -> TVar ActorMap -> IO (Message, [Action])
-actorMapPokeIO lref msg am = atomically (stateTVar am (actorMapPoke lref msg))
+actorMapPokeIO :: LocalRef -> Message -> UTCTime -> TVar ActorMap -> IO (Message, [Action])
+actorMapPokeIO lref msg t am = atomically (stateTVar am (actorMapPoke lref msg t))
 
 -- XXX: Promise counter should be used...
 actorPokeIO :: EventLoop -> LocalRef -> Message -> IO Message
 actorPokeIO ls lref msg = do
-  (reply, as) <- actorMapPokeIO lref msg (lsActorMap ls)
+  now <- getCurrentTime (lsTime ls)
+  (reply, as) <- actorMapPokeIO lref msg now (lsActorMap ls)
   act' ls as
   return reply
 
@@ -471,7 +475,7 @@ findTimedout now s =
     als = map ((\(tk, (c, lref)) -> case tk of
                    -- XXX: Introduce `Timer` in `Resolution`.
                    SendTimeout  -> (c (Left (error "XXX: timeout")), lref)
-                   TimerTimeout -> (c (Left (error "XXX: tick")), lref))) cs
+                   TimerTimeout -> (c (Left (error "XXX: tick, do we need the current time here?")), lref))) cs
     ks = foldr Map.delete (asyncStateContinuations s) (map snd ts)
   in
     (als, s { asyncStateContinuations = ks
@@ -498,10 +502,11 @@ handleEvent (Reaction r) ls = do
       reply <- actorPokeIO ls lref (envelopeMessage e)
       transportSend (lsTransport ls) (replyEnvelope e reply)
     ResumeContinuation a lref -> do
+      now <- getCurrentTime (lsTime ls)
       as <- atomically $ do
         am <- readTVar (lsActorMap ls)
         p  <- readTVar (lsNextPromise ls)
-        let ((), p', am', as) = actorMapTurn' p [] lref a am
+        let ((), p', am', as) = actorMapTurn' p [] lref now a am
         writeTVar (lsActorMap ls) am'
         writeTVar (lsNextPromise ls) p'
         return as
@@ -510,7 +515,7 @@ handleEvent (Reaction r) ls = do
       atomically (putTMVar returnVar msg)
 handleEvent (Admin cmd) ls = case cmd of
   Spawn a s returnVar -> do
-    lref <- actorMapSpawnIO a s (lsActorMap ls)
+    lref <- actorMapSpawnIO a s (lsTime ls) (lsActorMap ls)
     atomically (putTMVar returnVar lref)
   AdminInvoke lref msg returnVar -> do
     reply <- actorPokeIO ls lref msg
