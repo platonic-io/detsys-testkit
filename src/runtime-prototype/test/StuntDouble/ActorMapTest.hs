@@ -60,7 +60,7 @@ testActor1 (Message "inc") = Actor (return (Message "ack"))
 testActor2 :: RemoteRef -> Message -> Actor
 testActor2 rref msg@(Message "inc") = Actor $ do
   p <- send rref msg
-  on p (\(Right (Right (Message "ack"))) -> modify (add "x" 1))
+  on p (\(MessageR (Message "ack")) -> modify (add "x" 1))
   return (Message "inced")
 testActor2 _rref (Message "sum") = Actor $ do
   s <- get
@@ -96,7 +96,7 @@ unit_actorMapOnAndState = do
 testActor3 :: Message -> Actor
 testActor3 (Message "go") = Actor $ do
   p <- asyncIO (return (String "io done"))
-  on p (\(Right (Left (String "io done"))) -> modify (add "x" 1))
+  on p (\(IOResultR (String "io done")) -> modify (add "x" 1))
   return (Message "done")
 
 unit_actorMapIO :: Assertion
@@ -110,7 +110,7 @@ unit_actorMapIO = withEventLoop (eventLoopA "io") $ \el _h -> do
 testActor4 :: Message -> Actor
 testActor4 (Message "go") = Actor $ do
   p <- asyncIO (error "failed")
-  on p (\(Left _exception) -> modify (add "x" 1))
+  on p (\(ExceptionR _exception) -> modify (add "x" 1))
   return (Message "done")
 
 unit_actorMapIOFail :: Assertion
@@ -126,7 +126,7 @@ unit_actorMapIOFail = withEventLoop (eventLoopA "io_fail") $ \el _h -> do
 testActor5 :: RemoteRef -> Message -> Actor
 testActor5 rref (Message "go") = Actor $ do
   p <- send rref (Message "hi")
-  on p (\(Left _exception) -> modify (add "x" 1))
+  on p (\TimeoutR -> modify (add "x" 1))
   return (Message "done")
 
 unit_actorMapSendTimeout :: Assertion

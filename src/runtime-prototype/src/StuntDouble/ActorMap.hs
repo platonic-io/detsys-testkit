@@ -48,11 +48,8 @@ unPromise (Promise i) = i
 
 newtype Actor = Actor { unActor :: Free ActorF Message }
 
--- XXX: Introduce new datatype rather than nested eithers. Should we always
--- force the user to supply an exception continuation?
-type Resolution = Either SomeException (Either IOResult Message)
-
-data Resolution'
+-- XXX: Should we always force the user to supply an exception continuation?
+data Resolution
   = TimeoutR
   | TimerR
   | IOResultR IOResult
@@ -338,7 +335,7 @@ react (Receive p e) s =
     RequestKind  -> (Request e, s)
     ResponseKind ->
       case Map.lookup p (asyncStateContinuations s) of
-        Just (k, lref) -> (ResumeContinuation (k (Right (Right (envelopeMessage e)))) lref,
+        Just (k, lref) -> (ResumeContinuation (k (MessageR (envelopeMessage e))) lref,
                             s { asyncStateContinuations =
                                   Map.delete p (asyncStateContinuations s) })
         Nothing ->
@@ -356,7 +353,7 @@ react (AsyncIOFinished p result) s =
     Nothing ->
       -- No continuation was registered for this async.
       (NothingToDo, s)
-    Just (k, lref) -> (ResumeContinuation (k (Right (Left result))) lref,
+    Just (k, lref) -> (ResumeContinuation (k (IOResultR result)) lref,
                         s { asyncStateContinuations =
                             Map.delete p (asyncStateContinuations s) })
 react (AsyncIOFailed p exception) s =
@@ -364,7 +361,7 @@ react (AsyncIOFailed p exception) s =
     Nothing ->
       -- No continuation was registered for this async.
       (NothingToDo, s)
-    Just (k, lref) -> (ResumeContinuation (k (Left exception)) lref,
+    Just (k, lref) -> (ResumeContinuation (k (ExceptionR exception)) lref,
                         s { asyncStateContinuations =
                             Map.delete p (asyncStateContinuations s) })
 
@@ -490,9 +487,8 @@ findTimedout now s =
     cs = catMaybes (map (\(tk, p) ->
                            fmap (\c -> (tk, c)) (Map.lookup p (asyncStateContinuations s))) ts)
     als = map ((\(tk, (c, lref)) -> case tk of
-                   -- XXX: Introduce `Timer` in `Resolution`.
-                   SendTimeout  -> (c (Left (error "XXX: timeout")), lref)
-                   TimerTimeout -> (c (Left (error "XXX: tick, do we need the current time here?")), lref))) cs
+                   SendTimeout  -> (c TimeoutR, lref)
+                   TimerTimeout -> (c TimerR, lref))) cs
     ks = foldr Map.delete (asyncStateContinuations s) (map snd ts)
   in
     (als, s { asyncStateContinuations = ks
