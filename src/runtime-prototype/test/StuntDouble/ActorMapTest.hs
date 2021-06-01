@@ -163,8 +163,7 @@ unit_actorMapRandomAndTime = do
     result @?= Message "0.9871468153391151 1970-01-01 00:00:00 UTC"
     advanceFakeTime h 1
     result2 <- ainvoke el lref (Message "go")
-    -- XXX: This is wrong, because seed doesn't get updated...
-    result2 @?= Message "0.9871468153391151 1970-01-01 00:00:01 UTC"
+    result2 @?= Message "6.761085639865827e-2 1970-01-01 00:00:01 UTC"
 
 testActor7 :: Message -> Actor
 testActor7 (Message "go") = Actor $ do

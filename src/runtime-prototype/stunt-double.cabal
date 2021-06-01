@@ -30,6 +30,7 @@ library
     StuntDouble.Datatype
     StuntDouble.Time
     StuntDouble.Random
+    StuntDouble.Log
     StuntDouble.EventLoop
     StuntDouble.EventLoop.AsyncIOHandler
     StuntDouble.EventLoop.Event
