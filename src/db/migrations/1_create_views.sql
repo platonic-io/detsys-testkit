@@ -9,7 +9,7 @@ CREATE VIEW IF NOT EXISTS execution_step AS
     json_extract(data, '$.log-lines')      AS log_lines,
     json_extract(data, '$.diff')           AS heap_diff
   FROM event_log
-  WHERE event LIKE 'ExecutionStep';
+  WHERE event = 'ExecutionStep';
 
 CREATE VIEW IF NOT EXISTS jepsen_history AS
   SELECT
@@ -20,7 +20,7 @@ CREATE VIEW IF NOT EXISTS jepsen_history AS
     json_extract(data, '$.args')           AS args,
     json_extract(data, '$.jepsen-process') AS process
   FROM event_log
-  WHERE event LIKE 'NetworkTrace'
+  WHERE event = 'NetworkTrace'
   AND json_extract(data, '$.jepsen-type') IS NOT NULL;
 
 CREATE VIEW IF NOT EXISTS network_trace AS
@@ -37,7 +37,7 @@ CREATE VIEW IF NOT EXISTS network_trace AS
     json_extract(data, '$.recv-simulated-time') AS recv_simulated_time,
     json_extract(data, '$.dropped')             AS dropped
   FROM event_log
-  WHERE event LIKE 'NetworkTrace';
+  WHERE event = 'NetworkTrace';
 
 CREATE VIEW IF NOT EXISTS run_info AS
   SELECT
@@ -49,7 +49,7 @@ CREATE VIEW IF NOT EXISTS run_info AS
     json_extract(data, '$.max-time-ns')    AS max_time_ns,
     json_extract(data, '$.min-time-ns')    AS min_time_ns
   FROM event_log
-  WHERE event LIKE 'CreateRun';
+  WHERE event = 'CreateRun';
 
 CREATE VIEW IF NOT EXISTS test_info AS
   SELECT
@@ -58,12 +58,16 @@ CREATE VIEW IF NOT EXISTS test_info AS
     json_extract(data, '$.deployment') AS deployment,
     at                                 AS created_time
   FROM event_log
-  WHERE event LIKE 'CreateTest';
+  WHERE event = 'CreateTest';
 
 CREATE INDEX IF NOT EXISTS idx_test_id
-  ON event_log(json_extract(meta, '$.test-id'));
+  ON event_log(json_extract(meta, '$.test-id'), event);
+
+CREATE INDEX IF NOT EXISTS idx_run_id
+  ON event_log(json_extract(meta, '$.test-id'), json_extract(meta, '$.run-id'), event);
 
 -- +migrate Down
+DROP INDEX IF EXISTS idx_run_id;
 DROP INDEX IF EXISTS idx_test_id;
 
 DROP VIEW IF EXISTS execution_step;
