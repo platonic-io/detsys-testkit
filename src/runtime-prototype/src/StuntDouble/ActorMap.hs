@@ -426,6 +426,8 @@ makeEventLoop time seed tk name = do
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
   ls <- initLoopState name time seed t
+  -- XXX: all these async handlers introduce non-determinism, we would need a
+  -- way to synchronise them if we wanted complete determinism...
   aInHandler <- async (handleInbound ls)
   aAsyncIOHandler <- async (handleAsyncIO ls)
   aEvHandler <- async (handleEvents ls)
@@ -514,7 +516,7 @@ handleEvents ls = forever go
                   putStrLn ("handleEvents: exception: " ++ show ex)
 
 handleEvent :: Event -> EventLoop -> IO ()
-handleEvent (Action a) ls = act' ls [a]
+handleEvent (Action a)   ls = act' ls [a]
 handleEvent (Reaction r) ls = do
   m <- reactIO r (lsAsyncState ls)
   case m of
