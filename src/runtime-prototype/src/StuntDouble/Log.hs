@@ -11,8 +11,8 @@ newtype Log = Log [LogEntry]
 data LogEntry
   = Spawned LocalRef State
   | Turn TurnData
-  | ClientRequest
-  | ClientResponse
+  | ClientRequestEntry
+  | ClientResponseEntry
 
 data TurnData = TurnData
   { tdActor         :: LocalRef
