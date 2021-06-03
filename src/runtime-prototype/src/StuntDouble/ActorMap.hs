@@ -54,7 +54,7 @@ data Resolution
   = TimeoutR
   | TimerR
   | IOResultR IOResult
-  | MessageR Message
+  | InternalMessageR Message
   | ExceptionR SomeException
 
 data ActorF x
@@ -275,7 +275,6 @@ clientRequest ls lref msg = do
   cref <- atomically (stateTVar (lsNextPromise ls) (\p -> (ClientRef (unPromise p), p + 1)))
   returnVar <- newEmptyTMVarIO
   respVar <- newEmptyTMVarIO
-  -- XXX: assoc cref respVar ls
   atomically (modifyTVar' (lsAsyncState ls)
               (\s -> s { asyncStateClientResponses =
                          Map.insert cref respVar (asyncStateClientResponses s) }))
@@ -354,7 +353,7 @@ act name as time transport s0 = foldM go s0 as
       let respVar = asyncStateClientResponses s Map.! cref -- XXX: partial
       atomically (putTMVar respVar msg)
       return s
-        { asyncStateClientResponses = Map.delete cref (asyncStateClientResponses s)}
+        { asyncStateClientResponses = Map.delete cref (asyncStateClientResponses s) }
 
 data Reaction
   = Receive Promise Envelope
@@ -374,7 +373,7 @@ react (Receive p e) s =
     RequestKind  -> (Request e, s)
     ResponseKind ->
       case Map.lookup p (asyncStateContinuations s) of
-        Just (k, lref) -> (ResumeContinuation (k (MessageR (envelopeMessage e))) lref,
+        Just (k, lref) -> (ResumeContinuation (k (InternalMessageR (envelopeMessage e))) lref,
                             s { asyncStateContinuations =
                                   Map.delete p (asyncStateContinuations s) })
         Nothing ->
@@ -587,5 +586,5 @@ handleEvent (Admin cmd) ls = case cmd of
     threadDelay 100000
     mapM_ cancel pids
 handleEvent (ClientRequestEvent lref msg cref returnVar) ls = do
-  reply <- actorPokeIO ls lref msg -- XXX: cref needs to be fed in here...
+  reply <- actorPokeIO ls lref (ClientRequest (getMessage msg) cref)
   atomically (putTMVar returnVar reply)

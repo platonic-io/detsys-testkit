@@ -93,3 +93,7 @@ instance FromJSON RemoteRef
 deriving instance Generic CorrelationId
 instance ToJSON CorrelationId
 instance FromJSON CorrelationId
+
+deriving instance Generic ClientRef
+instance ToJSON ClientRef
+instance FromJSON ClientRef

@@ -92,7 +92,6 @@ test-suite test
   other-modules:
     StuntDouble.ActorMapTest
     StuntDouble.EventLoop.TransportTest
-    StuntDouble.EventLoopTest
     StuntDouble.SchedulerTest
     TastyDiscover
   -- TODO(stevan: This doesn't work, because tasty-discovery finds the module

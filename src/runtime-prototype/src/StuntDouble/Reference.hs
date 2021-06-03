@@ -25,4 +25,4 @@ newtype EventLoopName = EventLoopName { getEventLoopName :: String }
   deriving (Eq, Ord, Show, IsString)
 
 newtype ClientRef = ClientRef Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Read)

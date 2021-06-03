@@ -32,15 +32,15 @@ eventLoopA :: String -> EventLoopName
 eventLoopA suffix = EventLoopName ("event-loop-actormap-a" ++ "-" ++ suffix)
 
 testActor :: Message -> Actor
-testActor (Message "hi") = Actor (return (Message "bye!"))
+testActor (InternalMessage "hi") = Actor (return (InternalMessage "bye!"))
 
 ------------------------------------------------------------------------
 
 unit_actorMapInvoke :: Assertion
 unit_actorMapInvoke = withEventLoop (eventLoopA "invoke") $ \el _h -> do
   lref <- spawn el testActor emptyState
-  reply <- ainvoke el lref (Message "hi")
-  reply @?= Message "bye!"
+  reply <- ainvoke el lref (InternalMessage "hi")
+  reply @?= InternalMessage "bye!"
 
 unit_actorMapSend :: Assertion
 unit_actorMapSend = do
@@ -48,23 +48,23 @@ unit_actorMapSend = do
   withEventLoop ev $ \el _h -> do
     lref <- spawn el testActor emptyState
     let rref = localToRemoteRef ev lref
-    a <- asend el rref (Message "hi")
+    a <- asend el rref (InternalMessage "hi")
     reply <- wait a
-    reply @?= Message "bye!"
+    reply @?= InternalMessage "bye!"
 
 ------------------------------------------------------------------------
 
 testActor1 :: Message -> Actor
-testActor1 (Message "inc") = Actor (return (Message "ack"))
+testActor1 (InternalMessage "inc") = Actor (return (InternalMessage "ack"))
 
 testActor2 :: RemoteRef -> Message -> Actor
-testActor2 rref msg@(Message "inc") = Actor $ do
+testActor2 rref msg@(InternalMessage "inc") = Actor $ do
   p <- send rref msg
-  on p (\(MessageR (Message "ack")) -> modify (add "x" 1))
-  return (Message "inced")
-testActor2 _rref (Message "sum") = Actor $ do
+  on p (\(InternalMessageR (InternalMessage "ack")) -> modify (add "x" 1))
+  return (InternalMessage "inced")
+testActor2 _rref (InternalMessage "sum") = Actor $ do
   s <- get
-  return (Message (show (getField "x" s)))
+  return (InternalMessage (show (getField "x" s)))
 
 eventLoopB :: String -> EventLoopName
 eventLoopB suffix = EventLoopName ("event-loop-actormap-b" ++ "-" ++ suffix)
@@ -81,42 +81,42 @@ unit_actorMapOnAndState = do
                       lref1 <- spawn elA testActor1 emptyState
                       let rref1 = localToRemoteRef evA lref1
                       lref2 <- spawn elB (testActor2 rref1) (stateFromList [("x", Integer 0)])
-                      reply <- ainvoke elB lref2 (Message "inc")
-                      reply @?= Message "inced"
+                      reply <- ainvoke elB lref2 (InternalMessage "inc")
+                      reply @?= InternalMessage "inced"
                       threadDelay 100000
-                      reply2 <- ainvoke elB lref2 (Message "sum")
+                      reply2 <- ainvoke elB lref2 (InternalMessage "sum")
                       quit elA
                       quit elB
                       return reply2)
-    (\(e :: SomeException) -> return (Message (show e)))
-  reply2 @?= Message "Integer 1"
+    (\(e :: SomeException) -> return (InternalMessage (show e)))
+  reply2 @?= InternalMessage "Integer 1"
 
 ------------------------------------------------------------------------
 
 testActor3 :: Message -> Actor
-testActor3 (Message "go") = Actor $ do
+testActor3 (InternalMessage "go") = Actor $ do
   p <- asyncIO (return (String "io done"))
   on p (\(IOResultR (String "io done")) -> modify (add "x" 1))
-  return (Message "done")
+  return (InternalMessage "done")
 
 unit_actorMapIO :: Assertion
 unit_actorMapIO = withEventLoop (eventLoopA "io") $ \el _h -> do
   lref <- spawn el testActor3 (stateFromList [("x", Integer 0)])
-  _done <- ainvoke el lref (Message "go")
+  _done <- ainvoke el lref (InternalMessage "go")
   threadDelay 100000
   s <- getActorState el lref
   s @?= stateFromList [("x", Integer 1)]
 
 testActor4 :: Message -> Actor
-testActor4 (Message "go") = Actor $ do
+testActor4 (InternalMessage "go") = Actor $ do
   p <- asyncIO (error "failed")
   on p (\(ExceptionR _exception) -> modify (add "x" 1))
-  return (Message "done")
+  return (InternalMessage "done")
 
 unit_actorMapIOFail :: Assertion
 unit_actorMapIOFail = withEventLoop (eventLoopA "io_fail") $ \el _h -> do
   lref <- spawn el testActor4 (stateFromList [("x", Integer 0)])
-  _done <- ainvoke el lref (Message "go")
+  _done <- ainvoke el lref (InternalMessage "go")
   threadDelay 100000
   s <- getActorState el lref
   s @?= stateFromList [("x", Integer 1)]
@@ -124,10 +124,10 @@ unit_actorMapIOFail = withEventLoop (eventLoopA "io_fail") $ \el _h -> do
 ------------------------------------------------------------------------
 
 testActor5 :: RemoteRef -> Message -> Actor
-testActor5 rref (Message "go") = Actor $ do
-  p <- send rref (Message "hi")
+testActor5 rref (InternalMessage "go") = Actor $ do
+  p <- send rref (InternalMessage "hi")
   on p (\TimeoutR -> modify (add "x" 1))
-  return (Message "done")
+  return (InternalMessage "done")
 
 unit_actorMapSendTimeout :: Assertion
 unit_actorMapSendTimeout = do
@@ -135,7 +135,7 @@ unit_actorMapSendTimeout = do
   withEventLoop ev $ \el h -> do
     let rref = RemoteRef "doesnt_exist" 0
     lref <- spawn el (testActor5 rref) (stateFromList [("x", Integer 0)])
-    _done <- ainvoke el lref (Message "go")
+    _done <- ainvoke el lref (InternalMessage "go")
     -- Timeout happens after 60 seconds.
     advanceFakeTime h 59
     threadDelay 100000
@@ -149,40 +149,40 @@ unit_actorMapSendTimeout = do
 ------------------------------------------------------------------------
 
 testActor6 :: Message -> Actor
-testActor6 (Message "go") = Actor $ do
+testActor6 (InternalMessage "go") = Actor $ do
   d <- random
   t <- getTime
-  return (Message (show d ++ " " ++ show t))
+  return (InternalMessage (show d ++ " " ++ show t))
 
 unit_actorMapRandomAndTime :: Assertion
 unit_actorMapRandomAndTime = do
   let ev = eventLoopA "random_and_time"
   withEventLoop ev $ \el h -> do
     lref <- spawn el testActor6 emptyState
-    result <- ainvoke el lref (Message "go")
-    result @?= Message "0.9871468153391151 1970-01-01 00:00:00 UTC"
+    result <- ainvoke el lref (InternalMessage "go")
+    result @?= InternalMessage "0.9871468153391151 1970-01-01 00:00:00 UTC"
     advanceFakeTime h 1
-    result2 <- ainvoke el lref (Message "go")
-    result2 @?= Message "6.761085639865827e-2 1970-01-01 00:00:01 UTC"
+    result2 <- ainvoke el lref (InternalMessage "go")
+    result2 @?= InternalMessage "6.761085639865827e-2 1970-01-01 00:00:01 UTC"
 
 testActor7 :: Message -> Actor
-testActor7 (Message "go") = Actor $ do
+testActor7 (InternalMessage "go") = Actor $ do
   p <- setTimer 10
   on p (\TimerR -> modify (add "x" 1))
-  return (Message "done")
+  return (InternalMessage "done")
 
 unit_actorMapTimer :: Assertion
 unit_actorMapTimer = do
   let ev = eventLoopA "timer"
   withEventLoop ev $ \el h -> do
     lref <- spawn el testActor7 (stateFromList [("x", Integer 0)])
-    _done <- ainvoke el lref (Message "go")
+    _done <- ainvoke el lref (InternalMessage "go")
     -- Timer happens after 10 seconds.
     advanceFakeTime h 9
-    threadDelay 10000
+    threadDelay 100000
     s <- getActorState el lref
     s @?= stateFromList [("x", Integer 0)]
     advanceFakeTime h 1
-    threadDelay 10000
+    threadDelay 100000
     s' <- getActorState el lref
     s' @?= stateFromList [("x", Integer 1)]
