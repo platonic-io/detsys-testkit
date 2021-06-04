@@ -84,6 +84,7 @@ test-suite test
     StuntDouble.ActorMapTest
     StuntDouble.EventLoop.Transport.HttpTest
     StuntDouble.EventLoop.TransportTest
+    StuntDouble.FrontendTest
     StuntDouble.SchedulerTest
     TastyDiscover
 

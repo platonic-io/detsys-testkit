@@ -24,7 +24,7 @@ data Datatype
   | Map (Map Datatype Datatype)
   | List [Datatype]
   | Heap (Heap (Heap.Entry Datatype Datatype))
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Read)
 
 ------------------------------------------------------------------------
 
