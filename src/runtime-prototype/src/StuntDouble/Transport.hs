@@ -1,4 +1,4 @@
-module StuntDouble.EventLoop.Transport where
+module StuntDouble.Transport where
 
 import Control.Exception
 import Control.Concurrent.Async
@@ -7,7 +7,7 @@ import System.IO.Error
 import System.Posix.Files
 import System.FilePath
 
-import StuntDouble.EventLoop.Event
+import StuntDouble.Envelope
 import StuntDouble.Reference
 import StuntDouble.Message
 

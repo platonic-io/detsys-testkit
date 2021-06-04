@@ -6,7 +6,7 @@ import Control.Exception
 import Control.Concurrent
 import Control.Concurrent.Async
 
-import StuntDouble.Actor
+import StuntDouble.ActorMap
 
 ------------------------------------------------------------------------
 

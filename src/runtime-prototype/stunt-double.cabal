@@ -20,17 +20,12 @@ library
   hs-source-dirs:   src/
   exposed-modules:
     StuntDouble
-    StuntDouble.Actor
     StuntDouble.Actor.State
     StuntDouble.ActorMap
     StuntDouble.Datatype
-    StuntDouble.EventLoop
-    StuntDouble.EventLoop.AsyncIOHandler
-    StuntDouble.EventLoop.Event
-    StuntDouble.EventLoop.InboundHandler
-    StuntDouble.EventLoop.State
-    StuntDouble.EventLoop.Transport
-    StuntDouble.EventLoop.Transport.Http
+    StuntDouble.Envelope
+    StuntDouble.Transport
+    StuntDouble.Transport.Http
     StuntDouble.FreeMonad
     StuntDouble.Frontend.Http
     StuntDouble.Log
@@ -82,8 +77,8 @@ test-suite test
 
   other-modules:
     StuntDouble.ActorMapTest
-    StuntDouble.EventLoop.Transport.HttpTest
-    StuntDouble.EventLoop.TransportTest
+    StuntDouble.Transport.HttpTest
+    StuntDouble.TransportTest
     StuntDouble.FrontendTest
     StuntDouble.SchedulerTest
     TastyDiscover

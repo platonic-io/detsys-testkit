@@ -1,9 +1,9 @@
-module StuntDouble.EventLoop.TransportTest where
+module StuntDouble.TransportTest where
 
 import Control.Concurrent.Async
 import Test.HUnit
 
-import StuntDouble.EventLoop.Transport
+import StuntDouble.Transport
 import StuntDouble
 
 ------------------------------------------------------------------------

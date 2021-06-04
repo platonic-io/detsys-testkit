@@ -1,14 +1,14 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module StuntDouble.EventLoop.Transport.HttpTest where
+module StuntDouble.Transport.HttpTest where
 
 import Control.Exception
 import Control.Concurrent
 import Control.Concurrent.Async
 import Test.HUnit
 
-import StuntDouble.EventLoop.Transport.Http
-import StuntDouble.EventLoop.Transport
+import StuntDouble.Transport.Http
+import StuntDouble.Transport
 import StuntDouble
 
 ------------------------------------------------------------------------

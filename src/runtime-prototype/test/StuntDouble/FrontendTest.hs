@@ -13,7 +13,7 @@ import StuntDouble.Actor.State
 import StuntDouble.Datatype
 import StuntDouble.Random
 import StuntDouble.Time
-import StuntDouble.EventLoop.Transport
+import StuntDouble.Transport
 import StuntDouble.Frontend.Http
 
 ------------------------------------------------------------------------
