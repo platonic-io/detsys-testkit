@@ -1,7 +1,14 @@
 module StuntDouble.Message where
 
-newtype Message = Message String
+import StuntDouble.Reference
+
+------------------------------------------------------------------------
+
+data Message
+  = InternalMessage String
+  | ClientRequest String ClientRef
   deriving (Eq, Show, Read)
 
 getMessage :: Message -> String
-getMessage (Message msg) = msg
+getMessage (InternalMessage msg) = msg
+getMessage (ClientRequest msg _cref) = msg

@@ -21,25 +21,25 @@ fakeExecutor = do
   t <- httpTransport executorPort
   e <- transportReceive t
   envelopeMessage e @?= envelopeMessage e -- XXX: check if cmd is of the right shape
-  let resp = replyEnvelope e (Message "XXX: needs the right shape")
+  let resp = replyEnvelope e (InternalMessage "XXX: needs the right shape")
   transportSend t resp
 
 fakeScheduler :: RemoteRef -> Message -> Actor
-fakeScheduler executor (Message "step") = do
+fakeScheduler executor (InternalMessage "step") = do
   Just (cmd, heap') <- "heap" ^. pop
   "heap" .= (heap' :: Datatype)
-  a <- remoteCall executor (Message (prettyCommand cmd))
+  a <- remoteCall executor (InternalMessage (prettyCommand cmd))
   Left (Just resp) <- unsafeAwait (Left a)
   -- assert resp -- XXX: check if of the right shape
   now <- get "time"
   seed <- get "seed"
   arrivalTime <- genArrivalTime now seed
   op2 push arrivalTime (parseCommand resp) %= "heap"
-  return (Now (Message "stepped"))
+  return (Now (InternalMessage "stepped"))
 
   where
     parseCommand :: Message -> Datatype
-    parseCommand (Message m) = Pair (Text (Text.pack (show m))) (List []) -- XXX: args
+    parseCommand (InternalMessage m) = Pair (Text (Text.pack (show m))) (List []) -- XXX: args
 
     prettyCommand :: Text -> String
     prettyCommand _ = "XXX: command"
@@ -57,9 +57,9 @@ unit_scheduler = do
                                 , ("seed", Integer 0)
                                 ]
   catch (do lref <- spawn el (fakeScheduler executorRef) initState
-            a <- send el (localToRemoteRef ev lref) (Message "step")
+            a <- send el (localToRemoteRef ev lref) (InternalMessage "step")
             reply <- wait a
-            reply @?= Just (Message "stepped"))
+            reply @?= Just (InternalMessage "stepped"))
     -- (\(e :: SomeException) -> dump el >> eventLog el >>= mapM_ print >> print e)
     (\(e :: SomeException) -> putStrLn "failed")
 

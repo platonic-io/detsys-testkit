@@ -18,7 +18,8 @@ unit_httpSendReceive = do
   let port = 3001
       url = "http://localhost:" ++ show port
   catch (do t <- httpTransport port
-            let e = Envelope RequestKind (RemoteRef url 0) (Message "msg") (RemoteRef url 1) 0
+            let e = Envelope RequestKind (RemoteRef url 0) (InternalMessage "msg")
+                             (RemoteRef url 1) 0
             -- XXX: add better way to detect when http server is ready...
             threadDelay 100000
             a <- async (transportSend t e)

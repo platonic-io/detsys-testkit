@@ -16,34 +16,29 @@ build-type:         Simple
 extra-source-files: CHANGELOG.md
 tested-with:        GHC ==8.10.4
 
-flag http
-    description: Enable http transport support
-    default: True
-
 library
   hs-source-dirs:   src/
   exposed-modules:
     StuntDouble
     StuntDouble.Actor
-    StuntDouble.ActorMap
     StuntDouble.Actor.State
+    StuntDouble.ActorMap
     StuntDouble.Datatype
-    StuntDouble.Time
-    StuntDouble.Random
     StuntDouble.EventLoop
     StuntDouble.EventLoop.AsyncIOHandler
     StuntDouble.EventLoop.Event
     StuntDouble.EventLoop.InboundHandler
     StuntDouble.EventLoop.State
     StuntDouble.EventLoop.Transport
+    StuntDouble.EventLoop.Transport.Http
     StuntDouble.FreeMonad
+    StuntDouble.Frontend.Http
+    StuntDouble.Log
     StuntDouble.Message
+    StuntDouble.Random
     StuntDouble.Reference
     StuntDouble.Supervisor
-
-  if flag(http)
-     exposed-modules:
-       StuntDouble.EventLoop.Transport.Http
+    StuntDouble.Time
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
@@ -51,26 +46,23 @@ library
       base        >=4.14 && <4.15
     , containers
     , filepath
+    , mtl
+    , stm
     , text
     , time
-    , mtl
     , unix
-    , stm
 
   build-depends:
       aeson
     , async
+    , bytestring
+    , heaps
+    , http-client
+    , http-types
     , random
     , unordered-containers
-    , heaps
-
-  if flag(http)
-    build-depends:
-        bytestring
-      , http-client
-      , http-types
-      , wai
-      , warp
+    , wai
+    , warp
 
   default-language: Haskell2010
 
@@ -90,15 +82,11 @@ test-suite test
 
   other-modules:
     StuntDouble.ActorMapTest
+    StuntDouble.EventLoop.Transport.HttpTest
     StuntDouble.EventLoop.TransportTest
-    StuntDouble.EventLoopTest
+    StuntDouble.FrontendTest
     StuntDouble.SchedulerTest
     TastyDiscover
-  -- TODO(stevan: This doesn't work, because tasty-discovery finds the module
-  -- and tells cabal it's needed...
-  if flag(http)
-    other-modules:
-      StuntDouble.EventLoop.Transport.HttpTest
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
   default-language: Haskell2010
