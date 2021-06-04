@@ -31,3 +31,24 @@ data LogLines = YYY
 
 emptyLog :: Log
 emptyLog = Log []
+
+  {-
+
+type EventLog = [LogEntry]
+
+data LogEntry
+  = LogInvoke RemoteRef LocalRef Message Message EventLoopName
+  | LogSendStart RemoteRef RemoteRef Message CorrelationId EventLoopName
+  | LogSendFinish CorrelationId Message EventLoopName
+  | LogRequest RemoteRef RemoteRef Message Message EventLoopName
+  | LogReceive RemoteRef RemoteRef Message CorrelationId EventLoopName
+  | LogRequestStart RemoteRef RemoteRef Message CorrelationId EventLoopName
+  | LogRequestFinish CorrelationId Message EventLoopName
+  | LogComment String EventLoopName
+  | LogAsyncIOFinish CorrelationId IOResult EventLoopName
+  deriving (Eq, Show)
+
+isComment :: LogEntry -> Bool
+isComment LogComment {} = True
+isComment _otherwise    = False
+-}

@@ -21,17 +21,10 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import StuntDouble.Actor (IOResult)
 import StuntDouble.Actor.State
-import StuntDouble.EventLoop.Event
-       ( CorrelationId(..)
-       , Envelope(..)
-       , EnvelopeKind(..)
-       , getCorrelationId
-       , replyEnvelope
-       )
-import StuntDouble.EventLoop.Transport
-import StuntDouble.EventLoop.Transport.Http
+import StuntDouble.Envelope
+import StuntDouble.Transport
+import StuntDouble.Transport.Http
 import StuntDouble.FreeMonad
 import StuntDouble.Time
 import StuntDouble.Log
@@ -40,6 +33,8 @@ import StuntDouble.Message
 import StuntDouble.Reference
 
 ------------------------------------------------------------------------
+
+data IOResult = String String | IOUnit ()
 
 newtype Promise = Promise Int
   deriving (Eq, Ord, Num)

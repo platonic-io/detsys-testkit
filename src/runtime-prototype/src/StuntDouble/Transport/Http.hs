@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module StuntDouble.EventLoop.Transport.Http where
+module StuntDouble.Transport.Http where
 
 import qualified Data.HashMap.Strict as HashMap
 import Data.Text (Text)
@@ -20,8 +20,8 @@ import Network.HTTP.Types.Status
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
 
-import StuntDouble.EventLoop.Event
-import StuntDouble.EventLoop.Transport
+import StuntDouble.Envelope
+import StuntDouble.Transport
 import StuntDouble.Reference
 import StuntDouble.Message
 
