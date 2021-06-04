@@ -3,7 +3,6 @@ module StuntDouble.TransportTest where
 import Control.Concurrent.Async
 import Test.HUnit
 
-import StuntDouble.Transport
 import StuntDouble
 
 ------------------------------------------------------------------------

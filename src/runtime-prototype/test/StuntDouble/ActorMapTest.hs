@@ -8,15 +8,7 @@ import Control.Concurrent.Async
 import Control.Exception
 import Test.HUnit hiding (State)
 
-import StuntDouble.Actor.State
-import StuntDouble.ActorMap
-import StuntDouble.Datatype
-import StuntDouble.Transport
-import StuntDouble.FreeMonad
-import StuntDouble.Message
-import StuntDouble.Random
-import StuntDouble.Reference
-import StuntDouble.Time
+import StuntDouble
 
 ------------------------------------------------------------------------
 

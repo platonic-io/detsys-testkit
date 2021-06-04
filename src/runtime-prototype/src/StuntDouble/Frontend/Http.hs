@@ -11,8 +11,9 @@ import Network.HTTP.Types.Status
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
 
-import StuntDouble
 import StuntDouble.ActorMap
+import StuntDouble.Message
+import StuntDouble.Reference
 
 ------------------------------------------------------------------------
 
