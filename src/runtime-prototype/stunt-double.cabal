@@ -26,6 +26,7 @@ library
     StuntDouble.Envelope
     StuntDouble.Transport
     StuntDouble.Transport.Http
+    StuntDouble.Transport.NamedPipe
     StuntDouble.FreeMonad
     StuntDouble.Frontend.Http
     StuntDouble.Log
@@ -78,7 +79,7 @@ test-suite test
   other-modules:
     StuntDouble.ActorMapTest
     StuntDouble.Transport.HttpTest
-    StuntDouble.TransportTest
+    StuntDouble.Transport.NamedPipeTest
     StuntDouble.FrontendTest
     StuntDouble.SchedulerTest
     TastyDiscover

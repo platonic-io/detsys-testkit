@@ -24,6 +24,7 @@ import qualified Data.Set as Set
 import StuntDouble.Actor.State
 import StuntDouble.Envelope
 import StuntDouble.Transport
+import StuntDouble.Transport.NamedPipe
 import StuntDouble.Transport.Http
 import StuntDouble.FreeMonad
 import StuntDouble.Time

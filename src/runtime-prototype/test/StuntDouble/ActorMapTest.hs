@@ -12,15 +12,15 @@ import StuntDouble
 
 ------------------------------------------------------------------------
 
+eventLoopA :: String -> EventLoopName
+eventLoopA suffix = EventLoopName ("event-loop-actormap-a" ++ "-" ++ suffix)
+
 withEventLoop :: EventLoopName -> (EventLoop -> FakeTimeHandle -> IO ()) -> IO ()
 withEventLoop name k = do
   (time, h) <- fakeTimeEpoch
   el <- makeEventLoop time (makeSeed 0) (NamedPipe "/tmp") name
   k el h
   quit el
-
-eventLoopA :: String -> EventLoopName
-eventLoopA suffix = EventLoopName ("event-loop-actormap-a" ++ "-" ++ suffix)
 
 testActor :: Message -> Actor
 testActor (InternalMessage "hi") = Actor (return (InternalMessage "bye!"))

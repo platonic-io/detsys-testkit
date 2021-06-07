@@ -1,4 +1,4 @@
-module StuntDouble.TransportTest where
+module StuntDouble.Transport.NamedPipeTest where
 
 import Control.Concurrent.Async
 import Test.HUnit
