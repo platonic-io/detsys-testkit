@@ -27,6 +27,7 @@ library
     StuntDouble.Transport
     StuntDouble.Transport.Http
     StuntDouble.Transport.NamedPipe
+    StuntDouble.Transport.Stm
     StuntDouble.FreeMonad
     StuntDouble.Frontend.Http
     StuntDouble.Log
@@ -79,6 +80,7 @@ test-suite test
   other-modules:
     StuntDouble.ActorMapTest
     StuntDouble.Transport.HttpTest
+    StuntDouble.Transport.StmTest
     StuntDouble.Transport.NamedPipeTest
     StuntDouble.FrontendTest
     StuntDouble.SchedulerTest
