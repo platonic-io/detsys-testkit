@@ -26,6 +26,7 @@ import StuntDouble.Envelope
 import StuntDouble.Transport
 import StuntDouble.Transport.NamedPipe
 import StuntDouble.Transport.Http
+import StuntDouble.Transport.Stm
 import StuntDouble.FreeMonad
 import StuntDouble.Time
 import StuntDouble.Log
@@ -449,6 +450,7 @@ makeEventLoop time seed tk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
+         Stm          -> stmTransport
   ls <- initLoopState name time seed t
   -- XXX: all these async handlers introduce non-determinism, we would need a
   -- way to synchronise them if we wanted complete determinism...
@@ -465,9 +467,12 @@ handleInbound :: EventLoop -> IO ()
 handleInbound ls = forever go
   where
     go = do
-      e <- transportReceive (lsTransport ls)
-      let p = Promise (getCorrelationId (envelopeCorrelationId e))
-      atomically (writeTBQueue (lsQueue ls) (Reaction (Receive p e)))
+      me <- transportReceive (lsTransport ls)
+      case me of
+        Nothing -> return ()
+        Just e  -> do
+          let p = Promise (getCorrelationId (envelopeCorrelationId e))
+          atomically (writeTBQueue (lsQueue ls) (Reaction (Receive p e)))
 
 handleAsyncIO :: EventLoop -> IO ()
 handleAsyncIO ls = forever (go >> threadDelay 1000 {- 1 ms -})
@@ -551,10 +556,10 @@ handleEvent (Reaction r) ls = do
       transportSend (lsTransport ls) (replyEnvelope e reply)
     ResumeContinuation a lref -> do
       now <- getCurrentTime (lsTime ls)
-      seed <- readTVarIO (lsSeed ls)
       as <- atomically $ do
-        am <- readTVar (lsActorMap ls)
-        p  <- readTVar (lsNextPromise ls)
+        am   <- readTVar (lsActorMap ls)
+        p    <- readTVar (lsNextPromise ls)
+        seed <- readTVar (lsSeed ls)
         let ((), p', seed', am', as) = actorMapTurn' p [] lref now seed a am
         writeTVar (lsActorMap ls) am'
         writeTVar (lsNextPromise ls) p'
