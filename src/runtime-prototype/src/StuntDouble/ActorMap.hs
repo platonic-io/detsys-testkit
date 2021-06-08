@@ -173,7 +173,7 @@ actorMapTurn' p acc  lref  t seed (Free op)  am = case op of
     actorMapTurn' p acc lref t seed (k t) am
   Random k ->
     let
-      (d, seed') = uniform seed
+      (d, seed') = interval seed
     in
       actorMapTurn' p acc lref t seed' (k d) am
   SetTimer ndt k ->
