@@ -41,4 +41,8 @@ hMaybeGetLine h = do
   eof <- hIsEOF h
   if eof
   then return Nothing
-  else fmap Just (hGetLine h)
+  else do
+    rdy <- hReady h
+    if rdy
+    then fmap Just (hGetLine h)
+    else return Nothing
