@@ -4,7 +4,6 @@ module StuntDouble.Transport.HttpTest where
 
 import Control.Exception
 import Control.Concurrent
-import Control.Concurrent.Async
 import Test.HUnit
 
 import StuntDouble.Transport.Http
@@ -22,8 +21,7 @@ unit_httpSendReceive = do
                              (RemoteRef url 1) 0
             -- XXX: add better way to detect when http server is ready...
             threadDelay 100000
-            a <- async (transportSend t e)
+            transportSend t e
             e' <- transportReceive t
-            cancel a
-            e' @?= e)
+            e' @?= Just e)
     (\(e :: SomeException) -> print e)

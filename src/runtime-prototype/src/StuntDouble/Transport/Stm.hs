@@ -11,5 +11,5 @@ stmTransport = do
   chan <- newTChanIO
   return Transport
     { transportSend = \e -> atomically (writeTChan chan e)
-    , transportReceive = atomically (readTChan chan)
+    , transportReceive = atomically (tryReadTChan chan)
     }

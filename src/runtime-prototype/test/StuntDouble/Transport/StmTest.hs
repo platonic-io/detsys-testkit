@@ -12,7 +12,6 @@ unit_stmTransport = do
   t <- stmTransport
   let e = Envelope RequestKind (RemoteRef "from" 0) (InternalMessage "msg")
                    (RemoteRef "a" 1) 0
-  a <- async (transportSend t e)
+  a <- transportSend t e
   e' <- transportReceive t
-  cancel a
-  e' @?= e
+  e' @?= Just e

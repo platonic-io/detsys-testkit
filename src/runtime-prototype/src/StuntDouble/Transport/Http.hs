@@ -33,7 +33,7 @@ httpTransport port = do
   queue <- newTBQueueIO 128 -- XXX: when/how does this grow?
   _tid <- forkFinally (run port (app queue)) (const (return ()))
   return Transport { transportSend = transportSend' manager
-                   , transportReceive = atomically (readTBQueue queue)
+                   , transportReceive = atomically (tryReadTBQueue queue)
                    }
 
 transportSend' :: Manager -> Envelope -> IO ()

@@ -29,12 +29,16 @@ namedPipeTransport fp name = do
   h <- openFile (fp </> getEventLoopName name) ReadWriteMode
   hSetBuffering h LineBuffering
   return Transport { transportSend = \e ->
-                       -- XXX:
                        withFile (fp </> address (envelopeReceiver e)) WriteMode $ \h' -> do
                          hSetBuffering h' LineBuffering
                          hPutStrLn h' (show e)
                    , transportReceive =
-                       -- withFile (fp </> getEventLoopName name) ReadWriteMode $ \h -> do
-                       --   hSetBuffering h LineBuffering
-                         fmap read (hGetLine h)
+                       fmap (fmap read) (hMaybeGetLine h)
                    }
+
+hMaybeGetLine :: Handle -> IO (Maybe String)
+hMaybeGetLine h = do
+  eof <- hIsEOF h
+  if eof
+  then return Nothing
+  else fmap Just (hGetLine h)
