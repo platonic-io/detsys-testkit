@@ -6,15 +6,7 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Test.HUnit
 
-import StuntDouble.ActorMap
-import StuntDouble.Message
-import StuntDouble.Reference
-import StuntDouble.Actor.State
-import StuntDouble.Datatype
-import StuntDouble.Random
-import StuntDouble.Time
-import StuntDouble.Transport
-import StuntDouble.Frontend.Http
+import StuntDouble
 
 ------------------------------------------------------------------------
 

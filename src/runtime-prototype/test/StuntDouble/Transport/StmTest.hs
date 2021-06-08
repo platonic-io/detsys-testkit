@@ -1,16 +1,15 @@
-module StuntDouble.TransportTest where
+module StuntDouble.Transport.StmTest where
 
 import Control.Concurrent.Async
 import Test.HUnit
 
-import StuntDouble.Transport
 import StuntDouble
 
 ------------------------------------------------------------------------
 
-unit_sendReceive :: IO ()
-unit_sendReceive = do
-  t <- namedPipeTransport "/tmp" (EventLoopName "a")
+unit_stmTransport :: IO ()
+unit_stmTransport = do
+  t <- stmTransport
   let e = Envelope RequestKind (RemoteRef "from" 0) (InternalMessage "msg")
                    (RemoteRef "a" 1) 0
   a <- async (transportSend t e)

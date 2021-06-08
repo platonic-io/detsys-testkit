@@ -2,17 +2,26 @@
 
 module StuntDouble.Frontend.Http where
 
-import Control.Concurrent
 import Control.Concurrent.Async
 import Data.Aeson
 import Data.String
 import Network.HTTP.Client
+       ( RequestBody(..)
+       , defaultManagerSettings
+       , httpLbs
+       , method
+       , newManager
+       , parseRequest
+       , requestBody
+       , responseBody
+       )
 import Network.HTTP.Types.Status
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
 
-import StuntDouble
 import StuntDouble.ActorMap
+import StuntDouble.Message
+import StuntDouble.Reference
 
 ------------------------------------------------------------------------
 

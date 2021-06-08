@@ -8,17 +8,12 @@ import Control.Concurrent.Async
 import Control.Exception
 import Test.HUnit hiding (State)
 
-import StuntDouble.Actor.State
-import StuntDouble.ActorMap
-import StuntDouble.Datatype
-import StuntDouble.Transport
-import StuntDouble.FreeMonad
-import StuntDouble.Message
-import StuntDouble.Random
-import StuntDouble.Reference
-import StuntDouble.Time
+import StuntDouble
 
 ------------------------------------------------------------------------
+
+eventLoopA :: String -> EventLoopName
+eventLoopA suffix = EventLoopName ("event-loop-actormap-a" ++ "-" ++ suffix)
 
 withEventLoop :: EventLoopName -> (EventLoop -> FakeTimeHandle -> IO ()) -> IO ()
 withEventLoop name k = do
@@ -26,9 +21,6 @@ withEventLoop name k = do
   el <- makeEventLoop time (makeSeed 0) (NamedPipe "/tmp") name
   k el h
   quit el
-
-eventLoopA :: String -> EventLoopName
-eventLoopA suffix = EventLoopName ("event-loop-actormap-a" ++ "-" ++ suffix)
 
 testActor :: Message -> Actor
 testActor (InternalMessage "hi") = Actor (return (InternalMessage "bye!"))
