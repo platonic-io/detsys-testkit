@@ -483,7 +483,7 @@ stepHandlers s hs =
   let
     (hs', s') = shuffle s hs
   in do
-    mapM_ (\h -> h >> threadDelay 1000 {- 1 ms -}) hs'
+    sequence_ hs'
     return s'
 
 handleInbound :: EventLoop -> IO ()
@@ -560,7 +560,7 @@ findTimedout now s =
             })
 
 handleEvents :: EventLoop -> IO ()
-handleEvents = forever . handleEvents1Blocking
+handleEvents = forever . handleEvents1
 
 handleEvents1Blocking :: EventLoop -> IO ()
 handleEvents1Blocking ls = do
@@ -577,7 +577,7 @@ handleEvents1 :: EventLoop -> IO ()
 handleEvents1 ls = do
   me <- atomically (tryReadTBQueue (lsQueue ls))
   case me of
-    Nothing -> threadDelay 100 -- 0.1 ms
+    Nothing -> return ()
     Just e  -> do
       handleEvent e ls
         `catch` \(ex :: SomeException) -> do
