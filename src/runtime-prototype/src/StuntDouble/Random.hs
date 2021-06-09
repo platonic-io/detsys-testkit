@@ -13,6 +13,9 @@ instance RandomGen Seed where
 makeSeed :: Int -> Seed
 makeSeed = Seed . mkStdGen
 
+makeSeedIO :: IO Seed
+makeSeedIO = fmap makeSeed randomIO
+
 interval :: Seed -> (Double, Seed)
 interval = randomR (0, 1)
 
@@ -27,10 +30,11 @@ list s0 n0 g = go [] s0 n0
         go (x : acc) s' (n - 1)
 
 shuffle :: Seed -> [a] -> ([a], Seed)
-shuffle s0 xs =
+shuffle s [] = ([], s)
+shuffle s xs =
   let
     l = length xs - 1
-    (rs, s') = list s0 l (randomR (0, l))
+    (rs, s') = make_rs l s
   in
     (shuffle1 xs rs, s')
   where
@@ -50,3 +54,11 @@ shuffle s0 xs =
         loop 0 (h:t) accum = (h, accum ++ t)
         loop j (h:t) accum = loop (j-1) t (h:accum)
         loop _ _     _     = error "loop: impossible"
+
+    make_rs :: RandomGen g => Int -> g -> ([Int],g)
+    make_rs n g = loop [] n g
+      where
+        loop acc 0 g = (reverse acc,g)
+        loop acc n g =
+          let (r,g') = randomR (0,n) g
+          in loop (r:acc) (pred n) g'
