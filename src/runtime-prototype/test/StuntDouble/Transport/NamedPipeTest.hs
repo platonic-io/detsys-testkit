@@ -6,8 +6,8 @@ import StuntDouble
 
 ------------------------------------------------------------------------
 
-unit_sendReceive :: IO ()
-unit_sendReceive = do
+unit_transportNamedPipe :: IO ()
+unit_transportNamedPipe = do
   t <- namedPipeTransport "/tmp" (EventLoopName "a")
   let e = Envelope RequestKind (RemoteRef "from" 0) (InternalMessage "msg")
                    (RemoteRef "a" 1) 0

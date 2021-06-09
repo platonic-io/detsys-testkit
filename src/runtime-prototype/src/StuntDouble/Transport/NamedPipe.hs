@@ -16,16 +16,7 @@ import StuntDouble.Transport
 
 namedPipeTransport :: FilePath -> EventLoopName -> IO (Transport IO)
 namedPipeTransport fp name = do
-  catchJust
-    (\e -> if isAlreadyExistsErrorType (ioeGetErrorType e)
-           then Just ()
-           else Nothing)
-    (createNamedPipe
-      (fp </> getEventLoopName name)
-      (namedPipeMode `unionFileModes`
-       ownerReadMode `unionFileModes`
-       ownerWriteMode))
-    return
+  safeCreateNamedPipe (fp </> getEventLoopName name)
   h <- openFile (fp </> getEventLoopName name) ReadWriteMode
   hSetBuffering h LineBuffering
   return Transport { transportSend = \e ->
@@ -35,6 +26,18 @@ namedPipeTransport fp name = do
                    , transportReceive =
                        fmap (fmap read) (hMaybeGetLine h)
                    }
+
+safeCreateNamedPipe :: FilePath -> IO ()
+safeCreateNamedPipe fp =
+  catchJust
+    (\e -> if isAlreadyExistsErrorType (ioeGetErrorType e)
+           then Just ()
+           else Nothing)
+    (createNamedPipe fp
+      (namedPipeMode `unionFileModes`
+       ownerReadMode `unionFileModes`
+       ownerWriteMode))
+    return
 
 hMaybeGetLine :: Handle -> IO (Maybe String)
 hMaybeGetLine h = do
