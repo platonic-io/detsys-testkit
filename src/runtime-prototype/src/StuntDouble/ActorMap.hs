@@ -579,8 +579,10 @@ handleEvents1 ls = go
         Nothing -> return ()
         Just e  -> do
           handleEvent e ls
-            `catch` \(ex :: SomeException) ->
-                      putStrLn ("handleEvents: exception: " ++ show ex)
+            `catch` \(ex :: SomeException) -> do
+                      -- XXX: Why are `AsyncCancelled` being caught here?
+                      unless (fromException ex == Just AsyncCancelled) $
+                        putStrLn ("handleEvents: exception: " ++ show ex)
 
 handleEvent :: Event -> EventLoop -> IO ()
 handleEvent (Action a)   ls = act' ls [a]
