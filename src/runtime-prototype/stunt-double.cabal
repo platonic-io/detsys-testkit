@@ -72,9 +72,11 @@ test-suite test
     , base
     , containers
     , HUnit
+    , QuickCheck
     , stunt-double
     , tasty
     , tasty-hunit
+    , tasty-quickcheck
     , text
 
   other-modules:
@@ -83,6 +85,7 @@ test-suite test
     StuntDouble.Transport.StmTest
     StuntDouble.Transport.NamedPipeTest
     StuntDouble.FrontendTest
+    StuntDouble.RandomTest
     StuntDouble.SchedulerTest
     TastyDiscover
 

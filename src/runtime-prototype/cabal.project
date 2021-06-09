@@ -4,6 +4,8 @@ with-compiler: ghc-8.10.4
 
 reject-unconstrained-dependencies: all
 
+constraints: QuickCheck +old-random
+
 package stunt-double
   ghc-options: -Wall
 
