@@ -151,10 +151,10 @@ unit_actorMapRandomAndTime = do
   withEventLoop ev $ \el h -> do
     lref <- spawn el testActor6 emptyState
     result <- ainvoke el lref (InternalMessage "go")
-    result @?= InternalMessage "0.9871468153391151 1970-01-01 00:00:00 UTC"
+    result @?= InternalMessage "2.323435770446025e-7 1970-01-01 00:00:00 UTC"
     advanceFakeTime h 1
     result2 <- ainvoke el lref (InternalMessage "go")
-    result2 @?= InternalMessage "6.761085639865827e-2 1970-01-01 00:00:01 UTC"
+    result2 @?= InternalMessage "7.94137909876369e-8 1970-01-01 00:00:01 UTC"
 
 testActor7 :: Message -> Actor
 testActor7 (InternalMessage "go") = Actor $ do
@@ -170,10 +170,10 @@ unit_actorMapTimer = do
     _done <- ainvoke el lref (InternalMessage "go")
     -- Timer happens after 10 seconds.
     advanceFakeTime h 9
-    threadDelay 100000
+    threadDelay 300000
     s <- getActorState el lref
     s @?= stateFromList [("x", Integer 0)]
     advanceFakeTime h 1
-    threadDelay 100000
+    threadDelay 300000
     s' <- getActorState el lref
     s' @?= stateFromList [("x", Integer 1)]

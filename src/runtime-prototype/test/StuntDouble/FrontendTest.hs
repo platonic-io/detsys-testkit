@@ -52,9 +52,9 @@ unit_httpFrontend = do
                               (localToRemoteRef ev lref2))
                               (stateFromList [("sum", Integer 0)])
     let port = 3040
-    withHttpFrontend el lref3 port $ \_pid -> do
+    eResp <- withHttpFrontend el lref3 port $ \_a -> do
       -- XXX: Add better waiting mechanism...
-      threadDelay 100000
+      threadDelay 500000
 
-      eResp <- makeClientRequest (InternalMessage "sum") port
-      eResp @?= Right (InternalMessage "Integer 3")
+      makeClientRequest (InternalMessage "sum") port
+    eResp @?= Right (InternalMessage "Integer 3")

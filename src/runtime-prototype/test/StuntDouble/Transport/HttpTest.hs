@@ -12,15 +12,15 @@ import StuntDouble
 
 ------------------------------------------------------------------------
 
-unit_httpSendReceive :: IO ()
-unit_httpSendReceive = do
+unit_transportHttp :: IO ()
+unit_transportHttp = do
   let port = 3001
       url = "http://localhost:" ++ show port
   catch (do t <- httpTransport port
             let e = Envelope RequestKind (RemoteRef url 0) (InternalMessage "msg")
                              (RemoteRef url 1) 0
             -- XXX: add better way to detect when http server is ready...
-            threadDelay 100000
+            threadDelay 300000
             transportSend t e
             e' <- transportReceive t
             e' @?= Just e)
