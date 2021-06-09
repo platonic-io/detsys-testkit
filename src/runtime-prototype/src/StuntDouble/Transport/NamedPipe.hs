@@ -1,15 +1,16 @@
 module StuntDouble.Transport.NamedPipe where
 
-import Control.Exception
 import Control.Concurrent.Async
+import Control.Exception
+import System.FilePath
 import System.IO
 import System.IO.Error
 import System.Posix.Files
-import System.FilePath
+import System.Timeout
 
-import StuntDouble.Reference
-import StuntDouble.Message
 import StuntDouble.Envelope
+import StuntDouble.Message
+import StuntDouble.Reference
 import StuntDouble.Transport
 
 ------------------------------------------------------------------------
@@ -40,12 +41,4 @@ safeCreateNamedPipe fp =
     return
 
 hMaybeGetLine :: Handle -> IO (Maybe String)
-hMaybeGetLine h = do
-  eof <- hIsEOF h
-  if eof
-  then return Nothing
-  else do
-    rdy <- hReady h
-    if rdy
-    then fmap Just (hGetLine h)
-    else return Nothing
+hMaybeGetLine = timeout 1000 . hGetLine

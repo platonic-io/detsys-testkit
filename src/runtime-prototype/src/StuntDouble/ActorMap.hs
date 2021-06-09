@@ -452,7 +452,7 @@ makeEventLoop time seed tk name = do
          Http port    -> httpTransport port
          Stm          -> stmTransport
   ls <- initLoopState name time seed t
-  pids <- if True -- XXX: introduce and parametrise by flag
+  pids <- if False -- XXX: introduce and parametrise by flag
           then do
             aInHandler <- async (handleInbound ls)
             aAsyncIOHandler <- async (handleAsyncIO ls)
