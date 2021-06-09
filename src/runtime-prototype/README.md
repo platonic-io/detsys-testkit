@@ -125,8 +125,9 @@ not.
 #### How to run tests
 
 cabal configure test \
-    --test-option='--timeout=1' \
+    --test-option='--timeout=10' \
     --test-option='--color=always' \
     --test-show-details=streaming \
+    --ghc-options='-threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts' \
     # --test-option='--pattern=/$pattern/
 cabal test
