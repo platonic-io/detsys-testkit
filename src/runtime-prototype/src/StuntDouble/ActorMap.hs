@@ -173,7 +173,7 @@ actorMapTurn' p acc  lref  t seed (Free op)  am = case op of
     actorMapTurn' p acc lref t seed (k t) am
   Random k ->
     let
-      (d, seed') = uniform seed
+      (d, seed') = interval seed
     in
       actorMapTurn' p acc lref t seed' (k d) am
   SetTimer ndt k ->
@@ -452,19 +452,45 @@ makeEventLoop time seed tk name = do
          Http port    -> httpTransport port
          Stm          -> stmTransport
   ls <- initLoopState name time seed t
-  -- XXX: all these async handlers introduce non-determinism, we would need a
-  -- way to synchronise them if we wanted complete determinism...
-  aInHandler <- async (handleInbound ls)
-  aAsyncIOHandler <- async (handleAsyncIO ls)
-  aEvHandler <- async (handleEvents ls)
-  aTimeoutHandler <- async (handleTimeouts ls)
-  let pids = [aInHandler, aAsyncIOHandler, aEvHandler, aTimeoutHandler]
+  pids <- if True -- XXX: introduce and parametrise by flag
+          then do
+            aInHandler <- async (handleInbound ls)
+            aAsyncIOHandler <- async (handleAsyncIO ls)
+            aEvHandler <- async (handleEvents ls)
+            aTimeoutHandler <- async (handleTimeouts ls)
+            return [aInHandler, aAsyncIOHandler, aEvHandler, aTimeoutHandler]
+          else
+            fmap (: [])
+              (async (runHandlers seed  -- XXX: or do we want `TVar Seed` here?
+                       [ handleInbound1 ls
+                       , handleAsyncIO1 ls
+                       , handleEvents1 ls
+                       , handleTimeouts1 ls
+                       ]))
   atomically (modifyTVar' (lsPids ls) (pids ++))
   mapM_ link pids
   return ls
 
+runHandlers :: Seed -> [IO ()] -> IO ()
+runHandlers s0 hs = go s0
+  where
+    go s = do
+      s' <- stepHandlers s hs
+      go s'
+
+stepHandlers :: Seed -> [IO ()] -> IO Seed
+stepHandlers s hs =
+  let
+    (hs', s') = shuffle s hs
+  in do
+    mapM_ (\h -> h >> threadDelay 1000 {- 1 ms -}) hs'
+    return s'
+
 handleInbound :: EventLoop -> IO ()
-handleInbound ls = forever go
+handleInbound = forever . handleInbound1
+
+handleInbound1 :: EventLoop -> IO ()
+handleInbound1 ls = go
   where
     go = do
       me <- transportReceive (lsTransport ls)
@@ -475,7 +501,10 @@ handleInbound ls = forever go
           atomically (writeTBQueue (lsQueue ls) (Reaction (Receive p e)))
 
 handleAsyncIO :: EventLoop -> IO ()
-handleAsyncIO ls = forever (go >> threadDelay 1000 {- 1 ms -})
+handleAsyncIO ls = forever (handleAsyncIO1 ls >> threadDelay 1000 {- 1 ms -})
+
+handleAsyncIO1 :: EventLoop -> IO ()
+handleAsyncIO1 ls = go
   where
     go :: IO ()
     go = atomically $ do
@@ -508,7 +537,10 @@ pollAnySTM (a : as) = do
     Just r  -> return (Just (a, r))
 
 handleTimeouts :: EventLoop -> IO ()
-handleTimeouts ls = forever go
+handleTimeouts = forever . handleTimeouts1
+
+handleTimeouts1 :: EventLoop -> IO ()
+handleTimeouts1 ls = go
   where
     go :: IO ()
     go = do
@@ -536,13 +568,19 @@ findTimedout now s =
             })
 
 handleEvents :: EventLoop -> IO ()
-handleEvents ls = forever go
+handleEvents = forever . handleEvents1
+
+handleEvents1 :: EventLoop -> IO ()
+handleEvents1 ls = go
   where
     go = do
-      e <- atomically (readTBQueue (lsQueue ls))
-      handleEvent e ls
-        `catch` \(ex :: SomeException) ->
-                  putStrLn ("handleEvents: exception: " ++ show ex)
+      me <- atomically (tryReadTBQueue (lsQueue ls))
+      case me of
+        Nothing -> return ()
+        Just e  -> do
+          handleEvent e ls
+            `catch` \(ex :: SomeException) ->
+                      putStrLn ("handleEvents: exception: " ++ show ex)
 
 handleEvent :: Event -> EventLoop -> IO ()
 handleEvent (Action a)   ls = act' ls [a]
