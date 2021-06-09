@@ -574,9 +574,11 @@ handleEvents1 :: EventLoop -> IO ()
 handleEvents1 ls = go
   where
     go = do
-      me <- atomically (tryReadTBQueue (lsQueue ls))
+      -- XXX: This appears to make the tests a lot more flaky, not sure why...
+      -- me <- atomically (tryReadTBQueue (lsQueue ls))
+      me <- atomically (Just <$> readTBQueue (lsQueue ls))
       case me of
-        Nothing -> return ()
+        Nothing -> threadDelay 100 -- 0.1 ms
         Just e  -> do
           handleEvent e ls
             `catch` \(ex :: SomeException) -> do

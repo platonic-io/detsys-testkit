@@ -170,10 +170,10 @@ unit_actorMapTimer = do
     _done <- ainvoke el lref (InternalMessage "go")
     -- Timer happens after 10 seconds.
     advanceFakeTime h 9
-    threadDelay 100000
+    threadDelay 300000
     s <- getActorState el lref
     s @?= stateFromList [("x", Integer 0)]
     advanceFakeTime h 1
-    threadDelay 100000
+    threadDelay 300000
     s' <- getActorState el lref
     s' @?= stateFromList [("x", Integer 1)]
