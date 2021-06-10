@@ -74,7 +74,7 @@ unit_actorMapOnAndState = do
                       lref2 <- spawn elB (testActor2 rref1) (stateFromList [("x", Integer 0)])
                       reply <- ainvoke elB lref2 (InternalMessage "inc")
                       reply @?= InternalMessage "inced"
-                      threadDelay 300000
+                      threadDelay 500000
                       reply2 <- ainvoke elB lref2 (InternalMessage "sum")
                       quit elA
                       quit elB
