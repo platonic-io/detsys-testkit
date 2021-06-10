@@ -445,28 +445,34 @@ initLoopState name time seed t =
     <*> newTVarIO (Promise 0)
     <*> newTVarIO emptyLog
 
+data Threaded = SingleThreaded | MultiThreaded
+
 makeEventLoop :: Time -> Seed -> TransportKind -> EventLoopName -> IO EventLoop
-makeEventLoop time seed tk name = do
+makeEventLoop = makeEventLoopThreaded SingleThreaded
+
+makeEventLoopThreaded :: Threaded -> Time -> Seed -> TransportKind -> EventLoopName
+                      -> IO EventLoop
+makeEventLoopThreaded threaded time seed tk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
          Stm          -> stmTransport
   ls <- initLoopState name time seed t
-  pids <- if False -- XXX: introduce and parametrise by flag
-          then do
-            aInHandler <- async (handleInbound ls)
-            aAsyncIOHandler <- async (handleAsyncIO ls)
-            aEvHandler <- async (handleEvents ls)
-            aTimeoutHandler <- async (handleTimeouts ls)
-            return [aInHandler, aAsyncIOHandler, aEvHandler, aTimeoutHandler]
-          else
-            fmap (: [])
-              (async (runHandlers seed  -- XXX: or do we want `TVar Seed` here?
-                       [ handleInbound1 ls
-                       , handleAsyncIO1 ls
-                       , handleEvents1 ls
-                       , handleTimeouts1 ls
-                       ]))
+  pids <- case threaded of
+            SingleThreaded ->
+              fmap (: [])
+                (async (runHandlers seed  -- XXX: or do we want `TVar Seed` here?
+                        [ handleInbound1 ls
+                        , handleAsyncIO1 ls
+                        , handleEvents1 ls
+                        , handleTimeouts1 ls
+                        ]))
+            MultiThreaded ->
+              mapM async [ handleInbound ls
+                         , handleAsyncIO ls
+                         , handleEvents ls
+                         , handleTimeouts ls
+                         ]
   atomically (modifyTVar' (lsPids ls) (pids ++))
   mapM_ link pids
   return ls
