@@ -446,7 +446,6 @@ initLoopState name time seed t =
     <*> newTVarIO emptyLog
 
 data Threaded = SingleThreaded | MultiThreaded
-  deriving Eq
 
 makeEventLoop :: Time -> Seed -> TransportKind -> EventLoopName -> IO EventLoop
 makeEventLoop = makeEventLoopThreaded SingleThreaded
@@ -459,21 +458,21 @@ makeEventLoopThreaded threaded time seed tk name = do
          Http port    -> httpTransport port
          Stm          -> stmTransport
   ls <- initLoopState name time seed t
-  pids <- if threaded == SingleThreaded
-          then
-            fmap (: [])
-              (async (runHandlers seed  -- XXX: or do we want `TVar Seed` here?
-                       [ handleInbound1 ls
-                       , handleAsyncIO1 ls
-                       , handleEvents1 ls
-                       , handleTimeouts1 ls
-                       ]))
-          else do
-            aInHandler <- async (handleInbound ls)
-            aAsyncIOHandler <- async (handleAsyncIO ls)
-            aEvHandler <- async (handleEvents ls)
-            aTimeoutHandler <- async (handleTimeouts ls)
-            return [aInHandler, aAsyncIOHandler, aEvHandler, aTimeoutHandler]
+  pids <- case threaded of
+            SingleThreaded ->
+              fmap (: [])
+                (async (runHandlers seed  -- XXX: or do we want `TVar Seed` here?
+                        [ handleInbound1 ls
+                        , handleAsyncIO1 ls
+                        , handleEvents1 ls
+                        , handleTimeouts1 ls
+                        ]))
+            MultiThreaded ->
+              mapM async [ handleInbound ls
+                         , handleAsyncIO ls
+                         , handleEvents ls
+                         , handleTimeouts ls
+                         ]
   atomically (modifyTVar' (lsPids ls) (pids ++))
   mapM_ link pids
   return ls
