@@ -560,7 +560,7 @@ findTimedout now s =
             })
 
 handleEvents :: EventLoop -> IO ()
-handleEvents = forever . handleEvents1
+handleEvents = forever . handleEvents1Blocking
 
 handleEvents1Blocking :: EventLoop -> IO ()
 handleEvents1Blocking ls = do
