@@ -445,6 +445,24 @@ initLoopState name time seed t =
     <*> newTVarIO (Promise 0)
     <*> newTVarIO emptyLog
 
+isDoneEventLoop :: EventLoop -> STM Bool
+isDoneEventLoop ls =
+  (&&)
+  <$> isEmptyTBQueue (lsQueue ls)
+  <*> fmap isDoneAsyncState (readTVar (lsAsyncState ls))
+
+isDoneAsyncState :: AsyncState -> Bool
+isDoneAsyncState as = and
+  [ Map.null  (asyncStateAsyncIO as)
+  , Map.null  (asyncStateContinuations as)
+  , Map.null  (asyncStateAdminSend as)
+  , Heap.null (asyncStateTimeouts as)
+  , Map.null  (asyncStateClientResponses as)
+  ]
+
+waitForEventLoop :: EventLoop -> IO ()
+waitForEventLoop ls = atomically (check =<< isDoneEventLoop ls)
+
 data Threaded = SingleThreaded | MultiThreaded
 
 makeEventLoop :: Time -> Seed -> TransportKind -> EventLoopName -> IO EventLoop
