@@ -74,7 +74,7 @@ unit_actorMapOnAndState = do
                       lref2 <- spawn elB (testActor2 rref1) (stateFromList [("x", Integer 0)])
                       reply <- ainvoke elB lref2 (InternalMessage "inc")
                       reply @?= InternalMessage "inced"
-                      threadDelay 100000
+                      threadDelay 500000
                       reply2 <- ainvoke elB lref2 (InternalMessage "sum")
                       quit elA
                       quit elB
@@ -94,7 +94,7 @@ unit_actorMapIO :: Assertion
 unit_actorMapIO = withEventLoop (eventLoopA "io") $ \el _h -> do
   lref <- spawn el testActor3 (stateFromList [("x", Integer 0)])
   _done <- ainvoke el lref (InternalMessage "go")
-  threadDelay 100000
+  waitForEventLoop el
   s <- getActorState el lref
   s @?= stateFromList [("x", Integer 1)]
 
@@ -108,7 +108,7 @@ unit_actorMapIOFail :: Assertion
 unit_actorMapIOFail = withEventLoop (eventLoopA "io_fail") $ \el _h -> do
   lref <- spawn el testActor4 (stateFromList [("x", Integer 0)])
   _done <- ainvoke el lref (InternalMessage "go")
-  threadDelay 100000
+  waitForEventLoop el
   s <- getActorState el lref
   s @?= stateFromList [("x", Integer 1)]
 
@@ -133,7 +133,7 @@ unit_actorMapSendTimeout = do
     s <- getActorState el lref
     s @?= stateFromList [("x", Integer 0)]
     advanceFakeTime h 1
-    threadDelay 100000
+    waitForEventLoop el
     s' <- getActorState el lref
     s' @?= stateFromList [("x", Integer 1)]
 
@@ -174,6 +174,6 @@ unit_actorMapTimer = do
     s <- getActorState el lref
     s @?= stateFromList [("x", Integer 0)]
     advanceFakeTime h 1
-    threadDelay 300000
+    waitForEventLoop el
     s' <- getActorState el lref
     s' @?= stateFromList [("x", Integer 1)]

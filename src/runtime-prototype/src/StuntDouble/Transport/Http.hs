@@ -11,7 +11,7 @@ import Data.Aeson
 import Data.Aeson.Parser
 import Data.String
 import Data.Aeson.Internal
-import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Data.ByteString.Char8 as BS
 import Data.ByteString.Lazy as LBS
@@ -29,12 +29,21 @@ import StuntDouble.Message
 
 httpTransport :: Port -> IO (Transport IO)
 httpTransport port = do
-  manager <- newManager defaultManagerSettings
   queue <- newTBQueueIO 128 -- XXX: when/how does this grow?
-  _tid <- forkFinally (run port (app queue)) (const (return ()))
-  return Transport { transportSend = transportSend' manager
-                   , transportReceive = atomically (tryReadTBQueue queue)
-                   }
+  readyTMVar <- newEmptyTMVarIO
+  let settings = setPort port
+               . setBeforeMainLoop (atomically (putTMVar readyTMVar ()))
+               $ defaultSettings
+  aServer <- async (runSettings settings (app queue))
+  aReady  <- async (atomically (takeTMVar readyTMVar))
+  ok <- waitEither aServer aReady
+  case ok of
+    Left () -> error "httpTransport: impossible, server should not return"
+    Right () -> do
+      manager <- newManager defaultManagerSettings
+      return Transport { transportSend = transportSend' manager
+                       , transportReceive = atomically (tryReadTBQueue queue)
+                       }
 
 transportSend' :: Manager -> Envelope -> IO ()
 transportSend' manager e = do
