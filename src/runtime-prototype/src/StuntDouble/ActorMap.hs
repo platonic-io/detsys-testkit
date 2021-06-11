@@ -57,6 +57,10 @@ data Resolution
 data ActorF x
   = Invoke LocalRef Message (Message -> x)
   | Send RemoteRef Message (Promise -> x)
+  -- XXX: IOOperation
+  --         = Get | Put | Delete
+  --         | Interate (batch read, given start- and end-key)
+  --         | Batch Write/Delete
   | AsyncIO (IO IOResult) (Promise -> x)
   | On Promise (Resolution -> Free ActorF ()) (() -> x)
   | Get (State -> x)
@@ -460,8 +464,27 @@ isDoneAsyncState as = and
   , Map.null  (asyncStateClientResponses as)
   ]
 
+isDoneEventLoopModuloTimeouts :: EventLoop -> STM Bool
+isDoneEventLoopModuloTimeouts ls =
+  (&&)
+  <$> isEmptyTBQueue (lsQueue ls)
+  <*> fmap isDoneAsyncStateModuloTimeouts (readTVar (lsAsyncState ls))
+
+isDoneAsyncStateModuloTimeouts :: AsyncState -> Bool
+isDoneAsyncStateModuloTimeouts as = and
+  [ Map.null  (asyncStateAsyncIO as)
+  , Map.null  (asyncStateAdminSend as)
+  , Map.null  (asyncStateClientResponses as)
+  , Map.keysSet (asyncStateContinuations as) ==
+    foldMap (Set.singleton . snd . Heap.payload) (asyncStateTimeouts as)
+  ]
+
 waitForEventLoop :: EventLoop -> IO ()
 waitForEventLoop ls = atomically (check =<< isDoneEventLoop ls)
+
+waitForEventLoopModuloTimeouts :: EventLoop -> IO ()
+waitForEventLoopModuloTimeouts ls =
+  atomically (check =<< isDoneEventLoopModuloTimeouts ls)
 
 data Threaded = SingleThreaded | MultiThreaded
 

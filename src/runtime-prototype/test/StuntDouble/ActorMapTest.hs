@@ -74,6 +74,9 @@ unit_actorMapOnAndState = do
                       lref2 <- spawn elB (testActor2 rref1) (stateFromList [("x", Integer 0)])
                       reply <- ainvoke elB lref2 (InternalMessage "inc")
                       reply @?= InternalMessage "inced"
+                      -- XXX: Using waitForEventLoop here instead of sleep seems
+                      -- to hang. Also this test is flaky, could it be that
+                      -- there's a bug lurking here?
                       threadDelay 500000
                       reply2 <- ainvoke elB lref2 (InternalMessage "sum")
                       quit elA
@@ -129,7 +132,7 @@ unit_actorMapSendTimeout = do
     _done <- ainvoke el lref (InternalMessage "go")
     -- Timeout happens after 60 seconds.
     advanceFakeTime h 59
-    threadDelay 100000
+    waitForEventLoopModuloTimeouts el
     s <- getActorState el lref
     s @?= stateFromList [("x", Integer 0)]
     advanceFakeTime h 1
@@ -170,7 +173,7 @@ unit_actorMapTimer = do
     _done <- ainvoke el lref (InternalMessage "go")
     -- Timer happens after 10 seconds.
     advanceFakeTime h 9
-    threadDelay 300000
+    waitForEventLoopModuloTimeouts el
     s <- getActorState el lref
     s @?= stateFromList [("x", Integer 0)]
     advanceFakeTime h 1
