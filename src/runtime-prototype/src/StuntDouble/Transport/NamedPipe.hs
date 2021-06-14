@@ -2,6 +2,7 @@ module StuntDouble.Transport.NamedPipe where
 
 import Control.Concurrent.Async
 import Control.Exception
+import System.Directory
 import System.FilePath
 import System.IO
 import System.IO.Error
@@ -26,6 +27,7 @@ namedPipeTransport fp name = do
                          hPutStrLn h' (show e)
                    , transportReceive =
                        fmap (fmap read) (hMaybeGetLine h)
+                   , transportShutdown = cleanUpNamedPipe fp name
                    }
 
 safeCreateNamedPipe :: FilePath -> IO ()
@@ -38,6 +40,15 @@ safeCreateNamedPipe fp =
       (namedPipeMode `unionFileModes`
        ownerReadMode `unionFileModes`
        ownerWriteMode))
+    return
+
+cleanUpNamedPipe :: FilePath -> EventLoopName -> IO ()
+cleanUpNamedPipe fp name =
+  catchJust
+    (\e -> if isDoesNotExistErrorType (ioeGetErrorType e)
+           then Just ()
+           else Nothing)
+    (removeFile (fp </> getEventLoopName name))
     return
 
 hMaybeGetLine :: Handle -> IO (Maybe String)

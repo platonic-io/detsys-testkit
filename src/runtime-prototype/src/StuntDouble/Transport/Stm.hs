@@ -12,4 +12,5 @@ stmTransport = do
   return Transport
     { transportSend = \e -> atomically (writeTChan chan e)
     , transportReceive = atomically (tryReadTChan chan)
+    , transportShutdown = return ()
     }
