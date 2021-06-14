@@ -7,6 +7,7 @@ import StuntDouble.Envelope
 data TransportKind = NamedPipe FilePath | Http Int | Stm
 
 data Transport m = Transport
-  { transportSend    :: Envelope -> m ()
-  , transportReceive :: m (Maybe Envelope)
+  { transportSend     :: Envelope -> m ()
+  , transportReceive  :: m (Maybe Envelope)
+  , transportShutdown :: m ()
   }

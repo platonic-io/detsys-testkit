@@ -3,7 +3,6 @@
 
 module StuntDouble.ActorMapTest where
 
-import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
 import Test.HUnit hiding (State)
@@ -14,13 +13,6 @@ import StuntDouble
 
 eventLoopA :: String -> EventLoopName
 eventLoopA suffix = EventLoopName ("event-loop-actormap-a" ++ "-" ++ suffix)
-
-withEventLoop :: EventLoopName -> (EventLoop -> FakeTimeHandle -> IO ()) -> IO ()
-withEventLoop name k = do
-  (time, h) <- fakeTimeEpoch
-  el <- makeEventLoop time (makeSeed 0) (NamedPipe "/tmp") name
-  k el h
-  quit el
 
 testActor :: Message -> Actor
 testActor (InternalMessage "hi") = Actor (return (InternalMessage "bye!"))
@@ -74,10 +66,8 @@ unit_actorMapOnAndState = do
                       lref2 <- spawn elB (testActor2 rref1) (stateFromList [("x", Integer 0)])
                       reply <- ainvoke elB lref2 (InternalMessage "inc")
                       reply @?= InternalMessage "inced"
-                      -- XXX: Using waitForEventLoop here instead of sleep seems
-                      -- to hang. Also this test is flaky, could it be that
-                      -- there's a bug lurking here?
-                      threadDelay 500000
+                      waitForEventLoop elA
+                      waitForEventLoopModuloTimeouts elB
                       reply2 <- ainvoke elB lref2 (InternalMessage "sum")
                       quit elA
                       quit elB
@@ -108,7 +98,7 @@ testActor4 (InternalMessage "go") = Actor $ do
   return (InternalMessage "done")
 
 unit_actorMapIOFail :: Assertion
-unit_actorMapIOFail = withEventLoop (eventLoopA "io_fail") $ \el _h -> do
+unit_actorMapIOFail = withEventLoop (eventLoopA "ioFail") $ \el _h -> do
   lref <- spawn el testActor4 (stateFromList [("x", Integer 0)])
   _done <- ainvoke el lref (InternalMessage "go")
   waitForEventLoop el
@@ -125,14 +115,14 @@ testActor5 rref (InternalMessage "go") = Actor $ do
 
 unit_actorMapSendTimeout :: Assertion
 unit_actorMapSendTimeout = do
-  let ev = eventLoopA "send_timeout"
+  let ev = eventLoopA "sendTimeout"
   withEventLoop ev $ \el h -> do
-    let rref = RemoteRef "doesnt_exist" 0
+    let rref = RemoteRef "doesntExist" 0
     lref <- spawn el (testActor5 rref) (stateFromList [("x", Integer 0)])
     _done <- ainvoke el lref (InternalMessage "go")
     -- Timeout happens after 60 seconds.
     advanceFakeTime h 59
-    waitForEventLoopModuloTimeouts el
+    -- XXX: Step all handlers explicitly here to ensure that timeout doesn't happen.
     s <- getActorState el lref
     s @?= stateFromList [("x", Integer 0)]
     advanceFakeTime h 1
@@ -150,7 +140,7 @@ testActor6 (InternalMessage "go") = Actor $ do
 
 unit_actorMapRandomAndTime :: Assertion
 unit_actorMapRandomAndTime = do
-  let ev = eventLoopA "random_and_time"
+  let ev = eventLoopA "randomAndTime"
   withEventLoop ev $ \el h -> do
     lref <- spawn el testActor6 emptyState
     result <- ainvoke el lref (InternalMessage "go")
@@ -173,7 +163,7 @@ unit_actorMapTimer = do
     _done <- ainvoke el lref (InternalMessage "go")
     -- Timer happens after 10 seconds.
     advanceFakeTime h 9
-    waitForEventLoopModuloTimeouts el
+    -- XXX: Step all handlers explicitly here to ensure that timeout doesn't happen.
     s <- getActorState el lref
     s @?= stateFromList [("x", Integer 0)]
     advanceFakeTime h 1

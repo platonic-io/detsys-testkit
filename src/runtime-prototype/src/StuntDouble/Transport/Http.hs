@@ -43,6 +43,7 @@ httpTransport port = do
       manager <- newManager defaultManagerSettings
       return Transport { transportSend = transportSend' manager
                        , transportReceive = atomically (tryReadTBQueue queue)
+                       , transportShutdown = cancel aServer
                        }
 
 transportSend' :: Manager -> Envelope -> IO ()

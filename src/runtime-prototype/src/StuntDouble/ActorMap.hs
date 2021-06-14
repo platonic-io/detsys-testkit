@@ -39,7 +39,7 @@ import StuntDouble.Reference
 data IOResult = String String | IOUnit ()
 
 newtype Promise = Promise Int
-  deriving (Eq, Ord, Num)
+  deriving (Eq, Ord, Num, Show)
 
 unPromise :: Promise -> Int
 unPromise (Promise i) = i
@@ -306,6 +306,7 @@ data AsyncState = AsyncState
 data TimeoutKind
   = SendTimeout
   | TimerTimeout
+  deriving Show
 
 emptyAsyncState :: AsyncState
 emptyAsyncState = AsyncState Map.empty Map.empty Map.empty Heap.empty Map.empty
@@ -472,11 +473,11 @@ isDoneEventLoopModuloTimeouts ls =
 
 isDoneAsyncStateModuloTimeouts :: AsyncState -> Bool
 isDoneAsyncStateModuloTimeouts as = and
-  [ Map.null  (asyncStateAsyncIO as)
-  , Map.null  (asyncStateAdminSend as)
-  , Map.null  (asyncStateClientResponses as)
-  , Map.keysSet (asyncStateContinuations as) ==
-    foldMap (Set.singleton . snd . Heap.payload) (asyncStateTimeouts as)
+  [ Map.null (asyncStateAsyncIO as)
+  , Map.null (asyncStateContinuations as)
+  , Map.null (asyncStateAdminSend as)
+  , not (Heap.null (asyncStateTimeouts as))
+  , Map.null (asyncStateClientResponses as)
   ]
 
 waitForEventLoop :: EventLoop -> IO ()
@@ -485,6 +486,38 @@ waitForEventLoop ls = atomically (check =<< isDoneEventLoop ls)
 waitForEventLoopModuloTimeouts :: EventLoop -> IO ()
 waitForEventLoopModuloTimeouts ls =
   atomically (check =<< isDoneEventLoopModuloTimeouts ls)
+
+dumpEventLoop :: EventLoop -> IO ()
+dumpEventLoop ls = do
+  as <- readTVarIO (lsAsyncState ls)
+  dumpAsyncState as
+
+dumpAsyncState :: AsyncState -> IO ()
+dumpAsyncState as = do
+  putStrLn ""
+  putStrLn "    AsyncState"
+  putStr "      { asyncStateAsyncIO = "
+  print (Map.elems (asyncStateAsyncIO as))
+  putStr "      , asyncStateContinuations = "
+  print (map (fmap snd) (Map.toList (asyncStateContinuations as)))
+  putStr "      , asyncStateAdminSend = "
+  print (Map.keys (asyncStateAdminSend as))
+  putStr "      , asyncStateTimeouts = "
+  print (toList (asyncStateTimeouts as))
+  putStr "      , asyncStateClientResponses = "
+  print (Map.keys (asyncStateClientResponses as))
+  putStrLn "    }"
+
+
+withTransport :: TransportKind -> EventLoopName -> (Transport IO -> IO a) -> IO a
+withTransport tk name k =
+  bracket
+    (case tk of
+       NamedPipe fp -> namedPipeTransport fp name
+       Http port    -> httpTransport port
+       Stm          -> stmTransport)
+    transportShutdown
+    k
 
 data Threaded = SingleThreaded | MultiThreaded
 
@@ -517,6 +550,23 @@ makeEventLoopThreaded threaded time seed tk name = do
   atomically (modifyTVar' (lsPids ls) (pids ++))
   mapM_ link pids
   return ls
+
+withEventLoop :: EventLoopName -> (EventLoop -> FakeTimeHandle -> IO a) -> IO a
+withEventLoop name k =
+  withTransport (NamedPipe "/tmp") name $ \t -> do
+    (time, h) <- fakeTimeEpoch
+    let seed = makeSeed 0
+    ls <- initLoopState name time seed t
+    a <- async (runHandlers seed
+                 [ handleInbound1 ls
+                 , handleAsyncIO1 ls
+                 , handleEvents1 ls
+                 , handleTimeouts1 ls
+                 ])
+    atomically (modifyTVar' (lsPids ls) (a :))
+    x <- k ls h
+    quit ls
+    return x
 
 runHandlers :: Seed -> [IO ()] -> IO ()
 runHandlers s0 hs = go s0

@@ -32,13 +32,6 @@ summand (InternalMessage "get") = Actor $ do
   s <- get
   return (InternalMessage (show (getField "x" s)))
 
-withEventLoop :: EventLoopName -> (EventLoop -> FakeTimeHandle -> IO ()) -> IO ()
-withEventLoop name k = do
-  (time, h) <- fakeTimeEpoch
-  el <- makeEventLoop time (makeSeed 0) (NamedPipe "/tmp") name
-  k el h
-  quit el
-
 eventLoop :: String -> EventLoopName
 eventLoop suffix = EventLoopName ("event-loop-http-frontend-" ++ suffix)
 
