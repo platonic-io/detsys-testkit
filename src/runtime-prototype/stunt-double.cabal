@@ -31,6 +31,7 @@ library
     StuntDouble.FreeMonad
     StuntDouble.Frontend.Http
     StuntDouble.Log
+    StuntDouble.IO
     StuntDouble.Message
     StuntDouble.Random
     StuntDouble.Reference
@@ -55,6 +56,7 @@ library
     , async
     , bytestring
     , heaps
+    , hashable
     , http-client
     , http-types
     , random
