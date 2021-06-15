@@ -33,10 +33,9 @@ import StuntDouble.Log
 import StuntDouble.Random
 import StuntDouble.Message
 import StuntDouble.Reference
+import StuntDouble.IO
 
 ------------------------------------------------------------------------
-
-data IOResult = String String | IOUnit ()
 
 newtype Promise = Promise Int
   deriving (Eq, Ord, Num, Show)
@@ -57,11 +56,7 @@ data Resolution
 data ActorF x
   = Invoke LocalRef Message (Message -> x)
   | Send RemoteRef Message (Promise -> x)
-  -- XXX: IOOperation
-  --         = Get | Put | Delete
-  --         | Interate (batch read, given start- and end-key)
-  --         | Batch Write/Delete
-  | AsyncIO (IO IOResult) (Promise -> x)
+  | AsyncIO IOOp (Promise -> x)
   | On Promise (Resolution -> Free ActorF ()) (() -> x)
   | Get (State -> x)
   | Put State (() -> x)
@@ -79,7 +74,7 @@ invoke lref msg = Free (Invoke lref msg return)
 send :: RemoteRef -> Message -> Free ActorF Promise
 send rref msg = Free (Send rref msg return)
 
-asyncIO :: IO IOResult -> Free ActorF Promise
+asyncIO :: IOOp -> Free ActorF Promise
 asyncIO io = Free (AsyncIO io return)
 
 on :: Promise -> (Resolution -> Free ActorF ()) -> Free ActorF ()
@@ -136,7 +131,7 @@ actorMapSpawn a s t (ActorMap m) =
 
 data Action
   = SendAction LocalRef Message RemoteRef Promise
-  | AsyncIOAction (IO IOResult) Promise
+  | AsyncIOAction IOOp Promise
   | OnAction Promise (Resolution -> Free ActorF ()) LocalRef
   | SetTimerAction Time.NominalDiffTime Promise
   | ClientResponseAction ClientRef Message  -- XXX: this doesn't really fit into action...
@@ -247,7 +242,7 @@ act' :: EventLoop -> [Action] -> IO ()
 act' ls as = do
   -- XXX: non-atomic update of the async state?!
   s <- readTVarIO (lsAsyncState ls)
-  s' <- act (lsName ls) as (lsTime ls) (lsTransport ls) s
+  s' <- act (lsName ls) as (lsTime ls) (lsTransport ls) (lsDisk ls) s
   atomically (writeTVar (lsAsyncState ls) s')
 
 actorMapGetStateIO :: LocalRef -> TVar ActorMap -> IO State
@@ -320,8 +315,9 @@ madePromises = foldMap go
     go (SetTimerAction _ndt (Promise i)) = Set.singleton i
     go ClientResponseAction {} = Set.empty
 
-act :: EventLoopName -> [Action] -> Time -> Transport IO -> AsyncState -> IO AsyncState
-act name as time transport s0 = foldM go s0 as
+act :: EventLoopName -> [Action] -> Time -> Transport IO -> Disk IO -> AsyncState
+    -> IO AsyncState
+act name as time transport disk s0 = foldM go s0 as
   where
     is :: Set Int
     is = madePromises as
@@ -337,7 +333,7 @@ act name as time transport s0 = foldM go s0 as
                    Heap.insert (Entry timeoutAfter (SendTimeout, p)) (asyncStateTimeouts s) }
     go s (AsyncIOAction io p) = do
       -- XXX: Use `asyncOn` a different capability than main loop.
-      a <- async io
+      a <- async (diskIO io disk)
       -- XXX: make it possible for async I/O to timeout as well?
       return (s { asyncStateAsyncIO = Map.insert a p (asyncStateAsyncIO s) })
     go s (OnAction p@(Promise i) k lref)
@@ -431,13 +427,14 @@ data EventLoop = EventLoop
   , lsTime        :: Time
   , lsSeed        :: TVar Seed
   , lsTransport   :: Transport IO
+  , lsDisk        :: Disk IO
   , lsPids        :: TVar [Async ()]
   , lsNextPromise :: TVar Promise
   , lsLog         :: TVar Log
   }
 
-initLoopState :: EventLoopName -> Time -> Seed -> Transport IO -> IO EventLoop
-initLoopState name time seed t =
+initLoopState :: EventLoopName -> Time -> Seed -> Transport IO -> Disk IO -> IO EventLoop
+initLoopState name time seed transport disk =
   EventLoop
     <$> pure name
     <*> newTVarIO emptyActorMap
@@ -445,7 +442,8 @@ initLoopState name time seed t =
     <*> newTBQueueIO 128
     <*> pure time
     <*> newTVarIO seed
-    <*> pure t
+    <*> pure transport
+    <*> pure disk
     <*> newTVarIO []
     <*> newTVarIO (Promise 0)
     <*> newTVarIO emptyLog
@@ -531,7 +529,8 @@ makeEventLoopThreaded threaded time seed tk name = do
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
          Stm          -> stmTransport
-  ls <- initLoopState name time seed t
+  disk <- fakeDisk
+  ls <- initLoopState name time seed t disk
   pids <- case threaded of
             SingleThreaded ->
               fmap (: [])
@@ -556,7 +555,8 @@ withEventLoop name k =
   withTransport (NamedPipe "/tmp") name $ \t -> do
     (time, h) <- fakeTimeEpoch
     let seed = makeSeed 0
-    ls <- initLoopState name time seed t
+    disk <- fakeDisk
+    ls <- initLoopState name time seed t disk
     a <- async (runHandlers seed
                  [ handleInbound1 ls
                  , handleAsyncIO1 ls
