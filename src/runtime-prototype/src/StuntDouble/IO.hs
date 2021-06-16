@@ -27,6 +27,7 @@ data IOOp
 
   | IOAppend Index Value
   | IORead Index
+  | IOReturn IOResult
 
 data Disk m = Disk
   -- LevelDB.
@@ -42,12 +43,13 @@ data Disk m = Disk
   , ioRead    :: Index -> m Value
   }
 
-data IOResult = IOValue Value | IOUnit ()
+data IOResult = IOValue Value | IOUnit () | IOString String
 
 diskIO :: Monad m => IOOp -> Disk m -> m IOResult
-diskIO (IOGet k)    io = IOValue <$> ioGet io k
-diskIO (IOPut k v)  io = IOUnit <$> ioPut io k v
-diskIO (IODelete k) io = IOUnit <$> ioDelete io k
+diskIO (IOGet k)     io = IOValue <$> ioGet io k
+diskIO (IOPut k v)   io = IOUnit <$> ioPut io k v
+diskIO (IODelete k)  io = IOUnit <$> ioDelete io k
+diskIO (IOReturn x) _io = return x
 diskIO _ _io = error "not implemented yet"
 
 fakeDisk :: IO (Disk IO)
@@ -65,3 +67,6 @@ fakeDisk = do
     , ioAppend  = undefined
     , ioRead    = undefined
     }
+
+slowFakeDisk :: IO (Disk IO)
+slowFakeDisk = undefined

@@ -79,8 +79,8 @@ unit_actorMapOnAndState = do
 
 testActor3 :: Message -> Actor
 testActor3 (InternalMessage "go") = Actor $ do
-  p <- asyncIO (return (String "io done"))
-  on p (\(IOResultR (String "io done")) -> modify (add "x" 1))
+  p <- asyncIO (IOReturn (IOString "io done"))
+  on p (\(IOResultR (IOString "io done")) -> modify (add "x" 1))
   return (InternalMessage "done")
 
 unit_actorMapIO :: Assertion
