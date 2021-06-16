@@ -29,6 +29,7 @@ library
     StuntDouble.Transport.NamedPipe
     StuntDouble.Transport.Stm
     StuntDouble.FreeMonad
+    StuntDouble.Histogram
     StuntDouble.Frontend.Http
     StuntDouble.Log
     StuntDouble.IO
@@ -63,6 +64,8 @@ library
     , unordered-containers
     , wai
     , warp
+    , atomic-primops
+    , vector
 
   default-language: Haskell2010
 
@@ -88,6 +91,7 @@ test-suite test
     StuntDouble.Transport.StmTest
     StuntDouble.Transport.NamedPipeTest
     StuntDouble.FrontendTest
+    StuntDouble.HistogramTest
     StuntDouble.RandomTest
     StuntDouble.SchedulerTest
     TastyDiscover
