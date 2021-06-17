@@ -10,8 +10,10 @@
 -- Portability :  non-portable (GHC extensions)
 --
 -- This module is a Haskell port of Tyler Neely's historian Rust
--- [crate](https://github.com/spacejam/historian) which is licensed under the
--- [Apache license version 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+-- [crate](https://github.com/spacejam/historian), which in turn seems to be
+-- derived from his [loghisto](https://github.com/spacejam/loghisto) Golang
+-- library. Neely's code bases both use the [Apache license version
+-- 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 --
 -----------------------------------------------------------------------------
 module StuntDouble.Histogram where
@@ -43,7 +45,8 @@ newHistogram = Histogram
   <*> newCounter 0
   <*> newCounter 0
 
--- | The value @v@ must be positive.
+-- | The value @v@ must be positive. For values larger or equal to @1@ the
+-- compression loss is less than @1%@.
 measure :: RealFrac a => a -> Histogram -> IO Int
 measure v h = do
   incrCounter_ (round v) (histoSum h)
@@ -66,7 +69,7 @@ decompress w = exp (realToFrac w / precision) - 1
 
 percentile :: Double -> Histogram -> IO (Maybe Double)
 percentile p h
-  | p <= 100.0 = error "percentile: percentiles cannot be over 100"
+  | p > 100.0 = error "percentile: percentiles cannot be over 100"
   | otherwise  = do
       count <- readCounter (histoCount h)
       if count == 0

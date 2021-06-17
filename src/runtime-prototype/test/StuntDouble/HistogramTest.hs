@@ -1,5 +1,6 @@
 module StuntDouble.HistogramTest where
 
+import GHC.Float
 import Control.Monad
 import Test.QuickCheck
 import Test.HUnit
@@ -8,14 +9,31 @@ import StuntDouble.Histogram
 
 ------------------------------------------------------------------------
 
-prop_roundtrip :: Double -> Bool
-prop_roundtrip d =
-  let
+prop_roundtrip :: Positive Double -> Property
+prop_roundtrip (Positive d) = withMaxSuccess 100000 $
+  d >= 1 ==>
+  classify (1    <= d && d < 10)   "1-9" $
+  classify (10   <= d && d < 100)  "10-99" $
+  classify (100  <= d && d < 1000) "100-999" $
+  classify (1000 <= d)             "1000-.." $
+  d * 0.99 <= d' && d' <= d * 1.01
+  where
     d' = decompress (compress d)
-    ad = abs d
-  in
-    if ad <= 0.25 then True else
-    ad * 0.97 <= d' && d' <= ad * 1.03
+
+prop_roundtripLarge :: Large Int -> Property
+prop_roundtripLarge (Large i) = withMaxSuccess 100000 $
+  d >= 1 ==>
+  classify (1     <= d && d < 10)       "1-9" $
+  classify (10    <= d && d < 100)      "10-99" $
+  classify (100   <= d && d < 1000)     "100-999" $
+  classify (1000  <= d && d < 10000)    "1000-9999" $
+  classify (10000 <= d && d < 100000)   "10000-99999" $
+  classify (100000 <= d && d < 1000000) "100000-999999" $
+  classify (1000000 <= d)               "1000000-.." $
+  d * 0.99 <= d' && d' <= d * 1.01
+  where
+    d  = int2Double (abs i)
+    d' = decompress (compress d)
 
 assertIO :: (Eq a, Show a) => IO a -> a -> Assertion
 assertIO io y = do
