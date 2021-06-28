@@ -19,7 +19,7 @@
 module StuntDouble.Histogram where
 
 import Control.Exception
-import Data.Coerce
+import GHC.Float
 import Data.Word
 import Data.Atomics.Counter
 import Data.Vector (Vector)
@@ -100,3 +100,30 @@ hsum = readCounter . histoSum
 
 hcount :: Histogram -> IO Int
 hcount = readCounter . histoCount
+
+-- | @hstats@ returns `Nothing` if no @measure@s have been made, otherwise it
+-- returns `Just` of a list of the minimum, median, the 90-, 99-, 99.9- and
+-- 99.99-th percentile, the maximum, total count, and the sum of all @measure@s.
+hstats :: Histogram -> IO (Maybe [Double])
+hstats h = do
+  c <- hcount h
+  if c == 0
+  then return Nothing
+  else do
+    mps <- mapM (\p -> percentile p h) [0, 50, 90, 99, 99.9, 99.99, 100]
+    s <- hsum h
+    let mps' = mps ++ [Just (int2Double c), Just (int2Double s)]
+    return (Just (map (maybe (read "NaN") id) mps'))
+
+prettyPrintHistogram :: String -> Histogram -> IO ()
+prettyPrintHistogram name h = do
+  putStr name
+  putStr ": "
+  ms <- hstats h
+  case ms of
+    Nothing -> putStrLn "NaN"
+    Just s  -> do
+      putStrLn ""
+      putStr "min med 90 99 99.9 99.99 max count sum"
+      putStrLn ""
+      mapM_ (\d -> putStr (show d ++ " ")) s
