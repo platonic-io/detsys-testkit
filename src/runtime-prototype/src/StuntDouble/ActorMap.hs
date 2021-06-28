@@ -436,6 +436,7 @@ data EventLoop = EventLoop
   , lsNextPromise :: TVar Promise
   , lsLog         :: TVar Log
   , lsMetrics     :: Metrics
+  , lsIOQueue     :: TBQueue (IOOp, Promise)
   }
 
 initLoopState :: EventLoopName -> Time -> Seed -> Transport IO -> Disk IO -> IO EventLoop
@@ -453,6 +454,7 @@ initLoopState name time seed transport disk =
     <*> newTVarIO (Promise 0)
     <*> newTVarIO emptyLog
     <*> newMetrics
+    <*> newTBQueueIO 128 -- XXX: longer?
 
 isDoneEventLoop :: EventLoop -> STM Bool
 isDoneEventLoop ls =
@@ -525,18 +527,46 @@ withTransport tk name k =
 
 data Threaded = SingleThreaded | MultiThreaded
 
-makeEventLoop :: Time -> Seed -> TransportKind -> EventLoopName -> IO EventLoop
-makeEventLoop = makeEventLoopThreaded SingleThreaded
+data ThreadPool = NoThreadPool | ThreadPoolOfSize Int
 
-makeEventLoopThreaded :: Threaded -> Time -> Seed -> TransportKind -> EventLoopName
-                      -> IO EventLoop
-makeEventLoopThreaded threaded time seed tk name = do
+asyncIOWorker :: EventLoop -> IO ()
+asyncIOWorker ls = do
+  (io, p) <- atomically (readTBQueue (lsIOQueue ls))
+  -- XXX: timeout?
+  eResult <- try (diskIO io (lsDisk ls))
+  case eResult of
+    Right result ->
+      atomically (writeTBQueue (lsQueue ls) (Reaction (AsyncIOFinished p result)))
+    Left e ->
+      atomically (writeTBQueue (lsQueue ls) (Reaction (AsyncIOFailed p e)))
+
+spawnIOWorkers :: ThreadPool -> EventLoop -> IO [Async ()]
+spawnIOWorkers NoThreadPool         _ls = return []
+spawnIOWorkers (ThreadPoolOfSize n)  ls
+  | n <= 0 = error "spawnIOWorkers: thread pool less than or equal to zero"
+  | otherwise = do
+      tid <- myThreadId
+      (cap, _pinned) <- threadCapability tid
+      numCap <- getNumCapabilities
+      -- Minus one because we don't want to run the workers on the same thread
+      -- as the main event loop.
+      when (n > numCap - 1) $
+        error "spawnIOWorkers: thread pool size is bigger than the available CPU capabilities"
+      mapM (\c -> asyncOn c (asyncIOWorker ls)) [ i | i <- [0..n], i /= cap ]
+
+makeEventLoop :: Time -> Seed -> TransportKind -> EventLoopName -> IO EventLoop
+makeEventLoop = makeEventLoopThreaded SingleThreaded NoThreadPool
+
+makeEventLoopThreaded :: Threaded -> ThreadPool -> Time -> Seed -> TransportKind
+                      -> EventLoopName -> IO EventLoop
+makeEventLoopThreaded threaded threadpool time seed tk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
          Stm          -> stmTransport
   disk <- fakeDisk
   ls <- initLoopState name time seed t disk
+  workerPids <- spawnIOWorkers threadpool ls
   pids <- case threaded of
             SingleThreaded ->
               fmap (: [])
@@ -552,7 +582,7 @@ makeEventLoopThreaded threaded time seed tk name = do
                          , handleEvents ls
                          , handleTimeouts ls
                          ]
-  atomically (modifyTVar' (lsPids ls) (pids ++))
+  atomically (modifyTVar' (lsPids ls) ((pids ++ workerPids) ++))
   mapM_ link pids
   return ls
 
