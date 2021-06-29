@@ -336,7 +336,7 @@ act name as time transport disk s0 = foldM go s0 as
       return s { asyncStateTimeouts =
                    Heap.insert (Entry timeoutAfter (SendTimeout, p)) (asyncStateTimeouts s) }
     go s (AsyncIOAction io p) = do
-      -- XXX: Use `asyncOn` a different capability than main loop.
+      -- XXX: Append to lsIOQueue if thread pool is activated...
       a <- async (diskIO io disk)
       -- XXX: make it possible for async I/O to timeout as well?
       return (s { asyncStateAsyncIO = Map.insert a p (asyncStateAsyncIO s) })
