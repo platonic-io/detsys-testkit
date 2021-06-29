@@ -124,6 +124,7 @@ not.
 
 #### How to run tests
 
+```bash
 cabal configure test \
     --test-option='--timeout=10' \
     --test-option='--color=always' \
@@ -131,3 +132,8 @@ cabal configure test \
     --ghc-options='-threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts' \
     # --test-option='--pattern=/$pattern/
 cabal test
+```
+
+#### How to run benchmarks
+
+`cabal bench`
