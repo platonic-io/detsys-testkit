@@ -136,4 +136,8 @@ cabal test
 
 #### How to run benchmarks
 
-`cabal bench`
+```bash
+cabal configure bench \
+    --ghc-options='-threaded -rtsopts -with-rtsopts=-N'
+cabal bench
+```
