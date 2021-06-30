@@ -1,3 +1,6 @@
+-- This module is heavily inspired by Tyler Neely's sled benchmark:
+-- https://github.com/spacejam/sled/blob/main/benchmarks/stress2/src/main.rs
+
 module Main where
 
 import Control.Monad
@@ -21,6 +24,19 @@ client total = forever go
       threadDelay 100000 -- 100ms
       incrCounter_ 1 total
 
+rss :: IO Double
+rss = do
+  ml <- try (readFile "/proc/self/statm")
+  case ml of
+    Left err -> do
+      print (err :: SomeException)
+      return 0
+    Right l   ->
+      let
+        rssPages = read (words l !! 1)
+      in
+        return (rssPages * 4096)
+
 reporter :: AtomicCounter -> IO ()
 reporter total = go 0
   where
@@ -28,7 +44,9 @@ reporter total = go 0
     go last = do
       threadDelay 1000000 -- 1s
       tot <- readCounter total
-      putStrLn (concat ["did ", show (tot - last), " ops"])
+      b <- rss
+      putStrLn (concat ["did ", show (tot - last), " ops, ",
+                        show (b / (1024 * 1024)), "mb RSS"])
       go tot
 
 before :: Int -> AtomicCounter -> IO [Async ()]
