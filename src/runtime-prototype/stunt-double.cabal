@@ -122,6 +122,7 @@ benchmark bench
     , base
     , stm
     , stunt-double
+    , time
 
   -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/using-concurrent.html
   --  -with-rtsopts=-qa -with-rtsopts=-qm

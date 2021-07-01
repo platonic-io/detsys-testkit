@@ -138,6 +138,11 @@ cabal test
 
 ```bash
 cabal configure bench \
+    --enable-profiling \
     --ghc-options='-threaded -rtsopts -with-rtsopts=-N'
-cabal bench
+cabal run bench -p -- +RTS -p -hm -RTS
+
+less bench.prof
+hp2ps -c bench.hp
+evince bench.ps
 ```

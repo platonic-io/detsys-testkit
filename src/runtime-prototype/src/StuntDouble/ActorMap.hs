@@ -10,7 +10,10 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
+import Data.List
 import Data.Foldable (toList)
+import Data.Vector (Vector)
+import qualified Data.Vector as Vector
 import Data.Heap (Entry(Entry), Heap)
 import qualified Data.Heap as Heap
 import Data.Map (Map)
@@ -20,6 +23,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
+import System.Random
 
 import StuntDouble.Actor.State
 import StuntDouble.Envelope
@@ -605,19 +609,18 @@ withEventLoop name k =
     return x
 
 runHandlers :: Seed -> [IO ()] -> IO ()
-runHandlers s0 hs = go s0
+runHandlers seed0 hs = go seed0
   where
-    go s = do
-      s' <- stepHandlers s hs
-      go s'
+    hss :: Vector [IO ()]
+    hss = Vector.fromList (permutations hs)
 
-stepHandlers :: Seed -> [IO ()] -> IO Seed
-stepHandlers s hs =
-  let
-    (hs', s') = shuffle s hs
-  in do
-    sequence_ hs'
-    return s'
+    go :: Seed -> IO ()
+    go seed =
+      let
+        (ix, seed') = randomR (0, length hss - 1) seed
+      in do
+        sequence_ (hss Vector.! ix)
+        go seed'
 
 handleInbound :: EventLoop -> IO ()
 handleInbound = forever . handleInbound1
