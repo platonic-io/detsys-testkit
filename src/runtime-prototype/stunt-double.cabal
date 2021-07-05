@@ -38,6 +38,7 @@ library
     StuntDouble.Reference
     StuntDouble.Supervisor
     StuntDouble.Time
+    StuntDouble.Metrics
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)

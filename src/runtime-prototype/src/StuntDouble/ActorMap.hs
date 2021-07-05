@@ -11,29 +11,31 @@ import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
 import Data.Foldable (toList)
-import Data.Maybe (catMaybes)
-import Data.Heap (Heap, Entry(Entry))
+import Data.Heap (Entry(Entry), Heap)
 import qualified Data.Heap as Heap
-import Data.Time (UTCTime)
-import qualified Data.Time as Time
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (catMaybes)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Time (UTCTime)
+import qualified Data.Time as Time
 
 import StuntDouble.Actor.State
 import StuntDouble.Envelope
-import StuntDouble.Transport
-import StuntDouble.Transport.NamedPipe
-import StuntDouble.Transport.Http
-import StuntDouble.Transport.Stm
 import StuntDouble.FreeMonad
-import StuntDouble.Time
-import StuntDouble.Log
-import StuntDouble.Random
-import StuntDouble.Message
-import StuntDouble.Reference
+import StuntDouble.Histogram
 import StuntDouble.IO
+import StuntDouble.Log
+import StuntDouble.Message
+import StuntDouble.Metrics
+import StuntDouble.Random
+import StuntDouble.Reference
+import StuntDouble.Time
+import StuntDouble.Transport
+import StuntDouble.Transport.Http
+import StuntDouble.Transport.NamedPipe
+import StuntDouble.Transport.Stm
 
 ------------------------------------------------------------------------
 
@@ -274,6 +276,8 @@ clientRequest ls lref msg = do
   atomically (modifyTVar' (lsAsyncState ls)
               (\s -> s { asyncStateClientResponses =
                          Map.insert cref respVar (asyncStateClientResponses s) }))
+  depth <- atomically (lengthTBQueue (lsQueue ls))
+  reportEventLoopDepth depth (lsMetrics ls)
   atomically (writeTBQueue (lsQueue ls) (ClientRequestEvent lref msg cref returnVar))
   a <- async (atomically (takeTMVar respVar))
   reply <- atomically (takeTMVar returnVar)
@@ -431,6 +435,7 @@ data EventLoop = EventLoop
   , lsPids        :: TVar [Async ()]
   , lsNextPromise :: TVar Promise
   , lsLog         :: TVar Log
+  , lsMetrics     :: Metrics
   }
 
 initLoopState :: EventLoopName -> Time -> Seed -> Transport IO -> Disk IO -> IO EventLoop
@@ -447,6 +452,7 @@ initLoopState name time seed transport disk =
     <*> newTVarIO []
     <*> newTVarIO (Promise 0)
     <*> newTVarIO emptyLog
+    <*> newMetrics
 
 isDoneEventLoop :: EventLoop -> STM Bool
 isDoneEventLoop ls =
