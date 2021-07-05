@@ -241,15 +241,8 @@ actorPokeIO ls lref msg = do
     writeTVar (lsNextPromise ls) p'
     writeTVar (lsSeed ls) seed'
     return (reply, as)
-  act' ls as
+  act ls as
   return reply
-
-act' :: EventLoop -> [Action] -> IO ()
-act' ls as = do
-  -- XXX: non-atomic update of the async state?!
-  s <- readTVarIO (lsAsyncState ls)
-  s' <- act (lsName ls) as (lsTime ls) (lsTransport ls) (lsDisk ls) s
-  atomically (writeTVar (lsAsyncState ls) s')
 
 actorMapGetStateIO :: LocalRef -> TVar ActorMap -> IO State
 actorMapGetStateIO lref am = atomically (stateTVar am (actorMapGetState lref))
@@ -262,6 +255,8 @@ getActorState ls lref = actorMapGetStateIO lref (lsActorMap ls)
 ainvoke :: EventLoop -> LocalRef -> Message -> IO Message
 ainvoke ls lref msg = do
   returnVar <- newEmptyTMVarIO
+  depth <- atomically (lengthTBQueue (lsQueue ls))
+  reportEventLoopDepth depth (lsMetrics ls)
   atomically (writeTBQueue (lsQueue ls) (Admin (AdminInvoke lref msg returnVar)))
   atomically (takeTMVar returnVar)
 
@@ -323,43 +318,48 @@ madePromises = foldMap go
     go (SetTimerAction _ndt (Promise i)) = Set.singleton i
     go ClientResponseAction {} = Set.empty
 
-act :: EventLoopName -> [Action] -> Time -> Transport IO -> Disk IO -> AsyncState
-    -> IO AsyncState
-act name as time transport disk s0 = foldM go s0 as
+act :: EventLoop -> [Action] -> IO ()
+act ls as = mapM_ go as
   where
     is :: Set Int
     is = madePromises as
 
-    go :: AsyncState -> Action -> IO AsyncState
-    go s (SendAction from msg to p@(Promise i)) = do
-      transportSend transport
-        (Envelope RequestKind (localToRemoteRef name from) msg to (CorrelationId i))
-      t <- getCurrentTime time
+    go :: Action -> IO ()
+    go (SendAction from msg to p@(Promise i)) = do
+      transportSend (lsTransport ls)
+        (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i))
+      t <- getCurrentTime (lsTime ls)
       -- XXX: make it possible to specify when a send request should timeout.
       let timeoutAfter = Time.addUTCTime 60 t
-      return s { asyncStateTimeouts =
-                   Heap.insert (Entry timeoutAfter (SendTimeout, p)) (asyncStateTimeouts s) }
-    go s (AsyncIOAction io p) = do
+      atomically $ modifyTVar' (lsAsyncState ls) $
+        \s -> s { asyncStateTimeouts =
+                    Heap.insert (Entry timeoutAfter (SendTimeout, p))
+                                (asyncStateTimeouts s) }
+    go (AsyncIOAction io p) = do
       -- XXX: Append to lsIOQueue if thread pool is activated...
-      a <- async (diskIO io disk)
+      a <- async (diskIO io (lsDisk ls))
       -- XXX: make it possible for async I/O to timeout as well?
-      return (s { asyncStateAsyncIO = Map.insert a p (asyncStateAsyncIO s) })
-    go s (OnAction p@(Promise i) k lref)
+      atomically $ modifyTVar' (lsAsyncState ls) $ \s ->
+        s { asyncStateAsyncIO = Map.insert a p (asyncStateAsyncIO s) }
+    go (OnAction p@(Promise i) k lref)
       | i `Set.member` is =
-          return (s { asyncStateContinuations =
-                      Map.insert p (k, lref) (asyncStateContinuations s) })
+          atomically $ modifyTVar' (lsAsyncState ls) $ \s ->
+            s { asyncStateContinuations =
+                Map.insert p (k, lref) (asyncStateContinuations s) }
       | otherwise =
           error "act: impossible, `On` must be supplied with a promise that was just made."
-    go s (SetTimerAction ndt p) = do
-      t <- getCurrentTime time
+    go (SetTimerAction ndt p) = do
+      t <- getCurrentTime (lsTime ls)
       let timeoutAfter = Time.addUTCTime ndt t
-      return s { asyncStateTimeouts =
-                   Heap.insert (Entry timeoutAfter (TimerTimeout, p)) (asyncStateTimeouts s) }
-    go s (ClientResponseAction cref msg) = do
+      atomically $ modifyTVar' (lsAsyncState ls) $ \s ->
+        s { asyncStateTimeouts =
+            Heap.insert (Entry timeoutAfter (TimerTimeout, p)) (asyncStateTimeouts s) }
+    go (ClientResponseAction cref msg) = atomically $ do
+      s <- readTVar (lsAsyncState ls)
       let respVar = asyncStateClientResponses s Map.! cref -- XXX: partial
-      atomically (putTMVar respVar msg)
-      return s
-        { asyncStateClientResponses = Map.delete cref (asyncStateClientResponses s) }
+      putTMVar respVar msg
+      modifyTVar' (lsAsyncState ls) $ \s ->
+        s { asyncStateClientResponses = Map.delete cref (asyncStateClientResponses s) }
 
 data Reaction
   = Receive Promise Envelope
@@ -703,6 +703,7 @@ handleEvents1Blocking ls = do
   e <- atomically (readTBQueue (lsQueue ls))
   handleEvent e ls
     `catch` \(ex :: SomeException) -> do
+        reportError (lsMetrics ls)
         -- XXX: Why are `AsyncCancelled` being caught here?
         unless (fromException ex == Just AsyncCancelled) $
           putStrLn ("handleEvents: exception: " ++ show ex)
@@ -722,7 +723,7 @@ handleEvents1 ls = do
                     putStrLn ("handleEvents: exception: " ++ show ex)
 
 handleEvent :: Event -> EventLoop -> IO ()
-handleEvent (Action a)   ls = act' ls [a]
+handleEvent (Action a)   ls = act ls [a]
 handleEvent (Reaction r) ls = do
   m <- reactIO r (lsAsyncState ls)
   case m of
@@ -742,7 +743,7 @@ handleEvent (Reaction r) ls = do
         writeTVar (lsNextPromise ls) p'
         writeTVar (lsSeed ls) seed'
         return as
-      act' ls as
+      act ls as
     AdminSendResponse returnVar msg ->
       atomically (putTMVar returnVar msg)
 handleEvent (Admin cmd) ls = case cmd of

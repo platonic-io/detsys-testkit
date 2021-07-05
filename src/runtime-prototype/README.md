@@ -139,10 +139,25 @@ cabal test
 ```bash
 cabal configure bench \
     --enable-profiling \
-    --ghc-options='-threaded -rtsopts -with-rtsopts=-N'
-cabal run bench -p -- +RTS -p -hm -RTS
+    --ghc-options='-threaded -eventlog -rtsopts -with-rtsopts=-N'
+cabal run bench -p -- +RTS -p -hm -ls -RTS
 
+# CPU use
 less bench.prof
+
+# Memory use
 hp2ps -c bench.hp
 evince bench.ps
+
+# Threadscope
+# https://wiki.haskell.org/ThreadScope_Tour
+threadscope bench.eventlog
+
+# Flamegraphs
+# https://github.com/brendangregg/FlameGraph
+# https://hackage.haskell.org/package/stackcollapse-ghc
+stackcollapse-ghc -p bench.prof | \
+  flamegraph.pl --title 'bench' \
+                --subtitle 'Time' \
+                --countname ticks > bench.svg
 ```

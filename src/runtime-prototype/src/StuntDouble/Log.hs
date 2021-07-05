@@ -1,5 +1,7 @@
 module StuntDouble.Log where
 
+import Control.Exception
+
 import StuntDouble.Message
 import StuntDouble.Reference
 import StuntDouble.Actor.State
@@ -13,6 +15,7 @@ data LogEntry
   | Turn TurnData
   | ClientRequestEntry
   | ClientResponseEntry
+  | ErrorLogEntry SomeException
 
 data TurnData = TurnData
   { tdActor         :: LocalRef
