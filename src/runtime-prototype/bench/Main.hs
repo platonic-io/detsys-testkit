@@ -9,6 +9,7 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
+import Data.List (delete)
 import Data.Atomics.Counter
 import Data.IORef
 import qualified Data.Time.Clock as Clock
@@ -46,6 +47,24 @@ client mgr el lref total errors shutdown = go
                          then return ()
                          else incrCounter_ 1 errors
         incrCounter_ 1 total
+
+        -- as <- forM [1..5] $ \_ -> do
+        --   async (makeClientRequest mgr (InternalMessage "write") 3004)
+
+        -- let process [] = return ()
+        --     process as = do
+        --       (a, eReply) <- waitAnyCatch as
+        --       case eReply of
+        --         -- XXX: log error for debugging purposes?
+        --         Left  _err          -> incrCounter_ 1 errors
+        --         Right (Left _err)   -> incrCounter_ 1 errors
+        --         Right (Right reply) -> if reply == InternalMessage "ack"
+        --                                then return ()
+        --                                else incrCounter_ 1 errors
+        --       incrCounter_ 1 total
+        --       process (delete a as)
+
+        -- process as
         go
 
 -- | "Resident set size (RSS) is the portion of memory occupied by a process
@@ -122,7 +141,8 @@ after :: EventLoop -> AtomicCounter -> AtomicCounter -> Clock.UTCTime
       -> [Async ()] -> IO ()
 after el total errors t0 pids = do
   quit el
-  mapM_ cancel pids
+  mapM_ wait (tail pids) -- workers
+  cancel (head pids) -- http frontend
   printStats el total errors t0
   prettyPrintHistogram "event loop saturation" (mEventLoopSat (lsMetrics el))
 
