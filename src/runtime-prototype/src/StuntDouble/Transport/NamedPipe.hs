@@ -52,4 +52,4 @@ cleanUpNamedPipe fp name =
     return
 
 hMaybeGetLine :: Handle -> IO (Maybe String)
-hMaybeGetLine = timeout 1000 . hGetLine
+hMaybeGetLine = timeout 1 . hGetLine

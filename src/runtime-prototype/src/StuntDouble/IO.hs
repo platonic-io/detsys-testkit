@@ -46,10 +46,12 @@ data Disk m = Disk
 data IOResult = IOValue Value | IOUnit () | IOString String
 
 diskIO :: Monad m => IOOp -> Disk m -> m IOResult
-diskIO (IOGet k)     io = IOValue <$> ioGet io k
-diskIO (IOPut k v)   io = IOUnit <$> ioPut io k v
-diskIO (IODelete k)  io = IOUnit <$> ioDelete io k
-diskIO (IOReturn x) _io = return x
+diskIO (IOGet k)      io = IOValue <$> ioGet io k
+diskIO (IOPut k v)    io = IOUnit <$> ioPut io k v
+diskIO (IODelete k)   io = IOUnit <$> ioDelete io k
+diskIO (IOPuts kvs)   io = IOUnit <$> ioPuts io kvs
+diskIO (IODeletes ks) io = IOUnit <$> ioDeletes io ks
+diskIO (IOReturn x)  _io = return x
 diskIO _ _io = error "not implemented yet"
 
 fakeDisk :: IO (Disk IO)
@@ -59,8 +61,8 @@ fakeDisk = do
     { ioGet     = \k ->   atomicModifyIORef' r (\hm -> (hm, hm HashMap.! k))
     , ioPut     = \k v -> atomicModifyIORef' r (\hm -> (HashMap.insert k v hm, ()))
     , ioDelete  = \k ->   atomicModifyIORef' r (\hm -> (HashMap.delete k hm, ()))
-    , ioPuts    = undefined
-    , ioDeletes = undefined
+    , ioPuts    = mapM_ (\(k, v) -> atomicModifyIORef' r (\hm -> (HashMap.insert k v hm, ())))
+    , ioDeletes = mapM_ (\k -> atomicModifyIORef' r (\hm -> (HashMap.delete k hm, ())))
     , ioIterate = undefined
 
     -- SQLite event store.

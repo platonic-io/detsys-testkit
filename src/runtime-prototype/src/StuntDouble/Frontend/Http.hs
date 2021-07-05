@@ -6,14 +6,17 @@ import Control.Concurrent.Async
 import Data.Aeson
 import Data.String
 import Network.HTTP.Client
-       ( RequestBody(..)
+       ( Manager
+       , RequestBody(..)
        , defaultManagerSettings
        , httpLbs
+       , managerResponseTimeout
        , method
        , newManager
        , parseRequest
        , requestBody
        , responseBody
+       , responseTimeoutMicro
        )
 import Network.HTTP.Types.Status
 import qualified Network.Wai as Wai
@@ -44,13 +47,15 @@ parseReq req = do
 prettyResponse :: Message -> Wai.Response
 prettyResponse msg = Wai.responseLBS status200 [] (encode msg)
 
+startHttpFrontend :: EventLoop -> LocalRef -> Port -> IO (Async ())
+startHttpFrontend ls lref port = async (run port (httpFrontend ls lref))
+
 withHttpFrontend :: EventLoop -> LocalRef -> Port -> (Async () -> IO a) -> IO a
 withHttpFrontend ls lref port k =
   withAsync (run port (httpFrontend ls lref)) k
 
-makeClientRequest :: Message -> Port -> IO (Either String Message)
-makeClientRequest msg port = do
-  manager <- newManager defaultManagerSettings
+makeClientRequest :: Manager -> Message -> Port -> IO (Either String Message)
+makeClientRequest mgr msg port = do
   let url :: String
       url = "http://localhost:" ++ show port
 
@@ -64,5 +69,5 @@ makeClientRequest msg port = do
                    , requestBody = body
                    }
 
-  respBody <- responseBody <$> httpLbs request manager
+  respBody <- responseBody <$> httpLbs request mgr
   return (eitherDecode respBody)

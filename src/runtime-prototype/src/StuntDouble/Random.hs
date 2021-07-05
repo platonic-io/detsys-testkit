@@ -28,37 +28,3 @@ list s0 n0 g = go [] s0 n0
         (x, s') = g s
       in
         go (x : acc) s' (n - 1)
-
-shuffle :: Seed -> [a] -> ([a], Seed)
-shuffle s [] = ([], s)
-shuffle s xs =
-  let
-    l = length xs - 1
-    (rs, s') = make_rs l s
-  in
-    (shuffle1 xs rs, s')
-  where
-    -- The following code is taken from:
-    -- http://okmij.org/ftp/Haskell/perfect-shuffle.txt
-    shuffle1 :: [b] -> [Int] -> [b]
-    shuffle1 [e] [] = [e]
-    shuffle1 elements (r:r_others) =
-      let (b,rest) = extract r elements
-      in b:(shuffle1 rest r_others)
-    shuffle1 _ _ = error "shuffle1: impossible"
-
-    extract :: Int -> [a] -> (a, [a])
-    extract 0  (h:t) = (h, t)
-    extract j0 l     = loop j0 l []
-      where
-        loop 0 (h:t) accum = (h, accum ++ t)
-        loop j (h:t) accum = loop (j-1) t (h:accum)
-        loop _ _     _     = error "loop: impossible"
-
-    make_rs :: RandomGen g => Int -> g -> ([Int],g)
-    make_rs n g = loop [] n g
-      where
-        loop acc 0 g = (reverse acc,g)
-        loop acc n g =
-          let (r,g') = randomR (0,n) g
-          in loop (r:acc) (pred n) g'

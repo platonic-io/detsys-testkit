@@ -10,7 +10,10 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
+import Data.List
 import Data.Foldable (toList)
+import Data.Vector (Vector)
+import qualified Data.Vector as Vector
 import Data.Heap (Entry(Entry), Heap)
 import qualified Data.Heap as Heap
 import Data.Map (Map)
@@ -20,6 +23,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
+import System.Random
 
 import StuntDouble.Actor.State
 import StuntDouble.Envelope
@@ -237,15 +241,8 @@ actorPokeIO ls lref msg = do
     writeTVar (lsNextPromise ls) p'
     writeTVar (lsSeed ls) seed'
     return (reply, as)
-  act' ls as
+  act ls as
   return reply
-
-act' :: EventLoop -> [Action] -> IO ()
-act' ls as = do
-  -- XXX: non-atomic update of the async state?!
-  s <- readTVarIO (lsAsyncState ls)
-  s' <- act (lsName ls) as (lsTime ls) (lsTransport ls) (lsDisk ls) s
-  atomically (writeTVar (lsAsyncState ls) s')
 
 actorMapGetStateIO :: LocalRef -> TVar ActorMap -> IO State
 actorMapGetStateIO lref am = atomically (stateTVar am (actorMapGetState lref))
@@ -258,6 +255,8 @@ getActorState ls lref = actorMapGetStateIO lref (lsActorMap ls)
 ainvoke :: EventLoop -> LocalRef -> Message -> IO Message
 ainvoke ls lref msg = do
   returnVar <- newEmptyTMVarIO
+  depth <- atomically (lengthTBQueue (lsQueue ls))
+  reportEventLoopDepth depth (lsMetrics ls)
   atomically (writeTBQueue (lsQueue ls) (Admin (AdminInvoke lref msg returnVar)))
   atomically (takeTMVar returnVar)
 
@@ -319,43 +318,48 @@ madePromises = foldMap go
     go (SetTimerAction _ndt (Promise i)) = Set.singleton i
     go ClientResponseAction {} = Set.empty
 
-act :: EventLoopName -> [Action] -> Time -> Transport IO -> Disk IO -> AsyncState
-    -> IO AsyncState
-act name as time transport disk s0 = foldM go s0 as
+act :: EventLoop -> [Action] -> IO ()
+act ls as = mapM_ go as
   where
     is :: Set Int
     is = madePromises as
 
-    go :: AsyncState -> Action -> IO AsyncState
-    go s (SendAction from msg to p@(Promise i)) = do
-      transportSend transport
-        (Envelope RequestKind (localToRemoteRef name from) msg to (CorrelationId i))
-      t <- getCurrentTime time
+    go :: Action -> IO ()
+    go (SendAction from msg to p@(Promise i)) = do
+      transportSend (lsTransport ls)
+        (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i))
+      t <- getCurrentTime (lsTime ls)
       -- XXX: make it possible to specify when a send request should timeout.
       let timeoutAfter = Time.addUTCTime 60 t
-      return s { asyncStateTimeouts =
-                   Heap.insert (Entry timeoutAfter (SendTimeout, p)) (asyncStateTimeouts s) }
-    go s (AsyncIOAction io p) = do
-      -- XXX: Use `asyncOn` a different capability than main loop.
-      a <- async (diskIO io disk)
+      atomically $ modifyTVar' (lsAsyncState ls) $
+        \s -> s { asyncStateTimeouts =
+                    Heap.insert (Entry timeoutAfter (SendTimeout, p))
+                                (asyncStateTimeouts s) }
+    go (AsyncIOAction io p) = do
+      -- XXX: Append to lsIOQueue if thread pool is activated...
+      a <- async (diskIO io (lsDisk ls))
       -- XXX: make it possible for async I/O to timeout as well?
-      return (s { asyncStateAsyncIO = Map.insert a p (asyncStateAsyncIO s) })
-    go s (OnAction p@(Promise i) k lref)
+      atomically $ modifyTVar' (lsAsyncState ls) $ \s ->
+        s { asyncStateAsyncIO = Map.insert a p (asyncStateAsyncIO s) }
+    go (OnAction p@(Promise i) k lref)
       | i `Set.member` is =
-          return (s { asyncStateContinuations =
-                      Map.insert p (k, lref) (asyncStateContinuations s) })
+          atomically $ modifyTVar' (lsAsyncState ls) $ \s ->
+            s { asyncStateContinuations =
+                Map.insert p (k, lref) (asyncStateContinuations s) }
       | otherwise =
           error "act: impossible, `On` must be supplied with a promise that was just made."
-    go s (SetTimerAction ndt p) = do
-      t <- getCurrentTime time
+    go (SetTimerAction ndt p) = do
+      t <- getCurrentTime (lsTime ls)
       let timeoutAfter = Time.addUTCTime ndt t
-      return s { asyncStateTimeouts =
-                   Heap.insert (Entry timeoutAfter (TimerTimeout, p)) (asyncStateTimeouts s) }
-    go s (ClientResponseAction cref msg) = do
+      atomically $ modifyTVar' (lsAsyncState ls) $ \s ->
+        s { asyncStateTimeouts =
+            Heap.insert (Entry timeoutAfter (TimerTimeout, p)) (asyncStateTimeouts s) }
+    go (ClientResponseAction cref msg) = atomically $ do
+      s <- readTVar (lsAsyncState ls)
       let respVar = asyncStateClientResponses s Map.! cref -- XXX: partial
-      atomically (putTMVar respVar msg)
-      return s
-        { asyncStateClientResponses = Map.delete cref (asyncStateClientResponses s) }
+      putTMVar respVar msg
+      modifyTVar' (lsAsyncState ls) $ \s ->
+        s { asyncStateClientResponses = Map.delete cref (asyncStateClientResponses s) }
 
 data Reaction
   = Receive Promise Envelope
@@ -436,6 +440,7 @@ data EventLoop = EventLoop
   , lsNextPromise :: TVar Promise
   , lsLog         :: TVar Log
   , lsMetrics     :: Metrics
+  , lsIOQueue     :: TBQueue (IOOp, Promise)
   }
 
 initLoopState :: EventLoopName -> Time -> Seed -> Transport IO -> Disk IO -> IO EventLoop
@@ -453,6 +458,7 @@ initLoopState name time seed transport disk =
     <*> newTVarIO (Promise 0)
     <*> newTVarIO emptyLog
     <*> newMetrics
+    <*> newTBQueueIO 128 -- XXX: longer?
 
 isDoneEventLoop :: EventLoop -> STM Bool
 isDoneEventLoop ls =
@@ -525,18 +531,46 @@ withTransport tk name k =
 
 data Threaded = SingleThreaded | MultiThreaded
 
-makeEventLoop :: Time -> Seed -> TransportKind -> EventLoopName -> IO EventLoop
-makeEventLoop = makeEventLoopThreaded SingleThreaded
+data ThreadPool = NoThreadPool | ThreadPoolOfSize Int
 
-makeEventLoopThreaded :: Threaded -> Time -> Seed -> TransportKind -> EventLoopName
-                      -> IO EventLoop
-makeEventLoopThreaded threaded time seed tk name = do
+asyncIOWorker :: EventLoop -> IO ()
+asyncIOWorker ls = do
+  (io, p) <- atomically (readTBQueue (lsIOQueue ls))
+  -- XXX: timeout?
+  eResult <- try (diskIO io (lsDisk ls))
+  case eResult of
+    Right result ->
+      atomically (writeTBQueue (lsQueue ls) (Reaction (AsyncIOFinished p result)))
+    Left e ->
+      atomically (writeTBQueue (lsQueue ls) (Reaction (AsyncIOFailed p e)))
+
+spawnIOWorkers :: ThreadPool -> EventLoop -> IO [Async ()]
+spawnIOWorkers NoThreadPool         _ls = return []
+spawnIOWorkers (ThreadPoolOfSize n)  ls
+  | n <= 0 = error "spawnIOWorkers: thread pool less than or equal to zero"
+  | otherwise = do
+      tid <- myThreadId
+      (cap, _pinned) <- threadCapability tid
+      numCap <- getNumCapabilities
+      -- Minus one because we don't want to run the workers on the same thread
+      -- as the main event loop.
+      when (n > numCap - 1) $
+        error "spawnIOWorkers: thread pool size is bigger than the available CPU capabilities"
+      mapM (\c -> asyncOn c (asyncIOWorker ls)) [ i | i <- [0..n], i /= cap ]
+
+makeEventLoop :: Time -> Seed -> TransportKind -> EventLoopName -> IO EventLoop
+makeEventLoop = makeEventLoopThreaded SingleThreaded NoThreadPool
+
+makeEventLoopThreaded :: Threaded -> ThreadPool -> Time -> Seed -> TransportKind
+                      -> EventLoopName -> IO EventLoop
+makeEventLoopThreaded threaded threadpool time seed tk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
          Stm          -> stmTransport
   disk <- fakeDisk
   ls <- initLoopState name time seed t disk
+  workerPids <- spawnIOWorkers threadpool ls
   pids <- case threaded of
             SingleThreaded ->
               fmap (: [])
@@ -552,7 +586,7 @@ makeEventLoopThreaded threaded time seed tk name = do
                          , handleEvents ls
                          , handleTimeouts ls
                          ]
-  atomically (modifyTVar' (lsPids ls) (pids ++))
+  atomically (modifyTVar' (lsPids ls) ((pids ++ workerPids) ++))
   mapM_ link pids
   return ls
 
@@ -575,19 +609,18 @@ withEventLoop name k =
     return x
 
 runHandlers :: Seed -> [IO ()] -> IO ()
-runHandlers s0 hs = go s0
+runHandlers seed0 hs = go seed0
   where
-    go s = do
-      s' <- stepHandlers s hs
-      go s'
+    hss :: Vector [IO ()]
+    hss = Vector.fromList (permutations hs)
 
-stepHandlers :: Seed -> [IO ()] -> IO Seed
-stepHandlers s hs =
-  let
-    (hs', s') = shuffle s hs
-  in do
-    sequence_ hs'
-    return s'
+    go :: Seed -> IO ()
+    go seed =
+      let
+        (ix, seed') = randomR (0, length hss - 1) seed
+      in do
+        sequence_ (hss Vector.! ix)
+        go seed'
 
 handleInbound :: EventLoop -> IO ()
 handleInbound = forever . handleInbound1
@@ -670,6 +703,7 @@ handleEvents1Blocking ls = do
   e <- atomically (readTBQueue (lsQueue ls))
   handleEvent e ls
     `catch` \(ex :: SomeException) -> do
+        reportError (lsMetrics ls)
         -- XXX: Why are `AsyncCancelled` being caught here?
         unless (fromException ex == Just AsyncCancelled) $
           putStrLn ("handleEvents: exception: " ++ show ex)
@@ -689,7 +723,7 @@ handleEvents1 ls = do
                     putStrLn ("handleEvents: exception: " ++ show ex)
 
 handleEvent :: Event -> EventLoop -> IO ()
-handleEvent (Action a)   ls = act' ls [a]
+handleEvent (Action a)   ls = act ls [a]
 handleEvent (Reaction r) ls = do
   m <- reactIO r (lsAsyncState ls)
   case m of
@@ -709,7 +743,7 @@ handleEvent (Reaction r) ls = do
         writeTVar (lsNextPromise ls) p'
         writeTVar (lsSeed ls) seed'
         return as
-      act' ls as
+      act ls as
     AdminSendResponse returnVar msg ->
       atomically (putTMVar returnVar msg)
 handleEvent (Admin cmd) ls = case cmd of

@@ -24,21 +24,21 @@ library
     StuntDouble.ActorMap
     StuntDouble.Datatype
     StuntDouble.Envelope
-    StuntDouble.Transport
-    StuntDouble.Transport.Http
-    StuntDouble.Transport.NamedPipe
-    StuntDouble.Transport.Stm
     StuntDouble.FreeMonad
-    StuntDouble.Histogram
     StuntDouble.Frontend.Http
-    StuntDouble.Log
+    StuntDouble.Histogram
     StuntDouble.IO
+    StuntDouble.Log
     StuntDouble.Message
+    StuntDouble.Metrics
     StuntDouble.Random
     StuntDouble.Reference
     StuntDouble.Supervisor
     StuntDouble.Time
-    StuntDouble.Metrics
+    StuntDouble.Transport
+    StuntDouble.Transport.Http
+    StuntDouble.Transport.NamedPipe
+    StuntDouble.Transport.Stm
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
@@ -56,17 +56,17 @@ library
   build-depends:
       aeson
     , async
+    , atomic-primops
     , bytestring
-    , heaps
     , hashable
+    , heaps
     , http-client
     , http-types
     , random
     , unordered-containers
+    , vector
     , wai
     , warp
-    , atomic-primops
-    , vector
 
   default-language: Haskell2010
 
@@ -88,13 +88,12 @@ test-suite test
 
   other-modules:
     StuntDouble.ActorMapTest
-    StuntDouble.Transport.HttpTest
-    StuntDouble.Transport.StmTest
-    StuntDouble.Transport.NamedPipeTest
     StuntDouble.FrontendTest
     StuntDouble.HistogramTest
-    StuntDouble.RandomTest
     StuntDouble.SchedulerTest
+    StuntDouble.Transport.HttpTest
+    StuntDouble.Transport.NamedPipeTest
+    StuntDouble.Transport.StmTest
     TastyDiscover
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
@@ -110,4 +109,22 @@ executable stunt-double
 
   -- hs-source-dirs:
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+  default-language: Haskell2010
+
+benchmark bench
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/
+  main-is:        Main.hs
+  build-depends:
+      atomic-primops
+    , async
+    , base
+    , http-client
+    , stm
+    , stunt-double
+    , time
+
+  -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/using-concurrent.html
+  --  -with-rtsopts=-qa -with-rtsopts=-qm
+  ghc-options:    -threaded -eventlog -rtsopts -with-rtsopts=-N
   default-language: Haskell2010

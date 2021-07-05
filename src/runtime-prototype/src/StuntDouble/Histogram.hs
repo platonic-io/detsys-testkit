@@ -19,11 +19,12 @@
 module StuntDouble.Histogram where
 
 import Control.Exception
-import GHC.Float
-import Data.Word
 import Data.Atomics.Counter
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
+import Data.Word
+import GHC.Float
+import Text.Printf
 
 ------------------------------------------------------------------------
 
@@ -124,6 +125,7 @@ prettyPrintHistogram name h = do
     Nothing -> putStrLn "NaN"
     Just s  -> do
       putStrLn ""
-      putStr "min med 90 99 99.9 99.99 max count sum"
+      printf (concat (replicate 9 "%-10s"))
+             "min" "med" "90" "99" "99.9" "99.99" "max" "count" "sum"
       putStrLn ""
-      mapM_ (\d -> putStr (show d ++ " ")) s
+      mapM_ (printf "%-10.2f") s

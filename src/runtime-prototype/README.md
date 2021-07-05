@@ -124,6 +124,7 @@ not.
 
 #### How to run tests
 
+```bash
 cabal configure test \
     --test-option='--timeout=10' \
     --test-option='--color=always' \
@@ -131,3 +132,32 @@ cabal configure test \
     --ghc-options='-threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts' \
     # --test-option='--pattern=/$pattern/
 cabal test
+```
+
+#### How to run benchmarks
+
+```bash
+cabal configure bench \
+    --enable-profiling \
+    --ghc-options='-threaded -eventlog -rtsopts -with-rtsopts=-N'
+cabal run bench -p -- +RTS -p -hm -ls -RTS
+
+# CPU use
+less bench.prof
+
+# Memory use
+hp2ps -c bench.hp
+evince bench.ps # Or some other postscript viewer
+
+# Threadscope
+# https://wiki.haskell.org/ThreadScope_Tour
+threadscope bench.eventlog
+
+# Flamegraphs
+# https://github.com/brendangregg/FlameGraph
+# https://hackage.haskell.org/package/stackcollapse-ghc
+stackcollapse-ghc -p bench.prof | \
+  flamegraph.pl --title 'bench' \
+                --subtitle 'Time' \
+                --countname ticks > bench.svg
+```
