@@ -147,7 +147,7 @@ less bench.prof
 
 # Memory use
 hp2ps -c bench.hp
-evince bench.ps
+evince bench.ps # Or some other postscript viewer
 
 # Threadscope
 # https://wiki.haskell.org/ThreadScope_Tour
