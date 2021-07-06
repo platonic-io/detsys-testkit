@@ -140,6 +140,7 @@ benchmark bench-http
     , bytestring
     , http-client
     , http-types
+    , network
     , wai
     , warp
     , stm

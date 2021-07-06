@@ -2,12 +2,18 @@
 
 module Main where
 
+import Network.Socket
+import Network.Socket.ByteString.Lazy
+import GHC.Event
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
 import Data.Atomics.Counter
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as BS
+import System.Posix.Types
+import System.Timeout
 import Data.IORef
 import Data.List (delete)
 import qualified Data.Time.Clock as Clock
@@ -38,15 +44,17 @@ prepareRequest msg port = do
   initialRequest <- parseRequest url
 
   return initialRequest
-           { method      = "POST"
-           , requestBody = body
+           { method      = "GET"
+           -- , requestBody = body
            }
 
 data ExecutionMode
   = Synchronous
   | Asynchronous BatchSize
+  | EventLoop MaxOpenConnections
 
 type BatchSize = Int
+type MaxOpenConnections = Int
 
 client :: ExecutionMode -> Request -> Manager -> AtomicCounter -> AtomicCounter -> IORef Bool
        -> IO ()
@@ -85,6 +93,76 @@ client (Asynchronous batchSize) req mgr total errors shutdown = do
       else do
         a' <- async (makeClientRequest req mgr)
         go (a' : delete a as)
+client (EventLoop maxOpenConn) req mgr total errors shutdown = do
+  Just emgr <- getSystemEventManager
+  openConnsCounter <- newCounter 0
+  withSocketsDo $ do
+    addr <- resolve
+    let go = do
+          b <- readIORef shutdown
+          if b
+          then putStrLn "stopping"
+          else do
+            currOpenConns <- readCounter openConnsCounter
+            if currOpenConns < maxOpenConn
+            then do
+              bracketOnError (open addr) close $ \sock -> do
+                incrCounter_ 1 openConnsCounter
+                withFdSocket sock $ \fd -> do
+                  eFdKey <- try (registerFd emgr (onRead emgr openConnsCounter)
+                                            (Fd fd) evtRead OneShot)
+                  case eFdKey of
+                    Left err -> printSomeException "client: registerFd" err
+                    Right _fdKey -> return ()
+            else threadDelay 100
+            go
+    go
+  where
+    onRead :: EventManager -> AtomicCounter -> FdKey -> Event -> IO ()
+    onRead emgr openConnsCounter fdKey evt
+      | evt /= evtRead = return ()
+      | evt == evtRead = go `catch` \e -> do
+                           printSomeException "onRead" e
+                           eBool <- try (unregisterFd_ emgr fdKey)
+                           case eBool of
+                             Left err -> printSomeException "onRead: unregisterFd_" err
+                             Right _bool -> return ()
+
+      where
+        go :: IO ()
+        go = do
+          let Fd cint = keyFd fdKey
+          sock <- mkSocket cint
+          mReply <- timeout 1000 (recv sock 1024)
+          case mReply of
+            Nothing -> putStrLn "nothing to read"
+            Just reply -> do
+              -- XXX: better parsing of response body
+              if BS.split 10 reply !! 6 == "ack\r"
+              then return ()
+              else incrCounter_ 1 errors
+              incrCounter_ 1 total
+              _ <- unregisterFd_ emgr fdKey
+              incrCounter_ (-1) openConnsCounter
+              close sock
+
+    resolve = do
+      let hints = defaultHints { addrFlags = [AI_NUMERICHOST], addrSocketType = Stream }
+          host  = "127.0.0.1"
+          port  = "3004"
+      head <$> getAddrInfo (Just hints) (Just host) (Just port)
+
+    open addr = bracketOnError (openSocket addr) close $ \sock -> do
+      connect sock (addrAddress addr)
+      _ <- timeout 1000 (sendAll sock "GET /index.html HTTP/1.1\r\n\r\n")
+      return sock
+
+    openSocket addr = socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+
+printSomeException :: String -> SomeException -> IO ()
+printSomeException ctx err = do
+  putStr (ctx ++ ": ")
+  print err
 
 reporter :: AtomicCounter -> AtomicCounter -> IORef Bool -> IO ()
 reporter total errors shutdown = go 0
@@ -130,10 +208,16 @@ before numberOfClients execution total errors shutdown = do
   manager <- newManager defaultManagerSettings
                           -- 500 ms
                           { managerResponseTimeout =  responseTimeoutMicro (500 * 1000) }
-  workerPids <- forM [0..numberOfClients] $ \i -> do
-    async ((if i == 0
-            then reporter
-            else client execution req manager) total errors shutdown)
+  workerPids <- forM [0..numberOfClients] $ \i ->
+    if i == 0
+    then do
+      pid <- async (reporter total errors shutdown)
+      putStrLn "started reporter"
+      return pid
+    else do
+      pid <- async (client execution req manager total errors shutdown)
+      putStrLn ("started client " ++ show i)
+      return pid
   mapM_ link (serverPid : workerPids)
   return (serverPid : workerPids)
 
@@ -184,8 +268,8 @@ main = do
   n <- getNumCapabilities
   putStrLn ("CPU capabilities: " ++ show n)
   let numberOfClients = 4
-      stop = MaxDurationInSecs 30
-      exec = Asynchronous 10
+      stop = MaxDurationInSecs 5
+      exec = EventLoop 1
 
   total    <- newCounter 0
   errors   <- newCounter 0
