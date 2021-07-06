@@ -42,8 +42,15 @@ prepareRequest msg port = do
            , requestBody = body
            }
 
-client :: Request -> Manager -> AtomicCounter -> AtomicCounter -> IORef Bool -> IO ()
-client req mgr total errors shutdown = go
+data ExecutionMode
+  = Synchronous
+  | Asynchronous BatchSize
+
+type BatchSize = Int
+
+client :: ExecutionMode -> Request -> Manager -> AtomicCounter -> AtomicCounter -> IORef Bool
+       -> IO ()
+client Synchronous req mgr total errors shutdown = go
   where
     go :: IO ()
     go = do
@@ -55,26 +62,29 @@ client req mgr total errors shutdown = go
         then return ()
         else incrCounter_ 1 errors
         incrCounter_ 1 total
-
-        -- Doing async calls only seems to make things worse...
-
-        -- as <- forM [1..5] $ \_ -> do
-        --   async (makeClientRequest req mgr)
-
-        -- let process [] = return ()
-        --     process as = do
-        --       (a, eReply) <- waitAnyCatch as
-        --       case eReply of
-        --         -- XXX: log error for debugging purposes?
-        --         Left  _err  -> incrCounter_ 1 errors
-        --         Right reply -> if reply == "ack"
-        --                                then return ()
-        --                                else incrCounter_ 1 errors
-        --       incrCounter_ 1 total
-        --       process (delete a as)
-
-        -- process as
         go
+client (Asynchronous batchSize) req mgr total errors shutdown = do
+  as <- forM [1..batchSize] $ \_ -> do
+    async (makeClientRequest req mgr)
+  go as
+  where
+    go :: [Async ByteString] -> IO ()
+    go [] = return ()
+    go as = do
+      (a, eReply) <- waitAnyCatch as
+      case eReply of
+        -- XXX: log error for debugging purposes?
+        Left  _err  -> incrCounter_ 1 errors
+        Right reply -> if reply == "ack"
+                       then return ()
+                       else incrCounter_ 1 errors
+
+      incrCounter_ 1 total
+      b <- readIORef shutdown
+      if b then return ()
+      else do
+        a' <- async (makeClientRequest req mgr)
+        go (a' : delete a as)
 
 reporter :: AtomicCounter -> AtomicCounter -> IORef Bool -> IO ()
 reporter total errors shutdown = go 0
@@ -112,16 +122,18 @@ rss = do
       in
         return (rssPages * 4096)
 
-before :: Int -> AtomicCounter -> AtomicCounter -> IORef Bool
+before :: Int -> ExecutionMode -> AtomicCounter -> AtomicCounter -> IORef Bool
        -> IO [Async ()]
-before numberOfClients total errors shutdown = do
+before numberOfClients execution total errors shutdown = do
   serverPid <- server 3004
   req <- prepareRequest "write" 3004
   manager <- newManager defaultManagerSettings
                           -- 500 ms
                           { managerResponseTimeout =  responseTimeoutMicro (500 * 1000) }
   workerPids <- forM [0..numberOfClients] $ \i -> do
-    async ((if i == 0 then reporter else client req manager) total errors shutdown)
+    async ((if i == 0
+            then reporter
+            else client execution req manager) total errors shutdown)
   mapM_ link (serverPid : workerPids)
   return (serverPid : workerPids)
 
@@ -173,12 +185,13 @@ main = do
   putStrLn ("CPU capabilities: " ++ show n)
   let numberOfClients = 4
       stop = MaxDurationInSecs 30
+      exec = Asynchronous 10
 
   total    <- newCounter 0
   errors   <- newCounter 0
   shutdown <- newIORef False
   now      <- Clock.getCurrentTime
   bracket
-    (before numberOfClients total errors shutdown)
+    (before numberOfClients exec total errors shutdown)
     (after total errors now)
     (const (run total stop shutdown))
