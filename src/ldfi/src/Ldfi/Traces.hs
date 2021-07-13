@@ -1,7 +1,11 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Ldfi.Traces where
 
+import Data.Hashable (Hashable)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import GHC.Generics (Generic)
 import GHC.Natural
 
 ------------------------------------------------------------------------
@@ -16,7 +20,9 @@ data Event = Event
     to :: Node,
     recv :: Time
   }
-  deriving (Eq, Ord, Read, Show)
+  deriving (Eq, Ord, Read, Show, Generic)
+
+instance Hashable Event
 
 type Node = String
 

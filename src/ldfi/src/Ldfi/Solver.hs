@@ -7,8 +7,8 @@ import Ldfi.Prop
 
 -- * Solver
 
-data Solution = NoSolution | Solution (Map String Bool)
+data Solution key = NoSolution | Solution (Map key Bool)
   deriving (Show)
 
-data Solver m = Solver
-  {solve :: Formula -> m Solution}
+data Solver key m = Solver
+  {solve :: FormulaF key -> m (Solution key)}

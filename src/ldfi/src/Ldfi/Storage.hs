@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -7,6 +8,7 @@ import Control.Arrow (second)
 import Control.Exception
 import Data.Aeson (decode)
 import qualified Data.Binary.Builder as BB
+import Data.Hashable (Hashable)
 import Data.List (groupBy, intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -16,6 +18,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextE
 import Database.SQLite.Simple
+import GHC.Generics (Generic)
 import qualified Ldfi.Marshal.Faults as MF
 import Ldfi.Traces
 import System.Environment
@@ -29,7 +32,9 @@ type TestId = Int
 type RunId = Int
 
 data Fault = Crash Node Time | Omission Edge Time
-  deriving (Eq, Ord, Read, Show)
+  deriving (Eq, Ord, Read, Show, Generic)
+
+instance Hashable Fault
 
 data Failures = Failures
   { fFaultsFromFailedRuns :: [[Fault]],
