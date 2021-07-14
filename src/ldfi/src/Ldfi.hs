@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -6,12 +7,14 @@ module Ldfi where
 
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as BSL
+import Data.Hashable (Hashable)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
+import GHC.Generics (Generic)
 import qualified GHC.Natural as Nat
 import Ldfi.FailureSpec
 import qualified Ldfi.Marshal.Faults as MF
@@ -19,7 +22,6 @@ import Ldfi.Prop
 import Ldfi.Solver
 import Ldfi.Storage
 import Ldfi.Traces
-import Text.Read (readMaybe)
 
 ------------------------------------------------------------------------
 
@@ -28,7 +30,9 @@ import Text.Read (readMaybe)
 data LDFIVar
   = EventVar Event
   | FaultVar Fault
-  deriving (Eq, Ord, Read, Show)
+  deriving (Eq, Ord, Read, Show, Generic)
+
+instance Hashable LDFIVar
 
 type LDFIFormula = FormulaF LDFIVar
 
@@ -43,37 +47,45 @@ affects (Crash n a) (Event s sa r ra) =
 
 -- failureSemantic computes a formula s.t for each event either (xor) the event
 -- is true or one of the failures that affect it is true
-failureSemantic :: Set Event -> Set Fault -> LDFIFormula
+failureSemantic :: Set Event -> [Fault] -> LDFIFormula
 failureSemantic events faults =
   And
-    [ Var (EventVar event)
-        :+ Or
-          [ Var (FaultVar failure)
-            | failure <- Set.toList faults,
-              failure `affects` event
-          ]
+    [ f
+        (Var (EventVar event))
+        [ Var (FaultVar failure)
+          | failure <- faults,
+            failure `affects` event
+        ]
       | event <- Set.toList events
     ]
+  where
+    f x [] = Neg x
+    f x [y] = x :+ y
+    f x xs = x :+ Or xs
 
 -- failureSpecConstraint is the formula that makes sure we are following the
 -- Failure Specification. Although we will never generate any faults that occur
 -- later than eff, so we don't have to check that here
-failureSpecConstraint :: FailureSpec -> Set Event -> Set Fault -> LDFIFormula
+failureSpecConstraint :: FailureSpec -> Set Event -> [Fault] -> LDFIFormula
 failureSpecConstraint fs events faults
   | null crashes = TT
   | otherwise = And (AtMost crashVars (Nat.naturalToInt $ maxCrashes fs) : crashConditions)
   where
-    crashes = [c | c@(Crash _ _) <- Set.toList faults]
+    crashes = [c | c@(Crash _ _) <- faults]
     crashVars = map FaultVar crashes
+    -- this seems to allocate quite a bit..
     crashConditions =
-      [ Var (FaultVar c)
-          :-> Or
-            [ Var (EventVar e)
-              | e@(Event s sa _ _) <- Set.toList events,
-                s == n && sa < t
-            ]
+      [ f
+          (Var (FaultVar c))
+          [ Var (EventVar e)
+            | e@(Event s sa _ _) <- Set.toList events,
+              s == n && sa < t
+          ]
         | c@(Crash n t) <- crashes
       ]
+    f x [] = Neg x
+    f x [y] = x :-> y
+    f x xs = x :-> Or xs
 
 -- `enumerateAllFaults` will generate the interesting faults that could affect
 -- the set of events. But since it is pointless to generate a fault that is
@@ -103,38 +115,36 @@ enumerateAllFaults events fs = Set.unions (Set.map possibleFailure events)
 --     * If we introduce faults the corresponding events are false (`failureSemantic`)
 --     * We don't intruduce faults that violates the failure spec (`failureSpecConstaint`)
 --     * The lineage graph from traces are not satisfied (`Neg lineage`)
-ldfi :: FailureSpec -> Map RunId Trace -> Failures -> FormulaF String
+ldfi :: FailureSpec -> Map RunId Trace -> Failures -> FormulaF LDFIVar
 ldfi failureSpec tracesByRuns failures =
-  fmap show $
-    simplify $
-      And $
-        addLimit
-          [ failureSemantic allEvents allFaults,
-            failureSpecConstraint failureSpec allEvents allFaults,
-            Neg (lineage traces),
-            And
-              [ Neg $ And $ map (Var . FaultVar) faults
-                | faults <- fFaultsFromFailedRuns failures
-              ]
+  And $
+    addLimit
+      [ failureSemantic allEvents allFaultsList,
+        failureSpecConstraint failureSpec allEvents allFaultsList,
+        Neg (lineage traces),
+        And
+          [ Neg $ And $ map (Var . FaultVar) faults
+            | faults <- fFaultsFromFailedRuns failures
           ]
+      ]
   where
     addLimit xs = case numberOfFaultLimit failureSpec of
       Nothing -> xs
-      Just l -> AtMost [FaultVar $ f | f <- Set.toList allFaults] l : xs
+      Just l -> AtMost [FaultVar $ f | f <- allFaultsList] l : xs
     traces = Map.elems tracesByRuns
     allEvents = Set.unions (map Set.fromList traces)
     allFaults = enumerateAllFaults allEvents failureSpec
+    allFaultsList = Set.toList allFaults
 
 ------------------------------------------------------------------------
 
 -- * Main
 
-makeFaults :: Solution -> [Fault]
+makeFaults :: Solution LDFIVar -> [Fault]
 makeFaults NoSolution = []
 makeFaults (Solution assign) =
   [ f
-    | (key, True) <- Map.toAscList assign,
-      Just (FaultVar f) <- pure $ readMaybe key
+    | (FaultVar f, True) <- Map.toAscList assign
   ]
 
 marshalFaults :: [Fault] -> Text
@@ -144,12 +154,12 @@ marshalFaults = TE.decodeUtf8 . BSL.toStrict . Aeson.encode . MF.Faults . map co
     convert (Crash f a) = MF.Crash f a
     convert (Omission (f, t) a) = MF.Omission f t a
 
-run :: Monad m => Storage m -> Solver m -> TestInformation -> FailureSpec -> m [Fault]
+run :: Monad m => Storage m -> Solver LDFIVar m -> TestInformation -> FailureSpec -> m [Fault]
 run Storage {load, loadFailures} Solver {solve} testInformation failureSpec = do
   traces <- load testInformation
   failures <- loadFailures testInformation
   sol <- solve (ldfi failureSpec traces failures)
   return (makeFaults sol)
 
-run' :: Monad m => Storage m -> Solver m -> TestInformation -> FailureSpec -> m Text
+run' :: Monad m => Storage m -> Solver LDFIVar m -> TestInformation -> FailureSpec -> m Text
 run' storage solver testInformation failureSpec = fmap marshalFaults (run storage solver testInformation failureSpec)

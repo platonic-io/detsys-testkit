@@ -1,8 +1,12 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TupleSections #-}
+
 module Ldfi.Sat where
 
-import Data.Map (Map)
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
+import Data.Hashable (Hashable)
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import GHC.Stack (HasCallStack)
 import Ldfi.Prop
 import Ldfi.Solver
@@ -12,28 +16,59 @@ import Z3.Monad hiding (Solver)
 
 -- * SAT formula
 
-type Env = Map String AST
+type VarConstraint k = (Ord k, Hashable k, Show k)
 
-liftFun :: MonadZ3 z3 => Env -> Formula -> Formula -> (AST -> AST -> z3 AST) -> z3 AST
+type Env k = HashMap k AST
+
+liftFun :: (VarConstraint k, MonadZ3 z3) => Env k -> FormulaF k -> FormulaF k -> (AST -> AST -> z3 AST) -> z3 (AST, Env k)
 liftFun env l r f = do
-  l' <- translate env l
-  r' <- translate env r
-  f l' r'
+  (l', env') <- translate' env l
+  (r', env'') <- translate' env' r
+  a <- f l' r'
+  pure (a, env'')
 
-translate :: MonadZ3 z3 => Env -> Formula -> z3 AST
-translate env f0 = case f0 of
+mapMTs :: Monad m => (s -> a -> m (b, s)) -> s -> [a] -> m ([b], s)
+mapMTs _ s [] = pure ([], s)
+mapMTs f s (x : xs) = do
+  (y, s') <- f s x
+  (ys, s'') <- mapMTs f s' xs
+  pure (y : ys, s'')
+
+-- Should try to speed up
+translateVar :: (VarConstraint k, MonadZ3 z3) => Env k -> k -> z3 (AST, Env k)
+translateVar env v = case HashMap.lookup v env of
+  Nothing -> do
+    v' <- mkFreshBoolVar (show v)
+    pure (v', HashMap.insert v v' env)
+  Just v' -> pure (v', env)
+
+translate' :: (VarConstraint k, MonadZ3 z3) => Env k -> FormulaF k -> z3 (AST, Env k)
+translate' env f0 = case f0 of
   l :&& r -> liftFun env l r (\l' r' -> mkAnd [l', r'])
   l :|| r -> liftFun env l r (\l' r' -> mkOr [l', r'])
   l :+ r -> liftFun env l r mkXor
-  And fs -> mkAnd =<< mapM (translate env) fs
-  Or fs -> mkOr =<< mapM (translate env) fs
-  Neg f -> mkNot =<< translate env f
+  And fs -> withEnv mkAnd =<< mapMTs translate' env fs
+  Or fs -> withEnv mkOr =<< mapMTs translate' env fs
+  Neg f -> withEnv mkNot =<< translate' env f
   l :<-> r -> liftFun env l r mkIff
   l :-> r -> liftFun env l r mkImplies
-  TT -> mkTrue
-  FF -> mkFalse
-  Var v -> return (env Map.! v)
-  AtMost vs i -> mkAtMost [env Map.! v | v <- vs] i
+  TT -> (,env) <$> mkTrue
+  FF -> (,env) <$> mkFalse
+  Var v -> translateVar env v
+  AtMost vs i -> do
+    (vs', env') <- mapMTs translateVar env vs
+    (,env') <$> mkAtMost vs' i
+
+withEnv :: Monad m => (a -> m b) -> (a, s) -> m (b, s)
+withEnv m (x, env) = do
+  a <- m x
+  pure (a, env)
+
+translate :: (VarConstraint k, MonadZ3 z3) => FormulaF k -> z3 (AST, [k], [AST])
+translate f0 = do
+  (a, env) <- translate' HashMap.empty f0
+  let xs = HashMap.toList env
+  return (a, map fst xs, map snd xs)
 
 oldSolve :: MonadZ3 z3 => z3 AST -> z3 Result
 oldSolve m = do
@@ -42,20 +77,17 @@ oldSolve m = do
   (result, _mModel) <- getModel
   return result
 
-z3Solve :: HasCallStack => Formula -> IO Solution
+z3Solve :: (VarConstraint k, HasCallStack) => FormulaF k -> IO (Solution k)
 z3Solve f = do
   sols <- z3SolveAll (Just 1) f
   case sols of
     [] -> return NoSolution
     sol : _ -> return sol
 
-z3SolveAll :: HasCallStack => Maybe Int -> Formula -> IO [Solution]
+z3SolveAll :: (VarConstraint k, HasCallStack) => Maybe Int -> FormulaF k -> IO [Solution k]
 z3SolveAll limit f = do
-  let vs = Set.toList (getVars f)
   evalZ3 $ do
-    vs' <- mapM mkFreshBoolVar vs
-    let env = Map.fromList (zip vs vs')
-    a <- translate env f
+    (a, vs, vs') <- translate f
     assert a
     go 0 [] vs vs'
   where
@@ -64,11 +96,12 @@ z3SolveAll limit f = do
       Nothing -> False
       Just k -> n >= k
 
-    go :: MonadZ3 z3 => Int -> [Solution] -> [String] -> [AST] -> z3 [Solution]
+    -- should vs be list?
+    go :: (VarConstraint k, MonadZ3 z3) => Int -> [Solution k] -> [k] -> [AST] -> z3 [Solution k]
     go n acc vs vs'
       | limitReached n = return (reverse acc)
       | otherwise = do
-        (result, mModel) <- getModel
+        (result, mModel) <- getModel -- this takes most time
         case result of
           Undef -> error "impossible"
           Unsat -> return (reverse acc)
@@ -79,10 +112,11 @@ z3SolveAll limit f = do
               let bs = map (maybe (error "impossible") id) mbs
               bs' <-
                 mapM
-                  (\(ix, b) -> mkNot =<< mkEq (vs' !! ix) =<< mkBool b)
-                  (zip [0 .. length bs - 1] bs)
+                  (\(v', b) -> mkNot =<< mkEq v' =<< mkBool b)
+                  (zip vs' bs)
+              -- we should have a comment why we need this assert
               assert =<< mkOr bs'
               go (succ n) (Solution (Map.fromList (zip vs bs)) : acc) vs vs'
 
-z3Solver :: Solver IO
+z3Solver :: VarConstraint k => Solver k IO
 z3Solver = Solver z3Solve
