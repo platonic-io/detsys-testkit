@@ -138,9 +138,12 @@ benchmark bench-http
     , async
     , base
     , bytestring
+    , containers
     , http-client
     , http-types
     , network
+    , transformers
+    , unix
     , wai
     , warp
     , stm

@@ -53,3 +53,4 @@ cleanUpNamedPipe fp name =
 
 hMaybeGetLine :: Handle -> IO (Maybe String)
 hMaybeGetLine = timeout 1 . hGetLine
+-- XXX: Use https://hackage.haskell.org/package/bytestring-0.10.0.2/docs/Data-ByteString.html#v:hGetNonBlocking ?
