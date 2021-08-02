@@ -1,0 +1,15 @@
+packages: .
+
+with-compiler: ghc-8.10.4
+
+reject-unconstrained-dependencies: all
+
+constraints: QuickCheck +old-random
+
+package stats
+  ghc-options:
+              -Wall
+              -O2
+
+allow-older: *
+allow-newer: *

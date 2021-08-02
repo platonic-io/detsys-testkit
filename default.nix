@@ -24,6 +24,7 @@ let
   ldfi = callPackage ./src/ldfi/default.nix {};
   ltl = callPackage ./src/ltl/default.nix {};
   scheduler = callPackage ./src/scheduler/default.nix {};
+  stats = callPackage ./src/stats/default.nix {};
 in
 
 stdenv.mkDerivation {
@@ -53,7 +54,8 @@ stdenv.mkDerivation {
                           ++ lib.optional (nix-build-all || nix-build-generator) [ generator ]
                           ++ lib.optional (nix-build-all || nix-build-ldfi)      [ ldfi ]
                           ++ lib.optional (nix-build-all || nix-build-ltl)       [ ltl ]
-                          ++ lib.optional (nix-build-all || nix-build-scheduler) [ scheduler ];
+                          ++ lib.optional (nix-build-all || nix-build-scheduler) [ scheduler ]
+                          ++ [ stats ];
 
   installPhase = ''
     mkdir -p $out/bin
@@ -119,6 +121,7 @@ stdenv.mkDerivation {
     install -D $bazelBin/ltl/ltl $out/bin/detsys-ltl
     ''
     }
+    install -D ${stats.out}/bin/detsys-stats $out/bin
     ${if nix-build-scheduler || nix-build-all then ''
     install -D ${scheduler.out}/bin/detsys-scheduler $out/bin
     '' else ''

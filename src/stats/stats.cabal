@@ -1,0 +1,82 @@
+cabal-version:      >=1.10
+name:               stats
+version:            0.0.0
+synopsis:           statistics of a detsys test
+description:
+  See README at <https://github.com/symbiont-io/detsys-testkit/tree/main/src/stats#readme>
+
+bug-reports:        https://github.com/symbiont-io/detsys-testkit/issues
+license:            AllRightsReserved
+license-file:       LICENSE
+author:             Daniel Gustafsson
+maintainer:         symbiont-daniel-gustafsson@users.noreply.github.com
+copyright:          Copyright (c) 2021 Symbiont Inc
+category:           Testing, Distributed Systems
+build-type:         Simple
+extra-source-files: CHANGELOG.md
+tested-with:        GHC ==8.10.4
+
+library
+  hs-source-dirs:   src/
+  exposed-modules:
+    Description
+    Histogram
+    Ltl
+    Stats
+    Storage
+
+  -- exposed for linking
+  -- GHC boot library dependencies:
+  -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
+  build-depends:    base ==4.14.*
+
+  -- Other dependencies:
+  build-depends:
+      aeson
+    , atomic-primops
+    , filepath
+    , process
+    , sqlite-simple
+    , time
+    , vector
+
+  default-language: Haskell2010
+
+test-suite test
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test/
+  main-is:          Main.hs
+  build-depends:
+      base
+    , containers
+    , HUnit
+    , QuickCheck
+    , scientific
+    , stats
+    , tasty
+    , tasty-hunit
+    , text
+    , unordered-containers
+    , vector
+
+  build-depends:
+      aeson
+    , tasty-quickcheck
+
+  other-modules:    Driver
+  default-language: Haskell2010
+
+executable detsys-stats
+  hs-source-dirs:   app/
+  main-is:          Main.hs
+  build-depends:
+      base
+    , filepath
+    , optparse-generic
+    , stats
+
+  default-language: Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/symbiont-io/detsys-testkit
