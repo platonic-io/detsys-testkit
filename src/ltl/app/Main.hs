@@ -10,12 +10,16 @@ module Main where
 
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Text as AesonText
-import qualified Data.Text.Lazy.IO as TextIO
+import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
+import qualified Data.Text.Lazy.IO as LazyTextIO
 import Ltl
 import Ltl.Json
 import qualified Ltl.Proof as Proof
+import Ltl.Prop (Formula)
 import Ltl.Prop.Parser (parse)
 import qualified Ltl.Storage as Storage
+import Ltl.Traces (Trace)
 import Options.Generic
 
 ------------------------------------------------------------------------
@@ -42,6 +46,10 @@ data Config
         runId :: Int <?> "Which RunId to test",
         formula :: Text <?> "LTL Formula to check"
       }
+  | CheckMany
+      { testId :: Int <?> "Which TestId to test",
+        runId :: Int <?> "Which RunId to test"
+      }
   | Version
   deriving (Generic)
 
@@ -57,19 +65,47 @@ instance Aeson.FromJSON Result
 
 instance Aeson.ToJSON Result
 
+data ResultMany = ResultMany
+  { results :: [Result]
+  }
+  deriving (Generic)
+
+instance Aeson.FromJSON ResultMany
+
+instance Aeson.ToJSON ResultMany
+
+checkFormula :: Trace -> Formula -> Result
+checkFormula trace formula = Result result (Proof.reason dec)
+  where
+    dec = check formula trace
+    result =
+      case dec of
+        Proof.No {} -> False
+        Proof.Yes {} -> True
+
+getFormulas :: IO [Text]
+getFormulas = do
+  input <- TextIO.getContents
+  pure $ filter (not . Text.null) $ Text.lines input
+
 main :: IO ()
 main = do
   (cfg, help) <- getWithHelp "LTL checker"
   case cfg of
     Version -> putStrLn gitHash
+    CheckMany {..} -> do
+      trace <- Storage.sqliteLoad (unHelpful testId) (unHelpful runId)
+      formulas <- getFormulas
+      let testFormulas = flip map formulas $ \formula ->
+            case parse formula of
+              Left s -> error s
+              Right x -> x
+          results = map (checkFormula trace) testFormulas
+      LazyTextIO.putStrLn $ AesonText.encodeToLazyText (ResultMany results)
     Check {..} -> do
       trace <- Storage.sqliteLoad (unHelpful testId) (unHelpful runId)
       testFormula <- case parse (unHelpful formula) of
         Left s -> error s
         Right x -> pure x
-      let dec = check testFormula trace
-          result = case dec of
-            Proof.No {} -> False
-            Proof.Yes {} -> True
-          r = Result result (Proof.reason dec)
-      TextIO.putStrLn $ AesonText.encodeToLazyText r
+      let r = checkFormula trace testFormula
+      LazyTextIO.putStrLn $ AesonText.encodeToLazyText r

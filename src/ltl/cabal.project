@@ -7,7 +7,9 @@ reject-unconstrained-dependencies: all
 constraints: QuickCheck +old-random
 
 package ltl
-  ghc-options: -Wall
+  ghc-options:
+    -Wall
+    -O2
 
 allow-older: *
 allow-newer: *
