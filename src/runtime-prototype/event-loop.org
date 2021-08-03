@@ -255,10 +255,23 @@ queue |  __    __    __              | -.
      #+begin_src go
      func timeoutProducer1(ls loopState) event {
          now := ls.time.Now()
-         time, cb := ls.priorityQueue.peek() // TODO: c.f. Sean's timers branch...
+         time, cb := ls.priorityQueue.peek()
          if now.After(time) {
            ls.priorityQueue.pop()
            return Timeout{callback: &cb}
+         } else {
+           // NOTE: we can't just `sleep(time - now)` here, because new timeouts
+           // might be registered in the meantime.
+           return nil
+         }
+     }
+
+     func timeoutProducerSean(ls loopState) event {
+         now := ls.time.Now()
+         time, timerEvent := ls.priorityQueue.peek()
+         if now.After(time) {
+           ls.priorityQueue.pop()
+           return TimeoutSean{timerEvent: timerEvent}
          } else {
            // NOTE: we can't just `sleep(time - now)` here, because new timeouts
            // might be registered in the meantime.
@@ -330,6 +343,9 @@ queue |  __    __    __              | -.
            // ...
          case Timeout:
            e.callback()
+         case TimeoutSean:
+           r := lookupReactor(e.timerEvent.receiver)
+           r.tick(e.timerEvent)
          }
        }
      }
@@ -370,7 +386,7 @@ queue |  __    __    __              | -.
        for {
          r := posix.select(fds, ...)
          // one of the fds is ready... figure out which and enqueue appropritate event to queue
-         // when do we run eventConsumer?
+         // TODO: when do we run eventConsumer?
        }
      }
      #+end_src go
