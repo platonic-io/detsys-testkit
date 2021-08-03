@@ -270,7 +270,10 @@ queue |  __    __    __              | -.
        ...
        ls := ... // the event loop state, contains the event queue etc.
        for {
-         runHandlers(ls)
+         // NOTE: we used to run the handlers in random order to maximise coverage,
+         // but it turns out a lot of time is spent randomising and also randomness
+         // can potentially ruin branch predicition in the CPU.
+         runHandlers(ls) // TODO: which order do we run the handlers in?
        }
      }
      #+end_src go
@@ -405,3 +408,4 @@ queue |  __    __    __              | -.
 * Resources
 ** http://ithare.com/five-myths-used-in-golang-vs-node-js-debate/
 ** [chat server implemented using select/poll/epoll/uring](https://github.com/robn/yoctochat)
+** [Data-Oriented Design](https://dataorienteddesign.com/dodbook/)
