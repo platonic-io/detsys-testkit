@@ -212,14 +212,15 @@ queue |  __    __    __              | -.
 ** Performance
 ** Testability
 ** Observability
-** (Deployment)
-*** for development
-**** whole cluster running in single process
-**** fake networking between nodes
-**** simulation testing
-*** for production
-**** one node per computer
-**** real networking
+** Deployment
+*** swappable communication channels and computer topologies
+**** for development
+***** whole cluster running in single process
+***** fake networking between nodes
+***** simulation testing
+**** for production
+***** one node per computer
+***** real networking
 ** (HA)
 ** (Upgrades)
 * Reactors
@@ -373,10 +374,8 @@ queue |  __    __    __              | -.
      }
      #+end_src go
 ** Single-threaded notified
-*** use kernel-level notifications, select/poll/epoll/kqueue/io_uring
+*** use kernel-level notifications, select/poll/epoll/kqueue/libuv
 *** basically wait for some file descriptors to be readable/writable or timer to fire
-**** sockets for networking
-**** io_uring can handle any filesystem file
 *** avoids inefficiency of running handlers unnecessarily
 *** http and other transports need to be ported to run on top of event system
 *** pseudo code
@@ -391,35 +390,36 @@ queue |  __    __    __              | -.
      }
      #+end_src go
 
+* Thread pools
+** run blocking I/O, e.g. filesystem, on separate pool of threads
+
 * Batching
 ** buffer writes to disk / network?
 ** automatic low latency / high throughput reconfiguration?
 
-* Thread pools
-** run blocking I/O, e.g. filesystem, on separate pool of threads
+* Advanced techniques
+** Zero-deseralisation
+*** fixed sized datastructures
+*** no parsing
+**** cast incoming bytestrings directly into said datastructures
+**** or use functions to read fields straight from the bytestring
 
-* Zero-deseralisation
-** fixed sized datastructures
-** no parsing
-*** cast incoming bytestrings directly into said datastructures
-*** or use functions to read fields straight from the bytestring
-
-* Zero-syscalls
-** io_uring allows us to batch syscalls effectively amortising their cost
-** increasingly important post meltdown/spectre
-*** https://www.brendangregg.com/blog/2018-02-09/kpti-kaiser-meltdown-performance.html
-
-* Zero-allocation
-** Allocate at start up, not while running
-** Disk
-** Memory
-*** memory pools / arenas
-**** technique for non-garbage-collected languages?
-
-* Zero-copy
-** avoid copying data from, e.g., disk to app and then from app to network
-** sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
-** Direct I/O? O_DIRECT?
+** Zero-syscalls with io_uring
+*** io_uring allows us to batch syscalls effectively amortising their cost
+*** works for both filesystem and network I/O
+*** linux only
+*** increasingly important to avoid syscalls post meltdown/spectre
+**** https://www.brendangregg.com/blog/2018-02-09/kpti-kaiser-meltdown-performance.html
+** Zero-allocation
+*** Allocate at start up, not while running
+*** Disk
+*** Memory
+**** memory pools / arenas
+***** technique for non-garbage-collected languages?
+** Zero-copy
+*** avoid copying data from, e.g., disk to app and then from app to network
+*** sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
+*** Direct I/O? O_DIRECT?
 
 * Resources
 ** http://ithare.com/five-myths-used-in-golang-vs-node-js-debate/
