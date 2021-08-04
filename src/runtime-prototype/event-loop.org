@@ -209,9 +209,13 @@ queue |  __    __    __              | -.
 
 * Requirements
 ** Convenience
+*** asynchronous
+*** with synchronisation possibilities
+*** but without dead-locks
 ** Performance
-** Testability
-** Observability
+*** a basis that's fast enough
+*** and can be optimised later if needed
+*** using built-in profiler
 ** Deployment
 *** swappable communication channels and computer topologies
 **** for development
@@ -221,17 +225,21 @@ queue |  __    __    __              | -.
 **** for production
 ***** one node per computer
 ***** real networking
-** (HA)
+** Testability
+*** must run completely deterministically when deployed "for development"
+*** must run fast when deployd "for production"
+*** max intersection of the code executed between the two modes of deployment
+** Observability
+*** logging, traces, metrics on event loop level
+**** reducing clutter on application level?
+*** tap into testability event log to get debugger for live networks
+** (HA via supervisors)
+*** idea from Erlang (language initial developed by Ericsson for telecom)
+*** Ericsson reported to achieve a high availability of nine "9"s (>1Mloc)
+*** also useful for standing things up during deployment
 ** (Upgrades)
-* Reactors
-** Local sync invoke
-** Remote async send
-** (A)sync disk I/O
-** Timers
-** Install callbacks on completion of async actions
-
 * Event loop
-** reactors are spawned on event loops
+** reactors/state machines are spawned on event loops
 ** each event loop has a "queue" of events
 ** event producers
 *** incoming requests (remote async sends from reactors on remote event loops)
@@ -239,8 +247,83 @@ queue |  __    __    __              | -.
 *** async disk I/O completed
 *** timeouts
 ** event consumer
-
 ** the trace of processing the events is the basis for testability and observability
+* Reactors
+** local sync invoke
+** remote async send
+** (a)sync disk I/O
+** timers
+** install callbacks on completion of async actions
+** pseudo code
+   #+begin_src go
+     func CreateEventLoop(cfg Config) EventLoop
+
+     func Spawn(r Reactor, e EventLoop) LocalRef
+
+     func Invoke(r *Reactor, lref LocalRef, msg Message) Message
+     func Send(r *Reactor, rref Remoteref, msg Message) Promise
+     func LocalToRemoteRef(lref LocalRef, addr RemoteAddress) RemoteRef
+     func AsyncIO(r *Reactor, task IO) Promise
+     func SetTimer(r *Reactor, millis uint64, msg Message)
+     func RegisterCallback(r *Reactor, p Promise, ...) { // TODO: defunctionalised cb or not?
+       r.actions.append(RegCbAction{p, ..})
+     }
+
+     // all above functions don't actually DO anything, they merely append
+     // actions to the reactor like above in `RegisterCallback`.
+
+     func (r *Reactor) Receive(msg Message) {
+        switch msg.type {
+          case Foo:
+            reply := r.Invoke(r.refToOtherStateMachine, Message(...)) // non-blocking
+            p := r.Send(reply.f, ...)
+            r.SetTimer(3000, FooSendTimeout(p, ...))
+            r.RegisterCallback(p, ...) // TODO: register both a success and failure cb?!
+          case FooSendTimeout:
+            if (retries == 3) {
+              r.AsyncIO(Log("gave up"))
+            } else {
+              r.retries++
+              p := r.Send(...)
+              r.SetTimer(3000, FooSendTimeout(p, ...))
+            }
+        }
+     }
+
+     // When the event loop processes an event that has an incoming message for
+     // one of its reactors it calls `Receive` which creates a list of actions inside
+     // said reactor and then it retrieves those and updates its state and actually
+     // does the actions:
+
+     func consumeEvents(ls loopState) {
+       e := ls.events.dequeue()
+       switch e {
+         case RemoteSend:
+           r := ls.lookupReactor(e.to)
+           r.Receive(e.message)
+           handleActions(ls, r.actions)
+           r.actions = nil
+         case ...
+       }
+
+     }
+
+     func main() {
+
+       cfg := ... // read command line flags and config file
+       el := MakeEventLoop(cfg)
+
+       r := NewReactor()
+       lref := Spawn(r, el)
+
+
+       for {
+          // wait for signal to stop event loop
+       }
+     }
+
+   #+end_src
+
 
 * Event loop threading
 ** Single-threaded polling
@@ -392,12 +475,54 @@ queue |  __    __    __              | -.
 
 * Thread pools
 ** run blocking I/O, e.g. filesystem, on separate pool of threads
+** to avoid blocking the main event loop
+** pseudo code
+   #+begin_src go
+          func ioWorker(ioQueue chan IO, ls loopState) {
+            for {
+              task <- ioQueue // blocking read
+              result, err := task.run() // blocking
+              if (err == nil) {
+                ls.eventQueue.enqueue(IOFinished{task.id, result})
+              } else {
+                ls.eventQueue.enqueue(IOFailed{task.id, err})
+              }
+            }
+          }
+
+          func main() {
+            ls := ... // event loop state (including the event queue)
+            ioQueue := chan ...
+            go ioWorker(ioQueue, ls)
+            go ioWorker(ioQueue, ls) // potentially several workers
+
+            // main event loop goes here (as sketched above), callback
+            // may be fired when `IOFinished` or `IOFailed` events are processed.
+          }
+   #+end_src
 
 * Batching
 ** buffer writes to disk / network?
+*** will be application specific?
+**** scheduler
+***** batches disk I/O db appends to network / heap trace
+***** can't batch networking I/O, because of determinism
 ** automatic low latency / high throughput reconfiguration?
 
-* Advanced techniques
+* Metrics
+** histograms in Go: https://github.com/spacejam/loghisto
+** built-in profiler/metrics
+*** just a bunch of histograms and counters
+*** no external program (e.g. prometheus), i.e. deployment agnostic
+** what to measure?
+*** Brendan Gregg's USE
+**** utilisation
+**** saturation
+**** errors
+
+* Benchmarking
+
+* Advanced performance techniques
 ** Zero-deseralisation
 *** fixed sized datastructures
 *** no parsing
