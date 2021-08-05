@@ -258,34 +258,44 @@ queue |  __    __    __              | -.
    #+begin_src go
      func CreateEventLoop(cfg Config) EventLoop
 
-     func Spawn(r Reactor, e EventLoop) LocalRef
+     func Spawn(r Reactor, e EventLoop) LocalRef // `LocalRef` is basically a pointer.
 
-     func Invoke(r *Reactor, lref LocalRef, msg Message) Message
-     func Send(r *Reactor, rref Remoteref, msg Message) Promise
+     func Invoke(r *Reactor, lref LocalRef, msg Message) Message {
+       r.actions.append(InvokedAction{lref})
+       return *lref.SyncReceive(msg)
+     }
+     func Send(r *Reactor, rref Remoteref, msg Message, onSuccess Message, onFailure Message)
      func LocalToRemoteRef(lref LocalRef, addr RemoteAddress) RemoteRef
-     func AsyncIO(r *Reactor, task IO) Promise
-     func SetTimer(r *Reactor, millis uint64, msg Message)
-     func RegisterCallback(r *Reactor, p Promise, ...) { // TODO: defunctionalised cb or not?
-       r.actions.append(RegCbAction{p, ..})
+     func AsyncIO(r *Reactor, task IO, onSuccess Message, onFailure Message)
+     func SetTimer(r *Reactor, millis uint64, msg Message) {
+       r.actions.append(SetTimerAction{millis, msg})
      }
 
      // all above functions don't actually DO anything, they merely append
-     // actions to the reactor like above in `RegisterCallback`.
+     // actions to the reactor like above in `SetTimer`.
 
      func (r *Reactor) Receive(msg Message) {
         switch msg.type {
           case Foo:
             reply := r.Invoke(r.refToOtherStateMachine, Message(...)) // non-blocking
-            p := r.Send(reply.f, ...)
-            r.SetTimer(3000, FooSendTimeout(p, ...))
-            r.RegisterCallback(p, ...) // TODO: register both a success and failure cb?!
+            r.Send(reply.f, r.remoteSM)
+             .onSuccess(FooSendSuccess{...}) // builder pattern could be nice here.
+             .onFailure(FooSendFailure{...})
+             .after(3000, FooSendTimeout(p, ...)) // to avoid a separate SetTimer call,
+                                                  // still need timers unrelated to sends though.
+
+          // Success, failure and timers should perhaps have their own separate method
+          // instead of being part of `Receive`.
+          case FooSendSuccess:
+            // ...
+          case FoodSendFailure:
+            // ...
           case FooSendTimeout:
             if (retries == 3) {
               r.AsyncIO(Log("gave up"))
             } else {
               r.retries++
-              p := r.Send(...)
-              r.SetTimer(3000, FooSendTimeout(p, ...))
+              r.Send(...).(...)
             }
         }
      }
@@ -301,6 +311,12 @@ queue |  __    __    __              | -.
          case RemoteSend:
            r := ls.lookupReactor(e.to)
            r.Receive(e.message)
+           // If an action fails, call the failure callback associated with that promise.
+           // If the failure callback fails, or doesn't exist, then crash the reactor that
+           // created the action.
+
+           // When `InvokedAction{lref}` is handled we should recursively handle the actions
+           // of `lref`.
            handleActions(ls, r.actions)
            r.actions = nil
          case ...
@@ -321,9 +337,7 @@ queue |  __    __    __              | -.
           // wait for signal to stop event loop
        }
      }
-
    #+end_src
-
 
 * Event loop threading
 ** Single-threaded polling
@@ -409,20 +423,14 @@ queue |  __    __    __              | -.
          case ClientRequest:
            // ...
          case InternalMessage: // remote event loop sent message to reactor on this event loop
-           cb := lookupCallback(e.promise)
-           if (cb != nil) {
-             // the incoming message is a response for which we have a callback.
-             cb(e.message)
-           } else {
-             // the incoming message is a request
-             r := lookupReactor(e.receiver)
-             logState(r)
-             actions := r.receive(e.sender, e.message)
-             logState(r)
-             // actions are: send message to remote event loop, async disk I/O,
-             // set timer, or register callback for when any of the previous actions complete.
-             handleActions(ls, actions)
-           }
+           // the incoming message is a request
+           r := lookupReactor(e.receiver)
+           logState(r)
+           actions := r.receive(e.sender, e.message)
+           logState(r)
+           // actions are: send message to remote event loop, async disk I/O,
+           // or set timers.
+           handleActions(ls, actions)
          case IOFinished:
            // ...
          case Timeout:
