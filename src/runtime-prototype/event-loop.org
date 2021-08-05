@@ -351,6 +351,16 @@ queue |  __    __    __              | -.
      that way no synchronisation is needed for the event queue
 *** pseudo code
      #+begin_src go
+     func networkProducer1(ls loopState) event {
+
+       // external client requests, e.g. via http
+       events1 := ls.httpQueue.drain() // http server appends to `httpQueue`
+
+       // internal messages from other nodes, e.g. via grpc
+       events2 := ls.grpcQueue.drain() // same but for grpc server.
+       return EventBatch{events1, events2}
+     }
+
      func timeoutProducer1(ls loopState) event {
          now := ls.time.Now()
          time, cb := ls.priorityQueue.peek()
@@ -397,8 +407,6 @@ queue |  __    __    __              | -.
 *** pseudo code
      #+begin_src go
      func networkProducer(ls loopState, ch chan event) {
-       // internal messages from other nodes
-       // external client requests
        ...
      }
 
