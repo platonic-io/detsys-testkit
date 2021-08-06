@@ -1,0 +1,405 @@
+#+title: The event loop (part 3)
+#+author: Stevan Andjelkovic
+#+date: ?
+
+* Requirements
+** Convenience
+*** asynchronous
+*** with synchronisation possibilities
+*** but without dead-locks
+
+** Performance
+*** a basis that's fast enough
+*** and can be optimised later if needed
+*** using built-in profiler
+
+** Deployment
+*** swappable communication channels and computer topologies
+**** for development
+***** whole cluster running in single process
+***** fake networking between nodes
+***** simulation testing
+**** for production
+***** one node per computer
+***** real networking
+
+** Testability
+*** must run completely deterministically when deployed "for development"
+*** must run fast when deployed "for production"
+*** max intersection of the code executed between the two modes of deployment
+
+** Observability
+*** logging, traces, metrics on event loop level
+**** reducing clutter on application level?
+*** tap into testability event log to get debugger for live networks
+
+** (HA via supervisors)
+*** a (re)actor whose only job is to make sure (re)actors under it are alive
+**** if they are not, then restart them (possibly restarting its dependencies as well)
+*** idea from Erlang (language initial developed by Ericsson for telecom)
+*** Ericsson reported to achieve a high availability of nine "9"s (>1Mloc)
+*** also useful for standing things up during deployment
+
+** (Upgrades)
+
+* Event loop
+** reactors/state machines are spawned on event loops
+** each event loop has a "queue" of events
+** event producers
+*** incoming requests (remote async sends from reactors on remote event loops)
+*** incoming response (to remote async send made by reactor running on this event loop)
+*** async disk I/O completed
+*** timeouts
+** event consumer
+** the trace of processing the events is the basis for testability and observability
+
+* Reactors
+** local sync invoke
+** remote async send
+** (a)sync disk I/O
+** timers
+** install callbacks on completion of async actions
+** pseudo code
+   #+begin_src go
+     func CreateEventLoop(cfg Config) EventLoop
+
+     func Spawn(r Reactor, e EventLoop) LocalRef // `LocalRef` is basically a pointer.
+
+     func Invoke(r *Reactor, lref LocalRef, msg Message) Message {
+       r.actions.append(InvokedAction{lref})
+       return *lref.SyncReceive(msg)
+     }
+     func Send(r *Reactor, rref Remoteref, msg Message, onSuccess Message, onFailure Message)
+     func LocalToRemoteRef(lref LocalRef, addr RemoteAddress) RemoteRef
+     func AsyncIO(r *Reactor, task IO, onSuccess Message, onFailure Message)
+     func SetTimer(r *Reactor, millis uint64, msg Message) {
+       r.actions.append(SetTimerAction{millis, msg})
+     }
+
+     // all above functions don't actually DO anything, they merely append
+     // actions to the reactor like above in `SetTimer`.
+
+     func (r *Reactor) Receive(msg Message) {
+        switch msg.type {
+          case Foo:
+            reply := r.Invoke(r.refToOtherStateMachine, Message(...)) // non-blocking
+            r.Send(reply.f, r.remoteSM)
+             .onSuccess(FooSendSuccess{...}) // builder pattern could be nice here.
+             .onFailure(FooSendFailure{...})
+             .after(3000, FooSendTimeout(p, ...)) // to avoid a separate SetTimer call,
+                                                  // still need timers unrelated to sends though.
+
+          // Success, failure and timers should perhaps have their own separate method
+          // instead of being part of `Receive`.
+          case FooSendSuccess:
+            // ...
+          case FoodSendFailure:
+            // ...
+          case FooSendTimeout:
+            if (retries == 3) {
+              r.AsyncIO(Log("gave up"))
+            } else {
+              r.retries++
+              r.Send(...).(...)
+            }
+        }
+     }
+
+     // When the event loop processes an event that has an incoming message for
+     // one of its reactors it calls `Receive` which creates a list of actions inside
+     // said reactor and then it retrieves those and updates its state and actually
+     // does the actions:
+
+     func consumeEvents(ls loopState) {
+       e := ls.events.dequeue()
+       switch e {
+         case RemoteSend:
+           r := ls.lookupReactor(e.to)
+           r.Receive(e.message)
+           // If an action fails, call the failure callback associated with that promise.
+           // If the failure callback fails, or doesn't exist, then crash the reactor that
+           // created the action.
+
+           // When `InvokedAction{lref}` is handled we should recursively handle the actions
+           // of `lref`.
+           handleActions(ls, r.actions)
+           r.actions = nil
+         case ...
+       }
+
+     }
+
+     func main() {
+
+       cfg := ... // read command line flags and config file
+       el := MakeEventLoop(cfg)
+
+       r := NewReactor()
+       lref := Spawn(r, el)
+
+
+       for {
+          // wait for signal to stop event loop
+       }
+     }
+   #+end_src
+
+* Event loop threading
+** Single-threaded polling
+*** run each non-blocking handler in turn
+*** inefficient as we might be running handlers that have nothing to do
+*** depending on network transport, this can be difficult to implement
+**** for example, http transport libraries will likely require multiple threads
+**** possilbe workaround:
+     1. http server writes to a separate synchronised queue (due to multiple connections)
+     2. network poll step dumps the http queue to the event queue
+     that way no synchronisation is needed for the event queue
+*** pseudo code
+     #+begin_src go
+     func networkProducer1(ls loopState) event {
+
+       // external client requests, e.g. via http
+       events1 := ls.httpQueue.drain()
+       // http server appends to `httpQueue`, this happens concurrently to
+       // this function, so we need some sort of synchronisation, e.g. use
+       // a go channel.
+
+       // internal messages from other nodes, e.g. via grpc
+       events2 := ls.grpcQueue.drain() // same but for grpc server.
+       // same comment here about synchronisation.
+
+       // This would be a good place to collect the saturation of `httpQueue` and
+       // `grpcQueue`, i.e. what's their depth when we drain?
+
+       // Depending on the saturation of above queues or the main event queue,
+       // we could apply back-pressure at this point, i.e. tell the http and/or
+       // grpc servers to reject new requests.
+
+       return EventBatch{events1, events2}
+     }
+
+     func timeoutProducer1(ls loopState) event {
+         now := ls.time.Now()
+         // no synchronisation needed for `priorityQueue`, as only this function or
+         // `consumeEvents` (which might set new timers) will access it and they never
+         // run concurrently.
+         time, cb := ls.priorityQueue.peek()
+         if now.After(time) {
+           ls.priorityQueue.pop()
+           return Timeout{callback: &cb}
+         } else {
+           // NOTE: we can't just `sleep(time - now)` here, because new timeouts
+           // might be registered in the meantime.
+           return nil
+         }
+     }
+
+     func timeoutProducerSean(ls loopState) event {
+         now := ls.time.Now()
+         time, timerEvent := ls.priorityQueue.peek()
+         if now.After(time) {
+           ls.priorityQueue.pop()
+           return TimeoutSean{timerEvent: timerEvent}
+         } else {
+           // NOTE: we can't just `sleep(time - now)` here, because new timeouts
+           // might be registered in the meantime.
+           return nil
+         }
+     }
+
+     func main() {
+       ...
+       ls := ... // the event loop state, contains the event queue etc.
+       for {
+         // NOTE: we used to run the producers/consumer in random order to maximise
+         // coverage, but it turns out a lot of time is spent randomising and also
+         // randomness can potentially ruin branch predicition in the CPU.
+         // TODO: which order do we run the handlers in?
+         consumeEvents(ls)
+         e1 := networkProducer1(ls)
+         e2 := timeoutProducer1(ls)
+         ls.events.enqueue(e1, e2)
+         // no synchronisation needed for `events` queue as only one producer or
+         // consumer access it at the time.
+       }
+     }
+     #+end_src go
+
+** Multi-threaded
+*** run each, possibly blocking, handler in separate thread
+*** needs synchronisation, which is "expensive"
+**** a single lock-free queue is probably enough?
+*** perhaps closest to idiomatic Go
+*** pseudo code
+     #+begin_src go
+     func networkProducer(ls loopState, ch chan event) {
+       ...
+     }
+
+     func timeoutProducer(ls loopState, ch chan event) {
+       for {
+         e := timeoutProducer1(ls)
+         if e != nil {
+           ch <- e
+         }
+       }
+     }
+
+     func asyncIOProducer(ls loopState, ch chan event) {
+       ...
+     }
+
+     func eventConsumer(ls loopState) {
+       for {
+         e := ls.events.dequeue() // blocking read
+         logEvent(e) // for testability and observability, note that this can be slow,
+                     // so maybe needs some care...
+         switch e.type {
+         case ClientRequest:
+           // ...
+         case InternalMessage: // remote event loop sent message to reactor on this event loop
+           // the incoming message is a request
+           r := lookupReactor(e.receiver)
+           logState(r)
+           actions := r.receive(e.sender, e.message)
+           logState(r)
+           // actions are: send message to remote event loop, async disk I/O,
+           // or set timers.
+           handleActions(ls, actions)
+         case IOFinished:
+           // ...
+         case Timeout:
+           e.callback()
+         case TimeoutSean:
+           r := lookupReactor(e.timerEvent.receiver)
+           r.tick(e.timerEvent)
+         }
+       }
+     }
+
+     func main() {
+       ch1 := make(chan event)
+       ch2 := make(chan event)
+       ch3 := make(chan event)
+       go networkProducer(ls, ch1)
+       go timeoutProducer(ls, ch2)
+       go asyncIOProducer(ls, ch3)
+       go eventConsumer(ls)
+
+       for {
+         select {
+         case e1 := <-ch1:
+           ls.events.enqueue(e1) // `events` needs to be synchronised, because of multiple
+                                 // concurrent writers.
+         case e2 := <-ch2:
+           ls.events.enqueue(e2)
+         case e3 := <-ch3:
+           ls.events.enqueue(e3)
+         // TODO: or should the consumer be part of the select as well? perhaps prioritised?
+         }
+       }
+     }
+     #+end_src go
+** Single-threaded notified
+*** use kernel-level notifications, select/poll/epoll/kqueue/libuv
+*** basically wait for some file descriptors to be readable/writable or timer to fire
+*** avoids inefficiency of running handlers unnecessarily
+*** http and other transports need to be ported to run on top of event system
+*** pseudo code
+    #+begin_src go
+     func main() {
+       fds := ... // file descriptors to watch
+       for {
+         r := posix.select(fds, ...)
+         // one of the fds is ready... figure out which and enqueue appropritate event to queue
+         // TODO: when do we run eventConsumer?
+       }
+     }
+     #+end_src go
+
+* Thread pools
+** run blocking I/O, e.g. filesystem, on separate pool of threads
+** to avoid blocking the main event loop
+** pseudo code
+   #+begin_src go
+          func ioWorker(ioQueue chan IO, ls loopState) {
+            for {
+              task <- ioQueue // blocking read
+              result, err := task.run() // blocking
+              if (err == nil) {
+                ls.eventQueue.enqueue(IOFinished{task.id, result})
+              } else {
+                ls.eventQueue.enqueue(IOFailed{task.id, err})
+              }
+            }
+          }
+
+          func main() {
+            ls := ... // event loop state (including the event queue)
+            ioQueue := chan ...
+            go ioWorker(ioQueue, ls)
+            go ioWorker(ioQueue, ls) // potentially several workers
+
+            // main event loop goes here (as sketched above), callback
+            // may be fired when `IOFinished` or `IOFailed` events are processed.
+          }
+   #+end_src
+
+* Batching
+** buffer writes to disk / network?
+*** will be application specific?
+**** scheduler
+***** batches disk I/O db appends to network / heap trace
+***** can't batch networking I/O, because of determinism
+** automatic low latency / high throughput reconfiguration?
+
+* Metrics
+** histograms in Go: https://github.com/spacejam/loghisto
+** built-in profiler/metrics
+*** just a bunch of histograms and counters
+*** no external program (e.g. prometheus), i.e. deployment agnostic
+** what to measure?
+*** Brendan Gregg's USE
+**** utilisation
+**** saturation
+**** errors
+
+* Benchmarking
+** single process / machine
+** spin up clients on a few threads, deploy cluster locally
+** have the clients perform different workloads on SUT
+** look at built-in profiler
+** these benchmarks will be skewed because clients run on the same machine as SUT
+** but the iteraction cycle is very quick and the test is easy to write
+
+* Advanced performance techniques
+** Zero-deseralisation
+*** fixed sized datastructures
+*** no parsing
+**** cast incoming bytestrings directly into said datastructures
+**** or use functions to read fields straight from the bytestring
+
+** Zero-syscalls with io_uring
+*** io_uring allows us to batch syscalls effectively amortising their cost
+*** works for both filesystem and network I/O
+*** linux only
+*** increasingly important to avoid syscalls post meltdown/spectre
+**** https://www.brendangregg.com/blog/2018-02-09/kpti-kaiser-meltdown-performance.html
+** Zero-allocation
+*** Allocate at start up, not while running
+*** Disk
+*** Memory
+**** memory pools / arenas
+***** technique for non-garbage-collected languages?
+** Zero-copy
+*** avoid copying data from, e.g., disk to app and then from app to network
+*** sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
+*** Direct I/O? O_DIRECT?
+
+** LMAX disruptor
+*** a way of structuring concurrent processing of events with dependencies between consumers
+*** more efficient than queues
+* Resources
+** http://ithare.com/five-myths-used-in-golang-vs-node-js-debate/
+** [chat server implemented using select/poll/epoll/uring](https://github.com/robn/yoctochat)
+** [Data-Oriented Design](https://dataorienteddesign.com/dodbook/)
