@@ -326,6 +326,9 @@ act ls as = mapM_ go as
 
     go :: Action -> IO ()
     go (SendAction from msg to p@(Promise i)) = do
+      -- XXX: What do we do if `transportSend` fails here? We should probably
+      -- call the failure handler/continuation for this promise, if it exists.
+      -- If it doesn't exist we probably want to crash the sender, i.e. `from`.
       transportSend (lsTransport ls)
         (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i))
       t <- getCurrentTime (lsTime ls)
