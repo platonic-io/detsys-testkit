@@ -601,6 +601,9 @@ queue |  __    __    __              | -.
 *** sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
 *** Direct I/O? O_DIRECT?
 
+** LMAX disruptor
+*** a way of structuring concurrent processing of events with dependencies between consumers
+*** more efficient than queues
 * Resources
 ** http://ithare.com/five-myths-used-in-golang-vs-node-js-debate/
 ** [chat server implemented using select/poll/epoll/uring](https://github.com/robn/yoctochat)
