@@ -562,6 +562,12 @@ queue |  __    __    __              | -.
 **** errors
 
 * Benchmarking
+** single process / machine
+** spin up clients on a few threads, deploy cluster locally
+** have the clients perform different workloads on SUT
+** look at built-in profiler
+** these benchmarks will be skewed because clients run on the same machine as SUT
+** but the iteraction cycle is very quick and the test is easy to write
 
 * Advanced performance techniques
 ** Zero-deseralisation
