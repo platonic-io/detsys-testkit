@@ -55,6 +55,7 @@ type arrowInternal struct {
 	gapIndexToAnnotate int
 	annotationLeft     string
 	annotationRight    string
+	isLine             bool
 }
 
 func boxSize(names []string) int {
@@ -141,11 +142,16 @@ func appendBoxes(isTop bool, output *strings.Builder, names []string, gaps []int
 	}
 }
 
-func appendArrows(output *strings.Builder, names []string, arrows []arrowInternal, gaps []int, boxSize int, crashInformation crashInformationInternal) {
+func appendArrows(output *strings.Builder, names []string, arrows []arrowInternal, gaps []int, boxSize int, crashInformation crashInformationInternal) int {
 	deadNodes := make(map[int]bool)
+	line := 0
+	foundLine := false
 
 	halfBox := boxSize / 2
 	for _, arr := range arrows {
+		if arr.isLine {
+			foundLine = true
+		}
 		newCrashes := crashInformation[arr.at]
 
 		for _, n := range newCrashes {
@@ -174,6 +180,9 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 				WriteRepeat(output, " ", halfBox-2)
 			}
 			output.WriteString("\n")
+			if !foundLine {
+				line++
+			}
 			for i, _ := range names {
 				middle := "  │  "
 				newCrash := false
@@ -193,6 +202,9 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 				WriteRepeat(output, " ", halfBox-2)
 			}
 			output.WriteString("\n")
+			if !foundLine {
+				line++
+			}
 			for i, _ := range names {
 				middle := "  │  "
 				newCrash := false
@@ -212,6 +224,9 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 				WriteRepeat(output, " ", halfBox-2)
 			}
 			output.WriteString("\n")
+			if !foundLine {
+				line++
+			}
 		}
 
 		{
@@ -238,6 +253,9 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 				}
 			}
 			output.WriteString("\n")
+			if !foundLine {
+				line++
+			}
 		}
 
 		halfEmpty := wline(halfBox)
@@ -274,6 +292,9 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 
 			}
 			output.WriteString("\n")
+			if !foundLine {
+				line++
+			}
 			//compute bottom line of loop
 			for i, _ := range names {
 				WriteRepeat(output, " ", gaps[i])
@@ -299,6 +320,9 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 				output.WriteString(rightPart)
 			}
 			output.WriteString("\n")
+			if !foundLine {
+				line++
+			}
 		} else {
 			for i, _ := range names {
 				leftPart := halfEmpty
@@ -355,11 +379,15 @@ func appendArrows(output *strings.Builder, names []string, arrows []arrowInterna
 				output.WriteString(rightPart)
 			}
 			output.WriteString("\n")
+			if !foundLine {
+				line++
+			}
 		}
 	}
+	return line
 }
 
-func drawDiagram(names []string, arrows []arrowInternal, gaps []int, nrLoops int, crashInformation crashInformationInternal) ([]byte, []byte) {
+func drawDiagram(names []string, arrows []arrowInternal, gaps []int, nrLoops int, crashInformation crashInformationInternal) ([]byte, []byte, int) {
 	if len(names) < 1 {
 		panic("We need at least one box")
 	}
@@ -383,11 +411,11 @@ func drawDiagram(names []string, arrows []arrowInternal, gaps []int, nrLoops int
 
 	appendBoxes(true, &header, names, gaps)
 
-	appendArrows(&output, names, arrows, gaps, boxSize, crashInformation)
+	line := appendArrows(&output, names, arrows, gaps, boxSize, crashInformation)
 	appendBoxes(false, &output, names, gaps)
 
 	// remove last newline
-	return []byte(header.String()), []byte(output.String())
+	return []byte(header.String()), []byte(output.String()), line
 }
 
 func index(haystack []string, needle string) int {
@@ -405,7 +433,7 @@ type DrawSettings struct {
 	Crashes    CrashInformation
 }
 
-func DrawDiagram(arrows []Arrow, settings DrawSettings) ([]byte, []byte) {
+func DrawDiagram(arrows []Arrow, settings DrawSettings) ([]byte, []byte, int) {
 	var names []string
 	{
 		for _, arr := range arrows {
@@ -463,10 +491,12 @@ func DrawDiagram(arrows []Arrow, settings DrawSettings) ([]byte, []byte) {
 		var message string
 		annotationLeft := ""
 		annotationRight := ""
+		isLine := false
 		if i == settings.MarkAt {
 			annotationLeft = "[\"focused\"][yellow]"
 			annotationRight = "[-][\"\"]"
 			message = leftMarker + arr.Message + rightMarker
+			isLine = true
 		} else {
 			message = emptyMarker + arr.Message + emptyMarker
 		}
@@ -480,6 +510,7 @@ func DrawDiagram(arrows []Arrow, settings DrawSettings) ([]byte, []byte) {
 			gapIndexToAnnotate: gapIndexToAnnotate,
 			annotationLeft:     annotationLeft,
 			annotationRight:    annotationRight,
+			isLine:             isLine,
 		})
 	}
 
