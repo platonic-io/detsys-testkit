@@ -207,8 +207,13 @@ func colon(s string) string {
 	return strings.Replace(s, ":", "", -1)
 }
 
+type result struct {
+	dia  []byte
+	line int
+}
+
 type SequenceDiagrams struct {
-	inner   map[int][]byte
+	inner   map[int]result
 	header  []byte
 	net     []NetworkEvent
 	crashes CrashInformation
@@ -218,17 +223,17 @@ func NewSequenceDiagrams(testId lib.TestId, runId lib.RunId) *SequenceDiagrams {
 	net := GetNetworkTrace(testId, runId)
 	crashes := GetCrashes(testId, runId)
 	return &SequenceDiagrams{
-		inner:   make(map[int][]byte),
+		inner:   make(map[int]result),
 		net:     net,
 		crashes: crashes,
 	}
 }
 
-func (s *SequenceDiagrams) At(at int) []byte {
+func (s *SequenceDiagrams) At(at int) ([]byte, int) {
 	val, ok := s.inner[at]
 
 	if ok {
-		return val
+		return val.dia, val.line
 	}
 
 	arrows := make([]Arrow, 0, len(s.net))
@@ -241,7 +246,7 @@ func (s *SequenceDiagrams) At(at int) []byte {
 			Dropped: event.Dropped,
 		})
 	}
-	header, gen := DrawDiagram(arrows, DrawSettings{
+	header, gen, line := DrawDiagram(arrows, DrawSettings{
 		MarkerSize: 3,
 		MarkAt:     at,
 		Crashes:    s.crashes,
@@ -251,8 +256,8 @@ func (s *SequenceDiagrams) At(at int) []byte {
 		s.header = header
 	}
 
-	s.inner[at] = gen
-	return gen
+	s.inner[at] = result{gen, line}
+	return gen, line
 }
 
 func (s *SequenceDiagrams) Header() []byte {

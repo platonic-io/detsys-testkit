@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/symbiont-io/detsys-testkit/src/debugger/internal"
@@ -101,7 +102,21 @@ func (da *DebugApplication) redraw() {
 	logView.Clear()
 	row := da.activeRow
 	{
-		fmt.Fprintf(w2, "%s", da.diagrams.At(row-1))
+		_, _, _, height := diagram.GetInnerRect()
+		totalViewed := height - 1
+		beforeLimit := totalViewed / 2
+		buffer, line := da.diagrams.At(row - 1)
+		toDraw := make([]byte, 0)
+		lines := strings.SplitAfter(string(buffer), "\n")
+		if line > len(lines) {
+			panic("line is calculated wrong")
+		}
+		if line < beforeLimit {
+			toDraw = []byte(strings.Join(lines[:min(totalViewed, len(lines))], ""))
+		} else {
+			toDraw = []byte(strings.Join(lines[line-beforeLimit:min(line+(totalViewed-beforeLimit), len(lines))], ""))
+		}
+		fmt.Fprintf(w2, "%s", toDraw)
 		diagram.ScrollToHighlight()
 		fmt.Fprintf(wDiagramHeader, "%s", da.diagrams.Header())
 	}
