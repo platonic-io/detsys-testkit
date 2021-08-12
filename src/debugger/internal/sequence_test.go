@@ -9,7 +9,7 @@ import (
 
 func goldenTest(t *testing.T, settings DrawSettings, arrows []Arrow, outcome string) {
 	shouldBe := strings.TrimSpace(outcome)
-	header, boxes := DrawDiagram(arrows, settings)
+	header, boxes, _ := DrawDiagram(arrows, settings)
 
 	whole := strings.Join([]string{string(header), string(boxes)}, "\n")
 
@@ -141,7 +141,7 @@ func TestSequenceCrash(t *testing.T) {
 	goldenTest(t, settings, arrows, outcome)
 }
 
-var result []byte
+var theResultThatWeStoreForBenchmarking []byte
 
 // run with `go test -bench=Sequence -run XXX`
 func benchmarkSequence(many int, b *testing.B) {
@@ -159,9 +159,9 @@ func benchmarkSequence(many int, b *testing.B) {
 	// away
 	var r []byte
 	for i := 0; i < b.N; i++ {
-		_, r = DrawDiagram(arrows, settings)
+		_, r, _ = DrawDiagram(arrows, settings)
 	}
-	result = r
+	theResultThatWeStoreForBenchmarking = r
 }
 
 func BenchmarkSequence1(b *testing.B)    { benchmarkSequence(1, b) }
