@@ -701,8 +701,8 @@
                                      :from (:to client)
                                      :to (:from client)
                                      :kind (:kind client)
-                                     :sent-logical-time (:logical-time data')
-                                     :recv-logical-time (:logical-time data')
+                                     :sent-logical-time (:logical-clock data')
+                                     :recv-logical-time (:logical-clock data')
                                      :recv-simulated-time (:clock data')
                                      :dropped false
                                      :jepsen-type :info
