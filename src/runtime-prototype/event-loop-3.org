@@ -399,6 +399,7 @@
 ** LMAX disruptor
 *** a way of structuring concurrent processing of events with dependencies between consumers
 *** more efficient than queues
+*** c.f. DataAqueduct
 * Resources
 ** http://ithare.com/five-myths-used-in-golang-vs-node-js-debate/
 ** [chat server implemented using select/poll/epoll/uring](https://github.com/robn/yoctochat)
