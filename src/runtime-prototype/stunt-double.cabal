@@ -37,8 +37,10 @@ library
     StuntDouble.Time
     StuntDouble.Transport
     StuntDouble.Transport.Http
+    StuntDouble.Transport.HttpSync
     StuntDouble.Transport.NamedPipe
     StuntDouble.Transport.Stm
+    StuntDouble.Queue
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
@@ -79,6 +81,7 @@ test-suite test
     , base
     , containers
     , HUnit
+    , http-client
     , QuickCheck
     , stunt-double
     , tasty

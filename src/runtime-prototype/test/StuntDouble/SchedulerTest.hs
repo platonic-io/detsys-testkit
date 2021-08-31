@@ -13,38 +13,42 @@ import StuntDouble
 
 ------------------------------------------------------------------------
 
-  {-
-executorPort :: Int
-executorPort = 3004
-
-fakeExecutor :: IO ()
-fakeExecutor = do
-  t <- httpTransport executorPort
-  e <- transportReceive t
-  envelopeMessage e @?= envelopeMessage e -- XXX: check if cmd is of the right shape
-  let resp = replyEnvelope e (InternalMessage "XXX: needs the right shape")
-  transportSend t resp
-
 fakeScheduler :: RemoteRef -> Message -> Actor
-fakeScheduler executor (InternalMessage "step") = do
-  Just (cmd, heap') <- "heap" ^. pop
-  "heap" .= (heap' :: Datatype)
-  a <- remoteCall executor (InternalMessage (prettyCommand cmd))
-  Left (Just resp) <- unsafeAwait (Left a)
-  -- assert resp -- XXX: check if of the right shape
-  now <- get "time"
-  seed <- get "seed"
-  arrivalTime <- genArrivalTime now seed
-  op2 push arrivalTime (parseCommand resp) %= "heap"
-  return (Now (InternalMessage "stepped"))
-
+fakeScheduler executorRef (ClientRequest "CreateTest" cid) = Actor $ do
+  -- load from db
+  undefined
+fakeScheduler executorRef (ClientRequest "Start" cid) = Actor $ do
+  -- pop agenda end send to executorRef
+  r <- pop <$> gets "heap"
+  case r of
+    Some (Pair cmd heap') -> do
+      update "heap" heap'
+      _ <- send executorRef (InternalMessage (prettyCommand cmd))
+      undefined
+    None -> return (InternalMessage "Done") -- XXX: reply to client id?!
+    _otherwise -> error "scheduler: start: impossible"
   where
-    parseCommand :: Message -> Datatype
-    parseCommand (InternalMessage m) = Pair (Text (Text.pack (show m))) (List []) -- XXX: args
+    prettyCommand :: Datatype -> String
+    prettyCommand = undefined
+fakeScheduler executorRef msg@(InternalMessage "Ack") = Actor $ do
+  undefined
+  -- does executor send back anything else?
+  -- schedule the responses from the executor back on the agenda
 
-    prettyCommand :: Text -> String
-    prettyCommand _ = "XXX: command"
+  -- XXX: we need to make messages be able to have args/fields/payload
+  -- cmds <- parseCommands (payload msg)
+  -- if no cmds and agenda is empty then stop (how do we contact client? need to save cid?)
+  -- else
+  -- now <- gets "time"
+  -- seed <- gets "seed"
+  -- arrivalTime <- genArrivalTime now seed
+  -- op2 push arrivalTime (parseCommand resp) %= "heap"
+  -- where
+  --   parseCommand :: Message -> Datatype
+  --   parseCommand (InternalMessage m) = Pair (Text (Text.pack (show m))) (List []) -- XXX: args
 
+
+{-
 unit_scheduler :: Assertion
 unit_scheduler = do
   aExecutor <- async fakeExecutor

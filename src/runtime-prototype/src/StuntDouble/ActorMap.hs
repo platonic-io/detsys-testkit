@@ -10,22 +10,24 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
-import Data.List
 import Data.Foldable (toList)
-import Data.Vector (Vector)
-import qualified Data.Vector as Vector
 import Data.Heap (Entry(Entry), Heap)
 import qualified Data.Heap as Heap
+import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
+import Data.Vector (Vector)
+import qualified Data.Vector as Vector
 import System.Random
 
 import StuntDouble.Actor.State
+import StuntDouble.Datatype
 import StuntDouble.Envelope
 import StuntDouble.FreeMonad
 import StuntDouble.Histogram
@@ -89,11 +91,17 @@ on p k = Free (On p k return)
 get :: Free ActorF State
 get = Free (Get return)
 
+gets :: Text -> Free ActorF Datatype
+gets k = getField k <$> get
+
 put :: State -> Free ActorF ()
 put s' = Free (Put s' return)
 
 modify :: (State -> State) -> Free ActorF ()
 modify f = put . f =<< get
+
+update :: Text -> Datatype -> Free ActorF ()
+update k v = modify (setField k v)
 
 getTime :: Free ActorF UTCTime
 getTime = Free (GetTime return)
@@ -630,6 +638,8 @@ handleInbound = forever . handleInbound1
 
 handleInbound1 :: EventLoop -> IO ()
 handleInbound1 ls = do
+  -- XXX: instead of just reading one message from the transport queue we could
+  -- read the whole queue here...
   me <- transportReceive (lsTransport ls)
   case me of
     Nothing -> return ()

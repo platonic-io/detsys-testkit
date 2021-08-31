@@ -8,7 +8,6 @@ import qualified Data.HashMap.Strict as HashMap
 import Data.Text (Text)
 import GHC.Generics
 import Data.Aeson
-import Data.Aeson.Parser
 import Data.String
 import Data.Aeson.Internal
 import Control.Concurrent.Async
@@ -49,6 +48,9 @@ httpTransport port = do
 transportSend' :: Manager -> Envelope -> IO ()
 transportSend' manager e = do
   request <- envelopeToRequest e
+  -- XXX: Instead of sending right away here, we could batch instead and only
+  -- send ever 10 ms or whatever, we could also send concurrently (we would need
+  -- to asynchronously take care of possible errors though).
   responseBody <$> httpNoBody request manager
 
 envelopeToRequest :: Envelope -> IO Request

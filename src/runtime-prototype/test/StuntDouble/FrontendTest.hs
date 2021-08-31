@@ -4,6 +4,7 @@ module StuntDouble.FrontendTest where
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Network.HTTP.Client
 import Test.HUnit
 
 import StuntDouble
@@ -38,6 +39,7 @@ eventLoop suffix = EventLoopName ("event-loop-http-frontend-" ++ suffix)
 unit_httpFrontend :: Assertion
 unit_httpFrontend = do
   let ev = eventLoop "httpFrontend"
+  mgr <- newManager defaultManagerSettings
   withEventLoop ev $ \el _h -> do
     lref1 <- spawn el summand (stateFromList [("x", Integer 1)])
     lref2 <- spawn el summand (stateFromList [("x", Integer 2)])
@@ -46,5 +48,5 @@ unit_httpFrontend = do
                               (stateFromList [("sum", Integer 0)])
     let port = 3040
     eResp <- withHttpFrontend el lref3 port $ \_a -> do
-      makeClientRequest (InternalMessage "sum") port
+      makeClientRequest mgr (InternalMessage "sum") port
     eResp @?= Right (InternalMessage "Integer 3")
