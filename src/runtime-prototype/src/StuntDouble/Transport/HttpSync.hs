@@ -18,13 +18,13 @@ httpSyncTransport = do
   -- `transportReceive` are made to retrieve their replies.
   queue <- newQueue 128
   manager <- newManager defaultManagerSettings
-  return Transport { transportSend = transportSend' manager queue
+  return Transport { transportSend = transportSyncSend manager queue
                    , transportReceive = dequeue queue
                    , transportShutdown = return ()
                    }
 
-transportSend' :: Manager -> Queue Envelope -> Envelope -> IO ()
-transportSend' manager queue e = do
+transportSyncSend :: Manager -> Queue Envelope -> Envelope -> IO ()
+transportSyncSend manager queue e = do
   request <- envelopeToRequest e
   -- XXX: Instead of sending right away here, we could batch instead and only
   -- send ever 10 ms or whatever, we could also send concurrently (we would need

@@ -19,6 +19,7 @@ tested-with:        GHC ==8.10.4
 library
   hs-source-dirs:   src/
   exposed-modules:
+    Scheduler
     StuntDouble
     StuntDouble.Actor.State
     StuntDouble.ActorMap
@@ -102,15 +103,11 @@ test-suite test
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
   default-language: Haskell2010
 
-executable stunt-double
+executable scheduler
   hs-source-dirs:   app/
   main-is:          Main.hs
-
-  -- other-modules:
-  -- other-extensions:
-  build-depends:    base ==4.13.*
-
-  -- hs-source-dirs:
+  build-depends:    base ==4.13.*,
+                    stunt-double
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 

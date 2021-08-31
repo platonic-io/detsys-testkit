@@ -14,5 +14,6 @@ import StuntDouble.Reference as X
 import StuntDouble.Time as X
 import StuntDouble.Transport as X
 import StuntDouble.Transport.Http as X
+import StuntDouble.Transport.HttpSync as X
 import StuntDouble.Transport.NamedPipe as X
 import StuntDouble.Transport.Stm as X

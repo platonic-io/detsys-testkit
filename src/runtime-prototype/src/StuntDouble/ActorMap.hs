@@ -40,6 +40,7 @@ import StuntDouble.Reference
 import StuntDouble.Time
 import StuntDouble.Transport
 import StuntDouble.Transport.Http
+import StuntDouble.Transport.HttpSync
 import StuntDouble.Transport.NamedPipe
 import StuntDouble.Transport.Stm
 
@@ -536,6 +537,7 @@ withTransport tk name k =
     (case tk of
        NamedPipe fp -> namedPipeTransport fp name
        Http port    -> httpTransport port
+       HttpSync     -> httpSyncTransport
        Stm          -> stmTransport)
     transportShutdown
     k
@@ -578,6 +580,7 @@ makeEventLoopThreaded threaded threadpool time seed tk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
+         HttpSync     -> httpSyncTransport
          Stm          -> stmTransport
   disk <- fakeDisk
   ls <- initLoopState name time seed t disk
@@ -780,3 +783,8 @@ handleEvent (Admin cmd) ls = case cmd of
 handleEvent (ClientRequestEvent lref msg cref returnVar) ls = do
   reply <- actorPokeIO ls lref (ClientRequest (getMessage msg) cref)
   atomically (putTMVar returnVar reply)
+
+waitForEventLoopQuit :: EventLoop -> IO ()
+waitForEventLoopQuit ls = do
+  pids <- readTVarIO (lsPids ls)
+  mapM_ wait pids
