@@ -94,7 +94,7 @@ test-suite test
     StuntDouble.ActorMapTest
     StuntDouble.FrontendTest
     StuntDouble.HistogramTest
-    StuntDouble.SchedulerTest
+    StuntDouble.QueueTest
     StuntDouble.Transport.HttpTest
     StuntDouble.Transport.NamedPipeTest
     StuntDouble.Transport.StmTest
