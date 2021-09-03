@@ -66,7 +66,7 @@ dequeue q = do
     j <- rear q
     x <- Vec.unsafeRead (qQueue q) j
     modifyIORef' (qSize q) pred
-    modifyIORef' (qRear q) (\j -> j + 1 `mod` capacity q)
+    modifyIORef' (qRear q) (\j -> (j + 1) `mod` capacity q)
     return (Just x)
 
 iter :: (a -> b -> IO b) -> b -> Queue a -> IO b
