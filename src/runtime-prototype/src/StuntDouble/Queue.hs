@@ -48,6 +48,15 @@ enqueue x q = do
     modifyIORef' (qSize q) succ
     return True
 
+enqueues :: [a] -> Queue a -> IO Bool
+enqueues xs q = go xs
+  where
+    go [] = return True
+    go (x : xs) = do
+      b <- enqueue x q
+      b' <- go xs
+      return (b && b')
+
 dequeue :: Queue a -> IO (Maybe a)
 dequeue q = do
   empty <- isEmpty q
