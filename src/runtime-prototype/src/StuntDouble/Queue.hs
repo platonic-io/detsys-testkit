@@ -48,14 +48,15 @@ enqueue x q = do
     modifyIORef' (qSize q) succ
     return True
 
-enqueues :: [a] -> Queue a -> IO Bool
-enqueues xs q = go xs
+enqueueList :: [a] -> Queue a -> IO Bool
+enqueueList xs q = go xs
   where
     go [] = return True
     go (x : xs) = do
       b <- enqueue x q
-      b' <- go xs
-      return (b && b')
+      if b
+      then go xs
+      else return False
 
 dequeue :: Queue a -> IO (Maybe a)
 dequeue q = do

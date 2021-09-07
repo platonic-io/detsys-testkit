@@ -22,17 +22,19 @@ data Command
   | Clear
   | IsEmpty
   | Enqueue Int
+  | EnqueueList [Int]
   | Dequeue
   | Move [Int]
   deriving Show
 
 prettyCommand :: Command -> String
-prettyCommand Size       = "Size"
-prettyCommand Clear      = "Clear"
-prettyCommand IsEmpty    = "IsEmpty"
-prettyCommand Enqueue {} = "Enqueue"
-prettyCommand Dequeue    = "Dequeue"
-prettyCommand Move {}    = "Move"
+prettyCommand Size           = "Size"
+prettyCommand Clear          = "Clear"
+prettyCommand IsEmpty        = "IsEmpty"
+prettyCommand Enqueue {}     = "Enqueue"
+prettyCommand EnqueueList {} = "EnqueueList"
+prettyCommand Dequeue        = "Dequeue"
+prettyCommand Move {}        = "Move"
 
 data Response
   = Int Int
@@ -48,6 +50,9 @@ step IsEmpty     m = (m, Bool (null (mQueue m)))
 step (Enqueue x) m
   | length (mQueue m) >= mCapacity m = (m, Bool False)
   | otherwise                        = (m { mQueue = mQueue m ++ [x]}, Bool True)
+step (EnqueueList xs) m
+  | length (mQueue m) + length xs > mCapacity m = (m, Bool False)
+  | otherwise                                   = (m { mQueue = mQueue m ++ xs}, Bool True)
 step Dequeue     m = case mQueue m of
   []       -> (m, Maybe Nothing)
   (x : xs) -> (m { mQueue = xs }, Maybe (Just x))
@@ -56,14 +61,15 @@ step (Move xs) m
   | otherwise = (m, Bool False)
 
 exec :: Command -> Queue Int -> IO Response
-exec Size        q = Int   <$> size q
-exec Clear       q = Unit  <$> clear q
-exec IsEmpty     q = Bool  <$> isEmpty q
-exec (Enqueue x) q = Bool  <$> enqueue x q
-exec Dequeue     q = Maybe <$> dequeue q
-exec (Move xs)   q = do
+exec Size             q = Int   <$> size q
+exec Clear            q = Unit  <$> clear q
+exec IsEmpty          q = Bool  <$> isEmpty q
+exec (Enqueue x)      q = Bool  <$> enqueue x q
+exec (EnqueueList xs) q = Bool  <$> enqueueList xs q
+exec Dequeue          q = Maybe <$> dequeue q
+exec (Move xs)        q = do
   q' <- newQueue (length xs)
-  enqueues xs q
+  enqueueList xs q
   Bool <$> move q q'
 
 genCommand :: Int -> Int -> Gen Command
@@ -73,17 +79,18 @@ genCommand cap sz = frequency
                     -- rarely write to a full queue.
   , (2, pure IsEmpty)
   , (5, Enqueue <$> arbitrary)
+  , (2, genMany EnqueueList)
   , (2, pure Dequeue)
-  , (1, genMove)
+  , (1, genMany Move)
   ]
   where
-    genMove = do
+    genMany c = do
       -- `cap - sz` will fit, when `n` is negative will also fit, and when `n`
       -- is positive won't fit.
       let is = [ i | i <- [0..cap], cap - sz - i >= 0 ]
       -- We append `[0]` because if `is` is empty elements fails otherwise.
       n <- elements (is ++ map negate is ++ [0])
-      Move <$> vectorOf (cap - sz + n) arbitrary
+      c <$> vectorOf (cap - sz + n) arbitrary
 
 genCommands :: Int -> Int -> Gen [Command]
 genCommands cap sz = go sz 20 -- sized (go sz)
@@ -92,12 +99,13 @@ genCommands cap sz = go sz 20 -- sized (go sz)
     go sz  n = do
       cmd <- genCommand cap sz
       let sz' = case cmd of
-                  Size       -> sz
-                  Clear      -> 0
-                  IsEmpty    -> sz
-                  Enqueue {} -> sz + 1
-                  Dequeue    -> sz - 1
-                  Move xs    -> sz + length xs
+                  Size           -> sz
+                  Clear          -> 0
+                  IsEmpty        -> sz
+                  Enqueue {}     -> sz + 1
+                  EnqueueList xs -> sz + length xs
+                  Dequeue        -> sz - 1
+                  Move xs        -> sz + length xs
       cmds <- go sz' (n - 1)
       return (cmd : cmds)
 
@@ -126,6 +134,7 @@ prop_queue (Capacity cap) =
         go cmds m' q (resp : hist)
 
       classify' :: (Command, Response) -> Property -> Property
-      classify' (Enqueue {}, Bool b) = classify b "enqueue successful"
-      classify' (Move {},    Bool b) = classify b "move successful"
-      classify' (_, _)               = id
+      classify' (Enqueue {},     Bool b) = classify b "enqueue successful"
+      classify' (EnqueueList {}, Bool b) = classify b "enqueueList successful"
+      classify' (Move {},        Bool b) = classify b "move successful"
+      classify' (_, _)                   = id
