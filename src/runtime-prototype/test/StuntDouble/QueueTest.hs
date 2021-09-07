@@ -93,7 +93,7 @@ genCommand cap sz = frequency
       c <$> vectorOf (cap - sz + n) arbitrary
 
 genCommands :: Int -> Int -> Gen [Command]
-genCommands cap sz = go sz 20 -- sized (go sz)
+genCommands cap sz = sized (go sz)
   where
     go _sz 0 = return []
     go sz  n = do
