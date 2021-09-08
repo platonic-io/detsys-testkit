@@ -20,14 +20,12 @@ emptyState = State HashMap.empty
 
 withHashMap :: (HashMap Text Datatype -> HashMap Text Datatype) -> State -> State
 withHashMap f (State hm) = State (f hm)
-withHashMap _f _otherwise = error "withHashMap: impossible, invalid state."
 
 setField :: Text -> Datatype -> State -> State
 setField k v = withHashMap (HashMap.insert k v)
 
 getField :: Text -> State -> Datatype
 getField k (State hm)  = hm HashMap.! k
-getField _k _otherwise = error "getField: impossible, invalid state."
 
 modifyField :: Text -> (Datatype -> Datatype) -> State -> State
 modifyField k f = withHashMap (HashMap.adjust f k)
