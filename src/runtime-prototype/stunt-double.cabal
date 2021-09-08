@@ -66,6 +66,7 @@ library
     , http-client
     , http-types
     , random
+    , sqlite-simple
     , unordered-containers
     , vector
     , wai

@@ -6,7 +6,8 @@ module StuntDouble.Transport.Http where
 
 import qualified Data.HashMap.Strict as HashMap
 import Data.Text (Text)
-import GHC.Generics
+import Data.Heap (Heap)
+import GHC.Generics (Generic)
 import Data.Aeson
 import Data.String
 import Data.Aeson.Internal
@@ -20,6 +21,7 @@ import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
 
 import StuntDouble.Envelope
+import StuntDouble.Datatype
 import StuntDouble.Transport
 import StuntDouble.Reference
 import StuntDouble.Message
@@ -109,3 +111,7 @@ instance FromJSON CorrelationId
 deriving instance Generic ClientRef
 instance ToJSON ClientRef
 instance FromJSON ClientRef
+
+deriving instance Generic SDatatype
+instance ToJSON SDatatype
+instance FromJSON SDatatype
