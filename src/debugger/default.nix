@@ -16,7 +16,7 @@ buildGoModule rec {
   src = gitignoreSource ./.;
   buildInputs = [ detsysLib ];
 
-  vendorSha256 = "1y6yq31zmhv1278wf2lpf9p90nlvj44iqcrka9fq8pihdqq3pv7n";
+  vendorSha256 = "085ihafr18qx782asy0ypv5mqgjg13rwj9qfhiyh0sz3mqlzrcp4";
 
   buildFlagsArray =
     # This is a dummy git hash to avoid breaking the nix cache, it will be
