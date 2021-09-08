@@ -24,7 +24,7 @@ fakeScheduler :: RemoteRef -> Message -> Actor
 fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $ do
   -- load from db. XXX: need to extend IO module to be able to return Datatype?
   p <- asyncIO (IOQuery "SELECT agenda FROM test_info WHERE test_id = :tid" [":tid" := tid])
-  on p (\IOResultR (IORows entries) -> undefined)
+  on p (\(IOResultR (IORows entries)) -> undefined)
   undefined
 fakeScheduler executorRef (ClientRequest "Start" cid) = Actor $ do
   -- pop agenda end send to executorRef
