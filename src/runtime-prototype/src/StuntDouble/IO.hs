@@ -1,6 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE Rank2Types #-}
 
 module StuntDouble.IO where
 
@@ -10,11 +11,8 @@ import qualified Data.HashMap.Strict as HashMap
 import Data.Hashable
 import Data.IORef
 import Data.Text
+import Data.Typeable
 import Database.SQLite.Simple
-import Database.SQLite.Simple.FromField
-import Database.SQLite.Simple.FromRow
-import Database.SQLite.Simple.Internal
-import Database.SQLite.Simple.Ok
 
 import StuntDouble.Datatype
 
@@ -37,9 +35,9 @@ data IOOp
   | IOIterate Key Key
 
   | IOExecute Query [NamedParam]
-  | IOQuery Query [NamedParam]
+  | forall r. (Typeable r, FromRow r) => IOQuery (Proxy r) Query [NamedParam]
 
-  | IOReturn IOResult
+  -- | forall r. IOReturn (IOResult r)
 
 data Disk m = Disk
   -- LevelDB.
@@ -52,15 +50,14 @@ data Disk m = Disk
 
   -- SQLite.
   , ioExecute :: Query -> [NamedParam] -> m ()
-  , ioQuery   :: Query -> [NamedParam] -> m [Datatype]
+  , ioQuery   :: forall r. FromRow r => Query -> [NamedParam] -> m [r]
   }
 
 data IOResult
   = IOValue Value
   | IOUnit ()
   | IOString String
-  | IORows [Datatype]
-  deriving Show
+  | forall r. (Typeable r, FromRow r) => IORows (Proxy r) [r]
 
 diskIO :: Monad m => IOOp -> Disk m -> m IOResult
 diskIO (IOGet k)        io = IOValue <$> ioGet io k
@@ -70,8 +67,8 @@ diskIO (IOPuts kvs)     io = IOUnit <$> ioPuts io kvs
 diskIO (IODeletes ks)   io = IOUnit <$> ioDeletes io ks
 diskIO IOIterate {}    _io = error "not implemented yet"
 diskIO (IOExecute q ps) io = IOUnit <$> ioExecute io q ps
-diskIO (IOQuery q ps)   io = IORows <$> ioQuery io q ps
-diskIO (IOReturn x)    _io = return x
+diskIO (IOQuery r q ps) io = IORows r <$> ioQuery io q ps
+-- diskIO (IOReturn x)    _io = return x
 
 fakeDisk :: IO (Disk IO)
 fakeDisk = do
@@ -85,7 +82,17 @@ fakeDisk = do
     , ioIterate = undefined
 
     , ioExecute = \_ _ -> return ()
-    , ioQuery   = \_ _ -> return [Bool False]
+    , ioQuery   = \_ _ -> undefined -- return [[1]]
+{-
+    * Couldn't match type `r' with `[Integer]'
+      `r' is a rigid type variable bound by
+        a type expected by the context:
+          forall r. FromRow r => Query -> [NamedParam] -> IO [r]
+        at src/StuntDouble/IO.hs:85:19-38
+      Expected type: IO [r]
+        Actual type: IO [[Integer]]
+    * In the expression: return [[1]]
+-}
     }
 
 slowFakeDisk :: IO (Disk IO)
@@ -103,19 +110,5 @@ realSqlite fp = do
     , ioIterate = undefined
 
     , ioExecute = executeNamed conn
-    , ioQuery   = queryNamed conn
+    , ioQuery   = queryNamed   conn
     }
-
-instance FromRow Datatype where
-  fromRow :: RowParser Datatype
-  fromRow = do
-    n <- numFieldsRemaining
-    List <$> replicateM n field
-
-instance FromField Datatype where
-  fromField :: FieldParser Datatype
-  fromField (Field (SQLInteger i) _) = Ok (Integer (fromIntegral i))
-  fromField (Field (SQLFloat f) _)   = Ok (Double f)
-  fromField (Field (SQLText t) _)    = Ok (Text t)
-  fromField (Field (SQLBlob _bs) _)  = undefined -- XXX: Datatype doesn't have ByteStrings.
-  fromField (Field SQLNull _)        = Ok None
