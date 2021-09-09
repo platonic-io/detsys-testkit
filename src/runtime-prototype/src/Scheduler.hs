@@ -9,7 +9,7 @@ import qualified Data.Heap as Heap
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Time (UTCTime)
-import Database.SQLite.Simple -- XXX: re-export `:=`?
+import Database.SQLite.Simple
 
 import StuntDouble
 
@@ -30,11 +30,18 @@ initState t s = SchedulerState
   , seed = s
   }
 
+data Agenda = Agenda Int -- XXX
+
+instance ParseRow Agenda where
+  parseRow [FInt i] = Just (Agenda i)
+  parseRow _        = Nothing
+
 fakeScheduler :: RemoteRef -> Message -> Actor SchedulerState
 fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $ do
   -- load from db. XXX: need to extend IO module to be able to return Datatype?
   p <- asyncIO (IOQuery "SELECT agenda FROM test_info WHERE test_id = :tid" [":tid" := tid])
-  on p (\(IOResultR (IORows entries)) -> undefined)
+  on p (\(IOResultR (IORows entries)) -> case parseRows entries of
+           Just [Agenda i] -> undefined)
   undefined
 fakeScheduler executorRef (ClientRequest "Start" cid) = Actor $ do
   -- pop agenda end send to executorRef

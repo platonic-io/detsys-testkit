@@ -1,4 +1,5 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 
@@ -9,12 +10,12 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hashable
 import Data.IORef
-import Data.Text
+import Data.Text (Text)
+import Data.ByteString (ByteString)
 import Database.SQLite.Simple
 import Database.SQLite.Simple.FromField
-import Database.SQLite.Simple.FromRow
-import Database.SQLite.Simple.Internal
 import Database.SQLite.Simple.Ok
+import Database.SQLite.Simple.Internal (Field(Field))
 
 import StuntDouble.Datatype
 
@@ -52,15 +53,29 @@ data Disk m = Disk
 
   -- SQLite.
   , ioExecute :: Query -> [NamedParam] -> m ()
-  , ioQuery   :: Query -> [NamedParam] -> m [Datatype]
+  , ioQuery   :: Query -> [NamedParam] -> m [[FieldValue]]
   }
+
+data FieldValue
+  = FInt Int
+  | FDouble Double
+  | FText Text
+  | FBlob ByteString
+  | FNull
+  deriving Show
+
+instance FromField FieldValue where
+  fromField (Field (SQLInteger i) _) = Ok (FInt (fromIntegral i))
+  fromField (Field (SQLFloat f)   _) = Ok (FDouble f)
+  fromField (Field (SQLText t)    _) = Ok (FText t)
+  fromField (Field (SQLBlob b)    _) = Ok (FBlob b)
+  fromField (Field SQLNull        _) = Ok FNull
 
 data IOResult
   = IOValue Value
   | IOUnit ()
   | IOString String
-  | IORows [Datatype]
-  deriving Show
+  | IORows [[FieldValue]]
 
 diskIO :: Monad m => IOOp -> Disk m -> m IOResult
 diskIO (IOGet k)        io = IOValue <$> ioGet io k
@@ -85,7 +100,7 @@ fakeDisk = do
     , ioIterate = undefined
 
     , ioExecute = \_ _ -> return ()
-    , ioQuery   = \_ _ -> return [Bool False]
+    , ioQuery   = \_ _ -> return [[FInt 1]]
     }
 
 slowFakeDisk :: IO (Disk IO)
@@ -103,19 +118,18 @@ realSqlite fp = do
     , ioIterate = undefined
 
     , ioExecute = executeNamed conn
-    , ioQuery   = queryNamed conn
+    , ioQuery   = queryNamed   conn
     }
 
-instance FromRow Datatype where
-  fromRow :: RowParser Datatype
-  fromRow = do
-    n <- numFieldsRemaining
-    List <$> replicateM n field
+class ParseRow a where
+  parseRow :: [FieldValue] -> Maybe a
 
-instance FromField Datatype where
-  fromField :: FieldParser Datatype
-  fromField (Field (SQLInteger i) _) = Ok (Integer (fromIntegral i))
-  fromField (Field (SQLFloat f) _)   = Ok (Double f)
-  fromField (Field (SQLText t) _)    = Ok (Text t)
-  fromField (Field (SQLBlob _bs) _)  = undefined -- XXX: Datatype doesn't have ByteStrings.
-  fromField (Field SQLNull _)        = Ok None
+instance ParseRow [FieldValue] where
+  parseRow = Just
+
+instance ParseRow FieldValue where
+  parseRow [fv] = Just fv
+  parseRow _    = Nothing
+
+parseRows :: ParseRow a => [[FieldValue]] -> Maybe [a]
+parseRows = sequence . map parseRow
