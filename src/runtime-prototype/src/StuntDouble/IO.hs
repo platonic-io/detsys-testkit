@@ -1,7 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE Rank2Types #-}
 
 module StuntDouble.IO where
 
@@ -10,9 +10,12 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hashable
 import Data.IORef
-import Data.Text
-import Data.Typeable
+import Data.Text (Text)
+import Data.ByteString (ByteString)
 import Database.SQLite.Simple
+import Database.SQLite.Simple.FromField
+import Database.SQLite.Simple.Ok
+import Database.SQLite.Simple.Internal (Field(Field))
 
 import StuntDouble.Datatype
 
@@ -35,9 +38,9 @@ data IOOp
   | IOIterate Key Key
 
   | IOExecute Query [NamedParam]
-  | forall r. (Typeable r, FromRow r) => IOQuery (Proxy r) Query [NamedParam]
+  | IOQuery Query [NamedParam]
 
-  -- | forall r. IOReturn (IOResult r)
+  | IOReturn IOResult
 
 data Disk m = Disk
   -- LevelDB.
@@ -50,14 +53,29 @@ data Disk m = Disk
 
   -- SQLite.
   , ioExecute :: Query -> [NamedParam] -> m ()
-  , ioQuery   :: forall r. FromRow r => Query -> [NamedParam] -> m [r]
+  , ioQuery   :: Query -> [NamedParam] -> m [[FieldValue]]
   }
+
+data FieldValue
+  = FInt Int
+  | FDouble Double
+  | FText Text
+  | FBlob ByteString
+  | FNull
+  deriving Show
+
+instance FromField FieldValue where
+  fromField (Field (SQLInteger i) _) = Ok (FInt (fromIntegral i))
+  fromField (Field (SQLFloat f)   _) = Ok (FDouble f)
+  fromField (Field (SQLText t)    _) = Ok (FText t)
+  fromField (Field (SQLBlob b)    _) = Ok (FBlob b)
+  fromField (Field SQLNull        _) = Ok FNull
 
 data IOResult
   = IOValue Value
   | IOUnit ()
   | IOString String
-  | forall r. (Typeable r, FromRow r) => IORows (Proxy r) [r]
+  | IORows [[FieldValue]]
 
 diskIO :: Monad m => IOOp -> Disk m -> m IOResult
 diskIO (IOGet k)        io = IOValue <$> ioGet io k
@@ -67,8 +85,8 @@ diskIO (IOPuts kvs)     io = IOUnit <$> ioPuts io kvs
 diskIO (IODeletes ks)   io = IOUnit <$> ioDeletes io ks
 diskIO IOIterate {}    _io = error "not implemented yet"
 diskIO (IOExecute q ps) io = IOUnit <$> ioExecute io q ps
-diskIO (IOQuery r q ps) io = IORows r <$> ioQuery io q ps
--- diskIO (IOReturn x)    _io = return x
+diskIO (IOQuery q ps)   io = IORows <$> ioQuery io q ps
+diskIO (IOReturn x)    _io = return x
 
 fakeDisk :: IO (Disk IO)
 fakeDisk = do
@@ -82,17 +100,7 @@ fakeDisk = do
     , ioIterate = undefined
 
     , ioExecute = \_ _ -> return ()
-    , ioQuery   = \_ _ -> undefined -- return [[1]]
-{-
-    * Couldn't match type `r' with `[Integer]'
-      `r' is a rigid type variable bound by
-        a type expected by the context:
-          forall r. FromRow r => Query -> [NamedParam] -> IO [r]
-        at src/StuntDouble/IO.hs:85:19-38
-      Expected type: IO [r]
-        Actual type: IO [[Integer]]
-    * In the expression: return [[1]]
--}
+    , ioQuery   = \_ _ -> return [[FInt 1]]
     }
 
 slowFakeDisk :: IO (Disk IO)
@@ -112,3 +120,16 @@ realSqlite fp = do
     , ioExecute = executeNamed conn
     , ioQuery   = queryNamed   conn
     }
+
+class ParseRow a where
+  parseRow :: [FieldValue] -> Maybe a
+
+instance ParseRow [FieldValue] where
+  parseRow = Just
+
+instance ParseRow FieldValue where
+  parseRow [fv] = Just fv
+  parseRow _    = Nothing
+
+parseRows :: ParseRow a => [[FieldValue]] -> Maybe [a]
+parseRows = sequence . map parseRow
