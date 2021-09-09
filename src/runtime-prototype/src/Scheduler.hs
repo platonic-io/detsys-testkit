@@ -7,25 +7,31 @@ import qualified Data.Text as Text
 import Control.Exception
 import Control.Concurrent.Async
 
+import Database.SQLite.Simple -- XXX: re-export `:=`?
+
 import StuntDouble
 
 ------------------------------------------------------------------------
 
 initState :: State
-initState = stateFromList [ ("heap", heapFromList [(Integer 1, Text "cmd1")])
-                          , ("time", epoch)
-                          , ("seed", Integer 0)
-                          ]
+initState = stateFromList
+  [ ("heap", heapFromList [(Integer 1, Text "cmd1")])
+  , ("time", epoch)
+  , ("seed", Integer 0)
+  ]
 
-fakeScheduler :: RemoteRef -> Message -> Actor
-fakeScheduler executorRef (ClientRequest "CreateTest" cid) = Actor $ do
-  -- load from db
+fakeScheduler :: RemoteRef -> Message -> Actor ()
+fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $ do
+  -- load from db. XXX: need to extend IO module to be able to return Datatype?
+  p <- asyncIO (IOQuery "SELECT agenda FROM test_info WHERE test_id = :tid" [":tid" := tid])
+  on p (\(IOResultR (IORows entries)) -> undefined)
   undefined
 fakeScheduler executorRef (ClientRequest "Start" cid) = Actor $ do
   -- pop agenda end send to executorRef
   r <- pop <$> gets "heap"
   case r of
-    Some (Pair cmd heap') -> do
+    Some (Pair {- XXX: time -} cmd heap') -> do
+      -- XXX: update "time" time
       update "heap" heap'
       p <- send executorRef (InternalMessage (prettyCommand cmd))
       on p (\(InternalMessageR (InternalMessage "Ack")) -> undefined)
