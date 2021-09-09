@@ -20,7 +20,7 @@ initState = stateFromList
   , ("seed", Integer 0)
   ]
 
-fakeScheduler :: RemoteRef -> Message -> Actor
+fakeScheduler :: RemoteRef -> Message -> Actor ()
 fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $ do
   -- load from db. XXX: need to extend IO module to be able to return Datatype?
   p <- asyncIO (IOQuery "SELECT agenda FROM test_info WHERE test_id = :tid" [":tid" := tid])
