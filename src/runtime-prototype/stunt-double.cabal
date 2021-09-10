@@ -107,7 +107,9 @@ test-suite test
 executable scheduler
   hs-source-dirs:   app/
   main-is:          Main.hs
-  build-depends:    base ==4.13.*,
+  build-depends:    async,
+                    base ==4.13.*,
+                    filepath,
                     stunt-double
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
   default-language: Haskell2010

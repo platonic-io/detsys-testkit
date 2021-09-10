@@ -584,19 +584,21 @@ spawnIOWorkers (ThreadPoolOfSize n)  ls
         error "spawnIOWorkers: thread pool size is bigger than the available CPU capabilities"
       mapM (\c -> asyncOn c (asyncIOWorker ls)) [ i | i <- [0..n], i /= cap ]
 
-makeEventLoop :: Time -> Seed -> TransportKind -> EventLoopName -> IO EventLoop
+makeEventLoop :: Time -> Seed -> TransportKind -> DiskKind -> EventLoopName -> IO EventLoop
 makeEventLoop = makeEventLoopThreaded SingleThreaded NoThreadPool
 
-makeEventLoopThreaded :: Threaded -> ThreadPool -> Time -> Seed -> TransportKind
+makeEventLoopThreaded :: Threaded -> ThreadPool -> Time -> Seed -> TransportKind -> DiskKind
                       -> EventLoopName -> IO EventLoop
-makeEventLoopThreaded threaded threadpool time seed tk name = do
+makeEventLoopThreaded threaded threadpool time seed tk dk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
          HttpSync     -> httpSyncTransport
          Stm          -> stmTransport
-  disk <- fakeDisk
-  ls <- initLoopState name time seed t disk
+  d <- case dk of
+         FakeDisk    -> fakeDisk
+         RealDisk fp -> realDisk fp
+  ls <- initLoopState name time seed t d
   workerPids <- spawnIOWorkers threadpool ls
   pids <- case threaded of
             SingleThreaded ->
@@ -798,7 +800,7 @@ handleEvent (Admin cmd) ls = case cmd of
     threadDelay 100000
     mapM_ cancel pids
 handleEvent (ClientRequestEvent lref msg cref returnVar) ls = do
-  reply <- actorPokeIO ls lref (ClientRequest (getMessage msg) cref)
+  reply <- actorPokeIO ls lref (ClientRequest' (getMessage msg) (getArgs msg) cref)
   atomically (putTMVar returnVar reply)
 
 waitForEventLoopQuit :: EventLoop -> IO ()

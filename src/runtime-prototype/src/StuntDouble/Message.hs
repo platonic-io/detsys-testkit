@@ -31,3 +31,9 @@ getMessage (InternalMessage msg) = msg
 getMessage (InternalMessage' msg _args) = msg
 getMessage (ClientRequest msg _cid) = msg
 getMessage (ClientRequest' msg _args _cid) = msg
+
+getArgs :: Message -> Args
+getArgs InternalMessage {}               = []
+getArgs (InternalMessage' _msg args)     = args
+getArgs ClientRequest {}                 = []
+getArgs (ClientRequest' _msg args _cref) = args
