@@ -11,9 +11,15 @@
 
 (def db nil)
 (def ds nil)
+(def ^java.io.BufferedWriter eventSource nil)
 
 (defn setup-db
   [db-file]
+  (let [tmp (System/getProperty "java.io.tmpdir")
+        o (clojure.java.io/output-stream (str tmp "detsys-logger"))
+        w (clojure.java.io/writer o)]
+    (alter-var-root #'eventSource
+                    (constantly w)))
   (alter-var-root #'db
                   (constantly {:dbtype "sqlite" :dbname db-file}))
   (alter-var-root #'ds
@@ -55,6 +61,16 @@
 
 (defn append-event!
   [test-id run-id event data]
+  (let [metaBlob (json/write {:component "scheduler"
+                          :test-id test-id
+                          :run-id run-id})
+        dataBlob (json/write data)
+        toSend (str event "\t" metaBlob "\t" dataBlob)]
+    (prn :append-event :size (count toSend))
+    (.write eventSource toSend)
+    (.newLine eventSource)
+    (.flush eventSource))
+  (comment
    (jdbc/execute-one!
     ds
     ["INSERT INTO event_log (event, meta, data) VALUES (?,?,?)"
@@ -64,6 +80,7 @@
                   :run-id run-id})
      (json/write data)]
     {:return-keys true :builder-fn rs/as-unqualified-lower-maps}))
+  )
 
 (defn append-network-trace!
   [test-id run-id data]

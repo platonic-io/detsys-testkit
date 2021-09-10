@@ -1,11 +1,14 @@
 package executor
 
 import (
+	"bufio"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"go.uber.org/zap"
@@ -24,7 +27,7 @@ type StepInfo struct {
 
 type ComponentUpdate = func(component string) StepInfo
 
-func handler(db *sql.DB, topology lib.Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
+func handler(db *sql.DB, eventW *bufio.Writer, topology lib.Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if r.Method != "POST" {
@@ -50,7 +53,7 @@ func handler(db *sql.DB, topology lib.Topology, m lib.Marshaler, cu ComponentUpd
 		heapDiff := jsonDiff(heapBefore, heapAfter)
 		si := cu(sev.To)
 
-		EmitExecutionStepEvent(db, ExecutionStepEvent{
+		EmitExecutionStepEvent(db, eventW, ExecutionStepEvent{
 			Meta:          sev.Meta,
 			Reactor:       sev.To,
 			SimulatedTime: sev.At,
@@ -91,7 +94,7 @@ func handleTick(topology lib.Topology, m lib.Marshaler, cu ComponentUpdate) http
 	}
 }
 
-func handleTimer(db *sql.DB, topology lib.Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
+func handleTimer(db *sql.DB, eventW *bufio.Writer, topology lib.Topology, m lib.Marshaler, cu ComponentUpdate) http.HandlerFunc {
 	type TimerRequest struct {
 		Reactor string       `json:"to"`
 		At      time.Time    `json:"at"`
@@ -122,7 +125,7 @@ func handleTimer(db *sql.DB, topology lib.Topology, m lib.Marshaler, cu Componen
 		heapDiff := jsonDiff(heapBefore, heapAfter)
 		si := cu(req.Reactor)
 
-		EmitExecutionStepEvent(db, ExecutionStepEvent{
+		EmitExecutionStepEvent(db, eventW, ExecutionStepEvent{
 			Meta:          req.Meta,
 			Reactor:       req.Reactor,
 			SimulatedTime: req.At,
@@ -174,9 +177,17 @@ func DeployWithComponentUpdate(srv *http.Server, topology lib.Topology, m lib.Ma
 	db := lib.OpenDB()
 	defer db.Close()
 
-	mux.HandleFunc("/api/v1/event", handler(db, topology, m, cu))
+	namedPipe := filepath.Join(os.TempDir(), "detsys-logger")
+	fh, err := os.OpenFile(namedPipe, os.O_WRONLY|os.O_SYNC, 0600)
+	defer fh.Close()
+	if err != nil {
+		panic(err)
+	}
+	eventW := bufio.NewWriter(fh)
+
+	mux.HandleFunc("/api/v1/event", handler(db, eventW, topology, m, cu))
 	mux.HandleFunc("/api/v1/tick", handleTick(topology, m, cu))
-	mux.HandleFunc("/api/v1/timer", handleTimer(db, topology, m, cu))
+	mux.HandleFunc("/api/v1/timer", handleTimer(db, eventW, topology, m, cu))
 	mux.HandleFunc("/api/v1/inits", handleInits(topology, m))
 
 	srv.Addr = ":3001"

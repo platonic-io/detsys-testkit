@@ -29,7 +29,7 @@ func main() {
 
 	go worker(db, queue)
 
-	r := bufio.NewReaderSize(fh, PIPE_BUF)
+	r := bufio.NewReader(fh)
 
 	for {
 		// TODO(stevan): If we want or need to support linearisable
@@ -124,11 +124,16 @@ func commit(db *sql.DB, buffer [][]byte) {
 	if err != nil {
 		panic(err)
 	}
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO event_log(event, meta, data) VALUES(?,?,?)`)
+	if err != nil {
+		panic(err)
+	}
+	defer stmt.Close()
+
 	for _, entry := range buffer {
+		// parse should probably happen before we do db stuff you know..
 		event, meta, data := parse(entry)
-		_, err := tx.ExecContext(ctx,
-			`INSERT INTO event_log(event, meta, data) VALUES(?, ?, ?)`,
-			event, meta, data)
+		_, err := stmt.ExecContext(ctx, event, meta, data)
 		if err != nil {
 			panic(err)
 		}
@@ -172,6 +177,7 @@ func DBPath() string {
 func OpenPipe() *os.File {
 	namedPipe := filepath.Join(os.TempDir(), "detsys-logger")
 	syscall.Mkfifo(namedPipe, 0600)
+	log.Printf("Created pipe at: %s\n", namedPipe)
 
 	fh, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
 	if err != nil {
