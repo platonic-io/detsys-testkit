@@ -6,6 +6,7 @@
 module StuntDouble.IO where
 
 import Control.Monad
+import Data.String
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hashable
@@ -37,8 +38,8 @@ data IOOp
   | IODeletes [Key]
   | IOIterate Key Key
 
-  | IOExecute Query [NamedParam]
-  | IOQuery Query [NamedParam]
+  | IOExecute String [NamedParam]
+  | IOQuery String [NamedParam]
 
   | IOReturn IOResult
 
@@ -52,8 +53,8 @@ data Disk m = Disk
   , ioIterate :: Maybe Key -> Maybe Key -> m [(Key, Value)]
 
   -- SQLite.
-  , ioExecute :: Query -> [NamedParam] -> m ()
-  , ioQuery   :: Query -> [NamedParam] -> m [[FieldValue]]
+  , ioExecute :: String -> [NamedParam] -> m ()
+  , ioQuery   :: String -> [NamedParam] -> m [[FieldValue]]
   }
 
 data FieldValue
@@ -106,8 +107,8 @@ fakeDisk = do
 slowFakeDisk :: IO (Disk IO)
 slowFakeDisk = undefined
 
-realSqlite :: FilePath -> IO (Disk IO)
-realSqlite fp = do
+realDisk :: FilePath -> IO (Disk IO)
+realDisk fp = do
   conn <- open fp
   return Disk
     { ioGet     = undefined
@@ -117,19 +118,26 @@ realSqlite fp = do
     , ioDeletes = undefined
     , ioIterate = undefined
 
-    , ioExecute = executeNamed conn
-    , ioQuery   = queryNamed   conn
+    , ioExecute = \q -> executeNamed conn (fromString q)
+    , ioQuery   = \q -> queryNamed   conn (fromString q)
     }
 
 class ParseRow a where
   parseRow :: [FieldValue] -> Maybe a
 
 instance ParseRow [FieldValue] where
+  parseRow :: [FieldValue] -> Maybe [FieldValue]
   parseRow = Just
 
 instance ParseRow FieldValue where
+  parseRow :: [FieldValue] -> Maybe FieldValue
   parseRow [fv] = Just fv
   parseRow _    = Nothing
 
 parseRows :: ParseRow a => [[FieldValue]] -> Maybe [a]
 parseRows = sequence . map parseRow
+
+
+data DiskKind
+  = FakeDisk
+  | RealDisk FilePath
