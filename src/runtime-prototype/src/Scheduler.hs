@@ -47,6 +47,9 @@ initState t s = SchedulerState
 data Agenda = Agenda [SchedulerEvent]
 
 instance ParseRow Agenda where
+  -- XXX: Text -> ByteString -> JSON, seems unnecessary? We only need the `at`
+  -- field for the heap priority, the rest could remain as a text and sent as
+  -- such to the executor?
   parseRow [FText t] = case eitherDecodeStrict (Text.encodeUtf8 t) of
     Right es -> Just (Agenda es)
     Left err -> error (show err)
@@ -57,20 +60,26 @@ fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $
   p <- asyncIO (IOQuery "SELECT agenda FROM test_info WHERE test_id = :tid" [":tid" := tid])
   on p (\(IOResultR (IORows rs)) -> case parseRows rs of
            Nothing          -> clientResponse cid (InternalMessage "parse error")
-           Just [Agenda es] -> clientResponse cid (InternalMessage (show es)))
+           Just [Agenda es] -> do
+             modify $ \s -> s { heap = Heap.fromList (map (\e -> Entry (at e) e) es) }
+             clientResponse cid (InternalMessage (show es)))
   return (InternalMessage "ok")
-fakeScheduler executorRef (ClientRequest "Start" cid) = Actor $ do
+fakeScheduler executorRef (ClientRequest' "Start" [] cid) = Actor $ do
   -- pop agenda end send to executorRef
   r <- Heap.uncons . heap <$> get
   case r of
-    Just (Entry time cmd, heap') -> do
+    Just (Entry time e, heap') -> do
       modify $ \s -> s { heap = heap'
                        , time = time
                        }
-      p <- send executorRef (InternalMessage (prettyCommand cmd))
-      on p (\(InternalMessageR (InternalMessage "Ack")) -> undefined)
-      undefined
-    Nothing -> return (InternalMessage "Done") -- XXX: reply to client id?!
+      clientResponse cid (InternalMessage (show e))
+      return (InternalMessage "ok")
+      -- p <- send executorRef (InternalMessage (prettyCommand cmd))
+      -- on p (\(InternalMessageR (InternalMessage "Ack")) -> undefined)
+      -- undefined
+    Nothing -> do
+      clientResponse cid (InternalMessage "empty heap")
+      return (InternalMessage "Done")
   where
     prettyCommand :: SchedulerEvent -> String
     prettyCommand = undefined
@@ -79,7 +88,6 @@ fakeScheduler executorRef msg@(InternalMessage "Ack") = Actor $ do
   -- does executor send back anything else?
   -- schedule the responses from the executor back on the agenda
 
-  -- XXX: we need to make messages be able to have args/fields/payload
   -- cmds <- parseCommands (payload msg)
   -- if no cmds and agenda is empty then stop (how do we contact client? need to save cid?)
   -- else
