@@ -85,33 +85,3 @@ waiRequestToEnvelope :: Wai.Request -> IO (Either String Envelope)
 waiRequestToEnvelope req = do
   body <- Wai.lazyRequestBody req
   return (eitherDecode body)
-
--- XXX: orphan instances...
-
-deriving instance Generic Envelope
-instance ToJSON Envelope
-instance FromJSON Envelope
-
-deriving instance Generic EnvelopeKind
-instance ToJSON EnvelopeKind
-instance FromJSON EnvelopeKind
-
-deriving instance Generic Message
-instance ToJSON Message
-instance FromJSON Message
-
-deriving instance Generic RemoteRef
-instance ToJSON RemoteRef
-instance FromJSON RemoteRef
-
-deriving instance Generic CorrelationId
-instance ToJSON CorrelationId
-instance FromJSON CorrelationId
-
-deriving instance Generic ClientRef
-instance ToJSON ClientRef
-instance FromJSON ClientRef
-
-deriving instance Generic SDatatype
-instance ToJSON SDatatype
-instance FromJSON SDatatype

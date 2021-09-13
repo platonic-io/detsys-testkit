@@ -1,5 +1,9 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module StuntDouble.Message where
 
+import Data.Aeson (FromJSON, ToJSON)
+import GHC.Generics (Generic)
 import Data.HashMap.Strict (HashMap)
 
 import StuntDouble.Reference
@@ -17,14 +21,20 @@ data SDatatype
   -- | SBlob ByteString XXX: No To/FromJSON instances...
   | STimestamp Double
   | SList [SDatatype]
-  deriving (Eq, Show, Read)
+  deriving (Eq, Show, Read, Generic)
+
+instance ToJSON SDatatype
+instance FromJSON SDatatype
 
 data Message
   = InternalMessage String -- XXX: remove unprimed variants...
   | InternalMessage' Verb Args
   | ClientRequest String ClientRef
   | ClientRequest' Verb Args ClientRef
-  deriving (Eq, Show, Read)
+  deriving (Eq, Show, Read, Generic)
+
+instance ToJSON Message
+instance FromJSON Message
 
 getMessage :: Message -> String
 getMessage (InternalMessage msg) = msg
