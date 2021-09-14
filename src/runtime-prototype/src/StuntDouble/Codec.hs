@@ -7,8 +7,9 @@ import StuntDouble.Envelope
 ------------------------------------------------------------------------
 
 data Encode = Encode
-  { encodeAddress :: String
-  , encodePayload :: ByteString
+  { encodeAddress       :: String
+  , encodeCorrelationId :: Int
+  , encodePayload       :: ByteString
   }
 
 data Codec = Codec

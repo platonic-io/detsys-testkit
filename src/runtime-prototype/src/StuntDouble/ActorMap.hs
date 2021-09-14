@@ -66,6 +66,7 @@ data Resolution
   | IOResultR IOResult
   | InternalMessageR Message
   | ExceptionR SomeException
+  deriving Show
 
 data ActorF s x
   = Invoke LocalRef Message (Message -> x)

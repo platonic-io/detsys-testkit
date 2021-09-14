@@ -77,6 +77,7 @@ data IOResult
   | IOUnit ()
   | IOString String
   | IORows [[FieldValue]]
+  deriving Show
 
 diskIO :: Monad m => IOOp -> Disk m -> m IOResult
 diskIO (IOGet k)        io = IOValue <$> ioGet io k
@@ -136,7 +137,6 @@ instance ParseRow FieldValue where
 
 parseRows :: ParseRow a => [[FieldValue]] -> Maybe [a]
 parseRows = sequence . map parseRow
-
 
 data DiskKind
   = FakeDisk

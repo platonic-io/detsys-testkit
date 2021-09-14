@@ -3,15 +3,16 @@
 module StuntDouble.Transport.HttpSync where
 
 import Control.Monad
-import Network.HTTP.Client
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
+import Network.HTTP.Client
 
-import StuntDouble.Envelope
-import StuntDouble.Queue
-import StuntDouble.Transport
-import StuntDouble.Message
-import StuntDouble.Reference
 import StuntDouble.Codec
+import StuntDouble.Envelope
+import StuntDouble.Message
+import StuntDouble.Queue
+import StuntDouble.Reference
+import StuntDouble.Transport
 
 ------------------------------------------------------------------------
 
@@ -43,11 +44,13 @@ transportSyncSend manager codec@(Codec _encode decode) queue e = do
 
 envelopeToRequestSync :: Codec -> Envelope -> IO Request
 envelopeToRequestSync (Codec encode _decode) e = do
-  let Encode address payload = encode e
+  let Encode address corrId payload = encode e
 
   initialRequest <- parseRequest address
 
   return initialRequest
            { method      = "POST"
            , requestBody = RequestBodyLBS payload
+           , requestHeaders = requestHeaders initialRequest ++
+                              [("correlation-id", BS.pack (show corrId))]
            }

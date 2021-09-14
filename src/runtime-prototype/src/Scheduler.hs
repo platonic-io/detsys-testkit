@@ -94,7 +94,7 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) = Actor $ do
                        , time = time
                        }
       p <- send executorRef (InternalMessage (prettyEvent e))
-      on p (\(InternalMessageR (InternalMessage "Ack")) -> undefined)
+      on p (\r -> error (show r))
       clientResponse cid (InternalMessage (show e))
       return (InternalMessage "ok")
     Nothing -> do
@@ -106,7 +106,6 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) = Actor $ do
 
 -- {"args":{},"meta":{"test-id":7,"run-id":1,"logical-time":6},"event":"read","from":"client:0","kind":"invoke","at":"1970-01-01T00:00:10Z","to":"frontend"}
 
-    -- XXX: parametrise transport by codec instead?
     prettyEvent :: SchedulerEvent -> String
     prettyEvent = LBS.unpack . encode
 fakeScheduler executorRef msg@(InternalMessage "Ack") = Actor $ do
@@ -131,27 +130,31 @@ executorCodec = Codec encode decode
   where
     encode :: Envelope -> Encode
     encode e = Encode (address (envelopeReceiver e))
+                      (getCorrelationId (envelopeCorrelationId e))
                       (LBS.pack (getMessage (envelopeMessage e)))
 
     decode :: ByteString -> Either String Envelope
     decode bs = case eitherDecode bs of
-      Right (ExecutorResponse evs) -> Right $
+      Right (ExecutorResponse evs corrId) -> Right $
         Envelope
           { envelopeKind          = ResponseKind
           , envelopeSender        = RemoteRef "executor" 0
-          , envelopeMessage       = InternalMessage' "Events" []
+          -- XXX: going to sdatatype here seems suboptimal...
+          , envelopeMessage       = InternalMessage' "Events" (map toSDatatype evs)
           , envelopeReceiver      = RemoteRef "scheduler" 0
-          , envelopeCorrelationId = CorrelationId (-1)
+          , envelopeCorrelationId = corrId
           }
       Left err -> error err
 
 data ExecutorResponse = ExecutorResponse
-  { events :: [UnscheduledEvent] }
+  { events :: [UnscheduledEvent]
+  , corrId :: CorrelationId
+  }
   deriving (Generic, Show)
 
 instance FromJSON ExecutorResponse
 
-data UnscheduledEvent = UnScheduledEvent
+data UnscheduledEvent = UnscheduledEvent
   { ueKind  :: String
   , ueEvent :: String
   , ueArgs  :: Data.Aeson.Value
@@ -164,10 +167,8 @@ instance FromJSON UnscheduledEvent where
   parseJSON = genericParseJSON defaultOptions
     { fieldLabelModifier = \s -> case drop (length ("ue" :: String)) s of
         (x : xs) -> toLower x : xs
-        [] -> error "parseJSON: impossible" }
+        [] -> error "parseJSON: impossible, unless the field names of `UnscheduledEvent` changed" }
 
-t :: Either String ExecutorResponse
-t = eitherDecode response
-
-response :: ByteString
-response = "{\"events\":[{\"to\":[\"register1\"],\"from\":\"frontend\",\"kind\":\"message\",\"event\":\"write\",\"args\":{\"id\":\"0\",\"request\":{\"value\":1}}},{\"to\":[\"register2\"],\"from\":\"frontend\",\"kind\":\"message\",\"event\":\"write\",\"args\":{\"id\":\"0\",\"request\":{\"value\":1}}}]}"
+toSDatatype :: UnscheduledEvent -> SDatatype
+toSDatatype (UnscheduledEvent kind event args to from) =
+  SList [SString kind, SString event, SValue args, SList (map SString to), SString from]

@@ -2,7 +2,7 @@
 
 module StuntDouble.Message where
 
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson (FromJSON, ToJSON, Value)
 import GHC.Generics (Generic)
 import Data.HashMap.Strict (HashMap)
 
@@ -21,6 +21,7 @@ data SDatatype
   -- | SBlob ByteString XXX: No To/FromJSON instances...
   | STimestamp Double
   | SList [SDatatype]
+  | SValue Value
   deriving (Eq, Show, Read, Generic)
 
 instance ToJSON SDatatype
