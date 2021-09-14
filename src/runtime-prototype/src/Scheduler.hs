@@ -51,16 +51,18 @@ instance ToJSON Meta where
 instance FromJSON Meta where
 
 data SchedulerState = SchedulerState
-  { heap :: Heap (Entry UTCTime SchedulerEvent)
-  , time :: UTCTime
-  , seed :: Seed
+  { heap  :: Heap (Entry UTCTime SchedulerEvent)
+  , time  :: UTCTime
+  , seed  :: Seed
+  , steps :: Int
   }
 
 initState :: UTCTime -> Seed -> SchedulerState
 initState t s = SchedulerState
-  { heap = Heap.empty
-  , time = t
-  , seed = s
+  { heap  = Heap.empty
+  , time  = t
+  , seed  = s
+  , steps = 0
   }
 
 data Agenda = Agenda [SchedulerEvent]
@@ -86,26 +88,32 @@ fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $
                s { heap = Heap.fromList (map (\e -> Entry (at e) e) es) }
              clientResponse cid (InternalMessage (show es)))
   return (InternalMessage "ok")
-fakeScheduler executorRef (ClientRequest' "Start" [] cid) = Actor $ do
-  r <- Heap.uncons . heap <$> get
-  case r of
-    Just (Entry time e, heap') -> do
-      modify $ \s -> s { heap = heap'
-                       , time = time
-                       }
-      p <- send executorRef (InternalMessage (prettyEvent e))
-      on p (\r -> error (show r))
-      clientResponse cid (InternalMessage (show e))
+fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
+  let
+    step = do
+      r <- Heap.uncons . heap <$> get
+      case r of
+        Just (Entry time e, heap') -> do
+          modify $ \s -> s { heap  = heap'
+                           , time  = time
+                           , steps = succ (steps s)
+                           }
+          p <- send executorRef (InternalMessage (prettyEvent e))
+          on p (\(InternalMessageR (InternalMessage' "Events" args)) -> do
+                  let Just evs = sequence (map (fromSDatatype time) args)
+                      evs' = filter (\e -> kind e /= "ok") (concat evs)
+                      heap' = Heap.fromList (map (\e -> Entry (at e) e) evs')
+                  modify $ \s -> s { heap = heap s `Heap.union` heap' }
+                  step
+               )
+        Nothing -> do
+          s <- get
+          clientResponse cid (InternalMessage ("{\"steps\":" ++ show (steps s) ++ "}"))
+  in
+    Actor $ do
+      step
       return (InternalMessage "ok")
-    Nothing -> do
-      clientResponse cid (InternalMessage "empty heap")
-      return (InternalMessage "Done")
   where
-
--- {"args":{"request":{},"id":"1"},"meta":{"test-id":7,"run-id":1,"logical-time":7},"sent-logical-time":6,"event":"read","from":"frontend","kind":"message","at":"1970-01-01T00:00:10.002343669Z","to":"register2"}
-
--- {"args":{},"meta":{"test-id":7,"run-id":1,"logical-time":6},"event":"read","from":"client:0","kind":"invoke","at":"1970-01-01T00:00:10Z","to":"frontend"}
-
     prettyEvent :: SchedulerEvent -> String
     prettyEvent = LBS.unpack . encode
 fakeScheduler executorRef msg@(InternalMessage "Ack") = Actor $ do
@@ -172,3 +180,9 @@ instance FromJSON UnscheduledEvent where
 toSDatatype :: UnscheduledEvent -> SDatatype
 toSDatatype (UnscheduledEvent kind event args to from) =
   SList [SString kind, SString event, SValue args, SList (map SString to), SString from]
+
+fromSDatatype :: UTCTime -> SDatatype -> Maybe [SchedulerEvent]
+fromSDatatype at (SList
+  [SString kind, SString event, SValue args, SList tos, SString from])
+  = Just [ SchedulerEvent kind event args to from at Nothing | SString to <- tos ]
+fromSDatatyp = Nothing
