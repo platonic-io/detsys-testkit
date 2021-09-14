@@ -100,6 +100,7 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                            }
           p <- send executorRef (InternalMessage (prettyEvent e))
           on p (\(InternalMessageR (InternalMessage' "Events" args)) -> do
+                  -- XXX: we should generate an arrival time here using the seed.
                   let Just evs = sequence (map (fromSDatatype time) args)
                       evs' = filter (\e -> kind e /= "ok") (concat evs)
                       heap' = Heap.fromList (map (\e -> Entry (at e) e) evs')
@@ -116,21 +117,6 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
   where
     prettyEvent :: SchedulerEvent -> String
     prettyEvent = LBS.unpack . encode
-fakeScheduler executorRef msg@(InternalMessage "Ack") = Actor $ do
-  undefined
-  -- does executor send back anything else?
-  -- schedule the responses from the executor back on the agenda
-
-  -- cmds <- parseCommands (payload msg)
-  -- if no cmds and agenda is empty then stop (how do we contact client? need to save cid?)
-  -- else
-  -- now <- gets "time"
-  -- seed <- gets "seed"
-  -- arrivalTime <- genArrivalTime now seed
-  -- op2 push arrivalTime (parseCommand resp) %= "heap"
-  -- where
-  --   parseCommand :: Message -> Datatype
-  --   parseCommand (InternalMessage m) = Pair (Text (Text.pack (show m))) (List []) -- XXX: args
 fakeScheduler _ msg = error (show msg)
 
 executorCodec :: Codec
