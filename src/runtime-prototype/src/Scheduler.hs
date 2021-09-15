@@ -172,4 +172,4 @@ fromSDatatype :: UTCTime -> SDatatype -> Maybe [SchedulerEvent]
 fromSDatatype at (SList
   [SString kind, SString event, SValue args, SList tos, SString from])
   = Just [ SchedulerEvent kind event args to from at Nothing | SString to <- tos ]
-fromSDatatyp = Nothing
+fromSDatatype = Nothing

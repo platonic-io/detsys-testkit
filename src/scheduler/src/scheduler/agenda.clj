@@ -20,7 +20,8 @@
                              ::args
                              ::to
                              ::from
-                             ::at]))
+                             ::at
+                             ]))
 (def agenda? (s/coll-of entry?))
 
 (>defn empty-agenda
