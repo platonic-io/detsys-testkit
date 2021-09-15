@@ -21,7 +21,6 @@ import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
 
 import StuntDouble.Envelope
-import StuntDouble.Datatype
 import StuntDouble.Transport
 import StuntDouble.Reference
 import StuntDouble.Message

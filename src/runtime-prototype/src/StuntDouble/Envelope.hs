@@ -8,7 +8,6 @@ import GHC.Generics (Generic)
 import Control.Concurrent.STM
 import Control.Concurrent.Async
 
-import StuntDouble.Actor.State
 import StuntDouble.Message
 import StuntDouble.Reference
 
@@ -17,8 +16,8 @@ import StuntDouble.Reference
 newtype CorrelationId = CorrelationId Int
   deriving (Eq, Ord, Show, Read, Num, Enum, Generic)
 
-instance ToJSON CorrelationId where
-instance FromJSON CorrelationId where
+instance ToJSON CorrelationId
+instance FromJSON CorrelationId
 
 getCorrelationId :: CorrelationId -> Int
 getCorrelationId (CorrelationId i) = i
@@ -26,8 +25,8 @@ getCorrelationId (CorrelationId i) = i
 data EnvelopeKind = RequestKind | ResponseKind
   deriving (Eq, Show, Read, Generic)
 
-instance ToJSON EnvelopeKind where
-instance FromJSON EnvelopeKind where
+instance ToJSON EnvelopeKind
+instance FromJSON EnvelopeKind
 
 data Envelope = Envelope
   { envelopeKind          :: EnvelopeKind
@@ -38,8 +37,8 @@ data Envelope = Envelope
   }
   deriving (Generic, Eq, Show, Read)
 
-instance ToJSON Envelope where
-instance FromJSON Envelope where
+instance ToJSON Envelope
+instance FromJSON Envelope
 
 replyEnvelope :: Envelope -> Message -> Envelope
 replyEnvelope e msg

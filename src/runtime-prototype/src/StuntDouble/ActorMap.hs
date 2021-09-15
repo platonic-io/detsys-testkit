@@ -30,9 +30,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import System.Random
 
-import StuntDouble.Actor.State
 import StuntDouble.Codec
-import StuntDouble.Datatype
 import StuntDouble.Envelope
 import StuntDouble.FreeMonad
 import StuntDouble.Histogram

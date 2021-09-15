@@ -1,9 +1,7 @@
 module StuntDouble (module X) where
 
-import StuntDouble.Actor.State as X
 import StuntDouble.ActorMap as X
 import StuntDouble.Codec as X
-import StuntDouble.Datatype as X
 import StuntDouble.Envelope as X
 import StuntDouble.Frontend.Http as X
 import StuntDouble.Histogram as X
