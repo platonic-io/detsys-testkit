@@ -401,9 +401,6 @@
                   ;; TODO(stevan): go into error state if response body is of form {"error": ...}
                   ;; (if (:error events) true false)
 
-                  ;; TODO(stevan): Change executor to return this json object.
-                  (assert (= (keys events) '(:events :corrId))
-                          (str "execute!: unexpected response body: " events))
                   (log/debug :events events)
 
                   (assert (:run-id data) "execute!: no run-id set...")
@@ -671,8 +668,6 @@
                       :body
                       json/read
                       (update :events expand-events))]
-       (assert (= (keys events) '(:events :corrId))
-               (str "execute!: unexpected response body: " events))
        (doseq [event (:events events)]
          (conj! all-events event))))
    (let [events (->> all-events
