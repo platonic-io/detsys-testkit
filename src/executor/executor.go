@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
@@ -57,8 +58,11 @@ func handler(db *sql.DB, topology lib.Topology, m lib.Marshaler, cu ComponentUpd
 			LogLines:      si.LogLines,
 			HeapDiff:      heapDiff,
 		})
-
-		bs := lib.MarshalUnscheduledEvents(sev.To, oevs)
+		corrId, err := strconv.Atoi(r.Header.Get("correlation-id"))
+		if err != nil {
+			corrId = -1
+		}
+		bs := lib.MarshalUnscheduledEvents(sev.To, corrId, oevs)
 		fmt.Fprint(w, string(bs))
 	}
 }
@@ -86,7 +90,8 @@ func handleTick(topology lib.Topology, m lib.Marshaler, cu ComponentUpdate) http
 		}
 		oevs := topology.Reactor(req.Reactor).Tick(req.At)
 		cu(req.Reactor)
-		bs := lib.MarshalUnscheduledEvents(req.Reactor, oevs)
+		// XXX: CorrId doesn't make sense here, right? Hence -1...
+		bs := lib.MarshalUnscheduledEvents(req.Reactor, -1, oevs)
 		fmt.Fprint(w, string(bs))
 	}
 }
@@ -129,8 +134,11 @@ func handleTimer(db *sql.DB, topology lib.Topology, m lib.Marshaler, cu Componen
 			LogLines:      si.LogLines,
 			HeapDiff:      heapDiff,
 		})
-
-		bs := lib.MarshalUnscheduledEvents(req.Reactor, oevs)
+		corrId, err := strconv.Atoi(r.Header.Get("correlation-id"))
+		if err != nil {
+			corrId = -1
+		}
+		bs := lib.MarshalUnscheduledEvents(req.Reactor, corrId, oevs)
 		fmt.Fprint(w, string(bs))
 	}
 }

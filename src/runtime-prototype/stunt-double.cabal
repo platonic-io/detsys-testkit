@@ -24,6 +24,7 @@ library
     StuntDouble.Actor.State
     StuntDouble.ActorMap
     StuntDouble.Datatype
+    StuntDouble.Codec
     StuntDouble.Envelope
     StuntDouble.FreeMonad
     StuntDouble.Frontend.Http

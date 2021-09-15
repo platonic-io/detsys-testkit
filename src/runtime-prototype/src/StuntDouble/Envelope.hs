@@ -1,7 +1,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module StuntDouble.Envelope where
 
+import Data.Aeson (FromJSON, ToJSON)
+import GHC.Generics (Generic)
 import Control.Concurrent.STM
 import Control.Concurrent.Async
 
@@ -12,13 +15,19 @@ import StuntDouble.Reference
 ------------------------------------------------------------------------
 
 newtype CorrelationId = CorrelationId Int
-  deriving (Eq, Ord, Show, Read, Num, Enum)
+  deriving (Eq, Ord, Show, Read, Num, Enum, Generic)
+
+instance ToJSON CorrelationId where
+instance FromJSON CorrelationId where
 
 getCorrelationId :: CorrelationId -> Int
 getCorrelationId (CorrelationId i) = i
 
 data EnvelopeKind = RequestKind | ResponseKind
-  deriving (Eq, Show, Read)
+  deriving (Eq, Show, Read, Generic)
+
+instance ToJSON EnvelopeKind where
+instance FromJSON EnvelopeKind where
 
 data Envelope = Envelope
   { envelopeKind          :: EnvelopeKind
@@ -27,7 +36,10 @@ data Envelope = Envelope
   , envelopeReceiver      :: RemoteRef
   , envelopeCorrelationId :: CorrelationId
   }
-  deriving (Eq, Show, Read)
+  deriving (Generic, Eq, Show, Read)
+
+instance ToJSON Envelope where
+instance FromJSON Envelope where
 
 replyEnvelope :: Envelope -> Message -> Envelope
 replyEnvelope e msg

@@ -260,7 +260,6 @@
 
 (def entries? (s/coll-of entry? :kind vector?))
 
-
 (s/def :ext/to
   (s/or :singleton string?
         :set (s/coll-of string? :kind vector?)))
@@ -403,7 +402,7 @@
                   ;; (if (:error events) true false)
 
                   ;; TODO(stevan): Change executor to return this json object.
-                  (assert (= (keys events) '(:events))
+                  (assert (= (keys events) '(:events :corrId))
                           (str "execute!: unexpected response body: " events))
                   (log/debug :events events)
 
@@ -672,7 +671,7 @@
                       :body
                       json/read
                       (update :events expand-events))]
-       (assert (= (keys events) '(:events))
+       (assert (= (keys events) '(:events :corrId))
                (str "execute!: unexpected response body: " events))
        (doseq [event (:events events)]
          (conj! all-events event))))

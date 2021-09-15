@@ -142,11 +142,12 @@ func OutEventsToEvents(from string, oevs []OutEvent) []Event {
 	return usevs
 }
 
-func MarshalUnscheduledEvents(from string, oevs []OutEvent) json.RawMessage {
+func MarshalUnscheduledEvents(from string, corrId int, oevs []OutEvent) json.RawMessage {
 	usevs := OutEventsToEvents(from, oevs)
 	bs, err := json.Marshal(struct {
 		Events []Event `json:"events"`
-	}{usevs})
+		CorrId int     `json:"corrId"`
+	}{usevs, corrId})
 	if err != nil {
 		panic(err)
 	}

@@ -31,6 +31,7 @@ import qualified Data.Vector as Vector
 import System.Random
 
 import StuntDouble.Actor.State
+import StuntDouble.Codec
 import StuntDouble.Datatype
 import StuntDouble.Envelope
 import StuntDouble.FreeMonad
@@ -65,6 +66,7 @@ data Resolution
   | IOResultR IOResult
   | InternalMessageR Message
   | ExceptionR SomeException
+  deriving Show
 
 data ActorF s x
   = Invoke LocalRef Message (Message -> x)
@@ -101,6 +103,13 @@ put s' = Free (Put s' return)
 
 modify :: Typeable s => (s -> s) -> Free (ActorF s) ()
 modify f = put . f =<< get
+
+modifys :: Typeable s => (s -> (s, a)) -> Free (ActorF s) a
+modifys f = do
+  s <- get
+  let (s', x) = f s
+  put s'
+  return x
 
 getTime :: Free (ActorF s) UTCTime
 getTime = Free (GetTime return)
@@ -544,13 +553,13 @@ dumpAsyncState as = do
   putStrLn "    }"
 
 
-withTransport :: TransportKind -> EventLoopName -> (Transport IO -> IO a) -> IO a
-withTransport tk name k =
+withTransport :: TransportKind -> Codec -> EventLoopName -> (Transport IO -> IO a) -> IO a
+withTransport tk codec name k =
   bracket
     (case tk of
        NamedPipe fp -> namedPipeTransport fp name
        Http port    -> httpTransport port
-       HttpSync     -> httpSyncTransport
+       HttpSync     -> httpSyncTransport codec
        Stm          -> stmTransport)
     transportShutdown
     k
@@ -584,16 +593,17 @@ spawnIOWorkers (ThreadPoolOfSize n)  ls
         error "spawnIOWorkers: thread pool size is bigger than the available CPU capabilities"
       mapM (\c -> asyncOn c (asyncIOWorker ls)) [ i | i <- [0..n], i /= cap ]
 
-makeEventLoop :: Time -> Seed -> TransportKind -> DiskKind -> EventLoopName -> IO EventLoop
+makeEventLoop :: Time -> Seed -> TransportKind -> Codec -> DiskKind -> EventLoopName
+              -> IO EventLoop
 makeEventLoop = makeEventLoopThreaded SingleThreaded NoThreadPool
 
-makeEventLoopThreaded :: Threaded -> ThreadPool -> Time -> Seed -> TransportKind -> DiskKind
-                      -> EventLoopName -> IO EventLoop
-makeEventLoopThreaded threaded threadpool time seed tk dk name = do
+makeEventLoopThreaded :: Threaded -> ThreadPool -> Time -> Seed -> TransportKind
+                      -> Codec -> DiskKind -> EventLoopName -> IO EventLoop
+makeEventLoopThreaded threaded threadpool time seed tk codec dk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
-         HttpSync     -> httpSyncTransport
+         HttpSync     -> httpSyncTransport codec
          Stm          -> stmTransport
   d <- case dk of
          FakeDisk    -> fakeDisk
@@ -619,9 +629,9 @@ makeEventLoopThreaded threaded threadpool time seed tk dk name = do
   mapM_ link pids
   return ls
 
-withEventLoop :: EventLoopName -> (EventLoop -> FakeTimeHandle -> IO a) -> IO a
-withEventLoop name k =
-  withTransport (NamedPipe "/tmp") name $ \t -> do
+withEventLoop :: EventLoopName -> Codec -> (EventLoop -> FakeTimeHandle -> IO a) -> IO a
+withEventLoop name codec k =
+  withTransport (NamedPipe "/tmp") codec name $ \t -> do
     (time, h) <- fakeTimeEpoch
     let seed = makeSeed 0
     disk <- fakeDisk
