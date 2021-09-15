@@ -18,7 +18,6 @@ import Database.SQLite.Simple.FromField
 import Database.SQLite.Simple.Ok
 import Database.SQLite.Simple.Internal (Field(Field))
 
-import StuntDouble.Datatype
 
 ------------------------------------------------------------------------
 

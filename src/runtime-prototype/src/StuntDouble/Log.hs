@@ -4,14 +4,13 @@ import Control.Exception
 
 import StuntDouble.Message
 import StuntDouble.Reference
-import StuntDouble.Actor.State
 
 ------------------------------------------------------------------------
 
 newtype Log = Log [LogEntry]
 
 data LogEntry
-  = Spawned LocalRef State
+  = Spawned LocalRef
   | Turn TurnData
   | ClientRequestEntry
   | ClientResponseEntry
@@ -19,11 +18,11 @@ data LogEntry
 
 data TurnData = TurnData
   { tdActor         :: LocalRef
-  , tdBeforeState   :: State
+  , tdBeforeState   :: String -- XXX: State
   , tdMessage       :: Message
   , tdActions       :: [ActionLogEntry]
   , tdLogs          :: [LogLines]
-  , tdAfterState    :: State
+  , tdAfterState    :: String -- XXX: State
   , tdLogicalTime   :: Int
   , tdSimulatedTime :: Int -- XXX: UTCTime
   , tdReply         :: Message

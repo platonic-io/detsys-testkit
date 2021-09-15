@@ -21,9 +21,7 @@ library
   exposed-modules:
     Scheduler
     StuntDouble
-    StuntDouble.Actor.State
     StuntDouble.ActorMap
-    StuntDouble.Datatype
     StuntDouble.Codec
     StuntDouble.Envelope
     StuntDouble.FreeMonad
