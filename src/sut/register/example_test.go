@@ -27,20 +27,17 @@ func once(newFrontEnd func() lib.Reactor, testId lib.TestId, runEvent lib.Create
 	lib.Setup(func() {
 		executor.Deploy(&srv, topology, marshaler)
 	})
-	// qs := lib.LoadTest(testId)
-	// log.Printf("Loaded test of size: %d\n", qs.QueueSize)
-	// lib.Register(testId)
-	// runId := lib.CreateRun(testId, runEvent)
-	// lib.Run()
-	// log.Printf("Finished run id: %d\n", runId.RunId)
-	// lib.Teardown(&srv)
-	// model := "list-append"
-	// log.Printf("Analysing model %s for %+v and %+v\n", model, testId, runId)
-	// result := lib.Check(model, testId, runId)
-	// return runId, result
-	log.Printf("Executor running...")
-	time.Sleep(30 * time.Minute)
-        return lib.RunId{1}, false
+	qs := lib.LoadTest(testId)
+	log.Printf("Loaded test of size: %d\n", qs.QueueSize)
+	lib.Register(testId)
+	runId := lib.CreateRun(testId, runEvent)
+	lib.Run()
+	log.Printf("Finished run id: %d\n", runId.RunId)
+	lib.Teardown(&srv)
+	model := "list-append"
+	log.Printf("Analysing model %s for %+v and %+v\n", model, testId, runId)
+	result := lib.Check(model, testId, runId)
+	return runId, result
 }
 
 func testRegisterWithFrontEnd(newFrontEnd func() lib.Reactor, tickFrequency float64, t *testing.T, expectedRuns int, expectedFaults []lib.Fault) {

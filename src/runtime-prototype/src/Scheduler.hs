@@ -46,6 +46,7 @@ data Meta = Meta
 
 instance ToJSON Meta where
   toEncoding = genericToEncoding defaultOptions
+    -- The executor expects kebab-case.
     { fieldLabelModifier = map (\c -> if c == '_' then '-' else c) }
 
 instance FromJSON Meta where
