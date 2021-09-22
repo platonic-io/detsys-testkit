@@ -17,7 +17,7 @@ buildGoModule rec {
   buildInputs = [ detsysLib ];
   propagatedBuildInputs = [ sqlite-interactive ];
 
-  vendorSha256 = "1izykiz43bg74ils1024iplc194i6r80spvyhz8d4yzgdjf5z6z0";
+  vendorSha256 = "1kx9h90crkmha1nm8fkw5h9jycyf4hb74r9yvlgyf1xsvifwjs81";
 
   buildFlagsArray =
     # This is a dummy git hash to avoid breaking the nix cache, it will be
