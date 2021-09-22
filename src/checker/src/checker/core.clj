@@ -67,6 +67,17 @@
         (dissoc :also-not)
         (assoc :elle-output (str dir)))))
 
+(defn checker-list-append-from-stdin
+  [test-id run-id]
+  (let [dir (fs/temp-dir "detsys-elle")
+        history (edn/read-string (str "[" (slurp *in*) "]"))]
+    (-> (list-append/check
+         {:consistency-models [:strict-serializable]
+          :directory dir}
+         history)
+        (dissoc :also-not)
+        (assoc :elle-output (str dir)))))
+
 ;; When building with Bazel we generate a resource file containing the git
 ;; commit hash, otherwise we expect the git commit hash to be passed in via an
 ;; environment variable.
@@ -80,12 +91,18 @@
   [test-id run-id checker]
   (let [result (checker test-id run-id)
         valid? (:valid? result)]
-    (db/store-result test-id run-id valid? result gitrev)
-    (if valid?
-      (System/exit 0)
+    (db/store-result test-id run-id valid? (dissoc result :elle-output) gitrev)
+    (case valid?
+      true (System/exit 0)
+      ;; valid? could be "unknown" which we don't count as success
       (do
         (pprint result)
         (System/exit 1)))))
+
+(def models
+  {:rw-register checker-rw-register
+   :list-append checker-list-append
+   :list-append-stdin checker-list-append-from-stdin})
 
 (defn -main
   [& args]
@@ -97,10 +114,13 @@
       (do (println gitrev)
           (System/exit 0)))
     (db/setup-db (db/db))
-    (case arg0
-      "rw-register" (analyse (Integer/parseInt test-id) (Integer/parseInt run-id)
-                             checker-rw-register)
-      "list-append" (analyse (Integer/parseInt test-id) (Integer/parseInt run-id)
-                             checker-list-append)
-      (println
-       "First argument should be a model, i.e. either \"rw-register\" or \"list-append\""))))
+    (if-let [checker-fun (models (keyword arg0))]
+      (analyse (Integer/parseInt test-id)
+               (Integer/parseInt run-id)
+               checker-fun)
+        (println
+         (str
+          "First argument `"
+          arg0
+          "' should be a model, i.e. either "
+          (apply str (interpose ", " (map (fn [x] (subs (str x) 1)) (keys models)))))))))
