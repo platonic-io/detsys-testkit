@@ -705,9 +705,10 @@
     (if (time/before? (:next-tick data) (time/plus-nanos (time/init-clock)
                                                          (:min-time-ns data)))
       (tick! data)
-      (do
-        (Thread/sleep 10000)
-        [data {:events []}]))))
+      [(assoc data
+              :clock (:next-tick data)
+              :state :responding) ;; I think?
+       {:events []}])))
 
 (>defn step!
   [data]
