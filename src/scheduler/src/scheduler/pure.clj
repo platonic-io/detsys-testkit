@@ -553,19 +553,39 @@
   ;; => true
   )
 
+(>defn expire-clients!
+       [data expired-clients]
+       [::data (s/coll-of agenda/entry?) => nil?]
+       (doseq [client expired-clients]
+         (db/append-network-trace! (:test-id data)
+                                   (:run-id data)
+                                   {:message (:event client)
+                                    :args (:args client)
+                                    :from (:to client)
+                                    :to (:from client)
+                                    :kind (:kind client)
+                                    :sent-logical-time (:logical-clock data)
+                                    :recv-logical-time (:logical-clock data)
+                                    :recv-simulated-time (:clock data)
+                                    :dropped false
+                                    :jepsen-type :info
+                                    :jepsen-process (-> client :from parse-client-id)})))
+
 (>defn enqueue-timestamped-entries
   [data {:keys [timestamped-entries]}]
   [::data (s/keys :req-un [::timestamped-entries])
    => (s/tuple ::data (s/keys :req-un [::queue-size]))]
   (if (or (and (empty? timestamped-entries) (-> data :agenda empty?) (min-time? data))
           (max-time? data))
-    [(update data :state
-             (fn [state]
-               (case state
-                 :responding :finished
-                 :executors-prepared :inits-prepared
-                 :error-cannot-enqueue-in-this-state)))
-     {:queue-size (-> data :agenda count)}]
+    (do
+      (expire-clients! data (-> data :client-requests))
+      [(update data :state
+               (fn [state]
+                 (case state
+                   :responding :finished
+                   :executors-prepared :inits-prepared
+                   :error-cannot-enqueue-in-this-state)))
+       {:queue-size (-> data :agenda count)}])
     (let [data' (-> (reduce (fn [ih timestamped-entry]
                               (first (enqueue-entry ih timestamped-entry)))
                             data
@@ -687,20 +707,7 @@
     (if (time/before? (:next-tick data) (:at entry))
       (tick! data)
       (let [[data' expired-clients] (expired-clients data (:at entry))]
-        (doseq [client expired-clients]
-          (db/append-network-trace! (:test-id data')
-                                    (:run-id data')
-                                    {:message (:event client)
-                                     :args (:args client)
-                                     :from (:to client)
-                                     :to (:from client)
-                                     :kind (:kind client)
-                                     :sent-logical-time (:logical-clock data')
-                                     :recv-logical-time (:logical-clock data')
-                                     :recv-simulated-time (:clock data')
-                                     :dropped false
-                                     :jepsen-type :info
-                                     :jepsen-process (-> client :from parse-client-id)}))
+        (expire-clients! data' expired-clients)
         (execute! data')))
     (if (time/before? (:next-tick data) (time/plus-nanos (time/init-clock)
                                                          (:min-time-ns data)))
