@@ -40,6 +40,8 @@ library
     StuntDouble.Transport.HttpSync
     StuntDouble.Transport.NamedPipe
     StuntDouble.Transport.Stm
+    StuntDouble.AdminTransport
+    StuntDouble.AdminTransport.NamedPipe
     StuntDouble.Queue
 
   -- GHC boot library dependencies:
