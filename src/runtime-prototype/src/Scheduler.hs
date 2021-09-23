@@ -102,6 +102,7 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
           p <- send executorRef (InternalMessage (prettyEvent e))
           on p (\(InternalMessageR (InternalMessage' "Events" args)) -> do
                   -- XXX: we should generate an arrival time here using the seed.
+                  -- XXX: with some probability duplicate the event?
                   let Just evs = sequence (map (fromSDatatype time) args)
                       evs' = filter (\e -> kind e /= "ok") (concat evs)
                       heap' = Heap.fromList (map (\e -> Entry (at e) e) evs')

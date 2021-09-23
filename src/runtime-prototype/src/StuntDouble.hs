@@ -1,6 +1,8 @@
 module StuntDouble (module X) where
 
 import StuntDouble.ActorMap as X
+import StuntDouble.AdminTransport as X
+import StuntDouble.AdminTransport.NamedPipe as X
 import StuntDouble.Codec as X
 import StuntDouble.Envelope as X
 import StuntDouble.Frontend.Http as X

@@ -29,6 +29,7 @@ import Data.Typeable
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import System.Random
+import System.Exit (exitSuccess)
 
 import StuntDouble.Codec
 import StuntDouble.Envelope
@@ -41,6 +42,8 @@ import StuntDouble.Metrics
 import StuntDouble.Random
 import StuntDouble.Reference
 import StuntDouble.Time
+import StuntDouble.AdminTransport
+import StuntDouble.AdminTransport.NamedPipe
 import StuntDouble.Transport
 import StuntDouble.Transport.Http
 import StuntDouble.Transport.HttpSync
@@ -450,6 +453,7 @@ data Event
   = Action Action
   | Reaction Reaction
   | Admin Command
+  | AdminCommands [AdminCommand]
   | ClientRequestEvent LocalRef Message ClientRef (TMVar Message)
 
 data Command
@@ -460,23 +464,25 @@ data Command
   | Quit
 
 data EventLoop = EventLoop
-  { lsName        :: EventLoopName
-  , lsActorMap    :: TVar ActorMap
-  , lsAsyncState  :: TVar AsyncState
-  , lsQueue       :: TBQueue Event
-  , lsTime        :: Time
-  , lsSeed        :: TVar Seed
-  , lsTransport   :: Transport IO
-  , lsDisk        :: Disk IO
-  , lsPids        :: TVar [Async ()]
-  , lsNextPromise :: TVar Promise
-  , lsLog         :: TVar Log
-  , lsMetrics     :: Metrics
-  , lsIOQueue     :: TBQueue (IOOp, Promise)
+  { lsName           :: EventLoopName
+  , lsActorMap       :: TVar ActorMap
+  , lsAsyncState     :: TVar AsyncState
+  , lsQueue          :: TBQueue Event
+  , lsTime           :: Time
+  , lsSeed           :: TVar Seed
+  , lsTransport      :: Transport IO
+  , lsAdminTransport :: AdminTransport
+  , lsDisk           :: Disk IO
+  , lsPids           :: TVar [Async ()]
+  , lsNextPromise    :: TVar Promise
+  , lsLog            :: TVar Log
+  , lsMetrics        :: Metrics
+  , lsIOQueue        :: TBQueue (IOOp, Promise)
   }
 
-initLoopState :: EventLoopName -> Time -> Seed -> Transport IO -> Disk IO -> IO EventLoop
-initLoopState name time seed transport disk =
+initLoopState :: EventLoopName -> Time -> Seed -> Transport IO -> AdminTransport -> Disk IO
+              -> IO EventLoop
+initLoopState name time seed transport adminTransport disk =
   EventLoop
     <$> pure name
     <*> newTVarIO emptyActorMap
@@ -485,6 +491,7 @@ initLoopState name time seed transport disk =
     <*> pure time
     <*> newTVarIO seed
     <*> pure transport
+    <*> pure adminTransport
     <*> pure disk
     <*> newTVarIO []
     <*> newTVarIO (Promise 0)
@@ -591,42 +598,48 @@ spawnIOWorkers (ThreadPoolOfSize n)  ls
         error "spawnIOWorkers: thread pool size is bigger than the available CPU capabilities"
       mapM (\c -> asyncOn c (asyncIOWorker ls)) [ i | i <- [0..n], i /= cap ]
 
-makeEventLoop :: Time -> Seed -> TransportKind -> Codec -> DiskKind -> EventLoopName
-              -> IO EventLoop
+makeEventLoop :: Time -> Seed -> TransportKind -> AdminTransportKind -> Codec -> DiskKind
+              -> EventLoopName -> IO EventLoop
 makeEventLoop = makeEventLoopThreaded SingleThreaded NoThreadPool
 
 makeEventLoopThreaded :: Threaded -> ThreadPool -> Time -> Seed -> TransportKind
-                      -> Codec -> DiskKind -> EventLoopName -> IO EventLoop
-makeEventLoopThreaded threaded threadpool time seed tk codec dk name = do
+                      -> AdminTransportKind -> Codec -> DiskKind -> EventLoopName
+                      -> IO EventLoop
+makeEventLoopThreaded threaded threadpool time seed tk atk codec dk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
          HttpSync     -> httpSyncTransport codec
          Stm          -> stmTransport
+  at <- case atk of
+         AdminNamedPipe fp -> namedPipeAdminTransport fp name
   d <- case dk of
          FakeDisk    -> fakeDisk
          RealDisk fp -> realDisk fp
-  ls <- initLoopState name time seed t d
+  ls <- initLoopState name time seed t at d
   workerPids <- spawnIOWorkers threadpool ls
   pids <- case threaded of
             SingleThreaded ->
               fmap (: [])
                 (async (runHandlers seed  -- XXX: or do we want `TVar Seed` here?
                         [ handleInbound1 ls
+                        , handleAdminCommands1 ls
                         , handleAsyncIO1 ls
                         , handleEvents1 ls
                         , handleTimeouts1 ls
                         ]))
             MultiThreaded ->
               mapM async [ handleInbound ls
+                         , handleAdminCommands ls
                          , handleAsyncIO ls
                          , handleEvents ls
                          , handleTimeouts ls
                          ]
-  atomically (modifyTVar' (lsPids ls) ((pids ++ workerPids) ++))
+  atomically (modifyTVar' (lsPids ls) ((workerPids ++ pids) ++))
   mapM_ link pids
   return ls
 
+  {-
 withEventLoop :: EventLoopName -> Codec -> (EventLoop -> FakeTimeHandle -> IO a) -> IO a
 withEventLoop name codec k =
   withTransport (NamedPipe "/tmp") codec name $ \t -> do
@@ -644,6 +657,7 @@ withEventLoop name codec k =
     x <- k ls h
     quit ls
     return x
+-}
 
 runHandlers :: Seed -> [IO ()] -> IO ()
 runHandlers seed0 hs = go seed0
@@ -666,13 +680,24 @@ handleInbound = forever . handleInbound1
 handleInbound1 :: EventLoop -> IO ()
 handleInbound1 ls = do
   -- XXX: instead of just reading one message from the transport queue we could
-  -- read the whole queue here...
+  -- read the whole queue here... See `adminTransportReceive`.
   me <- transportReceive (lsTransport ls)
   case me of
     Nothing -> return ()
     Just e  -> do
       let p = Promise (getCorrelationId (envelopeCorrelationId e))
       atomically (writeTBQueue (lsQueue ls) (Reaction (Receive p e)))
+
+handleAdminCommands :: EventLoop -> IO ()
+handleAdminCommands = forever . handleAdminCommands1
+
+handleAdminCommands1 :: EventLoop -> IO ()
+handleAdminCommands1 ls = do
+  threadDelay 10000
+  cmds <- adminTransportReceive (lsAdminTransport ls)
+  case cmds of
+    []    -> return ()
+    _ : _ -> atomically (writeTBQueue (lsQueue ls) (AdminCommands cmds))
 
 handleAsyncIO :: EventLoop -> IO ()
 handleAsyncIO ls = forever (handleAsyncIO1 ls >> threadDelay 1000 {- 1 ms -})
@@ -762,8 +787,9 @@ handleEvents1 ls = do
       handleEvent e ls
         `catch` \(ex :: SomeException) -> do
                   -- XXX: Why are `AsyncCancelled` being caught here?
-                  unless (fromException ex == Just AsyncCancelled) $
-                    putStrLn ("handleEvents: exception: " ++ show ex)
+                  if fromException ex == Just AsyncCancelled
+                  then exitSuccess
+                  else putStrLn ("handleEvents: exception: " ++ show ex)
 
 handleEvent :: Event -> EventLoop -> IO ()
 handleEvent (Action a)   ls = act ls [a]
@@ -807,6 +833,34 @@ handleEvent (Admin cmd) ls = case cmd of
     pids <- readTVarIO (lsPids ls)
     threadDelay 100000
     mapM_ cancel pids
+handleEvent (AdminCommands cmds) ls = mapM_ go cmds
+  where
+    go :: AdminCommand -> IO ()
+    -- XXX: we probably don't want two different ways to quit, or more generally
+    -- issue admin commands. The biggest problem is spawning, since actors are
+    -- not seralisable... Perhaps we could give actors names and "load" all
+    -- available actors at the start of the event loop, then the spawn admin
+    -- command can simply take the name of the actors and start it? Or skip
+    -- spawning completely and simply specify the actors you want to spawn upon
+    -- event loop start up? Once we got supervisors, we probably want to specify
+    -- the root supervisor at event loop start up and have it do the
+    -- (re)spawning, so perhaps removing the spawn admin command completely is
+    -- the way to go...
+    go AdminQuit     = do
+      putStrLn "Shutting down..."
+      pids <- readTVarIO (lsPids ls)
+      threadDelay 100000
+      adminTransportShutdown (lsAdminTransport ls)
+      mapM_ uninterruptibleCancel pids
+      -- XXX: ^ The above isn't enough to actually shutdown the event loop. We
+      -- need to catch the AsyncCancelled exception in `handleEvents1` and do an
+      -- `exitSuccess` there... Perhaps a more clean way would be to have a
+      -- shutdown `TMVar` which `runHandlers` checks before looping?
+    go AdminDumpLog  = do
+      putStrLn "dumping log"
+      adminTransportSend (lsAdminTransport ls) "XXX: log"
+    go AdminResetLog = undefined -- XXX
+
 handleEvent (ClientRequestEvent lref msg cref returnVar) ls = do
   reply <- actorPokeIO ls lref (ClientRequest' (getMessage msg) (getArgs msg) cref)
   atomically (putTMVar returnVar reply)

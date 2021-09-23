@@ -29,8 +29,8 @@ main = do
       executorRef = RemoteRef ("http://localhost:" ++ show executorPort ++ "/api/v1/event") 0
       schedulerPort = 3005
   fp <- getDbPath
-  el <- makeEventLoop realTime (makeSeed 0) HttpSync executorCodec (RealDisk fp)
-          (EventLoopName "scheduler")
+  el <- makeEventLoop realTime (makeSeed 0) HttpSync (AdminNamedPipe "/tmp/")
+          executorCodec (RealDisk fp) (EventLoopName "scheduler")
   now <- getCurrentTime realTime
   lref <- spawn el (fakeScheduler executorRef) (initState now (makeSeed 0))
   withHttpFrontend el lref schedulerPort $ \pid -> do
