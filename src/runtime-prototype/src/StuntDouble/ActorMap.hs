@@ -842,7 +842,10 @@ handleEvent (AdminCommands cmds) ls = mapM_ go cmds
     -- available actors at the start of the event loop, then the spawn admin
     -- command can simply take the name of the actors and start it? Or skip
     -- spawning completely and simply specify the actors you want to spawn upon
-    -- event loop start up?
+    -- event loop start up? Once we got supervisors, we probably want to specify
+    -- the root supervisor at event loop start up and have it do the
+    -- (re)spawning, so perhaps removing the spawn admin command completely is
+    -- the way to go...
     go AdminQuit     = do
       putStrLn "Shutting down..."
       pids <- readTVarIO (lsPids ls)
