@@ -29,6 +29,7 @@ import Data.Typeable
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import System.Random
+import System.Exit (exitSuccess)
 
 import StuntDouble.Codec
 import StuntDouble.Envelope
@@ -634,7 +635,7 @@ makeEventLoopThreaded threaded threadpool time seed tk atk codec dk name = do
                          , handleEvents ls
                          , handleTimeouts ls
                          ]
-  atomically (modifyTVar' (lsPids ls) ((pids ++ workerPids) ++))
+  atomically (modifyTVar' (lsPids ls) ((workerPids ++ pids) ++))
   mapM_ link pids
   return ls
 
@@ -692,6 +693,7 @@ handleAdminCommands = forever . handleAdminCommands1
 
 handleAdminCommands1 :: EventLoop -> IO ()
 handleAdminCommands1 ls = do
+  threadDelay 10000
   cmds <- adminTransportReceive (lsAdminTransport ls)
   case cmds of
     []    -> return ()
@@ -785,8 +787,9 @@ handleEvents1 ls = do
       handleEvent e ls
         `catch` \(ex :: SomeException) -> do
                   -- XXX: Why are `AsyncCancelled` being caught here?
-                  unless (fromException ex == Just AsyncCancelled) $
-                    putStrLn ("handleEvents: exception: " ++ show ex)
+                  if fromException ex == Just AsyncCancelled
+                  then exitSuccess
+                  else putStrLn ("handleEvents: exception: " ++ show ex)
 
 handleEvent :: Event -> EventLoop -> IO ()
 handleEvent (Action a)   ls = act ls [a]
@@ -833,8 +836,26 @@ handleEvent (Admin cmd) ls = case cmd of
 handleEvent (AdminCommands cmds) ls = mapM_ go cmds
   where
     go :: AdminCommand -> IO ()
-    go AdminQuit     = handleEvent (Admin Quit) ls
-    go AdminDumpLog  = adminTransportSend (lsAdminTransport ls) "XXX: log"
+    -- XXX: we probably don't want two different ways to quit, or more generally
+    -- issue admin commands. The biggest problem is spawning, since actors are
+    -- not seralisable... Perhaps we could give actors names and "load" all
+    -- available actors at the start of the event loop, then the spawn admin
+    -- command can simply take the name of the actors and start it? Or skip
+    -- spawning completely and simply specify the actors you want to spawn upon
+    -- event loop start up?
+    go AdminQuit     = do
+      putStrLn "Shutting down..."
+      pids <- readTVarIO (lsPids ls)
+      threadDelay 100000
+      adminTransportShutdown (lsAdminTransport ls)
+      mapM_ uninterruptibleCancel pids
+      -- XXX: ^ The above isn't enough to actually shutdown the event loop. We
+      -- need to catch the AsyncCancelled exception in `handleEvents1` and do an
+      -- `exitSuccess` there... Perhaps a more clean way would be to have a
+      -- shutdown `TMVar` which `runHandlers` checks before looping?
+    go AdminDumpLog  = do
+      putStrLn "dumping log"
+      adminTransportSend (lsAdminTransport ls) "XXX: log"
     go AdminResetLog = undefined -- XXX
 
 handleEvent (ClientRequestEvent lref msg cref returnVar) ls = do

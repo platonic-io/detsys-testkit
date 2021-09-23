@@ -24,13 +24,18 @@ namedPipeAdminTransport :: FilePath -> EventLoopName -> IO AdminTransport
 namedPipeAdminTransport fp name = do
   queue <- newTBQueueIO 128 -- This queue grows if input is produced more often
                             -- than `transportReceive` is called.
-  let pipe = fp </> getEventLoopName name </> "admin"
+  let pipe = fp </> getEventLoopName name <> "-admin"
   safeCreateNamedPipe pipe
   h <- openFile pipe ReadWriteMode
   hSetBuffering h LineBuffering
   pid <- async (producer h queue)
   return AdminTransport
-    { adminTransportSend     = hPutStrLn h
+    { adminTransportSend = \s -> withFile (pipe <> "-response") WriteMode $ \h' -> do
+        hSetBuffering h' LineBuffering
+        -- NOTE: We cannot write back the response on the same pipe as we got
+        -- the command on, because `adminTransportRecieve` which runs in a loop
+        -- will consume the response.
+        hPutStrLn h' s
     , adminTransportReceive  = atomically (flushTBQueue queue)
     , adminTransportShutdown = do
         adminCleanUpNamedPipe fp name
