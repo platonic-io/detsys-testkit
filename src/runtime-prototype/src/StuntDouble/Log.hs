@@ -8,8 +8,12 @@ import StuntDouble.Reference
 ------------------------------------------------------------------------
 
 newtype Log = Log [LogEntry]
+  deriving Show
 
 data LogEntry
+  = LogSend LocalRef Message RemoteRef -- XXX: SentLogicalTime
+  deriving Show
+  {-
   = Spawned LocalRef
   | Turn TurnData
   | ClientRequestEntry
@@ -30,9 +34,21 @@ data TurnData = TurnData
 
 data ActionLogEntry = XXX
 data LogLines = YYY
+-}
 
 emptyLog :: Log
 emptyLog = Log []
+
+appendLog :: LogEntry -> Log -> Log
+appendLog e (Log es) = Log (e : es)
+
+-- XXX: Use more efficient data structure to avoid having to reverse.
+-- XXX: better serialisation than show...
+getLog :: Log -> String
+getLog (Log es) = show (Log (reverse es))
+
+foldMapLog :: Monoid m => (LogEntry -> m) -> Log -> m
+foldMapLog f (Log es) = foldMap f (reverse es)
 
   {-
 
