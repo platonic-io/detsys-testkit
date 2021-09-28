@@ -110,6 +110,39 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                   step
                )
         Nothing -> do
+          -- XXX: Add `getLog :: Actor Log` and then process the log here?
+          -- The format looks at follows:
+          -- LogSend _from (InternalMessage "{\"event\":\"write\",\"args\":{\"value\":1},\"at\":\"1970-01-01T00:00:00Z\",\"kind\":\"invoke\",\"to\":\"frontend\",\"from\":\"client:0\",\"meta\":null}") _to
+          -- For network_trace we need:
+          -- CREATE VIEW network_trace AS
+          --  SELECT
+          --    json_extract(meta, '$.test-id')             AS test_id,
+          --    json_extract(meta, '$.run-id')              AS run_id,
+          --    json_extract(data, '$.message')             AS message,
+          --    json_extract(data, '$.args')                AS args,
+          --    json_extract(data, '$.from')                AS sender,
+          --    json_extract(data, '$.to')                  AS receiver,
+          --    json_extract(data, '$.kind')                AS kind,
+          --    json_extract(data, '$.sent-logical-time')   AS sent_logical_time,
+          --    json_extract(data, '$.recv-logical-time')   AS recv_logical_time,
+          --    json_extract(data, '$.recv-simulated-time') AS recv_simulated_time,
+          --    json_extract(data, '$.dropped')             AS dropped
+          --
+          -- Scheduler gets the test_id upon `CreateTest` and it can figure out
+          -- which is the next `run_id` from the db using:
+          --
+          --  SELECT IFNULL(MAX(run_id), -1) + 1 as `run-id` FROM run_info WHERE test_id = :tid
+          --
+          -- `message` is `"event"`
+          -- `args`, `from`, `to`, `kind` is the same
+          -- `sent-logical-time`, can be saved in `LogSend`:
+          --
+          --    sent-logical-time (or (-> body :sent-logical-time)
+          --                          (and is-from-client?
+          --                               (:logical-clock data)))]
+          -- `recv-logical-time` is `logical-clock` of the next entry
+          -- `recv-simulated-time` is `clock` of the next entry
+
           s <- get
           clientResponse cid (InternalMessage ("{\"steps\":" ++ show (steps s) ++ "}"))
   in
