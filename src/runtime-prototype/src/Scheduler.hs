@@ -52,18 +52,22 @@ instance ToJSON Meta where
 instance FromJSON Meta where
 
 data SchedulerState = SchedulerState
-  { heap  :: Heap (Entry UTCTime SchedulerEvent)
-  , time  :: UTCTime
-  , seed  :: Seed
-  , steps :: Int
+  { heap   :: Heap (Entry UTCTime SchedulerEvent)
+  , time   :: UTCTime
+  , seed   :: Seed
+  , steps  :: Int
+  , testId :: Maybe Int
+  , runId  :: Maybe Int
   }
 
 initState :: UTCTime -> Seed -> SchedulerState
 initState t s = SchedulerState
-  { heap  = Heap.empty
-  , time  = t
-  , seed  = s
-  , steps = 0
+  { heap   = Heap.empty
+  , time   = t
+  , seed   = s
+  , steps  = 0
+  , testId = Nothing
+  , runId  = Nothing
   }
 
 data Agenda = Agenda [SchedulerEvent]
@@ -82,12 +86,21 @@ instance ParseRow Agenda where
 fakeScheduler :: RemoteRef -> Message -> Actor SchedulerState
 fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $ do
   p <- asyncIO (IOQuery "SELECT agenda FROM test_info WHERE test_id = :tid" [":tid" := tid])
+  q <- asyncIO (IOQuery "SELECT IFNULL(MAX(run_id), -1) + 1 FROM run_info WHERE test_id = :tid"
+                [":tid" := tid])
   on p (\(IOResultR (IORows rs)) -> case parseRows rs of
            Nothing          -> clientResponse cid (InternalMessage "parse error")
            Just [Agenda es] -> do
              modify $ \s ->
-               s { heap = Heap.fromList (map (\e -> Entry (at e) e) es) }
+               s { heap   = Heap.fromList (map (\e -> Entry (at e) e) es)
+                 , testId = Just tid
+                 }
              clientResponse cid (InternalMessage (show es)))
+  -- XXX: combine `on (p and q)` somehow? the current way we can respond to the
+  -- client without having set the runId... Also this current way we can't
+  -- really handle an error for the run id select?
+  on q (\(IOResultR (IORows [[FInt rid]])) ->
+           modify $ \s -> s { runId = Just rid })
   return (InternalMessage "ok")
 fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
   let
@@ -110,7 +123,6 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                   step
                )
         Nothing -> do
-          -- XXX: Add `getLog :: Actor Log` and then process the log here?
           -- The format looks at follows:
           -- LogSend _from (InternalMessage "{\"event\":\"write\",\"args\":{\"value\":1},\"at\":\"1970-01-01T00:00:00Z\",\"kind\":\"invoke\",\"to\":\"frontend\",\"from\":\"client:0\",\"meta\":null}") _to
           -- For network_trace we need:
@@ -128,11 +140,6 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
           --    json_extract(data, '$.recv-simulated-time') AS recv_simulated_time,
           --    json_extract(data, '$.dropped')             AS dropped
           --
-          -- Scheduler gets the test_id upon `CreateTest` and it can figure out
-          -- which is the next `run_id` from the db using:
-          --
-          --  SELECT IFNULL(MAX(run_id), -1) + 1 as `run-id` FROM run_info WHERE test_id = :tid
-          --
           -- `message` is `"event"`
           -- `args`, `from`, `to`, `kind` is the same
           -- `sent-logical-time`, can be saved in `LogSend`:
@@ -143,8 +150,13 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
           -- `recv-logical-time` is `logical-clock` of the next entry
           -- `recv-simulated-time` is `clock` of the next entry
 
+          l <- dumpLog
           s <- get
-          clientResponse cid (InternalMessage ("{\"steps\":" ++ show (steps s) ++ "}"))
+          clientResponse cid (InternalMessage ("{\"steps\":" ++ show (steps s) ++
+                                               ",\"test_id\":" ++ show (testId s) ++
+                                               ",\"run_id\":" ++ show (runId s) ++
+                                               ",\"event_log\":" ++ show l ++
+                                               "}"))
   in
     Actor $ do
       step
