@@ -5,6 +5,7 @@
 
 module StuntDouble.IO where
 
+import Control.Exception (finally)
 import Control.Monad
 import Data.String
 import Data.HashMap.Strict (HashMap)
@@ -13,6 +14,7 @@ import Data.Hashable
 import Data.IORef
 import Data.Text (Text)
 import Data.ByteString (ByteString)
+import qualified Database.SQLite3 as Base
 import Database.SQLite.Simple
 import Database.SQLite.Simple.FromField
 import Database.SQLite.Simple.Ok
@@ -38,6 +40,7 @@ data IOOp
   | IOIterate Key Key
 
   | IOExecute String [NamedParam]
+  | IOExecuteMany String [[NamedParam]]
   | IOQuery String [NamedParam]
 
   | IOReturn IOResult
@@ -52,8 +55,9 @@ data Disk m = Disk
   , ioIterate :: Maybe Key -> Maybe Key -> m [(Key, Value)]
 
   -- SQLite.
-  , ioExecute :: String -> [NamedParam] -> m ()
-  , ioQuery   :: String -> [NamedParam] -> m [[FieldValue]]
+  , ioExecute     :: String -> [NamedParam]   -> m ()
+  , ioExecuteMany :: String -> [[NamedParam]] -> m ()
+  , ioQuery       :: String -> [NamedParam] -> m [[FieldValue]]
   }
 
 data FieldValue
@@ -79,15 +83,16 @@ data IOResult
   deriving Show
 
 diskIO :: Monad m => IOOp -> Disk m -> m IOResult
-diskIO (IOGet k)        io = IOValue <$> ioGet io k
-diskIO (IOPut k v)      io = IOUnit <$> ioPut io k v
-diskIO (IODelete k)     io = IOUnit <$> ioDelete io k
-diskIO (IOPuts kvs)     io = IOUnit <$> ioPuts io kvs
-diskIO (IODeletes ks)   io = IOUnit <$> ioDeletes io ks
-diskIO IOIterate {}    _io = error "not implemented yet"
-diskIO (IOExecute q ps) io = IOUnit <$> ioExecute io q ps
-diskIO (IOQuery q ps)   io = IORows <$> ioQuery io q ps
-diskIO (IOReturn x)    _io = return x
+diskIO (IOGet k)            io = IOValue <$> ioGet io k
+diskIO (IOPut k v)          io = IOUnit <$> ioPut io k v
+diskIO (IODelete k)         io = IOUnit <$> ioDelete io k
+diskIO (IOPuts kvs)         io = IOUnit <$> ioPuts io kvs
+diskIO (IODeletes ks)       io = IOUnit <$> ioDeletes io ks
+diskIO IOIterate {}        _io = error "not implemented yet"
+diskIO (IOExecute q ps)     io = IOUnit <$> ioExecute io q ps
+diskIO (IOExecuteMany q ps) io = IOUnit <$> ioExecuteMany io q ps
+diskIO (IOQuery q ps)       io = IORows <$> ioQuery io q ps
+diskIO (IOReturn x)        _io = return x
 
 fakeDisk :: IO (Disk IO)
 fakeDisk = do
@@ -101,6 +106,7 @@ fakeDisk = do
     , ioIterate = undefined
 
     , ioExecute = \_ _ -> return ()
+    , ioExecuteMany = \_ _ -> return ()
     , ioQuery   = \_ _ -> return [[FInt 1]]
     }
 
@@ -118,8 +124,9 @@ realDisk fp = do
     , ioDeletes = undefined
     , ioIterate = undefined
 
-    , ioExecute = \q -> executeNamed conn (fromString q)
-    , ioQuery   = \q -> queryNamed   conn (fromString q)
+    , ioExecute     = \q -> executeNamed conn (fromString q)
+    , ioExecuteMany = \q -> executeManyNamed conn (fromString q)
+    , ioQuery       = \q -> queryNamed   conn (fromString q)
     }
 
 class ParseRow a where
@@ -140,3 +147,19 @@ parseRows = sequence . map parseRow
 data DiskKind
   = FakeDisk
   | RealDisk FilePath
+
+------------------------------------------------------------------------
+
+-- XXX: Upstream to sqlite-simple?
+
+executeManyNamed :: Connection -> Query -> [[NamedParam]] -> IO ()
+executeManyNamed conn template paramRows = withStatement conn template $ \stmt -> do
+  let Statement stmt' = stmt
+  forM_ paramRows $ \params ->
+    withBindNamed stmt params
+      (void . Base.step $ stmt')
+
+withBindNamed :: Statement -> [NamedParam] -> IO a -> IO a
+withBindNamed stmt params io = do
+  bindNamed stmt params
+  io `finally` reset stmt

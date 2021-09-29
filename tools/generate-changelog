@@ -61,6 +61,7 @@ knownCategories = Map.fromList
   , ("roadmap",   "Documentation improvements")
   , ("readme",    "Documentation improvements")
   , ("docs",      "Documentation improvements")
+  , ("doc",       "Documentation improvements")
   , ("changelog", "Documentation improvements")
   , ("nix",       "Build improvements")
   , ("bazel",     "Build improvements")
