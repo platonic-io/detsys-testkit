@@ -128,20 +128,12 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
           -- For network_trace we need:
           -- CREATE VIEW network_trace AS
           --  SELECT
-          --    json_extract(meta, '$.test-id')             AS test_id,
-          --    json_extract(meta, '$.run-id')              AS run_id,
-          --    json_extract(data, '$.message')             AS message,
-          --    json_extract(data, '$.args')                AS args,
-          --    json_extract(data, '$.from')                AS sender,
-          --    json_extract(data, '$.to')                  AS receiver,
-          --    json_extract(data, '$.kind')                AS kind,
+          --    ...
           --    json_extract(data, '$.sent-logical-time')   AS sent_logical_time,
           --    json_extract(data, '$.recv-logical-time')   AS recv_logical_time,
           --    json_extract(data, '$.recv-simulated-time') AS recv_simulated_time,
           --    json_extract(data, '$.dropped')             AS dropped
           --
-          -- `message` is `"event"`
-          -- `args`, `from`, `to`, `kind` is the same
           -- `sent-logical-time`, can be saved in `LogSend`:
           --
           --    sent-logical-time (or (-> body :sent-logical-time)
@@ -152,6 +144,21 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
 
           l <- dumpLog
           s <- get
+
+          -- XXX: something like this needs to be done for each log entry:
+          -- p <- asyncIO (IOExecute "INSERT INTO event_log (event, meta, data) \
+          --                         \ VALUES (:event, :meta, :data)"
+          --                [ ":event" := ("NetworkTrace" :: String)
+          --                , ":meta"  := encode (object
+          --                                       [ "component" .= ("scheduler" :: String)
+          --                                       , "test-id"   .= maybe (error "test id not set") id
+          --                                                          (testId s)
+          --                                       , "run-id"    .= maybe (error "run id not set") id
+          --                                                          (runId s)
+          --                                       ])
+          --                , ":data"  := encode (object []) -- XXX:
+          --                ])
+
           clientResponse cid (InternalMessage ("{\"steps\":" ++ show (steps s) ++
                                                ",\"test_id\":" ++ show (testId s) ++
                                                ",\"run_id\":" ++ show (runId s) ++
@@ -165,6 +172,19 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
     prettyEvent :: SchedulerEvent -> String
     prettyEvent = LBS.unpack . encode
 fakeScheduler _ msg = error (show msg)
+
+-- XXX: Avoid going to string, not sure if we should use bytestring or text though?
+entryToData :: Int -> Int -> UTCTime -> Bool -> LogEntry -> String
+entryToData slt rlt rst d (LogSend _from (InternalMessage msg) _to)
+  = addField "sent-logical-time" (show slt)
+  . addField "recv-logical-time" (show rlt)
+  . addField "recv-simulated-time" (show (encode rst))
+  . addField "dropped" (if d then "true" else "false")
+  . replaceEventMessage
+  $ msg
+  where
+    replaceEventMessage ('{' : '"' : 'e' : 'v' : 'e' : 'n' : 't' : msg') = "{\"message" ++ msg'
+    addField f v ('{' : msg') = "{\"" ++ f ++ "\":" ++ v ++ "," ++ msg'
 
 executorCodec :: Codec
 executorCodec = Codec encode decode

@@ -67,6 +67,7 @@ library
     , http-client
     , http-types
     , random
+    , direct-sqlite
     , sqlite-simple
     , unordered-containers
     , vector
