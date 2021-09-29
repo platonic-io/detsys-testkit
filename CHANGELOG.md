@@ -1,3 +1,87 @@
+## [v0.0.5](https://github.com/symbiont-io/detsys-testkit/compare/v0.0.4...v0.0.5) (2021-09-29)
+
+### Bug fixes
+* **scheduler**: Fix infinite loop in scheduler ([d26fe5b](https://github.com/symbiont-io/detsys-testkit/commit/d26fe5b47c9a443912a457eef9132d651a709a65))
+* **nix**: Update vendor sha256 hashes ([1d2c4f8](https://github.com/symbiont-io/detsys-testkit/commit/1d2c4f8f8a9152ccf876194bf0645e7d9b12d7a6))
+* **runtime**: unbreak backwards compat with old scheduler ([b77f9da](https://github.com/symbiont-io/detsys-testkit/commit/b77f9da7375371b208cb01925cccc88852bdd76c))
+* **runtime**: fix bug with put state not being persisted ([1aec066](https://github.com/symbiont-io/detsys-testkit/commit/1aec0668a9d3cb8dbd6d2cc6f65e0f73e206dd27))
+* **runtime**: fix compilation ([f0236f3](https://github.com/symbiont-io/detsys-testkit/commit/f0236f3e6a09f28e6d3b47a124908dbd0a419c26))
+* **runtime**: fix bug in dequeue ([38b09a0](https://github.com/symbiont-io/detsys-testkit/commit/38b09a019b49ebe4ea01f097b28e391d6e05c06c))
+* **scheduler**: When client calls timeout, the time wasn't set correctly ([2673493](https://github.com/symbiont-io/detsys-testkit/commit/2673493c592ba3b359a07aa7808425299d4cf9c5))
+* **debugger**: Fix the tests that got broken for debugger ([9e353c6](https://github.com/symbiont-io/detsys-testkit/commit/9e353c6897bf4fd3d45507787b270cefd3c4707e))
+* **runtime**: make benchmark pass (still doesn't do much though) ([f9ee761](https://github.com/symbiont-io/detsys-testkit/commit/f9ee7611245bf40ec29e5e1d329f05720dc8a650))
+* **runtime**: add todo about actually using the i/o queue ([79c0714](https://github.com/symbiont-io/detsys-testkit/commit/79c0714d7e754de637f499b41a110b58ddaf0793))
+
+### Build improvements
+* fix nix-build ([e7914a6](https://github.com/symbiont-io/detsys-testkit/commit/e7914a69972f1e7df07dab04b9f1fe957d8db11d))
+
+### Documentation improvements
+* add note about comparing disruptor to data aqueduct ([2271279](https://github.com/symbiont-io/detsys-testkit/commit/2271279e7b1648fa58aff9db21e794c4b65080da))
+* add a more detailed event loop design doc ([9f2f632](https://github.com/symbiont-io/detsys-testkit/commit/9f2f6322e7158b7820f4747257f89fee2272eec5))
+* remove third part from event loop design doc ([7b9e203](https://github.com/symbiont-io/detsys-testkit/commit/7b9e203241dc11b4b1c0fab220e812a48898865f))
+* add note about disruptor pattern ([bfaad7a](https://github.com/symbiont-io/detsys-testkit/commit/bfaad7aa6fa18506c22d1f194357e51a11c364f6))
+* add some more newlines for better readability in raw format ([3b537c7](https://github.com/symbiont-io/detsys-testkit/commit/3b537c77d803c2c72ce11d7db1911ced5aa2e5eb))
+* add bit about benchmark to event loop design ([9050a68](https://github.com/symbiont-io/detsys-testkit/commit/9050a68c20363d4e3ca73f599a008482a19f8345))
+* add bits about synchronisation, saturation and backpressure ([443c359](https://github.com/symbiont-io/detsys-testkit/commit/443c35914fc6b2e13f339a751ea871889101134d))
+* add pseudo code for network producer ([b25903e](https://github.com/symbiont-io/detsys-testkit/commit/b25903e4526f463e105f424b485a8422cc488afd))
+* clean up (re)actor api ([99c9b58](https://github.com/symbiont-io/detsys-testkit/commit/99c9b58d8c85a4d1819bddfa506b6496cb25471c))
+* event loop design, more on reactors and other minor changes ([5842803](https://github.com/symbiont-io/detsys-testkit/commit/5842803a8013eb05a1e2c43d1cb53702d848144d))
+* event loop design restructure a bit ([5af75de](https://github.com/symbiont-io/detsys-testkit/commit/5af75dea4114222f1e6a351f3c137e50031100bc))
+* add Sean's timer to event loop design ([b29cf8a](https://github.com/symbiont-io/detsys-testkit/commit/b29cf8a87b5d4505aa24bf8027247a660e216bb8))
+* add a note and reference to event loop design ([860d783](https://github.com/symbiont-io/detsys-testkit/commit/860d7839414e0d54dec01750b2d7688a75d37189))
+* more on event loop desigdocs: more on event loop design ([2ee9f69](https://github.com/symbiont-io/detsys-testkit/commit/2ee9f690fbeb22dc3580c5f660417b3f2f3f7646))
+* add first draft of event loop design doc ([ab7d7d5](https://github.com/symbiont-io/detsys-testkit/commit/ab7d7d534aa2d0bc8c1d927a25191cdac5559958))
+* **runtime**: add comment about other postscript viewers ([4764f12](https://github.com/symbiont-io/detsys-testkit/commit/4764f126bbba1567de5d71594e9afb01c8b26b6b))
+
+### New features
+* **runtime**: more work on event log ([568e52c](https://github.com/symbiont-io/detsys-testkit/commit/568e52c6addb256be7bbba5edee8172e2c66bb01))
+* **runtime**: make it possible to receive responses from admin commands ([bcce23a](https://github.com/symbiont-io/detsys-testkit/commit/bcce23a695ad4fa113669018ce9cd35aa9cd0090))
+* **runtime**: add the first parts of the admin commands ([1cc79d5](https://github.com/symbiont-io/detsys-testkit/commit/1cc79d5b2fc3146da497fa789141c2d566dd1620))
+* **scheduler**: Expire client-request when simulation finish ([34d3d94](https://github.com/symbiont-io/detsys-testkit/commit/34d3d9463cf4c7c01845aebb1c2f07ca475ce680))
+* **checker**: Add new model that reads history from stdin ([6795fb9](https://github.com/symbiont-io/detsys-testkit/commit/6795fb9afe028fd29a5861035ea9cc9be716503e))
+* **runtime**: step through the whole agenda ([9eca574](https://github.com/symbiont-io/detsys-testkit/commit/9eca574feb41cd9e78c3ace8eb8576ed0e070237))
+* **runtime**: fix correlation id propagation ([a32b5d0](https://github.com/symbiont-io/detsys-testkit/commit/a32b5d08ab158de406a243021bc925a799b6588e))
+* **runtime**: work towards scheduler being able to communicate with executor ([cb72120](https://github.com/symbiont-io/detsys-testkit/commit/cb721207cdb08c1b24445b3dfb6f99e7449d0f20))
+* **runtime**: make client request for "CreateTest" do db I/O and respond ([437ebd6](https://github.com/symbiont-io/detsys-testkit/commit/437ebd686b126ae29733bd71c4c7f98ffdd04b6d))
+* **runtime**: make actors polymorphic in state ([2b1e934](https://github.com/symbiont-io/detsys-testkit/commit/2b1e9345644371493dbd512a326b23bd2204373b))
+* **runtime**: extend messages with args and add sqlite disk ([cc98053](https://github.com/symbiont-io/detsys-testkit/commit/cc98053e2568e7596e40d41f37b66e4efe8bd89c))
+* **runtime**: make generation of command length depend on qc's size ([9b069eb](https://github.com/symbiont-io/detsys-testkit/commit/9b069ebf0d4c69b656dc4cc08cdb18518eab79e0))
+* **runtime**: add tests for move as wlel ([0164e48](https://github.com/symbiont-io/detsys-testkit/commit/0164e48e3bcb1a1e7285ea9efd18cffb37b633c3))
+* **runtime**: add proper tests for queue ([5d2e5ce](https://github.com/symbiont-io/detsys-testkit/commit/5d2e5ce03ebfa1dc27a9cf092c54a65affc0fb1f))
+* **runtime**: move scheduler to library and make it possible to build executable ([973a8a7](https://github.com/symbiont-io/detsys-testkit/commit/973a8a77520bfb91ebad7af5ed8dfe2ffc0f0925))
+* **runtime**: start reviving fake scheduler ([85b74f3](https://github.com/symbiont-io/detsys-testkit/commit/85b74f396467a3ea8eb8d5e72b9f8ac203514ce4))
+* **stats**: Add `detsys-stats` program for getting stats of test run ([03c4a49](https://github.com/symbiont-io/detsys-testkit/commit/03c4a497398aea27e6b2b4291f4bf7cea9e09fe2))
+* **ltl**: Add new command for ltl to check many formulas ([d0a0be3](https://github.com/symbiont-io/detsys-testkit/commit/d0a0be3a7a36dab74d420075f78e5ea3e8df9dbd))
+* **runtime**: add execution strategy based on ghc.event ([a2c2184](https://github.com/symbiont-io/detsys-testkit/commit/a2c21849dfe4a99abbd01a6e9105d248104d257e))
+* **runtime**: make it possible to run clients in async mode ([af534eb](https://github.com/symbiont-io/detsys-testkit/commit/af534eb8e436465ce5426eddf5e2e99b0be57f61))
+* **runtime**: add pure warp server benchmark for comparison ([7affcea](https://github.com/symbiont-io/detsys-testkit/commit/7affceabc1fbc1c6547fe17f17a8d6f211330d4c))
+* **runtime**: use client requests via http frontend in benchmark ([5e2271c](https://github.com/symbiont-io/detsys-testkit/commit/5e2271cf2fc15f74b18712d77e8c3ee21c807c21))
+* **runtime**: benchmark simple actor, plus fix a couple of bottlenecks ([bc320dd](https://github.com/symbiont-io/detsys-testkit/commit/bc320dd10d6659b8f7d7549f62b8211fccb04f6b))
+* **runtime**: add memory footprint to reporter ([ee8b3d2](https://github.com/symbiont-io/detsys-testkit/commit/ee8b3d21daa252ff01fac1ad1fafb1b6678076bc))
+* **runtime**: more on benchmark ([bcbc854](https://github.com/symbiont-io/detsys-testkit/commit/bcbc854c30776a1938dfb88e3a4f798ffabf8d23))
+* **runtime**: add skeleton for benchmarks ([5ed12fe](https://github.com/symbiont-io/detsys-testkit/commit/5ed12fef22a728f0439afcdf39c20ef096795113))
+* **runtime**: add fake disk implementation of puts and deletes ([5ff744d](https://github.com/symbiont-io/detsys-testkit/commit/5ff744d381ccfae4ad00486e6c9916b6deec7699))
+* **runtime**: implement thread pool for async i/o ([54ff880](https://github.com/symbiont-io/detsys-testkit/commit/54ff8808a631a0461db84a1205280623d3432de8))
+* **runtime**: add way of displaying the stats of histogram ([fd18d2a](https://github.com/symbiont-io/detsys-testkit/commit/fd18d2ad78eefa17850673e90161950872881a32))
+
+### Performance improvements
+* **debugger**: Make the sequence diagram faster ([acdafd0](https://github.com/symbiont-io/detsys-testkit/commit/acdafd0095d0b2fd7bbe5c56fbc9fd813cf1954a))
+* **ldfi**: Increase performance of ldfi ([c112cc3](https://github.com/symbiont-io/detsys-testkit/commit/c112cc32d9cbc2aedc7324c5f69b7b92b1a8f189))
+
+### Refactorings
+* **runtime**: remove datatype and state modules ([85dbf6e](https://github.com/symbiont-io/detsys-testkit/commit/85dbf6eec3d936215d433a11841226ed684997cd))
+* **scheduler**: remove assert that was causing trouble before above commit ([4039487](https://github.com/symbiont-io/detsys-testkit/commit/4039487e2397201e9f22b8184d61b7c0406a7252))
+* **runtime**: add comment about kebab-casing and restore test used for debugging ([2ddcd30](https://github.com/symbiont-io/detsys-testkit/commit/2ddcd30265a019abd2cd95bdddf87c2dfda90ace))
+* **runtime**: add comment about arrival times and clean up a bit ([cd9ce0b](https://github.com/symbiont-io/detsys-testkit/commit/cd9ce0b2fa61866e21b0795fe03669743fc1f3a5))
+* **runtime**: fix native types for db interface ([c65312d](https://github.com/symbiont-io/detsys-testkit/commit/c65312df1b30cf955bac74f9c47b53996decf39d))
+* **runtime**: try to use native types for db interface ([c2cadc6](https://github.com/symbiont-io/detsys-testkit/commit/c2cadc6384bfa4587879d60cc2186f73976d0f55))
+* **runtime**: use native types instead of `Datatype` in scheduler ([7992c07](https://github.com/symbiont-io/detsys-testkit/commit/7992c072d76f1a9d1bca74034405882e8d0a8fdf))
+* **runtime**: improve, test and rename enqueues to enqueueList ([66d695c](https://github.com/symbiont-io/detsys-testkit/commit/66d695c50f6397c976db95776bc7622611705bd9))
+
+### Uncategorised
+* doc(runtime): expand on removing spawn admin command comment ([c26a9d8](https://github.com/symbiont-io/detsys-testkit/commit/c26a9d8a3aae65f1544a9f6fe29fc8f6ca1b422a))
+
+
 ## [v0.0.4](https://github.com/symbiont-io/detsys-testkit/compare/v0.0.3...v0.0.4) (2021-06-30)
 
 ### Bug fixes
