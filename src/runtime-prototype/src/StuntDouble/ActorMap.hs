@@ -22,28 +22,30 @@ import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.String (fromString)
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import Data.Typeable
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
-import System.Random
 import System.Exit (exitSuccess)
+import System.Random
 
+import StuntDouble.AdminTransport
+import StuntDouble.AdminTransport.NamedPipe
 import StuntDouble.Codec
 import StuntDouble.Envelope
 import StuntDouble.FreeMonad
 import StuntDouble.Histogram
 import StuntDouble.IO
 import StuntDouble.Log
+import StuntDouble.LogicalTime
 import StuntDouble.Message
 import StuntDouble.Metrics
 import StuntDouble.Random
 import StuntDouble.Reference
 import StuntDouble.Time
-import StuntDouble.AdminTransport
-import StuntDouble.AdminTransport.NamedPipe
 import StuntDouble.Transport
 import StuntDouble.Transport.Http
 import StuntDouble.Transport.HttpSync
@@ -352,7 +354,8 @@ act ls as = mapM_ go as
       -- If it doesn't exist we probably want to crash the sender, i.e. `from`.
       transportSend (lsTransport ls)
         (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i))
-      logEvent ls (LogSend from msg to)
+      t <- timestamp (lsLogicalTime ls)
+      logEvent ls (LogSend from msg to t)
       t <- getCurrentTime (lsTime ls)
       -- XXX: make it possible to specify when a send request should timeout.
       let timeoutAfter = Time.addUTCTime 60 t
@@ -461,7 +464,8 @@ data EventLoop = EventLoop
   , lsActorMap       :: TVar ActorMap
   , lsAsyncState     :: TVar AsyncState
   , lsQueue          :: TBQueue Event
-  , lsTime           :: Time
+  , lsTime           :: Time -- Physical time.
+  , lsLogicalTime    :: LogicalTime
   , lsSeed           :: TVar Seed
   , lsTransport      :: Transport IO
   , lsAdminTransport :: AdminTransport
@@ -482,6 +486,7 @@ initLoopState name time seed transport adminTransport disk =
     <*> newTVarIO emptyAsyncState
     <*> newTBQueueIO 128
     <*> pure time
+    <*> newLogicalTime (fromString (getEventLoopName name))
     <*> newTVarIO seed
     <*> pure transport
     <*> pure adminTransport
