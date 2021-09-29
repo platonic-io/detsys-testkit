@@ -4,6 +4,7 @@ import Control.Exception
 
 import StuntDouble.Message
 import StuntDouble.Reference
+import StuntDouble.LogicalTime
 
 ------------------------------------------------------------------------
 
@@ -11,7 +12,7 @@ newtype Log = Log [LogEntry]
   deriving Show
 
 data LogEntry
-  = LogSend LocalRef Message RemoteRef -- XXX: SentLogicalTime
+  = LogSend LocalRef Message RemoteRef LogicalTimestamp
   deriving Show
   {-
   = Spawned LocalRef

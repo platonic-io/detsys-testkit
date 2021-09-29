@@ -35,6 +35,7 @@ library
     StuntDouble.Reference
     StuntDouble.Supervisor
     StuntDouble.Time
+    StuntDouble.LogicalTime
     StuntDouble.Transport
     StuntDouble.Transport.Http
     StuntDouble.Transport.HttpSync

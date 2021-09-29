@@ -14,6 +14,7 @@ import StuntDouble.Metrics as X
 import StuntDouble.Random as X
 import StuntDouble.Reference as X
 import StuntDouble.Time as X
+import StuntDouble.LogicalTime as X
 import StuntDouble.Transport as X
 import StuntDouble.Transport.Http as X
 import StuntDouble.Transport.HttpSync as X

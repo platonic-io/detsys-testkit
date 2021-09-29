@@ -175,8 +175,13 @@ fakeScheduler _ msg = error (show msg)
 
 -- XXX: Avoid going to string, not sure if we should use bytestring or text though?
 entryToData :: Int -> Int -> UTCTime -> Bool -> LogEntry -> String
-entryToData slt rlt rst d (LogSend _from (InternalMessage msg) _to)
-  = addField "sent-logical-time" (show slt)
+entryToData slt rlt rst d (LogSend _from (InternalMessage msg) _to _timestamp)
+  = addField "sent-logical-time" (show slt) -- XXX: we cannot use _timestamp
+                                            -- here, because its when the event
+                                            -- loop sent the message to the
+                                            -- executor rather than what we
+                                            -- want: when the actor sent the
+                                            -- message to the other actor.
   . addField "recv-logical-time" (show rlt)
   . addField "recv-simulated-time" (show (encode rst))
   . addField "dropped" (if d then "true" else "false")
