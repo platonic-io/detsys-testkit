@@ -10,6 +10,7 @@ import Control.Concurrent.Async
 
 import StuntDouble.Message
 import StuntDouble.Reference
+import StuntDouble.LogicalTime
 
 ------------------------------------------------------------------------
 
@@ -29,11 +30,14 @@ instance ToJSON EnvelopeKind
 instance FromJSON EnvelopeKind
 
 data Envelope = Envelope
-  { envelopeKind          :: EnvelopeKind
-  , envelopeSender        :: RemoteRef
-  , envelopeMessage       :: Message
-  , envelopeReceiver      :: RemoteRef
-  , envelopeCorrelationId :: CorrelationId
+  { envelopeKind             :: EnvelopeKind
+  , envelopeSender           :: RemoteRef
+  , envelopeMessage          :: Message
+  , envelopeReceiver         :: RemoteRef
+  , envelopeCorrelationId    :: CorrelationId
+  , envelopeLogicalTimestamp :: LogicalTimestamp -- XXX: we don't need to send
+                                                 -- the NodeName part, only the
+                                                 -- integer part over the wire...
   }
   deriving (Generic, Eq, Show, Read)
 

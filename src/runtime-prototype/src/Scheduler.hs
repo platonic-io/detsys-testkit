@@ -81,7 +81,7 @@ instance ParseRow Agenda where
     Left err -> error (show err)
   parseRow x         = error (show x)
 
--- echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005
+-- echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005 && echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"Start\",[]]}" | http POST :3005
 
 fakeScheduler :: RemoteRef -> Message -> Actor SchedulerState
 fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $ do
@@ -174,9 +174,9 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
 fakeScheduler _ msg = error (show msg)
 
 -- XXX: Avoid going to string, not sure if we should use bytestring or text though?
-entryToData :: Int -> Int -> UTCTime -> Bool -> LogEntry -> String
-entryToData slt rlt rst d (LogSend _from (InternalMessage msg) _to _timestamp)
-  = addField "sent-logical-time" (show slt) -- XXX: we cannot use _timestamp
+entryToData :: Int -> Int -> UTCTime -> Bool -> Timestamped LogEntry -> String
+entryToData slt rlt rst d (Timestamped (LogSend _from _to (InternalMessage msg)) _logicalTimestamp _t)
+  = addField "sent-logical-time" (show slt) -- XXX: we cannot use _logicalTimestamp
                                             -- here, because its when the event
                                             -- loop sent the message to the
                                             -- executor rather than what we
@@ -203,12 +203,13 @@ executorCodec = Codec encode decode
     decode bs = case eitherDecode bs of
       Right (ExecutorResponse evs corrId) -> Right $
         Envelope
-          { envelopeKind          = ResponseKind
-          , envelopeSender        = RemoteRef "executor" 0
+          { envelopeKind             = ResponseKind
+          , envelopeSender           = RemoteRef "executor" 0
           -- XXX: going to sdatatype here seems suboptimal...
-          , envelopeMessage       = InternalMessage' "Events" (map toSDatatype evs)
-          , envelopeReceiver      = RemoteRef "scheduler" 0
-          , envelopeCorrelationId = corrId
+          , envelopeMessage          = InternalMessage' "Events" (map toSDatatype evs)
+          , envelopeReceiver         = RemoteRef "scheduler" 0
+          , envelopeCorrelationId    = corrId
+          , envelopeLogicalTimestamp = LogicalTimestamp "executor" (-1)
           }
       Left err -> error err
 

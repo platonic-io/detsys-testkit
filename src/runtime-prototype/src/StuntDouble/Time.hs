@@ -6,8 +6,10 @@ import qualified Data.Time.Calendar.OrdinalDate as Time
 
 ------------------------------------------------------------------------
 
+type Timestamp = Time.UTCTime
+
 data Time = Time
-  { getCurrentTime :: IO Time.UTCTime }
+  { getCurrentTime :: IO Timestamp }
 
 realTime :: Time
 realTime = Time Time.getCurrentTime
