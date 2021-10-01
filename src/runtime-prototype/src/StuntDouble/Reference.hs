@@ -10,7 +10,7 @@ import Data.String
 ------------------------------------------------------------------------
 
 newtype LocalRef = LocalRef Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Read)
 
 data RemoteRef = RemoteRef
   { address :: String

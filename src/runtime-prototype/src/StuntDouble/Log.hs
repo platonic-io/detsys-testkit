@@ -10,18 +10,19 @@ import StuntDouble.LogicalTime
 ------------------------------------------------------------------------
 
 newtype Log = Log [Timestamped LogEntry]
-  deriving Show
+  deriving (Show, Read)
 
 data Timestamped a = Timestamped a LogicalTimestamp Timestamp
-  deriving Show
+  deriving (Show, Read)
 
 data TimestampedLogically a = TimestampedLogically a LogicalTimestamp
-  deriving Show
+  deriving (Show, Read)
 
 data LogEntry
   = LogSend LocalRef RemoteRef Message
   | LogResumeContinuation RemoteRef LocalRef Message
-  deriving Show
+  deriving (Show, Read)
+
   {-
   = Spawned LocalRef
   | Turn TurnData

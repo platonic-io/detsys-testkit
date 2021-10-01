@@ -261,8 +261,8 @@ getDbPath = do
           return (home </> ".detsys.db")
         else throwIO e
 
-main :: IO ()
-main = do
+main :: String -> IO ()
+main version = do
   let executorPort = 3001
       executorRef = RemoteRef ("http://localhost:" ++ show executorPort ++ "/api/v1/event") 0
       schedulerPort = 3005
@@ -272,6 +272,6 @@ main = do
   now <- getCurrentTime realTime
   lref <- spawn el (fakeScheduler executorRef) (initState now (makeSeed 0))
   withHttpFrontend el lref schedulerPort $ \pid -> do
-    putStrLn ("Scheduler is listening on port: " ++ show schedulerPort)
+    putStrLn ("Scheduler (version " ++ version ++ ") is listening on port: " ++ show schedulerPort)
     waitForEventLoopQuit el
     cancel pid
