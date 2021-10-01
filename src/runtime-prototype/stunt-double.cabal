@@ -20,6 +20,7 @@ library
   hs-source-dirs:   src/
   exposed-modules:
     Scheduler
+    Debugger
     StuntDouble
     StuntDouble.ActorMap
     StuntDouble.Codec
@@ -108,11 +109,17 @@ test-suite test
   default-language: Haskell2010
 
 executable scheduler
-  hs-source-dirs:   app/
+  hs-source-dirs:   app/scheduler
   main-is:          Main.hs
-  build-depends:    async,
-                    base ==4.13.*,
-                    filepath,
+  build-depends:    base,
+                    stunt-double
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+  default-language: Haskell2010
+
+executable debugger
+  hs-source-dirs:   app/debugger
+  main-is:          Main.hs
+  build-depends:    base,
                     stunt-double
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
   default-language: Haskell2010

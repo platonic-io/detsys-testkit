@@ -1,22 +1,31 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 -- This module implements logical time via Lamport clocks, we don't need vector
 -- clocks because we can't have events happening concurrently anyway.
 
 module StuntDouble.LogicalTime where
 
+import GHC.Generics (Generic)
+import Data.Aeson (FromJSON, ToJSON)
 import Data.IORef
 import Data.String (IsString)
 
 ------------------------------------------------------------------------
 
 newtype NodeName = NodeName String
-  deriving (Eq, Ord, IsString, Show)
+  deriving (Eq, Ord, IsString, Show, Read, Generic)
+
+instance ToJSON NodeName
+instance FromJSON NodeName
 
 data LogicalTime = LogicalTime NodeName (IORef Int)
 
 data LogicalTimestamp = LogicalTimestamp NodeName Int
-  deriving Show
+  deriving (Show, Eq, Read, Generic)
+
+instance ToJSON LogicalTimestamp
+instance FromJSON LogicalTimestamp
 
 data Relation = HappenedBeforeOrConcurrently | HappenedAfter
 
@@ -38,6 +47,6 @@ timestamp (LogicalTime n c) = do
   return (LogicalTimestamp n t)
 
 -- Upon receving a timestamped message we should update our clock.
-update :: LogicalTime -> LogicalTimestamp -> IO ()
-update (LogicalTime _n c) (LogicalTimestamp _n' t') =
-  atomicModifyIORef' c (\t -> (max t t' + 1, ()))
+update :: LogicalTime -> LogicalTimestamp -> IO LogicalTimestamp
+update (LogicalTime n c) (LogicalTimestamp _n' t') =
+  atomicModifyIORef' c (\t -> let t'' = max t t' + 1 in (t'', LogicalTimestamp n t''))

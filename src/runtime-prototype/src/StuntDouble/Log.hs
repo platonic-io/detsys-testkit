@@ -4,15 +4,23 @@ import Control.Exception
 
 import StuntDouble.Message
 import StuntDouble.Reference
+import StuntDouble.Time
 import StuntDouble.LogicalTime
 
 ------------------------------------------------------------------------
 
-newtype Log = Log [LogEntry]
+newtype Log = Log [Timestamped LogEntry]
+  deriving Show
+
+data Timestamped a = Timestamped a LogicalTimestamp Timestamp
+  deriving Show
+
+data TimestampedLogically a = TimestampedLogically a LogicalTimestamp
   deriving Show
 
 data LogEntry
-  = LogSend LocalRef Message RemoteRef LogicalTimestamp
+  = LogSend LocalRef RemoteRef Message
+  | LogResumeContinuation RemoteRef LocalRef Message
   deriving Show
   {-
   = Spawned LocalRef
@@ -40,16 +48,13 @@ data LogLines = YYY
 emptyLog :: Log
 emptyLog = Log []
 
-appendLog :: LogEntry -> Log -> Log
-appendLog e (Log es) = Log (e : es)
+appendLog :: LogEntry -> LogicalTimestamp -> Timestamp -> Log -> Log
+appendLog e lt t (Log es) = Log (Timestamped e lt t : es)
 
 -- XXX: Use more efficient data structure to avoid having to reverse.
 -- XXX: better serialisation than show...
 getLog :: Log -> String
 getLog (Log es) = show (Log (reverse es))
-
-foldMapLog :: Monoid m => (LogEntry -> m) -> Log -> m
-foldMapLog f (Log es) = foldMap f (reverse es)
 
   {-
 

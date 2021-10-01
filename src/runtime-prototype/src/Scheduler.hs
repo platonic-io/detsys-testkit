@@ -1,14 +1,16 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Scheduler where
 
 import Control.Concurrent.Async
 import Control.Exception
+import Control.Exception (throwIO)
 import Data.Aeson
-import Data.Char (toLower)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
+import Data.Char (toLower)
 import Data.Heap (Entry(Entry), Heap)
 import qualified Data.Heap as Heap
 import Data.Maybe (fromJust)
@@ -18,6 +20,9 @@ import qualified Data.Text.Encoding as Text
 import Data.Time (UTCTime)
 import Database.SQLite.Simple
 import GHC.Generics (Generic)
+import System.Environment (getEnv)
+import System.FilePath ((</>))
+import System.IO.Error (catchIOError, isDoesNotExistError)
 
 import StuntDouble
 
@@ -81,7 +86,7 @@ instance ParseRow Agenda where
     Left err -> error (show err)
   parseRow x         = error (show x)
 
--- echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005
+-- echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005 && echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"Start\",[]]}" | http POST :3005
 
 fakeScheduler :: RemoteRef -> Message -> Actor SchedulerState
 fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $ do
@@ -174,9 +179,9 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
 fakeScheduler _ msg = error (show msg)
 
 -- XXX: Avoid going to string, not sure if we should use bytestring or text though?
-entryToData :: Int -> Int -> UTCTime -> Bool -> LogEntry -> String
-entryToData slt rlt rst d (LogSend _from (InternalMessage msg) _to _timestamp)
-  = addField "sent-logical-time" (show slt) -- XXX: we cannot use _timestamp
+entryToData :: Int -> Int -> UTCTime -> Bool -> Timestamped LogEntry -> String
+entryToData slt rlt rst d (Timestamped (LogSend _from _to (InternalMessage msg)) _logicalTimestamp _t)
+  = addField "sent-logical-time" (show slt) -- XXX: we cannot use _logicalTimestamp
                                             -- here, because its when the event
                                             -- loop sent the message to the
                                             -- executor rather than what we
@@ -203,12 +208,13 @@ executorCodec = Codec encode decode
     decode bs = case eitherDecode bs of
       Right (ExecutorResponse evs corrId) -> Right $
         Envelope
-          { envelopeKind          = ResponseKind
-          , envelopeSender        = RemoteRef "executor" 0
+          { envelopeKind             = ResponseKind
+          , envelopeSender           = RemoteRef "executor" 0
           -- XXX: going to sdatatype here seems suboptimal...
-          , envelopeMessage       = InternalMessage' "Events" (map toSDatatype evs)
-          , envelopeReceiver      = RemoteRef "scheduler" 0
-          , envelopeCorrelationId = corrId
+          , envelopeMessage          = InternalMessage' "Events" (map toSDatatype evs)
+          , envelopeReceiver         = RemoteRef "scheduler" 0
+          , envelopeCorrelationId    = corrId
+          , envelopeLogicalTimestamp = LogicalTimestamp "executor" (-1)
           }
       Left err -> error err
 
@@ -244,3 +250,28 @@ fromSDatatype at (SList
   [SString kind, SString event, SValue args, SList tos, SString from])
   = Just [ SchedulerEvent kind event args to from at Nothing | SString to <- tos ]
 fromSDatatype _at _d = Nothing
+
+getDbPath :: IO FilePath
+getDbPath = do
+  getEnv "DETSYS_DB"
+    `catchIOError` \(e :: catchIOError) ->
+      if isDoesNotExistError e
+        then do
+          home <- getEnv "HOME"
+          return (home </> ".detsys.db")
+        else throwIO e
+
+main :: IO ()
+main = do
+  let executorPort = 3001
+      executorRef = RemoteRef ("http://localhost:" ++ show executorPort ++ "/api/v1/event") 0
+      schedulerPort = 3005
+  fp <- getDbPath
+  el <- makeEventLoop realTime (makeSeed 0) HttpSync (AdminNamedPipe "/tmp/")
+          executorCodec (RealDisk fp) (EventLoopName "scheduler")
+  now <- getCurrentTime realTime
+  lref <- spawn el (fakeScheduler executorRef) (initState now (makeSeed 0))
+  withHttpFrontend el lref schedulerPort $ \pid -> do
+    putStrLn ("Scheduler is listening on port: " ++ show schedulerPort)
+    waitForEventLoopQuit el
+    cancel pid

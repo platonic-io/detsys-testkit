@@ -2,8 +2,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
 module StuntDouble.ActorMap where
@@ -259,8 +259,8 @@ actorPokeIO ls lref msg = do
           in
             ((reply, as, p', seed', l'), am')
 
-logEvent :: EventLoop -> LogEntry -> IO ()
-logEvent ls e = atomically (modifyTVar (lsLog ls) (\(Log es) -> Log (e : es)))
+logEvent :: TVar Log -> LogEntry -> LogicalTimestamp -> Timestamp -> IO ()
+logEvent l e lt t = atomically (modifyTVar l (appendLog e lt t))
 
 logDump :: EventLoop -> IO String
 logDump ls = do
@@ -349,13 +349,15 @@ act ls as = mapM_ go as
 
     go :: Action -> IO ()
     go (SendAction from msg to p@(Promise i)) = do
+      lt <- timestamp (lsLogicalTime ls)
       -- XXX: What do we do if `transportSend` fails here? We should probably
       -- call the failure handler/continuation for this promise, if it exists.
       -- If it doesn't exist we probably want to crash the sender, i.e. `from`.
       transportSend (lsTransport ls)
-        (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i))
-      t <- timestamp (lsLogicalTime ls)
-      logEvent ls (LogSend from msg to t)
+        (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i) lt)
+      lt <- timestamp (lsLogicalTime ls)
+      t <- getCurrentTime (lsTime ls)
+      logEvent (lsLog ls) (LogSend from to msg) lt t
       t <- getCurrentTime (lsTime ls)
       -- XXX: make it possible to specify when a send request should timeout.
       let timeoutAfter = Time.addUTCTime 60 t
@@ -401,46 +403,48 @@ data ReactTask
   | forall s. Typeable s => ResumeContinuation (Free (ActorF s) ()) LocalRef
   | AdminSendResponse (TMVar Message) Message
 
-react :: Reaction -> AsyncState -> (ReactTask, AsyncState)
+react :: Reaction -> AsyncState -> ((ReactTask, Maybe (TimestampedLogically LogEntry)), AsyncState)
 react (Receive p e) s =
   case envelopeKind e of
-    RequestKind  -> (Request e, s)
+    RequestKind  -> ((Request e, Nothing), s)
     ResponseKind ->
       case Map.lookup p (asyncStateContinuations s) of
         Just (ResolutionClosure k, lref) ->
-          (ResumeContinuation (k (InternalMessageR (envelopeMessage e))) lref,
+          ((ResumeContinuation (k (InternalMessageR (envelopeMessage e))) lref,
+            Just (TimestampedLogically (LogResumeContinuation (envelopeSender e) lref (envelopeMessage e))
+                   (envelopeLogicalTimestamp e))),
             s { asyncStateContinuations =
                   Map.delete p (asyncStateContinuations s) })
         Nothing ->
           case Map.lookup p (asyncStateAdminSend s) of
             Nothing ->
               -- We got a response for something we are not (longer) waiting for.
-              (NothingToDo, s)
+              ((NothingToDo, Nothing), s)
             Just returnVar ->
-              (AdminSendResponse returnVar (envelopeMessage e),
+              ((AdminSendResponse returnVar (envelopeMessage e), Nothing),
                 s { asyncStateAdminSend =
                       Map.delete p (asyncStateAdminSend s) })
-react (SendTimeoutReaction a lref) s = (ResumeContinuation a lref, s)
+react (SendTimeoutReaction a lref) s = ((ResumeContinuation a lref, Nothing), s)
 react (AsyncIOFinished p result) s =
   case Map.lookup p (asyncStateContinuations s) of
     Nothing ->
       -- No continuation was registered for this async.
-      (NothingToDo, s)
+      ((NothingToDo, Nothing), s)
     Just (ResolutionClosure k, lref) ->
-      (ResumeContinuation (k (IOResultR result)) lref,
+      ((ResumeContinuation (k (IOResultR result)) lref, Nothing),
         s { asyncStateContinuations =
               Map.delete p (asyncStateContinuations s) })
 react (AsyncIOFailed p exception) s =
   case Map.lookup p (asyncStateContinuations s) of
     Nothing ->
       -- No continuation was registered for this async.
-      (NothingToDo, s)
+      ((NothingToDo, Nothing), s)
     Just (ResolutionClosure k, lref) ->
-      (ResumeContinuation (k (ExceptionR exception)) lref,
+      ((ResumeContinuation (k (ExceptionR exception)) lref, Nothing),
         s { asyncStateContinuations =
               Map.delete p (asyncStateContinuations s) })
 
-reactIO :: Reaction -> TVar AsyncState -> IO ReactTask
+reactIO :: Reaction -> TVar AsyncState -> IO (ReactTask, Maybe (TimestampedLogically LogEntry))
 reactIO r v = atomically (stateTVar v (react r))
 
 ------------------------------------------------------------------------
@@ -792,7 +796,13 @@ handleEvents1 ls = do
 handleEvent :: Event -> EventLoop -> IO ()
 handleEvent (Action a)   ls = act ls [a]
 handleEvent (Reaction r) ls = do
-  m <- reactIO r (lsAsyncState ls)
+  (m, mle) <- reactIO r (lsAsyncState ls)
+  now <- getCurrentTime (lsTime ls)
+  case mle of
+    Just (TimestampedLogically le lt) -> do
+      lt' <- update (lsLogicalTime ls) lt
+      logEvent (lsLog ls) le lt' now
+    Nothing -> return ()
   case m of
     NothingToDo -> return ()
     Request e -> do
@@ -801,7 +811,6 @@ handleEvent (Reaction r) ls = do
       -- XXX: return more than reply, and log event
       transportSend (lsTransport ls) (replyEnvelope e reply)
     ResumeContinuation a lref -> do
-      now <- getCurrentTime (lsTime ls)
       as <- atomically $ do
         am   <- readTVar (lsActorMap ls)
         p    <- readTVar (lsNextPromise ls)
@@ -826,8 +835,9 @@ handleEvent (Admin cmd) ls = case cmd of
     atomically (putTMVar returnVar reply)
   AdminSend rref msg p returnVar -> do
     let dummyAdminRef = localToRemoteRef (lsName ls) (LocalRef (-1))
+    lt <- timestamp (lsLogicalTime ls)
     transportSend (lsTransport ls)
-      (Envelope RequestKind dummyAdminRef msg rref (CorrelationId (unPromise p)))
+      (Envelope RequestKind dummyAdminRef msg rref (CorrelationId (unPromise p)) lt)
     atomically (modifyTVar' (lsAsyncState ls)
                 (\as -> as { asyncStateAdminSend =
                              Map.insert p returnVar (asyncStateAdminSend as) }))
