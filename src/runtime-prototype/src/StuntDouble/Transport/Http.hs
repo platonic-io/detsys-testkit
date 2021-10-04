@@ -34,7 +34,7 @@ httpTransport port = do
   let settings = setPort port
                . setBeforeMainLoop (atomically (putTMVar readyTMVar ()))
                $ defaultSettings
-  aServer <- async (runSettings settings (app queue))
+  aServer <- async (runSettings settings (waiApp queue))
   aReady  <- async (atomically (takeTMVar readyTMVar))
   ok <- waitEither aServer aReady
   case ok of
@@ -70,8 +70,8 @@ envelopeToRequest e = do
            , requestBody = body
            }
 
-app :: TBQueue Envelope -> Wai.Application
-app queue req respond = do
+waiApp :: TBQueue Envelope -> Wai.Application
+waiApp queue req respond = do
   eEnvelope <- waiRequestToEnvelope req
   case eEnvelope of
     Left err -> do
