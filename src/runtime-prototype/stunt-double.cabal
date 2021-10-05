@@ -75,6 +75,7 @@ library
     , unordered-containers
     , vector
     , vty
+    , word-wrap
     , wai
     , warp
 

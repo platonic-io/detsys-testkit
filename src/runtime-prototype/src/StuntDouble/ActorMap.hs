@@ -216,7 +216,6 @@ actorMapTurn' p acc  lref  t seed l (Free op)  am = case op of
   DumpLog k ->
     actorMapTurn' p acc lref t seed l (k l) am
 
-
 actorMapGetState :: Typeable s => LocalRef -> ActorMap -> (s, ActorMap)
 actorMapGetState lref am = case actorMapUnsafeLookup lref am of
   ActorData _a s' _t -> case cast s' of
