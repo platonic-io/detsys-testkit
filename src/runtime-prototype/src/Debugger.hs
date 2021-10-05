@@ -7,13 +7,14 @@ import Brick.Widgets.Border (borderWithLabel, vBorder)
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center (center, hCenter)
 import qualified Brick.Widgets.List as L
-import qualified Data.Vector as Vector
 import Control.Concurrent.Async
 import Control.Monad
+import qualified Data.Vector as Vector
 import qualified Graphics.Vty as V
 import System.FilePath
 import System.IO
 import System.Posix.Files
+import Text.Wrap
 
 import StuntDouble
 
@@ -36,8 +37,10 @@ drawUI as = [ui]
        $ borderWithLabel (str "Debugger")
        $ hBox [ center (L.renderList listDrawElement True (asLog as))
               , vBorder
-              , center (str (displaySelectedMessage as))
+              , center (strWrapWith wrapSettings (displaySelectedMessage as))
               ]
+    wrapSettings = defaultWrapSettings
+      { preserveIndentation = False, breakLongWords = True }
 
 listDrawElement :: Bool -> Timestamped LogEntry -> Widget ()
 listDrawElement sel (Timestamped le (LogicalTimestamp (NodeName nn) lt) pt) =
