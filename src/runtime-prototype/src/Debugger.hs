@@ -30,24 +30,39 @@ readLog = do
   return (read s)
 
 drawUI :: AppState -> [Widget ()]
-drawUI (AppState l) = [ui]
+drawUI as = [ui]
   where
     ui = withBorderStyle unicode
        $ borderWithLabel (str "Debugger")
-       $ (center (L.renderList listDrawElement True l) <+> vBorder <+> center (str "Right"))
+       $ hBox [ center (L.renderList listDrawElement True (asLog as))
+              , vBorder
+              , center (str (displaySelectedMessage as))
+              ]
 
 listDrawElement :: Bool -> Timestamped LogEntry -> Widget ()
-listDrawElement sel (Timestamped le lt pt) =
+listDrawElement sel (Timestamped le (LogicalTimestamp (NodeName nn) lt) pt) =
   let selStr s = if sel
                  then withAttr customAttr (str $ "<" <> s <> ">")
                  else str s
-  in hCenter $ selStr $ show le ++ " " ++ show lt ++ " " ++ show pt
+  in selStr $ display le ++ " " ++ nn ++ " " ++ show lt ++ " " ++ show pt
+
+display :: LogEntry -> String
+display (LogSend (LocalRef i) (RemoteRef a j) msg)
+  = show i ++ " --> " ++ show j ++ "@" ++ a
+display (LogResumeContinuation (RemoteRef a i) (LocalRef j) msg)
+  = show j ++ " <-- " ++ show i ++ "@" ++ a
+
+displaySelectedMessage :: AppState -> String
+displaySelectedMessage as = case L.listSelectedElement (asLog as) of
+  Nothing -> "?"
+  Just (_ix, Timestamped (LogSend _from _to msg) _lt _pt) -> show msg
+  Just (_ix, Timestamped (LogResumeContinuation _from _to msg) _lt _pt) -> show msg
 
 customAttr :: AttrName
 customAttr = L.listSelectedAttr <> "custom"
 
-app :: App AppState e ()
-app = App
+brickApp :: App AppState e ()
+brickApp = App
   { appDraw = drawUI
   , appHandleEvent = appEvent
   , appStartEvent = return
@@ -79,4 +94,4 @@ initialState (Log es) = AppState
 main :: IO ()
 main = do
   l <- readLog
-  void (defaultMain app (initialState l))
+  void (defaultMain brickApp (initialState l))
