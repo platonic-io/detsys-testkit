@@ -1,88 +1,33 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module Scheduler where
 
-import Control.Concurrent.Async
-import Control.Exception
-import Control.Exception (throwIO)
 import Data.Aeson
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Char (toLower)
-import Data.Heap (Entry(Entry), Heap)
-import qualified Data.Heap as Heap
-import Data.Maybe (fromJust)
-import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Time (UTCTime)
 import Database.SQLite.Simple
 import GHC.Generics (Generic)
-import System.Environment (getEnv)
-import System.FilePath ((</>))
-import System.IO.Error (catchIOError, isDoesNotExistError)
 
+import Scheduler.Event
+import Scheduler.State
+import Scheduler.Agenda (Agenda)
+import qualified Scheduler.Agenda as Agenda
 import StuntDouble
 
 ------------------------------------------------------------------------
 
-data SchedulerEvent = SchedulerEvent
-  { kind  :: String
-  , event :: String
-  , args  :: Data.Aeson.Value
-  , to    :: String
-  , from  :: String
-  , at    :: UTCTime
-  , meta  :: Maybe Meta
-  }
-  deriving (Generic, Eq, Ord, Show)
+data AgendaList = AgendaList [SchedulerEvent]
 
-instance FromJSON SchedulerEvent
-instance ToJSON SchedulerEvent
-
-data Meta = Meta
-  { test_id      :: Int
-  , run_id       :: Int
-  , logical_time :: Int
-  }
-  deriving (Generic, Eq, Ord, Show)
-
-instance ToJSON Meta where
-  toEncoding = genericToEncoding defaultOptions
-    -- The executor expects kebab-case.
-    { fieldLabelModifier = map (\c -> if c == '_' then '-' else c) }
-
-instance FromJSON Meta where
-
-data SchedulerState = SchedulerState
-  { heap   :: Heap (Entry UTCTime SchedulerEvent)
-  , time   :: UTCTime
-  , seed   :: Seed
-  , steps  :: Int
-  , testId :: Maybe Int
-  , runId  :: Maybe Int
-  }
-
-initState :: UTCTime -> Seed -> SchedulerState
-initState t s = SchedulerState
-  { heap   = Heap.empty
-  , time   = t
-  , seed   = s
-  , steps  = 0
-  , testId = Nothing
-  , runId  = Nothing
-  }
-
-data Agenda = Agenda [SchedulerEvent]
-
-instance ParseRow Agenda where
+instance ParseRow AgendaList where
   -- XXX: Text -> ByteString -> JSON, seems unnecessary? We only need the `at`
   -- field for the heap priority, the rest could remain as a text and sent as
   -- such to the executor?
   parseRow [FText t] = case eitherDecodeStrict (Text.encodeUtf8 t) of
-    Right es -> Just (Agenda es)
+    Right es -> Just (AgendaList es)
     Left err -> error (show err)
   parseRow x         = error (show x)
 
@@ -95,9 +40,9 @@ fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $
                 [":tid" := tid])
   on p (\(IOResultR (IORows rs)) -> case parseRows rs of
            Nothing          -> clientResponse cid (InternalMessage "parse error")
-           Just [Agenda es] -> do
+           Just [AgendaList es] -> do
              modify $ \s ->
-               s { heap   = Heap.fromList (map (\e -> Entry (at e) e) es)
+               s { agenda = Agenda.fromList (map (\e -> (at e, e)) es)
                  , testId = Just tid
                  }
              clientResponse cid (InternalMessage (show es)))
@@ -110,12 +55,12 @@ fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $
 fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
   let
     step = do
-      r <- Heap.uncons . heap <$> get
+      r <- Agenda.pop . agenda <$> get
       case r of
-        Just (Entry time e, heap') -> do
-          modify $ \s -> s { heap  = heap'
-                           , time  = time
-                           , steps = succ (steps s)
+        Just ((time, e), agenda') -> do
+          modify $ \s -> s { agenda = agenda'
+                           , time   = time
+                           , steps  = succ (steps s)
                            }
           p <- send executorRef (InternalMessage (prettyEvent e))
           on p (\(InternalMessageR (InternalMessage' "Events" args)) -> do
@@ -123,8 +68,8 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                   -- XXX: with some probability duplicate the event?
                   let Just evs = sequence (map (fromSDatatype time) args)
                       evs' = filter (\e -> kind e /= "ok") (concat evs)
-                      heap' = Heap.fromList (map (\e -> Entry (at e) e) evs')
-                  modify $ \s -> s { heap = heap s `Heap.union` heap' }
+                      agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
+                  modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
                   step
                )
         Nothing -> do
@@ -146,6 +91,15 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
           --                               (:logical-clock data)))]
           -- `recv-logical-time` is `logical-clock` of the next entry
           -- `recv-simulated-time` is `clock` of the next entry
+
+          -- The NetworkTrace event also contains the following fields needed
+          -- for jepsen_history:
+
+          --     json_extract(data, '$.jepsen-type')    AS kind,
+          --     json_extract(data, '$.jepsen-process') AS process
+          --  , ntJepsenType :: Maybe String
+          --  , ntJepsenProcess :: Maybe Int
+
 
           l <- dumpLog
           s <- get
@@ -250,28 +204,3 @@ fromSDatatype at (SList
   [SString kind, SString event, SValue args, SList tos, SString from])
   = Just [ SchedulerEvent kind event args to from at Nothing | SString to <- tos ]
 fromSDatatype _at _d = Nothing
-
-getDbPath :: IO FilePath
-getDbPath = do
-  getEnv "DETSYS_DB"
-    `catchIOError` \(e :: catchIOError) ->
-      if isDoesNotExistError e
-        then do
-          home <- getEnv "HOME"
-          return (home </> ".detsys.db")
-        else throwIO e
-
-main :: String -> IO ()
-main version = do
-  let executorPort = 3001
-      executorRef = RemoteRef ("http://localhost:" ++ show executorPort ++ "/api/v1/event") 0
-      schedulerPort = 3005
-  fp <- getDbPath
-  el <- makeEventLoop realTime (makeSeed 0) HttpSync (AdminNamedPipe "/tmp/")
-          executorCodec (RealDisk fp) (EventLoopName "scheduler")
-  now <- getCurrentTime realTime
-  lref <- spawn el (fakeScheduler executorRef) (initState now (makeSeed 0))
-  withHttpFrontend el lref schedulerPort $ \pid -> do
-    putStrLn ("Scheduler (version " ++ version ++ ") is listening on port: " ++ show schedulerPort)
-    waitForEventLoopQuit el
-    cancel pid
