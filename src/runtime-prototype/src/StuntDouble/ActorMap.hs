@@ -874,7 +874,6 @@ handleEvent (AdminCommands cmds) ls = mapM_ go cmds
     go AdminResetLog = do
       putStrLn "resetting log"
       logReset ls
-
 handleEvent (ClientRequestEvent lref msg cref returnVar) ls = do
   reply <- actorPokeIO ls lref (ClientRequest' (getMessage msg) (getArgs msg) cref)
   -- XXX: return more than reply, so we can log event

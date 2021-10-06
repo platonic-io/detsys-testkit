@@ -4,7 +4,7 @@ module Main where
 
 import System.Environment (getArgs)
 
-import qualified Scheduler
+import qualified Scheduler.Main as Scheduler
 
 ------------------------------------------------------------------------
 

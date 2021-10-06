@@ -20,6 +20,10 @@ library
   hs-source-dirs:   src/
   exposed-modules:
     Scheduler
+    Scheduler.Agenda
+    Scheduler.Event
+    Scheduler.State
+    Scheduler.Main
     Debugger
     StuntDouble
     StuntDouble.ActorMap
