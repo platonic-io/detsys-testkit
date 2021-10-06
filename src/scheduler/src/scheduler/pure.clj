@@ -465,7 +465,7 @@
                          (case (:kind entry)
                            "timer" (-> entry
                                        ;; Maybe these should have another probability distribution for how slow they are
-                                       (assoc :at (time/plus-nanos timestamp (double (:duration-ns entry)))
+                                       (assoc :at (time/plus-nanos timestamp (double (max (:duration-ns entry) 0)))
                                               :to (:from entry)
                                               :event :timer)
                                        (dissoc :duration))
