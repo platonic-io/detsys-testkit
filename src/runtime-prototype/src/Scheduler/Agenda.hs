@@ -21,5 +21,5 @@ fromList = Agenda . Heap.fromList . map (uncurry Entry)
 
 pop :: Agenda -> Maybe ((UTCTime, SchedulerEvent), Agenda)
 pop (Agenda h) = case Heap.uncons h of
-  Nothing            -> Nothing
+  Nothing              -> Nothing
   Just (Entry t e, h') -> Just ((t, e), Agenda h')

@@ -24,6 +24,7 @@ library
     Scheduler.Event
     Scheduler.State
     Scheduler.Main
+    Scheduler.Executor
     Debugger
     StuntDouble
     StuntDouble.ActorMap

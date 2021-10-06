@@ -11,6 +11,7 @@ import Control.Exception (throwIO)
 import StuntDouble
 import Scheduler
 import Scheduler.State
+import Scheduler.Executor
 
 ------------------------------------------------------------------------
 

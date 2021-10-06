@@ -52,8 +52,8 @@ data EventProducer = EventProducer
   { epAsync :: Async ()
   }
 
-newEventProducer :: RingBuffer e -> (s -> IO (e, s)) -> s -> IO EventProducer
-newEventProducer rb p s0 = do
+newEventProducer :: RingBuffer e -> (s -> IO (e, s)) -> (s -> IO ()) -> s -> IO EventProducer
+newEventProducer rb p backPressure s0 = do
   a <- async (go s0)
   return (EventProducer a)
   where
@@ -62,7 +62,7 @@ newEventProducer rb p s0 = do
       case mSnr of
         Nothing -> do
           putStrLn "producer: consumer is too slow"
-          threadDelay 1000000
+          backPressure s
           go s
         Just snr -> do
           (e, s') <- p s
@@ -124,15 +124,16 @@ data EventConsumer = EventConsumer
 type EventHandler e = e -> SequenceNumber -> EndOfBatch -> IO ()
 type EndOfBatch = Bool
 
-data Barrier e
+data SequenceBarrier e
   = RingBufferBarrier (RingBuffer e)
-  | SequenceBarrierBarrier SequenceBarrier
   | EventConsumerBarrier EventConsumer
 
-newEventConsumer :: EventHandler e -> RingBuffer e -> [Barrier e]
-                  -> IO EventConsumer
-newEventConsumer handler rb barriers = do
-  putStrLn "starting processor"
+data WaitStrategy = Sleep Int
+
+newEventConsumer :: EventHandler e -> RingBuffer e -> [SequenceBarrier e] -> WaitStrategy
+                 -> IO EventConsumer
+newEventConsumer handler rb barriers (Sleep n) = do
+  putStrLn "starting consumer"
   snrRef <- newIORef (-1)
   a <- async (go snrRef) -- XXX: Pin to a specific CPU core with `asyncOn`?
   return (EventConsumer snrRef a)
@@ -142,10 +143,11 @@ newEventConsumer handler rb barriers = do
       mbSnr <- waitFor mySnr rb barriers
       case mbSnr of
         Nothing -> do
-          -- XXX: We could try to recurse immediately here, and if there's no work
-          -- after a couple of tries go into a takeMTVar sleep waiting for a
-          -- producer to wake us up.
-          threadDelay 1000000
+          -- XXX: Other wait strategies could be implemented here, e.g. we could
+          -- try to recurse immediately here, and if there's no work after a
+          -- couple of tries go into a takeMTVar sleep waiting for a producer to
+          -- wake us up.
+          threadDelay n
           putStrLn ("nothing to do, mySrn = " ++ show (getSequenceNumber mySnr))
           -- XXX: Maybe we want to check if a shutdown variable has been set before looping?
           go snrRef
@@ -157,7 +159,7 @@ newEventConsumer handler rb barriers = do
           threadDelay 1000000
           go snrRef
 
-waitFor :: SequenceNumber -> RingBuffer e -> [Barrier e] -> IO (Maybe SequenceNumber)
+waitFor :: SequenceNumber -> RingBuffer e -> [SequenceBarrier e] -> IO (Maybe SequenceNumber)
 waitFor snr rb [] = waitFor snr rb [RingBufferBarrier rb]
 waitFor snr rb bs = do
   let snrs = concatMap getSequenceNumber bs
@@ -166,16 +168,9 @@ waitFor snr rb bs = do
   then return (Just minSrn)
   else return Nothing
   where
-    getSequenceNumber :: Barrier e -> [IORef SequenceNumber]
-    getSequenceNumber (RingBufferBarrier      rb) = [rbSequenceNumber rb]
-    getSequenceNumber (SequenceBarrierBarrier sb) = sbSequenceNumbers sb
-    getSequenceNumber (EventConsumerBarrier   ec) = [ecSequenceNumber ec]
-
-data SequenceBarrier = SequenceBarrier
-  { sbSequenceNumbers :: [IORef SequenceNumber] }
-
-newSequenceBarrier :: [Either (RingBuffer e) EventConsumer] -> SequenceBarrier
-newSequenceBarrier = SequenceBarrier . map (either rbSequenceNumber ecSequenceNumber)
+    getSequenceNumber :: SequenceBarrier e -> [IORef SequenceNumber]
+    getSequenceNumber (RingBufferBarrier    rb) = [rbSequenceNumber rb]
+    getSequenceNumber (EventConsumerBarrier ec) = [ecSequenceNumber ec]
 
 main :: IO ()
 main = do
@@ -184,9 +179,10 @@ main = do
   safeCreateNamedPipe pipe
   h <- openFile pipe ReadWriteMode
   hSetBuffering h LineBuffering
-  ep <- newEventProducer rb producer h
+  let backPressure = const (threadDelay 1000000)
+  ep <- newEventProducer rb producer backPressure h
   link (epAsync ep)
-  ec <- newEventConsumer handler rb []
+  ec <- newEventConsumer handler rb [] (Sleep 1000000)
   setGatingSequences rb [ec]
   link (ecAsync ec)
   threadDelay 30000000
