@@ -19,6 +19,8 @@ import System.Posix.Files
 newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Int64 }
   deriving (Num, Eq, Ord, Real, Enum, Integral)
 
+-- * Ring-buffer
+
 data RingBuffer e = RingBuffer
   { rbSequenceNumber  :: IORef SequenceNumber
   , rbEvents          :: IOVector e
@@ -39,6 +41,35 @@ newRingBuffer capacity = do
   v   <- Vector.new capacity
   gs  <- newIORef []
   return (RingBuffer snr v gs capacity)
+
+setGatingSequences :: RingBuffer e -> [EventConsumer] -> IO ()
+setGatingSequences rb eps =
+  writeIORef (rbGatingSequences rb) (map ecSequenceNumber eps)
+
+-- * Event producers
+
+data EventProducer = EventProducer
+  { epAsync :: Async ()
+  }
+
+newEventProducer :: RingBuffer e -> (s -> IO (e, s)) -> s -> IO EventProducer
+newEventProducer rb p s0 = do
+  a <- async (go s0)
+  return (EventProducer a)
+  where
+    go s = do
+      mSnr <- next rb
+      case mSnr of
+        Nothing -> do
+          putStrLn "producer: consumer is too slow"
+          threadDelay 1000000
+          go s
+        Just snr -> do
+          (e, s') <- p s
+          write rb e snr
+          -- putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
+          publish rb
+          go s'
 
 index :: Int -> SequenceNumber -> Int
 index capacity snr = fromIntegral (snr `mod` fromInteger (toInteger capacity))
@@ -81,71 +112,70 @@ publish rb = atomicModifyIORef' (rbSequenceNumber rb) (\snr -> (succ snr, ()))
 get :: SequenceNumber -> RingBuffer e -> IO e
 get snr rb = Vector.read (rbEvents rb) (index (rbCapacity rb) snr)
 
-setGatingSequences :: RingBuffer e -> [EventProcessor] -> IO ()
-setGatingSequences rb eps =
-  writeIORef (rbGatingSequences rb) (map epSequenceNumber eps)
+-- * Event consumers
 
-type EndOfBatch = Bool
-
-data EventProcessor = EventProcessor
-  { epSequenceNumber :: IORef SequenceNumber
-  , epAsync          :: Async ()
+data EventConsumer = EventConsumer
+  { ecSequenceNumber :: IORef SequenceNumber
+  , ecAsync          :: Async ()
   }
 
 -- NOTE: The `SequenceNumber` can be used for sharding, e.g. one handler handles
 -- even and another handles odd numbers.
 type EventHandler e = e -> SequenceNumber -> EndOfBatch -> IO ()
+type EndOfBatch = Bool
 
 data Barrier e
   = RingBufferBarrier (RingBuffer e)
   | SequenceBarrierBarrier SequenceBarrier
-  | EventProducerBarrier EventProcessor
+  | EventConsumerBarrier EventConsumer
 
-newEventProcessor :: EventHandler e -> RingBuffer e -> [Barrier e]
-                  -> IO EventProcessor
-newEventProcessor handler rb barriers = do
+newEventConsumer :: EventHandler e -> RingBuffer e -> [Barrier e]
+                  -> IO EventConsumer
+newEventConsumer handler rb barriers = do
   putStrLn "starting processor"
   snrRef <- newIORef (-1)
   a <- async (go snrRef) -- XXX: Pin to a specific CPU core with `asyncOn`?
-  return (EventProcessor snrRef a)
+  return (EventConsumer snrRef a)
   where
     go snrRef = do
       mySnr <- readIORef snrRef
-      rbSnr <- waitFor mySnr rb barriers
-      if mySnr < rbSnr
-      then do
-        putStrLn ("something to do, mySrn = " ++ show (getSequenceNumber mySnr) ++
-                  ", rbSnr  = " ++ show (getSequenceNumber rbSnr))
-        mapM_ (\snr -> get snr rb >>= \e -> handler e snr (snr == rbSnr)) [mySnr + 1..rbSnr]
-        writeIORef snrRef rbSnr
-        threadDelay 1000000
-        go snrRef
-      else do
-        -- XXX: We could try to recurse immediately here, and if there's no work
-        -- after a couple of tries go into a takeMTVar sleep waiting for a
-        -- producer to wake us up.
-        threadDelay 1000000
-        putStrLn ("nothing to do, mySrn = " ++ show (getSequenceNumber mySnr) ++
-                  ", rbSnr  = " ++ show (getSequenceNumber rbSnr))
-        -- XXX: Maybe we want to check if a shutdown variable has been set before looping?
-        go snrRef
+      mbSnr <- waitFor mySnr rb barriers
+      case mbSnr of
+        Nothing -> do
+          -- XXX: We could try to recurse immediately here, and if there's no work
+          -- after a couple of tries go into a takeMTVar sleep waiting for a
+          -- producer to wake us up.
+          threadDelay 1000000
+          putStrLn ("nothing to do, mySrn = " ++ show (getSequenceNumber mySnr))
+          -- XXX: Maybe we want to check if a shutdown variable has been set before looping?
+          go snrRef
+        Just bSnr -> do
+          putStrLn ("something to do, mySrn = " ++ show (getSequenceNumber mySnr) ++
+                    ", bSnr  = " ++ show (getSequenceNumber bSnr))
+          mapM_ (\snr -> get snr rb >>= \e -> handler e snr (snr == bSnr)) [mySnr + 1..bSnr]
+          writeIORef snrRef bSnr
+          threadDelay 1000000
+          go snrRef
 
-waitFor :: SequenceNumber -> RingBuffer e -> [Barrier e] -> IO SequenceNumber
-waitFor snr rb [] = readIORef (rbSequenceNumber rb)
+waitFor :: SequenceNumber -> RingBuffer e -> [Barrier e] -> IO (Maybe SequenceNumber)
+waitFor snr rb [] = waitFor snr rb [RingBufferBarrier rb]
 waitFor snr rb bs = do
   let snrs = concatMap getSequenceNumber bs
-  minimum <$> mapM readIORef snrs
+  minSrn <- minimum <$> mapM readIORef snrs
+  if snr < minSrn
+  then return (Just minSrn)
+  else return Nothing
   where
     getSequenceNumber :: Barrier e -> [IORef SequenceNumber]
     getSequenceNumber (RingBufferBarrier      rb) = [rbSequenceNumber rb]
     getSequenceNumber (SequenceBarrierBarrier sb) = sbSequenceNumbers sb
-    getSequenceNumber (EventProducerBarrier   ep) = [epSequenceNumber ep]
+    getSequenceNumber (EventConsumerBarrier   ec) = [ecSequenceNumber ec]
 
 data SequenceBarrier = SequenceBarrier
   { sbSequenceNumbers :: [IORef SequenceNumber] }
 
-newSequenceBarrier :: [Either (RingBuffer e) EventProcessor] -> SequenceBarrier
-newSequenceBarrier = SequenceBarrier . map (either rbSequenceNumber epSequenceNumber)
+newSequenceBarrier :: [Either (RingBuffer e) EventConsumer] -> SequenceBarrier
+newSequenceBarrier = SequenceBarrier . map (either rbSequenceNumber ecSequenceNumber)
 
 main :: IO ()
 main = do
@@ -154,30 +184,21 @@ main = do
   safeCreateNamedPipe pipe
   h <- openFile pipe ReadWriteMode
   hSetBuffering h LineBuffering
-  ap <- async (producer h rb)
-  link ap
-  ep <- newEventProcessor handler rb []
-  setGatingSequences rb [ep]
+  ep <- newEventProducer rb producer h
   link (epAsync ep)
+  ec <- newEventConsumer handler rb []
+  setGatingSequences rb [ec]
+  link (ecAsync ec)
   threadDelay 30000000
-  cancel ap
   cancel (epAsync ep)
+  cancel (ecAsync ec)
   return ()
   where
     handler str snr eob = putStrLn (show (getSequenceNumber snr) ++ ": " ++ str ++
                                     if eob then ";" else "")
-    producer h rb = forever $ do
-      mSnr <- next rb
-      case mSnr of
-        Nothing -> do
-          putStrLn "producer: consumer is too slow"
-          threadDelay 1000000
-        Just snr -> do
-          l <- hGetLine h
-          -- putStrLn ("got line: " ++ l)
-          write rb l snr
-          -- putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
-          publish rb
+    producer h = do
+      l <- hGetLine h
+      return (l, h)
 
 safeCreateNamedPipe :: FilePath -> IO ()
 safeCreateNamedPipe fp =
