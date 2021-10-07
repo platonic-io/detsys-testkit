@@ -24,7 +24,6 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.String (fromString)
 import Data.Text (Text)
-import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import Data.Typeable
 import Data.Vector (Vector)
@@ -78,7 +77,7 @@ data ActorF s x
   | Typeable s => On Promise (Resolution -> Free (ActorF s) ()) (() -> x)
   | Typeable s => Get (s -> x)
   | Typeable s => Put s (() -> x)
-  | GetTime (UTCTime -> x)
+  | GetTime (Time -> x)
   | Random (Double -> x)
   | SetTimer Time.NominalDiffTime (Promise -> x)
   | ClientResponse ClientRef Message (() -> x)
@@ -115,7 +114,7 @@ modifys f = do
   put s'
   return x
 
-getTime :: Free (ActorF s) UTCTime
+getTime :: Free (ActorF s) Time
 getTime = Free (GetTime return)
 
 random :: Free (ActorF s) Double
@@ -137,7 +136,7 @@ newtype ActorMap = ActorMap (Map LocalRef ActorData)
 data ActorData = forall s. Typeable s => ActorData
   { adActor :: Message -> Actor s
   , adState :: s
-  , adTime  :: Time -- XXX: Nothing uses this?
+  , adClock :: Clock -- XXX: Nothing uses this?
   }
 
 emptyActorMap :: ActorMap
@@ -159,13 +158,13 @@ actorMapUpdateState lref s' (ActorMap m) = ActorMap (Map.adjust f lref m)
         Just s -> ActorData a s t
         Nothing -> error "actorMapUpdateState: impossible, wrong type of state"
 
-actorMapSpawn :: Typeable s => (Message -> Actor s) -> s -> Time -> ActorMap
+actorMapSpawn :: Typeable s => (Message -> Actor s) -> s -> Clock -> ActorMap
               -> (LocalRef, ActorMap)
-actorMapSpawn a s t (ActorMap m) =
+actorMapSpawn a s c (ActorMap m) =
   let
     lref = LocalRef (Map.size m)
   in
-    (lref, ActorMap (Map.insert lref (ActorData a s t) m))
+    (lref, ActorMap (Map.insert lref (ActorData a s c) m))
 
 data Action
   = SendAction LocalRef Message RemoteRef Promise
@@ -175,14 +174,14 @@ data Action
   | ClientResponseAction ClientRef Message  -- XXX: this doesn't really fit into action...
 
 -- XXX: what about exceptions? transactional in state, but also in actions?!
-actorMapTurn :: LocalRef -> Message -> Promise -> UTCTime -> Seed -> Log -> ActorMap
+actorMapTurn :: LocalRef -> Message -> Promise -> Time -> Seed -> Log -> ActorMap
              -> ((Message, Promise, Seed, Log, ActorMap, [Action]), ActorMap)
 actorMapTurn lref msg p t seed l am =
   case actorMapUnsafeLookup lref am of
     ActorData a _ _ ->
       (actorMapTurn' p [] lref t seed l (unActor (a msg)) am, am)
 
-actorMapTurn' :: Promise -> [Action] -> LocalRef -> UTCTime -> Seed -> Log -> Free (ActorF s) a
+actorMapTurn' :: Promise -> [Action] -> LocalRef -> Time -> Seed -> Log -> Free (ActorF s) a
               -> ActorMap -> (a, Promise, Seed, Log, ActorMap, [Action])
 actorMapTurn' p acc _lref _t seed l (Pure msg) am = (msg, p, seed, l, am, reverse acc)
 actorMapTurn' p acc  lref  t seed l (Free op)  am = case op of
@@ -227,13 +226,13 @@ actorMapGetState lref am = case actorMapUnsafeLookup lref am of
 makeActorMapIO :: IO (TVar ActorMap)
 makeActorMapIO = newTVarIO emptyActorMap
 
-actorMapSpawnIO :: Typeable s => (Message -> Actor s) -> s -> Time -> TVar ActorMap
+actorMapSpawnIO :: Typeable s => (Message -> Actor s) -> s -> Clock -> TVar ActorMap
                 -> IO LocalRef
-actorMapSpawnIO a s t am = atomically (stateTVar am (actorMapSpawn a s t))
+actorMapSpawnIO a s c am = atomically (stateTVar am (actorMapSpawn a s c))
 
 actorPokeIO :: EventLoop -> LocalRef -> Message -> IO Message
 actorPokeIO ls lref msg = do
-  now <- getCurrentTime (lsTime ls)
+  now <- getCurrentTime (lsClock ls)
   (reply, as) <- atomically $ do
     p <- readTVar (lsNextPromise ls)
     seed <- readTVar (lsSeed ls)
@@ -246,11 +245,11 @@ actorPokeIO ls lref msg = do
   act ls as
   return reply
   where
-    actorMapPokeSTM :: LocalRef -> Message -> Promise -> UTCTime -> Seed -> Log -> TVar ActorMap
+    actorMapPokeSTM :: LocalRef -> Message -> Promise -> Time -> Seed -> Log -> TVar ActorMap
                     -> STM (Message, [Action], Promise, Seed, Log)
     actorMapPokeSTM lref msg p t seed l am = stateTVar am (actorMapPoke lref msg p t seed l)
       where
-        actorMapPoke :: LocalRef -> Message -> Promise -> UTCTime -> Seed -> Log -> ActorMap
+        actorMapPoke :: LocalRef -> Message -> Promise -> Time -> Seed -> Log -> ActorMap
                      -> ((Message, [Action], Promise, Seed, Log), ActorMap)
         actorMapPoke lref msg p t seed l am =
           let
@@ -258,7 +257,7 @@ actorPokeIO ls lref msg = do
           in
             ((reply, as, p', seed', l'), am')
 
-logEvent :: TVar Log -> LogEntry -> LogicalTimestamp -> Timestamp -> IO ()
+logEvent :: TVar Log -> LogEntry -> LogicalTimestamp -> Time -> IO ()
 logEvent l e lt t = atomically (modifyTVar l (appendLog e lt t))
 
 logDump :: EventLoop -> IO String
@@ -319,7 +318,7 @@ data AsyncState = AsyncState
   { asyncStateAsyncIO         :: Map (Async IOResult) Promise
   , asyncStateContinuations   :: Map Promise (ResolutionClosure, LocalRef)
   , asyncStateAdminSend       :: Map Promise (TMVar Message)
-  , asyncStateTimeouts        :: Heap (Entry UTCTime (TimeoutKind, Promise))
+  , asyncStateTimeouts        :: Heap (Entry Time (TimeoutKind, Promise))
   , asyncStateClientResponses :: Map ClientRef (TMVar Message)
   }
 
@@ -355,11 +354,11 @@ act ls as = mapM_ go as
       transportSend (lsTransport ls)
         (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i) lt)
       lt <- timestamp (lsLogicalTime ls)
-      t <- getCurrentTime (lsTime ls)
+      t <- getCurrentTime (lsClock ls)
       logEvent (lsLog ls) (LogSend from to msg) lt t
-      t <- getCurrentTime (lsTime ls)
+      t <- getCurrentTime (lsClock ls)
       -- XXX: make it possible to specify when a send request should timeout.
-      let timeoutAfter = Time.addUTCTime 60 t
+      let timeoutAfter = addTime t 60
       atomically $ modifyTVar' (lsAsyncState ls) $
         \s -> s { asyncStateTimeouts =
                     Heap.insert (Entry timeoutAfter (SendTimeout, p))
@@ -378,8 +377,8 @@ act ls as = mapM_ go as
       | otherwise =
           error "act: impossible, `On` must be supplied with a promise that was just made."
     go (SetTimerAction ndt p) = do
-      t <- getCurrentTime (lsTime ls)
-      let timeoutAfter = Time.addUTCTime ndt t
+      t <- getCurrentTime (lsClock ls)
+      let timeoutAfter = addTime t ndt
       atomically $ modifyTVar' (lsAsyncState ls) $ \s ->
         s { asyncStateTimeouts =
             Heap.insert (Entry timeoutAfter (TimerTimeout, p)) (asyncStateTimeouts s) }
@@ -467,7 +466,7 @@ data EventLoop = EventLoop
   , lsActorMap       :: TVar ActorMap
   , lsAsyncState     :: TVar AsyncState
   , lsQueue          :: TBQueue Event
-  , lsTime           :: Time -- Physical time.
+  , lsClock          :: Clock -- Physical time.
   , lsLogicalTime    :: LogicalTime
   , lsSeed           :: TVar Seed
   , lsTransport      :: Transport IO
@@ -480,15 +479,15 @@ data EventLoop = EventLoop
   , lsIOQueue        :: TBQueue (IOOp, Promise)
   }
 
-initLoopState :: EventLoopName -> Time -> Seed -> Transport IO -> AdminTransport -> Disk IO
+initLoopState :: EventLoopName -> Clock -> Seed -> Transport IO -> AdminTransport -> Disk IO
               -> IO EventLoop
-initLoopState name time seed transport adminTransport disk =
+initLoopState name clock seed transport adminTransport disk =
   EventLoop
     <$> pure name
     <*> newTVarIO emptyActorMap
     <*> newTVarIO emptyAsyncState
     <*> newTBQueueIO 128
-    <*> pure time
+    <*> pure clock
     <*> newLogicalTime (fromString (getEventLoopName name))
     <*> newTVarIO seed
     <*> pure transport
@@ -599,14 +598,14 @@ spawnIOWorkers (ThreadPoolOfSize n)  ls
         error "spawnIOWorkers: thread pool size is bigger than the available CPU capabilities"
       mapM (\c -> asyncOn c (asyncIOWorker ls)) [ i | i <- [0..n], i /= cap ]
 
-makeEventLoop :: Time -> Seed -> TransportKind -> AdminTransportKind -> Codec -> DiskKind
+makeEventLoop :: Clock -> Seed -> TransportKind -> AdminTransportKind -> Codec -> DiskKind
               -> EventLoopName -> IO EventLoop
 makeEventLoop = makeEventLoopThreaded SingleThreaded NoThreadPool
 
-makeEventLoopThreaded :: Threaded -> ThreadPool -> Time -> Seed -> TransportKind
+makeEventLoopThreaded :: Threaded -> ThreadPool -> Clock -> Seed -> TransportKind
                       -> AdminTransportKind -> Codec -> DiskKind -> EventLoopName
                       -> IO EventLoop
-makeEventLoopThreaded threaded threadpool time seed tk atk codec dk name = do
+makeEventLoopThreaded threaded threadpool clock seed tk atk codec dk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
          Http port    -> httpTransport port
@@ -617,7 +616,7 @@ makeEventLoopThreaded threaded threadpool time seed tk atk codec dk name = do
   d <- case dk of
          FakeDisk    -> fakeDisk
          RealDisk fp -> realDisk fp
-  ls <- initLoopState name time seed t at d
+  ls <- initLoopState name clock seed t at d
   workerPids <- spawnIOWorkers threadpool ls
   pids <- case threaded of
             SingleThreaded ->
@@ -738,7 +737,7 @@ handleTimeouts = forever . handleTimeouts1
 
 handleTimeouts1 :: EventLoop -> IO ()
 handleTimeouts1 ls = do
-  now <- getCurrentTime (lsTime ls)
+  now <- getCurrentTime (lsClock ls)
   als <- atomically (stateTVar (lsAsyncState ls) (findTimedout now))
   mapM_ (\(ExistsStateActor a, lref) ->
            atomically (writeTBQueue (lsQueue ls) (Reaction (SendTimeoutReaction a lref))))
@@ -747,7 +746,7 @@ handleTimeouts1 ls = do
 data ExistsStateActor =
   forall s. Typeable s => ExistsStateActor (Free (ActorF s) ())
 
-findTimedout :: UTCTime -> AsyncState
+findTimedout :: Time -> AsyncState
              -> ([(ExistsStateActor, LocalRef)], AsyncState)
 findTimedout now s =
   let
@@ -796,7 +795,7 @@ handleEvent :: Event -> EventLoop -> IO ()
 handleEvent (Action a)   ls = act ls [a]
 handleEvent (Reaction r) ls = do
   (m, mle) <- reactIO r (lsAsyncState ls)
-  now <- getCurrentTime (lsTime ls)
+  now <- getCurrentTime (lsClock ls)
   case mle of
     Just (TimestampedLogically le lt) -> do
       lt' <- update (lsLogicalTime ls) lt
@@ -826,7 +825,7 @@ handleEvent (Reaction r) ls = do
       atomically (putTMVar returnVar msg)
 handleEvent (Admin cmd) ls = case cmd of
   Spawn a s returnVar -> do
-    lref <- actorMapSpawnIO a s (lsTime ls) (lsActorMap ls)
+    lref <- actorMapSpawnIO a s (lsClock ls) (lsActorMap ls)
     atomically (putTMVar returnVar lref)
   AdminInvoke lref msg returnVar -> do
     reply <- actorPokeIO ls lref msg

@@ -19,16 +19,40 @@ import StuntDouble
 
 ------------------------------------------------------------------------
 
-data AgendaList = AgendaList [SchedulerEvent]
+type Dropped = Bool
+data SchedulerAction
+  -- = Tick Time
+  = Execute (Time, SchedulerEvent) Dropped
+  | Done
+  | TimeoutClient (Time, SchedulerEvent) Time -- XXX: what's the second time?
 
-instance ParseRow AgendaList where
-  -- XXX: Text -> ByteString -> JSON, seems unnecessary? We only need the `at`
-  -- field for the heap priority, the rest could remain as a text and sent as
-  -- such to the executor?
-  parseRow [FText t] = case eitherDecodeStrict (Text.encodeUtf8 t) of
-    Right es -> Just (AgendaList es)
-    Left err -> error (show err)
-  parseRow x         = error (show x)
+-- XXX: This will need some handling of faults
+whatToDo :: {- RunInfo ref -> -} SchedulerState -> SchedulerAction
+whatToDo s0 = go s0
+  where
+    -- XXX: this comes from RunInfo
+    clientTimeout = 20
+    clientDelay = 20
+
+    go :: SchedulerState -> SchedulerAction
+    go s =
+      case Agenda.pop (agenda s) of
+        Nothing -> Done
+        Just (ev@(t, event), agenda') ->
+          case lookupClient (from event) s of
+            Nothing ->
+              -- XXX: check if faults apply here
+              Execute ev False
+            Just t' ->
+              let
+                now :: Time
+                now = time s
+              in
+              if now `afterTime` (t' `addTime` clientTimeout)
+              then TimeoutClient ev now
+              else
+                -- Update time. XXX: explain why?
+                go (s { agenda = Agenda.push (t `addTime` clientDelay, event) agenda' })
 
 -- echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005 && echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"Start\",[]]}" | http POST :3005
 
@@ -148,3 +172,14 @@ entryToData slt rlt rst d (Timestamped (LogSend _from _to (InternalMessage msg))
   where
     replaceEventMessage ('{' : '"' : 'e' : 'v' : 'e' : 'n' : 't' : msg') = "{\"message" ++ msg'
     addField f v ('{' : msg') = "{\"" ++ f ++ "\":" ++ v ++ "," ++ msg'
+
+data AgendaList = AgendaList [SchedulerEvent]
+
+instance ParseRow AgendaList where
+  -- XXX: Text -> ByteString -> JSON, seems unnecessary? We only need the `at`
+  -- field for the heap priority, the rest could remain as a text and sent as
+  -- such to the executor?
+  parseRow [FText t] = case eitherDecodeStrict (Text.encodeUtf8 t) of
+    Right es -> Just (AgendaList es)
+    Left err -> error (show err)
+  parseRow x         = error (show x)

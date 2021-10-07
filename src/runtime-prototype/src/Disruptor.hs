@@ -2,12 +2,13 @@
 
 module StuntDouble.Disruptor where
 
+import Data.Bits
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
 import Data.IORef
-import Data.Int
+import Data.Word
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
 import System.IO
@@ -16,8 +17,8 @@ import System.Posix.Files
 
 ------------------------------------------------------------------------
 
-newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Int64 }
-  deriving (Num, Eq, Ord, Real, Enum, Integral)
+newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Word64 }
+  deriving (Num, Eq, Ord, Real, Enum, Integral, Show)
 
 -- * Ring-buffer
 
@@ -32,15 +33,21 @@ data RingBuffer e = RingBuffer
                                                       -- overwriting events that
                                                       -- have not been consumed
                                                       -- yet.
-  , rbCapacity        :: Int
+  , rbCapacity        :: Word64
   }
 
 newRingBuffer :: Int -> IO (RingBuffer e)
-newRingBuffer capacity = do
-  snr <- newIORef (-1)
-  v   <- Vector.new capacity
-  gs  <- newIORef []
-  return (RingBuffer snr v gs capacity)
+newRingBuffer capacity
+  | capacity <= 0          =
+      error "newRingBuffer: capacity must be greater than 0"
+  | popCount capacity /= 1 =
+      -- NOTE: The use of bitwise and (`.&.`) in `index` relies on this.
+      error "newRingBuffer: capacity must be a power of 2"
+  | otherwise              = do
+      snr <- newIORef (-1)
+      v   <- Vector.new capacity
+      gs  <- newIORef []
+      return (RingBuffer snr v gs (fromIntegral capacity))
 
 setGatingSequences :: RingBuffer e -> [EventConsumer] -> IO ()
 setGatingSequences rb eps =
@@ -71,8 +78,10 @@ newEventProducer rb p backPressure s0 = do
           publish rb
           go s'
 
-index :: Int -> SequenceNumber -> Int
-index capacity snr = fromIntegral (snr `mod` fromInteger (toInteger capacity))
+-- > quickCheck $ \(Positive i) j -> let capacity = 2^i in
+--     j `mod` capacity == j Data.Bits..&. (capacity - 1)
+index :: Word64 -> SequenceNumber -> Int
+index capacity (SequenceNumber snr) = fromIntegral (snr .&. (capacity - 1))
 
 -- The `next` sequence number to write to. If `Nothing` is returned, then the
 -- last consumer has not yet processed the event we are about to overwrite (due
@@ -80,37 +89,30 @@ index capacity snr = fromIntegral (snr `mod` fromInteger (toInteger capacity))
 -- back-pressure upstream if this happens.
 next :: RingBuffer e -> IO (Maybe SequenceNumber)
 next rb = do
-  nextSnr <- succ <$> readIORef (rbSequenceNumber rb)
+  nextSnr <- (+1) <$> readIORef (rbSequenceNumber rb)
   -- Check that the ring-buffer doesn't overwrite events that still haven't been
   -- processed by the last consumers.
+  rc <- remainingCapacity rb nextSnr
+  if rc <= 0
+  then return Nothing
+  else return (Just nextSnr) -- XXX: we could return a range `(nextSnr, nextSnr + rc)`
+                             -- which could be used for batched writes.
+
+remainingCapacity :: RingBuffer e -> SequenceNumber -> IO Word64
+remainingCapacity rb produced = do
   snrs <- mapM readIORef =<< readIORef (rbGatingSequences rb)
-  if any (\snr -> overflow (rbCapacity rb) nextSnr snr) snrs
-  then do
-    putStrLn ("next: waiting for " ++ show (map (index (rbCapacity rb)) snrs) ++
-              ", index rb nextSnr = " ++ show (index (rbCapacity rb) nextSnr))
-    return Nothing
-  else return (Just nextSnr)
-
--- XXX: what's the right way to calculate this?
-overflow :: Int -> SequenceNumber -> SequenceNumber -> Bool
-overflow capacity nextSnr lastConsumerSnr
-  = index capacity nextSnr <= index capacity lastConsumerSnr
-
-test_overflow1 = overflow 3 1 0 == False
-test_overflow2 = overflow 3 3 0 == True
-test_overflow3 = overflow 3 3 1 == False
-test_overflow4 = overflow 3 4 1 == True
-test_overflow5 = overflow 3 3 3 == False
-test_overflow6 = overflow 3 6 3 == True
+  let consumed = minimum (if null snrs then [0] else snrs)
+  return (rbCapacity rb - getSequenceNumber (produced - consumed))
 
 write :: RingBuffer e -> e -> SequenceNumber -> IO ()
 write rb e snr = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
 
 publish :: RingBuffer e -> IO ()
-publish rb = atomicModifyIORef' (rbSequenceNumber rb) (\snr -> (succ snr, ()))
+publish rb = atomicModifyIORef' (rbSequenceNumber rb) (\snr -> (snr + 1, ()))
 
 get :: SequenceNumber -> RingBuffer e -> IO e
 get snr rb = Vector.read (rbEvents rb) (index (rbCapacity rb) snr)
+-- XXX: check if srn <= rbSequenceNumber?
 
 -- * Event consumers
 

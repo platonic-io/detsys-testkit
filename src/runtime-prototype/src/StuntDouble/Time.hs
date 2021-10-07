@@ -1,42 +1,57 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module StuntDouble.Time where
 
+import GHC.Generics (Generic)
+import Data.Aeson (FromJSON, ToJSON)
 import Control.Concurrent.STM
 import qualified Data.Time as Time
+import qualified Data.Time.Clock as Time
 import qualified Data.Time.Calendar.OrdinalDate as Time
 
 ------------------------------------------------------------------------
 
-type Timestamp = Time.UTCTime
+newtype Time = Time Time.UTCTime
+  deriving (Show, Read, Eq, Ord, Generic)
 
-data Time = Time
-  { getCurrentTime :: IO Timestamp }
+instance FromJSON Time
+instance ToJSON Time
 
-realTime :: Time
-realTime = Time Time.getCurrentTime
+addTime :: Time -> Time.NominalDiffTime -> Time
+addTime (Time t) dt = Time (Time.addUTCTime dt t)
 
-newtype FakeTimeHandle = FakeTimeHandle (TVar Time.UTCTime)
+afterTime :: Time -> Time -> Bool
+afterTime (Time t1) (Time t2) = t1 >= t2
 
-fakeTime :: Time.UTCTime -> IO (Time, FakeTimeHandle)
-fakeTime t0 = do
+data Clock = Clock
+  { getCurrentTime :: IO Time }
+
+realClock :: Clock
+realClock = Clock (Time <$> Time.getCurrentTime)
+
+newtype FakeClockHandle = FakeClockHandle (TVar Time)
+
+fakeClock :: Time -> IO (Clock, FakeClockHandle)
+fakeClock t0 = do
   v <- newTVarIO t0
-  return (Time (readTVarIO v), FakeTimeHandle v)
+  return (Clock (readTVarIO v), FakeClockHandle v)
 
-fakeTimeEpoch :: IO (Time, FakeTimeHandle)
-fakeTimeEpoch = do
-  let t0 = Time.UTCTime (Time.fromOrdinalDate 1970 0) 0
+fakeClockEpoch :: IO (Clock, FakeClockHandle)
+fakeClockEpoch = do
+  let t0 = Time (Time.UTCTime (Time.fromOrdinalDate 1970 0) 0)
   v <- newTVarIO t0
-  return (Time (readTVarIO v), FakeTimeHandle v)
+  return (Clock (readTVarIO v), FakeClockHandle v)
 
-advanceFakeTime :: FakeTimeHandle -> Time.NominalDiffTime -> IO ()
-advanceFakeTime (FakeTimeHandle v) seconds =
-  atomically (modifyTVar' v (Time.addUTCTime seconds))
+advanceFakeClock :: FakeClockHandle -> Time.NominalDiffTime -> IO ()
+advanceFakeClock (FakeClockHandle v) seconds =
+  atomically (modifyTVar' v (flip addTime seconds))
 
 -- XXX: move to test directory.
 test :: IO ()
 test = do
   t <- Time.getCurrentTime
-  (time, h) <- fakeTime t
-  print =<< getCurrentTime time
-  print =<< getCurrentTime time
-  advanceFakeTime h 1
-  print =<< getCurrentTime time
+  (clock, h) <- fakeClock (Time t)
+  print =<< getCurrentTime clock
+  print =<< getCurrentTime clock
+  advanceFakeClock h 1
+  print =<< getCurrentTime clock
