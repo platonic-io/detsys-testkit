@@ -3,8 +3,9 @@
 module Scheduler.Event where
 
 import Data.Aeson
-import Data.Time
 import GHC.Generics (Generic)
+
+import StuntDouble.Time
 
 ------------------------------------------------------------------------
 
@@ -14,7 +15,7 @@ data SchedulerEvent = SchedulerEvent
   , args  :: {- JSON -} Value
   , to    :: String
   , from  :: String
-  , at    :: UTCTime
+  , at    :: Time
   , meta  :: Maybe Meta
   }
   deriving (Generic, Eq, Ord, Show)

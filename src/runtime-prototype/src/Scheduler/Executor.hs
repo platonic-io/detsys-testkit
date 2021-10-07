@@ -7,7 +7,6 @@ import Data.Aeson
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Char (toLower)
-import Data.Time
 import GHC.Generics (Generic)
 
 import Scheduler.Event
@@ -42,7 +41,7 @@ toSDatatype :: UnscheduledEvent -> SDatatype
 toSDatatype (UnscheduledEvent kind event args to from) =
   SList [SString kind, SString event, SValue args, SList (map SString to), SString from]
 
-fromSDatatype :: UTCTime -> SDatatype -> Maybe [SchedulerEvent]
+fromSDatatype :: Time -> SDatatype -> Maybe [SchedulerEvent]
 fromSDatatype at (SList
   [SString kind, SString event, SValue args, SList tos, SString from])
   = Just [ SchedulerEvent kind event args to from at Nothing | SString to <- tos ]
