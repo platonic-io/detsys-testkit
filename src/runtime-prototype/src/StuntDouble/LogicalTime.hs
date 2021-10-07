@@ -19,34 +19,34 @@ newtype NodeName = NodeName String
 instance ToJSON NodeName
 instance FromJSON NodeName
 
-data LogicalTime = LogicalTime NodeName (IORef Int)
+data LogicalClock = LogicalClock NodeName (IORef Int)
 
-data LogicalTimestamp = LogicalTimestamp NodeName Int
+data LogicalTime = LogicalTime NodeName Int
   deriving (Show, Eq, Read, Generic)
 
-instance ToJSON LogicalTimestamp
-instance FromJSON LogicalTimestamp
+instance ToJSON LogicalTime
+instance FromJSON LogicalTime
 
 data Relation = HappenedBeforeOrConcurrently | HappenedAfter
 
-relation :: LogicalTimestamp -> LogicalTimestamp -> Relation
-relation (LogicalTimestamp n t) (LogicalTimestamp n' t')
+relation :: LogicalTime -> LogicalTime -> Relation
+relation (LogicalTime n t) (LogicalTime n' t')
   | t < t' || (t == t' && n < n') = HappenedBeforeOrConcurrently
   | otherwise                     = HappenedAfter
 
-newLogicalTime :: NodeName -> IO LogicalTime
-newLogicalTime n = do
+newLogicalClock :: NodeName -> IO LogicalClock
+newLogicalClock n = do
   c <- newIORef 0
-  return (LogicalTime n c)
+  return (LogicalClock n c)
 
 -- Upon sending or logging local events we should increment the counter before
 -- creating the timestamp.
-timestamp :: LogicalTime -> IO LogicalTimestamp
-timestamp (LogicalTime n c) = do
+timestamp :: LogicalClock -> IO LogicalTime
+timestamp (LogicalClock n c) = do
   t <- atomicModifyIORef' c (\t -> (t + 1, t + 1))
-  return (LogicalTimestamp n t)
+  return (LogicalTime n t)
 
 -- Upon receving a timestamped message we should update our clock.
-update :: LogicalTime -> LogicalTimestamp -> IO LogicalTimestamp
-update (LogicalTime n c) (LogicalTimestamp _n' t') =
-  atomicModifyIORef' c (\t -> let t'' = max t t' + 1 in (t'', LogicalTimestamp n t''))
+update :: LogicalClock -> LogicalTime -> IO LogicalTime
+update (LogicalClock n c) (LogicalTime _n' t') =
+  atomicModifyIORef' c (\t -> let t'' = max t t' + 1 in (t'', LogicalTime n t''))

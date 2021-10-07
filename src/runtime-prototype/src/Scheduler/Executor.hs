@@ -59,12 +59,12 @@ executorCodec = Codec encode decode
     decode bs = case eitherDecode bs of
       Right (ExecutorResponse evs corrId) -> Right $
         Envelope
-          { envelopeKind             = ResponseKind
-          , envelopeSender           = RemoteRef "executor" 0
+          { envelopeKind          = ResponseKind
+          , envelopeSender        = RemoteRef "executor" 0
           -- XXX: going to sdatatype here seems suboptimal...
-          , envelopeMessage          = InternalMessage' "Events" (map toSDatatype evs)
-          , envelopeReceiver         = RemoteRef "scheduler" 0
-          , envelopeCorrelationId    = corrId
-          , envelopeLogicalTimestamp = LogicalTimestamp "executor" (-1)
+          , envelopeMessage       = InternalMessage' "Events" (map toSDatatype evs)
+          , envelopeReceiver      = RemoteRef "scheduler" 0
+          , envelopeCorrelationId = corrId
+          , envelopeLogicalTime   = LogicalTime "executor" (-1)
           }
       Left err -> error err

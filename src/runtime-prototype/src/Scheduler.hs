@@ -34,7 +34,10 @@ whatToDo s0 = go s0
     clientTimeout = 20
     clientDelay = 20
 
-    go :: SchedulerState -> SchedulerAction
+    go :: SchedulerState -> SchedulerAction -- XXX: return the new state also?
+                                            -- Otherwise we won't get through
+                                            -- the agenda if we call whatToDo in
+                                            -- a loop.
     go s =
       case Agenda.pop (agenda s) of
         Nothing -> Done
