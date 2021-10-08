@@ -27,6 +27,9 @@ data LogicalTime = LogicalTime NodeName Int
 instance ToJSON LogicalTime
 instance FromJSON LogicalTime
 
+succLogicalTime :: LogicalTime -> LogicalTime
+succLogicalTime (LogicalTime n i) = LogicalTime n (succ i)
+
 data Relation = HappenedBeforeOrConcurrently | HappenedAfter
 
 relation :: LogicalTime -> LogicalTime -> Relation

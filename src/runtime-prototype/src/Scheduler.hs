@@ -83,15 +83,19 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
       case sa of
         Execute (t, ev) dropped
           | dropped -> do
-              undefined -- XXX
-              -- let now = Agenda.theTime ae
-              -- Time.advanceTime timeC now Time.BumpLogical
-              -- lnow <- Time.currentLogicalClock timeC
+              modify $ \s -> s { time        = t
+                               , logicalTime = succLogicalTime (logicalTime s)
+                               , steps       = succ (steps s)
+                               }
+              _lnow <- logicalTime <$> get
+              -- XXX:
               -- emitEvent traceC clientC testId runId dropped lnow ae
-              -- step
+              step
           | otherwise -> do
-              modify $ \s -> s { time   = t
-                               , steps  = succ (steps s)
+              -- XXX: if client request we need to add it to state
+              modify $ \s -> s { time        = t
+                               , logicalTime = succLogicalTime (logicalTime s)
+                               , steps       = succ (steps s)
                                }
 
               p <- send executorRef (InternalMessage (prettyEvent ev))
@@ -104,9 +108,6 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                        modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
                        step
                    )
-              -- if client request we need to add it to state
-              -- let now = Agenda.theTime ae
-              -- Time.advanceTime timeC now Time.BumpLogical
               -- currentLogicalTime <- Time.currentLogicalClock timeC
               -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
               -- let ref = senderRef runInfo (to $ Agenda.theEvent ae)
