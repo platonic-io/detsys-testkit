@@ -43,7 +43,7 @@ drawUI as = [ui]
       { preserveIndentation = False, breakLongWords = True }
 
 listDrawElement :: Bool -> Timestamped LogEntry -> Widget ()
-listDrawElement sel (Timestamped le (LogicalTimestamp (NodeName nn) lt) pt) =
+listDrawElement sel (Timestamped le (LogicalTime (NodeName nn) lt) pt) =
   let selStr s = if sel
                  then withAttr customAttr (str $ "<" <> s <> ">")
                  else str s

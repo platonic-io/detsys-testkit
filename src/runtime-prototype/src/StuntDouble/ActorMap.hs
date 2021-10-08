@@ -107,10 +107,10 @@ put s' = Free (Put s' return)
 modify :: Typeable s => (s -> s) -> Free (ActorF s) ()
 modify f = put . f =<< get
 
-modifys :: Typeable s => (s -> (s, a)) -> Free (ActorF s) a
+modifys :: Typeable s => (s -> (a, s)) -> Free (ActorF s) a
 modifys f = do
   s <- get
-  let (s', x) = f s
+  let (x, s') = f s
   put s'
   return x
 
@@ -257,7 +257,7 @@ actorPokeIO ls lref msg = do
           in
             ((reply, as, p', seed', l'), am')
 
-logEvent :: TVar Log -> LogEntry -> LogicalTimestamp -> Time -> IO ()
+logEvent :: TVar Log -> LogEntry -> LogicalTime -> Time -> IO ()
 logEvent l e lt t = atomically (modifyTVar l (appendLog e lt t))
 
 logDump :: EventLoop -> IO String
@@ -347,13 +347,13 @@ act ls as = mapM_ go as
 
     go :: Action -> IO ()
     go (SendAction from msg to p@(Promise i)) = do
-      lt <- timestamp (lsLogicalTime ls)
+      lt <- timestamp (lsLogicalClock ls)
       -- XXX: What do we do if `transportSend` fails here? We should probably
       -- call the failure handler/continuation for this promise, if it exists.
       -- If it doesn't exist we probably want to crash the sender, i.e. `from`.
       transportSend (lsTransport ls)
         (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i) lt)
-      lt <- timestamp (lsLogicalTime ls)
+      lt <- timestamp (lsLogicalClock ls)
       t <- getCurrentTime (lsClock ls)
       logEvent (lsLog ls) (LogSend from to msg) lt t
       t <- getCurrentTime (lsClock ls)
@@ -410,7 +410,7 @@ react (Receive p e) s =
         Just (ResolutionClosure k, lref) ->
           ((ResumeContinuation (k (InternalMessageR (envelopeMessage e))) lref,
             Just (TimestampedLogically (LogResumeContinuation (envelopeSender e) lref (envelopeMessage e))
-                   (envelopeLogicalTimestamp e))),
+                   (envelopeLogicalTime e))),
             s { asyncStateContinuations =
                   Map.delete p (asyncStateContinuations s) })
         Nothing ->
@@ -467,7 +467,7 @@ data EventLoop = EventLoop
   , lsAsyncState     :: TVar AsyncState
   , lsQueue          :: TBQueue Event
   , lsClock          :: Clock -- Physical time.
-  , lsLogicalTime    :: LogicalTime
+  , lsLogicalClock   :: LogicalClock
   , lsSeed           :: TVar Seed
   , lsTransport      :: Transport IO
   , lsAdminTransport :: AdminTransport
@@ -488,7 +488,7 @@ initLoopState name clock seed transport adminTransport disk =
     <*> newTVarIO emptyAsyncState
     <*> newTBQueueIO 128
     <*> pure clock
-    <*> newLogicalTime (fromString (getEventLoopName name))
+    <*> newLogicalClock (fromString (getEventLoopName name))
     <*> newTVarIO seed
     <*> pure transport
     <*> pure adminTransport
@@ -798,7 +798,7 @@ handleEvent (Reaction r) ls = do
   now <- getCurrentTime (lsClock ls)
   case mle of
     Just (TimestampedLogically le lt) -> do
-      lt' <- update (lsLogicalTime ls) lt
+      lt' <- update (lsLogicalClock ls) lt
       logEvent (lsLog ls) le lt' now
     Nothing -> return ()
   case m of
@@ -833,7 +833,7 @@ handleEvent (Admin cmd) ls = case cmd of
     atomically (putTMVar returnVar reply)
   AdminSend rref msg p returnVar -> do
     let dummyAdminRef = localToRemoteRef (lsName ls) (LocalRef (-1))
-    lt <- timestamp (lsLogicalTime ls)
+    lt <- timestamp (lsLogicalClock ls)
     transportSend (lsTransport ls)
       (Envelope RequestKind dummyAdminRef msg rref (CorrelationId (unPromise p)) lt)
     atomically (modifyTVar' (lsAsyncState ls)

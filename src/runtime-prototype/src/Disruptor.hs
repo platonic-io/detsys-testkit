@@ -18,7 +18,7 @@ import System.Posix.Files
 ------------------------------------------------------------------------
 
 newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Word64 }
-  deriving (Num, Eq, Ord, Real, Enum, Integral, Show)
+  deriving (Num, Eq, Ord, Real, Enum, Integral, Show, Bounded)
 
 -- * Ring-buffer
 
@@ -74,7 +74,7 @@ newEventProducer rb p backPressure s0 = do
         Just snr -> do
           (e, s') <- p s
           write rb e snr
-          -- putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
+          putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
           publish rb
           go s'
 
@@ -107,6 +107,8 @@ remainingCapacity rb produced = do
 write :: RingBuffer e -> e -> SequenceNumber -> IO ()
 write rb e snr = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
 
+-- TODO: Non-blocking multi-producer: https://youtu.be/VBnLW9mKMh4?t=1813
+-- https://groups.google.com/g/lmax-disruptor/c/UhmRuz_CL6E/m/-hVt86bHvf8J
 publish :: RingBuffer e -> IO ()
 publish rb = atomicModifyIORef' (rbSequenceNumber rb) (\snr -> (snr + 1, ()))
 
@@ -164,15 +166,17 @@ newEventConsumer handler rb barriers (Sleep n) = do
 waitFor :: SequenceNumber -> RingBuffer e -> [SequenceBarrier e] -> IO (Maybe SequenceNumber)
 waitFor snr rb [] = waitFor snr rb [RingBufferBarrier rb]
 waitFor snr rb bs = do
-  let snrs = concatMap getSequenceNumber bs
-  minSrn <- minimum <$> mapM readIORef snrs
-  if snr < minSrn
-  then return (Just minSrn)
+  let snrs = map getSequenceNumberRef bs
+  minSnr <- minimum <$> mapM readIORef snrs
+  putStrLn ("waitFor: snr = " ++ show (getSequenceNumber snr) ++
+            ", minSrn = " ++ show (getSequenceNumber minSnr))
+  if (snr == maxBound && minSnr /= maxBound) || snr < minSnr
+  then return (Just minSnr)
   else return Nothing
   where
-    getSequenceNumber :: SequenceBarrier e -> [IORef SequenceNumber]
-    getSequenceNumber (RingBufferBarrier    rb) = [rbSequenceNumber rb]
-    getSequenceNumber (EventConsumerBarrier ec) = [ecSequenceNumber ec]
+    getSequenceNumberRef :: SequenceBarrier e -> IORef SequenceNumber
+    getSequenceNumberRef (RingBufferBarrier    rb) = rbSequenceNumber rb
+    getSequenceNumberRef (EventConsumerBarrier ec) = ecSequenceNumber ec
 
 main :: IO ()
 main = do
@@ -187,7 +191,7 @@ main = do
   ec <- newEventConsumer handler rb [] (Sleep 1000000)
   setGatingSequences rb [ec]
   link (ecAsync ec)
-  threadDelay 30000000
+  threadDelay 5000000
   cancel (epAsync ep)
   cancel (ecAsync ec)
   return ()

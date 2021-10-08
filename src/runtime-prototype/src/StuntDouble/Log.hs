@@ -12,10 +12,10 @@ import StuntDouble.LogicalTime
 newtype Log = Log [Timestamped LogEntry]
   deriving (Show, Read)
 
-data Timestamped a = Timestamped a LogicalTimestamp Time
+data Timestamped a = Timestamped a LogicalTime Time
   deriving (Show, Read)
 
-data TimestampedLogically a = TimestampedLogically a LogicalTimestamp
+data TimestampedLogically a = TimestampedLogically a LogicalTime
   deriving (Show, Read)
 
 data LogEntry
@@ -49,7 +49,7 @@ data LogLines = YYY
 emptyLog :: Log
 emptyLog = Log []
 
-appendLog :: LogEntry -> LogicalTimestamp -> Time -> Log -> Log
+appendLog :: LogEntry -> LogicalTime -> Time -> Log -> Log
 appendLog e lt t (Log es) = Log (Timestamped e lt t : es)
 
 -- XXX: Use more efficient data structure to avoid having to reverse.
