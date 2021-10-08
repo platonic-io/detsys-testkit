@@ -27,32 +27,29 @@ data SchedulerAction
   | TimeoutClient (Time, SchedulerEvent) Time -- XXX: what's the second time?
 
 -- XXX: This will need some handling of faults
-whatToDo :: {- RunInfo ref -> -} SchedulerState -> SchedulerAction
+whatToDo :: {- RunInfo ref -> -} SchedulerState -> (SchedulerAction, SchedulerState)
 whatToDo s0 = go s0
   where
     -- XXX: this comes from RunInfo
     clientTimeout = 20
     clientDelay = 20
 
-    go :: SchedulerState -> SchedulerAction -- XXX: return the new state also?
-                                            -- Otherwise we won't get through
-                                            -- the agenda if we call whatToDo in
-                                            -- a loop.
+    go :: SchedulerState -> (SchedulerAction, SchedulerState)
     go s =
       case Agenda.pop (agenda s) of
-        Nothing -> Done
+        Nothing -> (Done, s)
         Just (ev@(t, event), agenda') ->
           case lookupClient (from event) s of
             Nothing ->
               -- XXX: check if faults apply here
-              Execute ev False
+              (Execute ev False, s { agenda = agenda' })
             Just t' ->
               let
                 now :: Time
                 now = time s
               in
               if now `afterTime` (t' `addTime` clientTimeout)
-              then TimeoutClient ev now
+              then (TimeoutClient ev now, s { agenda = agenda' })
               else
                 -- Update time. XXX: explain why?
                 go (s { agenda = Agenda.push (t `addTime` clientDelay, event) agenda' })
@@ -80,25 +77,48 @@ fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $
   return (InternalMessage "ok")
 fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
   let
+    step :: Free (ActorF SchedulerState) ()
     step = do
-      r <- Agenda.pop . agenda <$> get
-      case r of
-        Just ((time, e), agenda') -> do
-          modify $ \s -> s { agenda = agenda'
-                           , time   = time
-                           , steps  = succ (steps s)
-                           }
-          p <- send executorRef (InternalMessage (prettyEvent e))
-          on p (\(InternalMessageR (InternalMessage' "Events" args)) -> do
-                  -- XXX: we should generate an arrival time here using the seed.
-                  -- XXX: with some probability duplicate the event?
-                  let Just evs = sequence (map (fromSDatatype time) args)
-                      evs' = filter (\e -> kind e /= "ok") (concat evs)
-                      agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
-                  modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
-                  step
-               )
-        Nothing -> do
+      sa <- modifys whatToDo
+      case sa of
+        Execute (t, ev) dropped
+          | dropped -> do
+              undefined -- XXX
+              -- let now = Agenda.theTime ae
+              -- Time.advanceTime timeC now Time.BumpLogical
+              -- lnow <- Time.currentLogicalClock timeC
+              -- emitEvent traceC clientC testId runId dropped lnow ae
+              -- step
+          | otherwise -> do
+              modify $ \s -> s { time   = t
+                               , steps  = succ (steps s)
+                               }
+
+              p <- send executorRef (InternalMessage (prettyEvent ev))
+              on p (\(InternalMessageR (InternalMessage' "Events" args)) -> do
+                       -- XXX: we should generate an arrival time here using the seed.
+                       -- XXX: with some probability duplicate the event?
+                       let Just evs = sequence (map (fromSDatatype t) args)
+                           evs' = filter (\e -> kind e /= "ok") (concat evs)
+                           agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
+                       modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
+                       step
+                   )
+              -- if client request we need to add it to state
+              -- let now = Agenda.theTime ae
+              -- Time.advanceTime timeC now Time.BumpLogical
+              -- currentLogicalTime <- Time.currentLogicalClock timeC
+              -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
+              -- let ref = senderRef runInfo (to $ Agenda.theEvent ae)
+              -- let ie = toInEvent testId runId currentLogicalTime ae
+              -- events <- case Executor.kind ie of
+              --   Executor.KEInternalMessage -> Executor.execute executorC ref ie
+              --   Executor.KEClient -> Executor.execute executorC ref ie
+              --   Executor.KETimer -> Executor.timer executorC ref ie
+              -- (cr, entries) <- partitionOutEvent clientC currentLogicalTime events
+              -- resolveClientResponses testId runId runInfo timeC cr
+              -- scheduleEvents randomC agendaC timeC entries
+        Done -> do
           -- The format looks at follows:
           -- LogSend _from (InternalMessage "{\"event\":\"write\",\"args\":{\"value\":1},\"at\":\"1970-01-01T00:00:00Z\",\"kind\":\"invoke\",\"to\":\"frontend\",\"from\":\"client:0\",\"meta\":null}") _to
           -- For network_trace we need:
@@ -149,6 +169,21 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                                                ",\"run_id\":" ++ show (runId s) ++
                                                ",\"event_log\":" ++ show l ++
                                                "}"))
+        TimeoutClient ae now -> do
+          -- Time.advanceTime timeC now Time.BumpLogical  -- should this really bump logical?
+          -- lnow <- Time.currentLogicalClock timeC
+          -- emitTimeout traceC clientC testId runId False lnow ae
+          -- go
+          undefined
+        {-
+        Tick now -> do
+          Time.advanceTime timeC now Time.KeepLogical
+          events <- forM (allRefs runInfo) $ \ ref -> Executor.tick executorC ref now
+          let (cr, entries) = partitionOutEvent (sort $ concat events)
+          resolveClientResponses testId runId runInfo timeC  cr
+          scheduleEvents randomC agendaC timeC entries
+          go
+        -}
   in
     Actor $ do
       step

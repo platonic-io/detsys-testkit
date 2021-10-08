@@ -107,10 +107,10 @@ put s' = Free (Put s' return)
 modify :: Typeable s => (s -> s) -> Free (ActorF s) ()
 modify f = put . f =<< get
 
-modifys :: Typeable s => (s -> (s, a)) -> Free (ActorF s) a
+modifys :: Typeable s => (s -> (a, s)) -> Free (ActorF s) a
 modifys f = do
   s <- get
-  let (s', x) = f s
+  let (x, s') = f s
   put s'
   return x
 
