@@ -2,6 +2,7 @@ module Scheduler.Agenda where
 
 import Data.Heap (Entry(Entry), Heap)
 import qualified Data.Heap as Heap
+import Data.List (foldl')
 
 import Scheduler.Event
 import StuntDouble.Time
@@ -26,3 +27,7 @@ pop (Agenda h) = case Heap.uncons h of
 
 push :: (Time, SchedulerEvent) -> Agenda -> Agenda
 push (t, e) (Agenda h) = Agenda (Heap.insert (Entry t e) h)
+
+pushList :: [(Time, SchedulerEvent)] -> Agenda -> Agenda
+pushList tes (Agenda h) =
+  Agenda (foldl' (\ih (t, e) -> Heap.insert (Entry t e) ih) h tes)

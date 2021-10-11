@@ -109,6 +109,8 @@ write rb e snr = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
 
 -- TODO: Non-blocking multi-producer: https://youtu.be/VBnLW9mKMh4?t=1813
 -- https://groups.google.com/g/lmax-disruptor/c/UhmRuz_CL6E/m/-hVt86bHvf8J
+-- Multiple single-producers combined into one:
+-- https://groups.google.com/g/lmax-disruptor/c/hvJVE-h2Xu0/m/mBW0j_3SrmIJ
 publish :: RingBuffer e -> IO ()
 publish rb = atomicModifyIORef' (rbSequenceNumber rb) (\snr -> (snr + 1, ()))
 
@@ -158,6 +160,7 @@ newEventConsumer handler rb barriers (Sleep n) = do
         Just bSnr -> do
           putStrLn ("something to do, mySrn = " ++ show (getSequenceNumber mySnr) ++
                     ", bSnr  = " ++ show (getSequenceNumber bSnr))
+          -- XXX: what if handler throws exception? https://youtu.be/eTeWxZvlCZ8?t=2271
           mapM_ (\snr -> get snr rb >>= \e -> handler e snr (snr == bSnr)) [mySnr + 1..bSnr]
           writeIORef snrRef bSnr
           threadDelay 1000000

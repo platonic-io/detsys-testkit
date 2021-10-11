@@ -1,10 +1,18 @@
-module StuntDouble.Random where
+module StuntDouble.Random
+  ( Seed
+  , RandomInterval
+  , makeSeed
+  , makeSeedIO
+  , interval
+  , exponential
+  )
+  where
 
 import System.Random
 
 ------------------------------------------------------------------------
 
-data Seed = Seed StdGen
+newtype Seed = Seed StdGen
 
 instance RandomGen Seed where
   split (Seed g) = let (g', g'') = split g in (Seed g', Seed g'')
@@ -16,15 +24,14 @@ makeSeed = Seed . mkStdGen
 makeSeedIO :: IO Seed
 makeSeedIO = fmap makeSeed randomIO
 
-interval :: Seed -> (Double, Seed)
-interval = randomR (0, 1)
+newtype RandomInterval = RandomInterval Double
 
-list :: Seed -> Int -> (Seed -> (a, Seed)) -> ([a], Seed)
-list s0 n0 g = go [] s0 n0
-  where
-    go acc s 0 = (reverse acc, s)
-    go acc s n =
-      let
-        (x, s') = g s
-      in
-        go (x : acc) s' (n - 1)
+interval :: Seed -> (RandomInterval, Seed)
+interval seed =
+  let
+    (d, seed') = randomR (0, 1) seed
+  in
+    (RandomInterval d, seed')
+
+exponential :: Double -> RandomInterval -> Double
+exponential mean (RandomInterval u) = (- mean) * log u
