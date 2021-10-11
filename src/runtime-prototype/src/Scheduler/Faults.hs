@@ -11,6 +11,7 @@ import GHC.Generics (Generic)
 import Database.SQLite.Simple
 
 import StuntDouble.IO
+import StuntDouble.Time
 
 data Fault
   = Omission
@@ -22,6 +23,12 @@ data Fault
       { from :: String,
         at :: Int
       }
+  -- new ones
+  | Pause
+    { node :: String
+    , fromTime :: Time
+    , toTime :: Time
+    }
   deriving (Generic, Show)
 
 customOptions :: Options

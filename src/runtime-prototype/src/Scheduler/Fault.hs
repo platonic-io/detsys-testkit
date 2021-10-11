@@ -2,7 +2,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Scheduler.Fault where
 
-import Data.Heap (Entry(Entry))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -45,6 +44,7 @@ newFaultState = foldMap translate . Faults.faults
     translate :: Faults.Fault -> FaultState
     translate (Faults.Omission _f t a) = mempty { fsOmissions = Map.singleton t $ Set.singleton a}
     translate (Faults.Crash f a) = mempty { fsPermanentCrash = Map.singleton f $ LogicalTime nodeName a} -- ?
+    translate (Faults.Pause n f t) = mempty { fsPause = Map.singleton n $ singleton (TimeInterval f t)}
 
 
 ------------------------------------------------------------------------
@@ -54,11 +54,11 @@ afterLogicalTime after before = case relation after before of
   _ -> False -- ??
 
 shouldDrop
-  :: Entry Time SchedulerEvent
+  :: (Time, SchedulerEvent)
   -> LogicalTime
   -> FaultState
   -> Bool {- Dropped -}
-shouldDrop (Entry t e) lt fs = isOmitted || isCrashed || isPaused
+shouldDrop (t,  e) lt fs = isOmitted || isCrashed || isPaused
   -- maybe we should keep the reason why it is dropped for tracing?
   -- maybe use https://hackage.haskell.org/package/explainable-predicates ?
   where
@@ -83,6 +83,9 @@ newtype TimeIntervals = TimeIntervals (Set TimeInterval)
 
 emptyIntervals :: TimeIntervals
 emptyIntervals = TimeIntervals Set.empty
+
+singleton :: TimeInterval -> TimeIntervals
+singleton = TimeIntervals . Set.singleton
 
 contains :: Time -> TimeIntervals -> Bool
 contains t (TimeIntervals s) =
