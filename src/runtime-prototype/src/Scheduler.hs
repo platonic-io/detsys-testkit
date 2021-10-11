@@ -9,6 +9,7 @@ import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Time (UTCTime)
 import Database.SQLite.Simple
 import GHC.Generics (Generic)
+import qualified Data.Time.Clock as Time -- XXX: remove
 
 import Scheduler.Event
 import Scheduler.Executor
@@ -53,6 +54,86 @@ whatToDo s0 = go s0
               else
                 -- Update time. XXX: explain why?
                 go (s { agenda = Agenda.push (t `addTime` clientDelay, event) agenda' })
+
+  {-
+emitEvent :: Monad m =>
+  Trace.Capability m ->
+  Client.Capability m ->
+  TestId -> RunId -> Dropped -> Time.LogicalTime -> AgendaEntry -> m ()
+emitEvent traceC clientC tid rid d now ae = do
+  mclient <- clientP clientC (from $ Agenda.theEvent ae) (to $ Agenda.theEvent ae)
+  Trace.emitEvent traceC tid rid (traceEvent d False now mclient ae)
+-}
+
+  {-
+partitionOutEvent :: Monad m => Client.Capability m -> Time.LogicalTime ->
+  Executor.Events -> m ([ClientResponse], [(Event, Maybe Time.Duration)])
+partitionOutEvent clientC now = fmap Either.partitionEithers . mapM f . sort . concatMap translate
+  where
+    -- f :: (Event, Maybe Time.Duration) -> m (Either ClientResponse Event)
+    f (e, d) = do
+      mc <- Client.isClient clientC (to e)
+      case mc of
+        Nothing -> return $ Right (e, d)
+        Just _p -> do
+          -- should we deActivateClient here?
+          Client.deActivateClient clientC (to e)
+          return $ Left $ ClientResponse e
+
+    kindTy Executor.Ok = "ok"
+    kindTy Executor.Message = "message"
+
+    kindTimerTy Executor.Timer = "timer"
+
+    translate :: Executor.OutEvent -> [(Event, Maybe Time.Duration)]
+    translate (Executor.OEUnscheduledEvent use) = do
+      toA <- Executor.ueTo use
+      return (Event
+              { kind = kindTy (Executor.ueKind use),
+                event = Executor.ueEvent use,
+                args = Executor.ueArgs use,
+                to = toA,
+                from = Executor.ueFrom use,
+                sentAt = Just (Time.theLogicalTime now)
+              }, Nothing)
+    translate (Executor.OETimer te) =
+      return (Event
+              { kind = kindTimerTy (Executor.teKind te),
+                event = "timer",
+                args = Executor.teArgs te,
+                to = Executor.teFrom te, -- note we use from
+                from = Executor.teFrom te,
+                sentAt = Just (Time.theLogicalTime now)
+              }, Just $ Executor.teDuration te)
+-}
+
+  {-
+resolveClientResponses :: Monad m => TestId -> RunId -> RunInfo ref
+  -> Time.Capability m
+  -> [ClientResponse] -> m ()
+resolveClientResponses _testId _runId _runInfo _timeC [] = pure ()
+resolveClientResponses _testId _runId _runInfo timeC _cr = do
+  now <- Time.currentSimulatedClock timeC
+  -- we set the time to the same, but we bump the logical time
+  Time.advanceTime timeC now Time.BumpLogical
+  -- TODO
+  -- we should emit events here
+  pure ()
+-}
+
+scheduleEvents :: [(SchedulerEvent, Maybe Time.NominalDiffTime)]
+               -> Free (ActorF SchedulerState) ()
+scheduleEvents aes = do
+  deltas <- map (fromRational . toRational) <$> randomListOfExp (length aes) 20
+  now <- time <$> get
+  let entries = zipWith (f now) aes deltas
+  modify $ \s -> s { agenda = Agenda.pushList entries (agenda s) }
+  where
+    f t (tevent, mdur) delta =
+      let time' = case mdur of
+            Nothing  -> t
+            Just dt -> t `addTime` dt
+      in (time' `addTime` delta, tevent)
 
 -- echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005 && echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"Start\",[]]}" | http POST :3005
 
@@ -99,6 +180,8 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                                }
 
               p <- send executorRef (InternalMessage (prettyEvent ev))
+              -- currentLogicalTime <- Time.currentLogicalClock timeC
+              -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
               on p (\(InternalMessageR (InternalMessage' "Events" args)) -> do
                        -- XXX: we should generate an arrival time here using the seed.
                        -- XXX: with some probability duplicate the event?
@@ -106,19 +189,19 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                            evs' = filter (\e -> kind e /= "ok") (concat evs)
                            agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
                        modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
+
+                       -- (cr, entries) <- partitionOutEvent clientC currentLogicalTime events
+                       -- resolveClientResponses testId runId runInfo timeC cr
+                       -- scheduleEvents randomC agendaC timeC entries
+
                        step
                    )
-              -- currentLogicalTime <- Time.currentLogicalClock timeC
-              -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
               -- let ref = senderRef runInfo (to $ Agenda.theEvent ae)
               -- let ie = toInEvent testId runId currentLogicalTime ae
               -- events <- case Executor.kind ie of
               --   Executor.KEInternalMessage -> Executor.execute executorC ref ie
               --   Executor.KEClient -> Executor.execute executorC ref ie
               --   Executor.KETimer -> Executor.timer executorC ref ie
-              -- (cr, entries) <- partitionOutEvent clientC currentLogicalTime events
-              -- resolveClientResponses testId runId runInfo timeC cr
-              -- scheduleEvents randomC agendaC timeC entries
         Done -> do
           -- The format looks at follows:
           -- LogSend _from (InternalMessage "{\"event\":\"write\",\"args\":{\"value\":1},\"at\":\"1970-01-01T00:00:00Z\",\"kind\":\"invoke\",\"to\":\"frontend\",\"from\":\"client:0\",\"meta\":null}") _to

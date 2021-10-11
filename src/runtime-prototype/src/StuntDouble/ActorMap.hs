@@ -29,7 +29,7 @@ import Data.Typeable
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import System.Exit (exitSuccess)
-import System.Random
+import System.Random (randomR)
 
 import StuntDouble.AdminTransport
 import StuntDouble.AdminTransport.NamedPipe
@@ -78,7 +78,7 @@ data ActorF s x
   | Typeable s => Get (s -> x)
   | Typeable s => Put s (() -> x)
   | GetTime (Time -> x)
-  | Random (Double -> x)
+  | Random (RandomInterval -> x)
   | SetTimer Time.NominalDiffTime (Promise -> x)
   | ClientResponse ClientRef Message (() -> x)
   | DumpLog (Log -> x)
@@ -117,8 +117,11 @@ modifys f = do
 getTime :: Free (ActorF s) Time
 getTime = Free (GetTime return)
 
-random :: Free (ActorF s) Double
+random :: Free (ActorF s) RandomInterval
 random = Free (Random return)
+
+randomListOfExp :: Int -> Double -> Free (ActorF s) [Double]
+randomListOfExp n mean = map (exponential mean) <$> replicateM n random
 
 setTimer :: Time.NominalDiffTime -> Free (ActorF s) Promise
 setTimer ndt = Free (SetTimer ndt return)
