@@ -57,6 +57,6 @@ adminCleanUpNamedPipe fp name =
     (\e -> if isDoesNotExistErrorType (ioeGetErrorType e)
            then Just ()
            else Nothing)
-    (removeFile (fp </> getEventLoopName name </> "admin") >>
-     removeFile (fp </> getEventLoopName name </> "admin-response"))
+    (removeFile (fp </> getEventLoopName name <> "-admin") >>
+     removeFile (fp </> getEventLoopName name <> "-admin-response"))
     return
