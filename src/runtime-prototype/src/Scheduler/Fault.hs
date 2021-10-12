@@ -19,33 +19,47 @@ import StuntDouble.Time
 
 type ActorName = String
 
-
-data FaultState = FaultState
-  { fsOmissions :: Map ActorName (Set Int) -- should be LogicalTime
-  , fsPermanentCrash :: Map ActorName LogicalTime
-  , fsPause :: Map ActorName TimeIntervals
+data FaultStateForActor = FaultStateForActor
+  { fsOmissions :: Set Int -- should be LogicalTime
+  , fsPermanentCrash :: Maybe LogicalTime
+  , fsPause :: TimeIntervals
   -- , fsPartition
   }
   deriving stock Show
 
-instance Semigroup FaultState where
-  FaultState o c p <> FaultState o' c' p' = FaultState (o `plus` o') (c `plusL` c') (p `plus` p')
+instance Semigroup FaultStateForActor where
+  FaultStateForActor o c p <> FaultStateForActor o' c' p' = FaultStateForActor (o <> o') (c `plusL` c') (p <> p')
     where
-      plus a b = Map.unionWith (<>) a b -- eta-expandend to defeat the monomorphism-restriction
-      plusL = Map.unionWith $ \ a b -> if a `afterLogicalTime` b then b else a
+      -- this is almost (<>) for Maybe, except LogicalTime doesn't have Semigroup (we want it to be Min Int)
+      plusL Nothing x = x
+      plusL x Nothing = x
+      plusL (Just a) (Just b) = Just $ if a `afterLogicalTime` b then b else a
+
+instance Monoid FaultStateForActor where
+  -- once again no Semigroup for LogicalTime so need to use Nothing here
+  mempty = FaultStateForActor mempty Nothing mempty
+
+newtype FaultState = FaultState (Map ActorName FaultStateForActor)
+  deriving newtype Show
+
+instance Semigroup FaultState where
+  FaultState m <> FaultState m' = FaultState $ Map.unionWith (<>) m m'
 
 instance Monoid FaultState where
-  mempty = FaultState mempty mempty mempty
+  mempty = FaultState mempty
 
 newFaultState :: Faults.Faults -> FaultState
-newFaultState = foldMap translate . Faults.faults
+newFaultState = foldMap mkFaultState . Faults.faults
   where
-    nodeName = NodeName "scheduler"
-    translate :: Faults.Fault -> FaultState
-    translate (Faults.Omission _f t a) = mempty { fsOmissions = Map.singleton t $ Set.singleton a}
-    translate (Faults.Crash f a) = mempty { fsPermanentCrash = Map.singleton f $ LogicalTime nodeName a} -- ?
-    translate (Faults.Pause n f t) = mempty { fsPause = Map.singleton n $ singleton (TimeInterval f t)}
+    mkFaultState :: Faults.Fault -> FaultState
+    mkFaultState f = FaultState $ uncurry Map.singleton (translate f)
 
+    nodeName = NodeName "scheduler"
+    (!->) = (,)
+    translate :: Faults.Fault -> (ActorName, FaultStateForActor)
+    translate (Faults.Omission _f t a) = t !-> mempty { fsOmissions = Set.singleton a}
+    translate (Faults.Crash f a) = f !-> mempty { fsPermanentCrash = Just $ LogicalTime nodeName{-?-} a}
+    translate (Faults.Pause n f t) = n !-> mempty { fsPause = singleton (TimeInterval f t)}
 
 ------------------------------------------------------------------------
 afterLogicalTime :: LogicalTime -> LogicalTime -> Bool
@@ -58,18 +72,19 @@ shouldDrop
   -> LogicalTime
   -> FaultState
   -> Bool {- Dropped -}
-shouldDrop (t,  e) lt fs = isOmitted || isCrashed || isPaused
-  -- maybe we should keep the reason why it is dropped for tracing?
-  -- maybe use https://hackage.haskell.org/package/explainable-predicates ?
-  where
-    -- t == at e ??
-    actor = to e
-    isTick = kind e == "timer" -- yikes stringly typed..
-    ltInt = let LogicalTime _ i = lt in i
-    isOmitted = ltInt `Set.member` fromMaybe Set.empty (Map.lookup actor (fsOmissions fs))
-      && not isTick
-    isCrashed = maybe False (lt `afterLogicalTime`) (Map.lookup actor $ fsPermanentCrash fs)
-    isPaused  = contains t $ fromMaybe emptyIntervals (Map.lookup actor $ fsPause fs)
+shouldDrop (t,  e) lt (FaultState fsForAll) = case Map.lookup (to e) fsForAll of
+  Nothing -> False
+  Just fs -> isOmitted || isCrashed || isPaused
+    -- maybe we should keep the reason why it is dropped for tracing?
+    -- maybe use https://hackage.haskell.org/package/explainable-predicates ?
+    where
+      -- t == at e ??
+      isTick = kind e == "timer" -- yikes stringly typed..
+      ltInt = let LogicalTime _ i = lt in i
+      isOmitted = ltInt `Set.member` fsOmissions fs
+        && not isTick
+      isCrashed = maybe False (lt `afterLogicalTime`) (fsPermanentCrash fs)
+      isPaused  = contains t $ fsPause fs
 
 ------------------------------------------------------------------------
 -- does Time support inf?
