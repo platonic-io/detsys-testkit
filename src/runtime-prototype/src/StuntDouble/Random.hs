@@ -25,6 +25,7 @@ makeSeedIO :: IO Seed
 makeSeedIO = fmap makeSeed randomIO
 
 newtype RandomInterval = RandomInterval Double
+  deriving Show
 
 interval :: Seed -> (RandomInterval, Seed)
 interval seed =

@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module StuntDouble.Disruptor where
+module Disruptor where
 
 import Data.Bits
 import Control.Concurrent

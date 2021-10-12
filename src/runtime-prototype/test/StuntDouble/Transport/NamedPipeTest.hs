@@ -10,7 +10,7 @@ unit_transportNamedPipe :: Assertion
 unit_transportNamedPipe = do
   t <- namedPipeTransport "/tmp" (EventLoopName "transportNamedPipe")
   let e = Envelope RequestKind (RemoteRef "from" 0) (InternalMessage "msg")
-                   (RemoteRef "transportNamedPipe" 1) 0
+                   (RemoteRef "transportNamedPipe" 1) 0 (LogicalTime (NodeName "x") 0)
   transportSend t e
   me' <- transportReceive t
   me' @?= Just e
