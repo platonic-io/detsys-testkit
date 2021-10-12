@@ -2,8 +2,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 
 module StuntDouble.ActorMap where
@@ -29,6 +29,7 @@ import Data.Typeable
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import System.Exit (exitSuccess)
+import System.Posix.Signals
 import System.Random (randomR)
 
 import StuntDouble.AdminTransport
@@ -640,6 +641,11 @@ makeEventLoopThreaded threaded threadpool clock seed tk atk codec dk name = do
                          ]
   atomically (modifyTVar' (lsPids ls) ((workerPids ++ pids) ++))
   mapM_ link pids
+  let handler = do
+        putStrLn "Interrupted, shutting down..."
+        adminTransportShutdown (lsAdminTransport ls)
+        mapM_ uninterruptibleCancel pids
+  installHandler keyboardSignal (Catch handler) Nothing
   return ls
 
   {-

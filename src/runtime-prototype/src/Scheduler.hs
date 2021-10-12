@@ -131,7 +131,7 @@ scheduleEvents aes = do
   where
     f t (tevent, mdur) delta =
       let time' = case mdur of
-            Nothing  -> t
+            Nothing -> t
             Just dt -> t `addTime` dt
       in (time' `addTime` delta, tevent)
 

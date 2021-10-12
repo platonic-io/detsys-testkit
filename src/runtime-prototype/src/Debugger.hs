@@ -20,15 +20,25 @@ import StuntDouble
 
 ------------------------------------------------------------------------
 
-readLog :: IO Log
+readLog :: IO (Maybe Log)
 readLog = do
-  let pipe = "/tmp" </> "scheduler-admin"
-  -- NOTE: We need to start reading the response before making the request to
-  -- dump the log, otherwise the response will be written to the void.
-  a <- async (withFile (pipe <> "-response") ReadWriteMode hGetLine)
-  appendFile pipe "AdminDumpLog\n"
-  s <- wait a
-  return (read s)
+  let commandPipe  = "/tmp" </> "scheduler-admin"
+      responsePipe = "/tmp" </> "scheduler-admin-response"
+  exists <- (,) <$> fileExist commandPipe <*> fileExist responsePipe
+  if not (and exists)
+  then return Nothing
+  else do
+    cfs <- getFileStatus commandPipe
+    rfs <- getFileStatus responsePipe
+    if not (isNamedPipe cfs && isNamedPipe rfs)
+    then return Nothing
+    else do
+      -- NOTE: We need to start reading the response before making the request to
+      -- dump the log, otherwise the response will be written to the void.
+      a <- async (withFile responsePipe ReadWriteMode hGetLine)
+      appendFile commandPipe "AdminDumpLog\n"
+      s <- wait a
+      return (Just (read s))
 
 drawUI :: AppState -> [Widget ()]
 drawUI as = [ui]
@@ -96,5 +106,7 @@ initialState (Log es) = AppState
 
 main :: IO ()
 main = do
-  l <- readLog
-  void (defaultMain brickApp (initialState l))
+  ml <- readLog
+  case ml of
+    Nothing -> putStrLn "Couldn't connect to scheduler pipe."
+    Just l  -> void (defaultMain brickApp (initialState l))
