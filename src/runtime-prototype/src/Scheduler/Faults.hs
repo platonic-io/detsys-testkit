@@ -29,6 +29,12 @@ data Fault
     , fromTime :: Time
     , toTime :: Time
     }
+  | Partition
+    { node :: String
+    , cantReceiveFrom :: [String]
+    , fromtime :: Time
+    , toTime :: Time
+    }
   deriving (Generic, Show)
 
 customOptions :: Options

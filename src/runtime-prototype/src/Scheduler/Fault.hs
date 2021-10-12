@@ -23,12 +23,13 @@ data FaultStateForActor = FaultStateForActor
   { fsOmissions :: Set Int -- should be LogicalTime
   , fsPermanentCrash :: Maybe LogicalTime
   , fsPause :: TimeIntervals
-  -- , fsPartition
+  , fsPartition :: Map ActorName TimeIntervals
   }
   deriving stock Show
 
 instance Semigroup FaultStateForActor where
-  FaultStateForActor o c p <> FaultStateForActor o' c' p' = FaultStateForActor (o <> o') (c `plusL` c') (p <> p')
+  FaultStateForActor o c p pa <> FaultStateForActor o' c' p' pa'
+    = FaultStateForActor (o <> o') (c `plusL` c') (p <> p') (Map.unionWith (<>) pa pa')
     where
       -- this is almost (<>) for Maybe, except LogicalTime doesn't have Semigroup (we want it to be Min Int)
       plusL Nothing x = x
@@ -37,7 +38,7 @@ instance Semigroup FaultStateForActor where
 
 instance Monoid FaultStateForActor where
   -- once again no Semigroup for LogicalTime so need to use Nothing here
-  mempty = FaultStateForActor mempty Nothing mempty
+  mempty = FaultStateForActor mempty Nothing mempty mempty
 
 newtype FaultState = FaultState (Map ActorName FaultStateForActor)
   deriving newtype Show
@@ -60,6 +61,8 @@ newFaultState = foldMap mkFaultState . Faults.faults
     translate (Faults.Omission _f t a) = t !-> mempty { fsOmissions = Set.singleton a}
     translate (Faults.Crash f a) = f !-> mempty { fsPermanentCrash = Just $ LogicalTime nodeName{-?-} a}
     translate (Faults.Pause n f t) = n !-> mempty { fsPause = singleton (TimeInterval f t)}
+    translate (Faults.Partition n c f t) = n !-> mempty { fsPartition = Map.fromList $ zip c (repeat ti) }
+     where ti = singleton $ TimeInterval f t
 
 ------------------------------------------------------------------------
 afterLogicalTime :: LogicalTime -> LogicalTime -> Bool
@@ -74,7 +77,7 @@ shouldDrop
   -> Bool {- Dropped -}
 shouldDrop (t,  e) lt (FaultState fsForAll) = case Map.lookup (to e) fsForAll of
   Nothing -> False
-  Just fs -> isOmitted || isCrashed || isPaused
+  Just fs -> isOmitted || isCrashed || isPaused || isPartition
     -- maybe we should keep the reason why it is dropped for tracing?
     -- maybe use https://hackage.haskell.org/package/explainable-predicates ?
     where
@@ -85,6 +88,7 @@ shouldDrop (t,  e) lt (FaultState fsForAll) = case Map.lookup (to e) fsForAll of
         && not isTick
       isCrashed = maybe False (lt `afterLogicalTime`) (fsPermanentCrash fs)
       isPaused  = contains t $ fsPause fs
+      isPartition = maybe False (contains t) $ Map.lookup (from e) (fsPartition fs)
 
 ------------------------------------------------------------------------
 -- does Time support inf?
