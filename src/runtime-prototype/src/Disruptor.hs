@@ -2,6 +2,7 @@
 
 module Disruptor where
 
+import Data.Atomics (casIORef, readForCAS, peekTicket)
 import Data.Bits
 import Control.Concurrent
 import Control.Concurrent.Async
@@ -22,8 +23,12 @@ newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Word64 }
 
 -- * Ring-buffer
 
+data RingBufferMode = SingleProducer | MultiProducer
+
 data RingBuffer e = RingBuffer
-  { rbSequenceNumber  :: IORef SequenceNumber
+  { rbMode            :: RingBufferMode
+  , rbCapacity        :: Word64
+  , rbSequenceNumber  :: IORef SequenceNumber
   , rbEvents          :: IOVector e
   , rbGatingSequences :: IORef [IORef SequenceNumber] -- ^ References to the
                                                       -- last consumers'
@@ -33,11 +38,12 @@ data RingBuffer e = RingBuffer
                                                       -- overwriting events that
                                                       -- have not been consumed
                                                       -- yet.
-  , rbCapacity        :: Word64
+  , rbCachedGatingSequence :: IORef SequenceNumber
+  , rbAvailableBuffer      :: IOVector Int
   }
 
-newRingBuffer :: Int -> IO (RingBuffer e)
-newRingBuffer capacity
+newRingBuffer :: RingBufferMode -> Int -> IO (RingBuffer e)
+newRingBuffer mode capacity
   | capacity <= 0          =
       error "newRingBuffer: capacity must be greater than 0"
   | popCount capacity /= 1 =
@@ -47,11 +53,37 @@ newRingBuffer capacity
       snr <- newIORef (-1)
       v   <- Vector.new capacity
       gs  <- newIORef []
-      return (RingBuffer snr v gs (fromIntegral capacity))
+      cgs <- newIORef (-1)
+      ab  <- Vector.new (case mode of
+                           SingleProducer -> 0
+                           MultiProducer  -> capacity)
+      Vector.set ab (-1)
+      return (RingBuffer mode (fromIntegral capacity) snr v gs cgs ab)
+
+ringBufferCapacity :: RingBuffer e -> Word64
+ringBufferCapacity = rbCapacity
+
+getCursor :: RingBuffer e -> IO SequenceNumber
+getCursor rb = readIORef (rbSequenceNumber rb)
+
+claim :: RingBuffer e -> SequenceNumber -> IO ()
+claim rb = atomicWriteIORef (rbSequenceNumber rb)
 
 setGatingSequences :: RingBuffer e -> [EventConsumer] -> IO ()
 setGatingSequences rb eps =
-  writeIORef (rbGatingSequences rb) (map ecSequenceNumber eps)
+  atomicWriteIORef (rbGatingSequences rb) (map ecSequenceNumber eps)
+
+getCachedGatingSequence :: RingBuffer e -> IO SequenceNumber
+getCachedGatingSequence rb = readIORef (rbCachedGatingSequence rb)
+
+setCachedGatingSequence :: RingBuffer e -> SequenceNumber -> IO ()
+setCachedGatingSequence rb = atomicWriteIORef (rbCachedGatingSequence rb)
+
+setAvailable :: RingBuffer e -> SequenceNumber -> IO ()
+setAvailable rb snr = Vector.write
+  (rbAvailableBuffer rb)
+  (index (rbCapacity rb) snr)
+  (availabilityFlag (rbCapacity rb) snr)
 
 -- * Event producers
 
@@ -65,7 +97,7 @@ newEventProducer rb p backPressure s0 = do
   return (EventProducer a)
   where
     go s = do
-      mSnr <- next rb
+      mSnr <- tryNext rb
       case mSnr of
         Nothing -> do
           putStrLn "producer: consumer is too slow"
@@ -73,50 +105,142 @@ newEventProducer rb p backPressure s0 = do
           go s
         Just snr -> do
           (e, s') <- p s
-          write rb e snr
+          set rb snr e
           putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
-          publish rb
+          publish rb snr
           go s'
 
 -- > quickCheck $ \(Positive i) j -> let capacity = 2^i in
 --     j `mod` capacity == j Data.Bits..&. (capacity - 1)
 index :: Word64 -> SequenceNumber -> Int
-index capacity (SequenceNumber snr) = fromIntegral (snr .&. (capacity - 1))
+index capacity (SequenceNumber snr) = fromIntegral (snr .&. indexMask)
+  where
+    indexMask = capacity - 1
 
--- The `next` sequence number to write to. If `Nothing` is returned, then the
--- last consumer has not yet processed the event we are about to overwrite (due
--- to the ring buffer wrapping around) -- the callee of `next` should apply
--- back-pressure upstream if this happens.
-next :: RingBuffer e -> IO (Maybe SequenceNumber)
-next rb = do
-  nextSnr <- (+1) <$> readIORef (rbSequenceNumber rb)
-  -- Check that the ring-buffer doesn't overwrite events that still haven't been
-  -- processed by the last consumers.
-  rc <- remainingCapacity rb nextSnr
-  if rc <= 0
-  then return Nothing
-  else return (Just nextSnr) -- XXX: we could return a range `(nextSnr, nextSnr + rc)`
-                             -- which could be used for batched writes.
+availabilityFlag :: Word64 -> SequenceNumber -> Int
+availabilityFlag capacity (SequenceNumber snr) =
+  fromIntegral (snr `shiftR` indexShift)
+  where
+    indexShift = logBase2 capacity
 
-remainingCapacity :: RingBuffer e -> SequenceNumber -> IO Word64
-remainingCapacity rb produced = do
-  snrs <- mapM readIORef =<< readIORef (rbGatingSequences rb)
-  let consumed = minimum (if null snrs then [0] else snrs)
-  return (rbCapacity rb - getSequenceNumber (produced - consumed))
+    logBase2 :: Word64 -> Int
+    logBase2 w = finiteBitSize w - 1 - countLeadingZeros w
 
-write :: RingBuffer e -> e -> SequenceNumber -> IO ()
-write rb e snr = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
+-- | Claim the next event in sequence for publishing.
+next :: RingBuffer e -> IO SequenceNumber
+next rb = nextBatch rb 1
+
+-- | Claim the next `n` events in sequence for publishing. This is for batch
+-- event producing. Returns the highest claimed sequence number, so using it
+-- requires a bit of extra work, e.g.:
+--
+-- @
+--     let n = 10
+--     hi <- nextBatch rb n
+--     let lo = hi - (n - 1)
+--     mapM_ f [lo..hi]
+--     publishBatch rb lo hi
+-- @
+--
+nextBatch :: RingBuffer e -> Int -> IO SequenceNumber
+nextBatch rb n
+  | n < 1 || fromIntegral n > ringBufferCapacity rb =
+    error "nextBatch: n < 1 || n > ringBufferCapacity"
+  | otherwise = do
+    undefined
+    -- XXX: ...
+
+-- Try to return the next sequence number to write to. If `Nothing` is returned,
+-- then the last consumer has not yet processed the event we are about to
+-- overwrite (due to the ring buffer wrapping around) -- the callee of `tryNext`
+-- should apply back-pressure upstream if this happens.
+tryNext :: RingBuffer e -> IO (Maybe SequenceNumber)
+tryNext rb = tryNextBatch rb 1
+
+tryNextBatch :: RingBuffer e -> Int -> IO (Maybe SequenceNumber)
+tryNextBatch rb n
+  | n < 1     = error "tryNextBatch: n must be > 0"
+  | otherwise = go
+  where
+    go = do
+      current <- readForCAS (rbSequenceNumber rb)
+      let current_ = peekTicket current
+          next     = current_ + fromIntegral n
+      hasCapacity <- hasAvailableCapacity' rb n current_
+      if not hasCapacity
+      then return Nothing
+      else do
+        -- NOTE: In the SingleProducer case we could just use writeIORef here,
+        -- but not sure if it's worth the extra branch...
+        (success, _current') <- casIORef (rbSequenceNumber rb) current next
+        if success
+        then return (Just next)
+        else go
+
+remainingCapacity :: RingBuffer e -> IO Word64
+remainingCapacity rb = do
+  consumed <- minimumSequence rb
+  produced <- getCursor rb
+  return (ringBufferCapacity rb - fromIntegral (produced - consumed))
+
+hasAvailableCapacity :: RingBuffer e -> Int -> IO Bool
+hasAvailableCapacity rb requiredCapacity = do
+  cursorValue <- getCursor rb
+  hasAvailableCapacity' rb requiredCapacity cursorValue
+
+hasAvailableCapacity' :: RingBuffer e -> Int -> SequenceNumber -> IO Bool
+hasAvailableCapacity' rb requiredCapacity cursorValue = do
+  let wrapPoint = (cursorValue + fromIntegral requiredCapacity) -
+                  fromIntegral (ringBufferCapacity rb)
+  cachedGatingSequence <- getCachedGatingSequence rb
+  if (wrapPoint > cachedGatingSequence || cachedGatingSequence > cursorValue)
+  then do
+    minSequence <- minimumSequence' (rbGatingSequences rb) cursorValue
+    setCachedGatingSequence rb minSequence
+    if (wrapPoint > minSequence)
+    then return False
+    else return True
+  else return True
+
+minimumSequence :: RingBuffer e -> IO SequenceNumber
+minimumSequence rb = do
+  cursorValue <- getCursor rb
+  minimumSequence' (rbGatingSequences rb) cursorValue
+
+minimumSequence' :: IORef [IORef SequenceNumber] -> SequenceNumber -> IO SequenceNumber
+minimumSequence' gatingSequences cursorValue = do
+  snrs <- mapM readIORef =<< readIORef gatingSequences
+  return (minimum (cursorValue : snrs))
+
+set :: RingBuffer e -> SequenceNumber -> e -> IO ()
+set rb snr e = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
 
 -- TODO: Non-blocking multi-producer: https://youtu.be/VBnLW9mKMh4?t=1813
 -- https://groups.google.com/g/lmax-disruptor/c/UhmRuz_CL6E/m/-hVt86bHvf8J
 -- Multiple single-producers combined into one:
 -- https://groups.google.com/g/lmax-disruptor/c/hvJVE-h2Xu0/m/mBW0j_3SrmIJ
-publish :: RingBuffer e -> IO ()
-publish rb = atomicModifyIORef' (rbSequenceNumber rb) (\snr -> (snr + 1, ()))
+publish :: RingBuffer e -> SequenceNumber -> IO ()
+publish rb snr = case rbMode rb of
+  SingleProducer -> claim rb snr
+  MultiProducer  ->
+    setAvailable rb snr
+    -- XXX: Wake up consumers that are using a sleep wait strategy.
 
-get :: SequenceNumber -> RingBuffer e -> IO e
-get snr rb = Vector.read (rbEvents rb) (index (rbCapacity rb) snr)
--- XXX: check if srn <= rbSequenceNumber?
+publishBatch :: RingBuffer e -> SequenceNumber -> SequenceNumber -> IO ()
+publishBatch rb lo hi = case rbMode rb of
+  SingleProducer -> claim rb hi
+  MultiProducer  -> mapM_ (setAvailable rb) [lo..hi]
+    -- XXX: Wake up consumers that are using a sleep wait strategy.
+
+unsafeGet :: RingBuffer e -> SequenceNumber -> IO e
+unsafeGet rb snr = Vector.read (rbEvents rb) (index (rbCapacity rb) snr)
+
+get :: RingBuffer e -> SequenceNumber -> IO (Maybe e)
+get rb snr = do
+  written <- getCursor rb
+  if snr <= written
+  then Just <$> unsafeGet rb snr
+  else return Nothing
 
 -- * Event consumers
 
@@ -161,7 +285,8 @@ newEventConsumer handler rb barriers (Sleep n) = do
           putStrLn ("something to do, mySrn = " ++ show (getSequenceNumber mySnr) ++
                     ", bSnr  = " ++ show (getSequenceNumber bSnr))
           -- XXX: what if handler throws exception? https://youtu.be/eTeWxZvlCZ8?t=2271
-          mapM_ (\snr -> get snr rb >>= \e -> handler e snr (snr == bSnr)) [mySnr + 1..bSnr]
+          mapM_ (\snr -> unsafeGet rb snr >>= \e ->
+                    handler e snr (snr == bSnr)) [mySnr + 1..bSnr]
           writeIORef snrRef bSnr
           threadDelay 1000000
           go snrRef
@@ -183,7 +308,7 @@ waitFor snr rb bs = do
 
 main :: IO ()
 main = do
-  rb <- newRingBuffer 128
+  rb <- newRingBuffer SingleProducer 128
   let pipe = "/tmp/producer-pipe"
   safeCreateNamedPipe pipe
   h <- openFile pipe ReadWriteMode
