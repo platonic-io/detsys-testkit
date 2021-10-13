@@ -85,6 +85,25 @@ setAvailable rb snr = Vector.write
   (index (rbCapacity rb) snr)
   (availabilityFlag (rbCapacity rb) snr)
 
+getAvailable :: RingBuffer e -> Int -> IO Int
+getAvailable rb ix = Vector.read (rbAvailableBuffer rb) ix
+
+-- > quickCheck $ \(Positive i) j -> let capacity = 2^i in
+--     j `mod` capacity == j Data.Bits..&. (capacity - 1)
+index :: Word64 -> SequenceNumber -> Int
+index capacity (SequenceNumber snr) = fromIntegral (snr .&. indexMask)
+  where
+    indexMask = capacity - 1
+
+availabilityFlag :: Word64 -> SequenceNumber -> Int
+availabilityFlag capacity (SequenceNumber snr) =
+  fromIntegral (snr `shiftR` indexShift)
+  where
+    indexShift = logBase2 capacity
+
+logBase2 :: Word64 -> Int
+logBase2 w = finiteBitSize w - 1 - countLeadingZeros w
+
 -- * Event producers
 
 data EventProducer = EventProducer
@@ -109,22 +128,6 @@ newEventProducer rb p backPressure s0 = do
           putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
           publish rb snr
           go s'
-
--- > quickCheck $ \(Positive i) j -> let capacity = 2^i in
---     j `mod` capacity == j Data.Bits..&. (capacity - 1)
-index :: Word64 -> SequenceNumber -> Int
-index capacity (SequenceNumber snr) = fromIntegral (snr .&. indexMask)
-  where
-    indexMask = capacity - 1
-
-availabilityFlag :: Word64 -> SequenceNumber -> Int
-availabilityFlag capacity (SequenceNumber snr) =
-  fromIntegral (snr `shiftR` indexShift)
-  where
-    indexShift = logBase2 capacity
-
-    logBase2 :: Word64 -> Int
-    logBase2 w = finiteBitSize w - 1 - countLeadingZeros w
 
 -- | Claim the next event in sequence for publishing.
 next :: RingBuffer e -> IO SequenceNumber
@@ -233,7 +236,24 @@ publishBatch rb lo hi = case rbMode rb of
     -- XXX: Wake up consumers that are using a sleep wait strategy.
 
 unsafeGet :: RingBuffer e -> SequenceNumber -> IO e
-unsafeGet rb snr = Vector.read (rbEvents rb) (index (rbCapacity rb) snr)
+unsafeGet rb current = case rbMode rb of
+  SingleProducer -> Vector.read (rbEvents rb) (index (rbCapacity rb) current)
+  MultiProducer  -> go
+  where
+    availableValue :: Int
+    availableValue = fromIntegral current `shiftR` indexShift
+
+    ix :: Int
+    ix = index (rbCapacity rb) current
+
+    indexShift :: Int
+    indexShift = logBase2 (rbCapacity rb)
+
+    go = do
+      v <- getAvailable rb ix
+      if v /= availableValue
+      then go -- XXX: a bit of sleep?
+      else Vector.read (rbEvents rb) ix
 
 get :: RingBuffer e -> SequenceNumber -> IO (Maybe e)
 get rb snr = do
