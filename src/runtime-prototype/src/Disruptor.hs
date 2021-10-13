@@ -9,7 +9,7 @@ import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
 import Data.IORef
-import Data.Word
+import Data.Int
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
 import System.IO
@@ -18,7 +18,7 @@ import System.Posix.Files
 
 ------------------------------------------------------------------------
 
-newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Word64 }
+newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Int64 }
   deriving (Num, Eq, Ord, Real, Enum, Integral, Show, Bounded)
 
 -- * Ring-buffer
@@ -27,7 +27,7 @@ data RingBufferMode = SingleProducer | MultiProducer
 
 data RingBuffer e = RingBuffer
   { rbMode            :: RingBufferMode
-  , rbCapacity        :: Word64
+  , rbCapacity        :: Int64
   , rbSequenceNumber  :: IORef SequenceNumber
   , rbEvents          :: IOVector e
   , rbGatingSequences :: IORef [IORef SequenceNumber] -- ^ References to the
@@ -60,7 +60,7 @@ newRingBuffer mode capacity
       Vector.set ab (-1)
       return (RingBuffer mode (fromIntegral capacity) snr v gs cgs ab)
 
-ringBufferCapacity :: RingBuffer e -> Word64
+ringBufferCapacity :: RingBuffer e -> Int64
 ringBufferCapacity = rbCapacity
 
 getCursor :: RingBuffer e -> IO SequenceNumber
@@ -90,18 +90,18 @@ getAvailable rb ix = Vector.read (rbAvailableBuffer rb) ix
 
 -- > quickCheck $ \(Positive i) j -> let capacity = 2^i in
 --     j `mod` capacity == j Data.Bits..&. (capacity - 1)
-index :: Word64 -> SequenceNumber -> Int
+index :: Int64 -> SequenceNumber -> Int
 index capacity (SequenceNumber snr) = fromIntegral (snr .&. indexMask)
   where
     indexMask = capacity - 1
 
-availabilityFlag :: Word64 -> SequenceNumber -> Int
+availabilityFlag :: Int64 -> SequenceNumber -> Int
 availabilityFlag capacity (SequenceNumber snr) =
   fromIntegral (snr `shiftR` indexShift)
   where
     indexShift = logBase2 capacity
 
-logBase2 :: Word64 -> Int
+logBase2 :: Int64 -> Int
 logBase2 w = finiteBitSize w - 1 - countLeadingZeros w
 
 -- * Event producers
@@ -180,7 +180,7 @@ tryNextBatch rb n
         then return (Just next)
         else go
 
-remainingCapacity :: RingBuffer e -> IO Word64
+remainingCapacity :: RingBuffer e -> IO Int64
 remainingCapacity rb = do
   consumed <- minimumSequence rb
   produced <- getCursor rb
