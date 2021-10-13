@@ -13,6 +13,8 @@ import qualified Data.Time.Clock as Time -- XXX: remove
 
 import Scheduler.Event
 import Scheduler.Executor
+import Scheduler.Fault (newFaultState, shouldDrop)
+import Scheduler.Faults (Faults(Faults))
 import Scheduler.State
 import Scheduler.Agenda (Agenda)
 import qualified Scheduler.Agenda as Agenda
@@ -42,8 +44,8 @@ whatToDo s0 = go s0
         Just (ev@(t, event), agenda') ->
           case lookupClient (from event) s of
             Nothing ->
-              -- XXX: check if faults apply here
-              (Execute ev False, s { agenda = agenda' })
+              let toDrop = shouldDrop ev (logicalTime s) (faultState s)
+              in (Execute ev toDrop, s { agenda = agenda' })
             Just t' ->
               let
                 now :: Time
@@ -155,6 +157,26 @@ fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $
   -- really handle an error for the run id select?
   on q (\(IOResultR (IORows [[FInt rid]])) ->
            modify $ \s -> s { runId = Just rid })
+  return (InternalMessage "ok")
+fakeScheduler executorRef (ClientRequest' "LoadTest" [SInt tid, SInt rid] cid) = Actor $ do
+  p <- asyncIO (IOQuery "SELECT agenda FROM test_info WHERE test_id = :tid" [":tid" := tid])
+  on p (\(IOResultR (IORows rs)) -> case parseRows rs of
+           Nothing          -> clientResponse cid (InternalMessage "parse error")
+           Just [AgendaList es] -> do
+             modify $ \s ->
+               s { agenda = Agenda.fromList (map (\e -> (at e, e)) es)
+                 , testId = Just tid
+                 }
+             clientResponse cid (InternalMessage (show es)))
+  f <- asyncIO (IOQuery "SELECT faults FROM run_info WHERE test_id = :tid AND run_id = :rid" [":tid" := tid, ":rid" := rid])
+  on f (\(IOResultR (IORows rs)) -> case parseRows rs of
+           Nothing          -> clientResponse cid (InternalMessage "parse error")
+           Just [fs@Faults{}] -> do
+             modify $ \s ->
+               s { faultState = newFaultState fs
+                 , runId = Just rid
+                 })
+             -- clientResponse cid (InternalMessage (show fs))) -- hmm should we just do one response?
   return (InternalMessage "ok")
 fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
   let

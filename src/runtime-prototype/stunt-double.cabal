@@ -22,6 +22,8 @@ library
     Scheduler
     Scheduler.Agenda
     Scheduler.Event
+    Scheduler.Fault
+    Scheduler.Faults
     Scheduler.State
     Scheduler.Main
     Scheduler.Executor

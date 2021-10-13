@@ -5,12 +5,14 @@ import qualified Data.Map as Map
 
 import Scheduler.Agenda (Agenda)
 import qualified Scheduler.Agenda as Agenda
+import Scheduler.Fault (FaultState)
 import StuntDouble
 
 ------------------------------------------------------------------------
 
 data SchedulerState = SchedulerState
   { agenda      :: Agenda
+  , faultState  :: FaultState
   , time        :: Time
   , logicalTime :: LogicalTime
   , seed        :: Seed
@@ -23,6 +25,7 @@ data SchedulerState = SchedulerState
 initState :: Time -> Seed -> SchedulerState
 initState t s = SchedulerState
   { agenda      = Agenda.empty
+  , faultState  = mempty
   , time        = t
   , logicalTime = LogicalTime (NodeName "scheduler") 0
   , seed        = s

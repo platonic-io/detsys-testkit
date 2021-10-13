@@ -61,9 +61,9 @@ listDrawElement sel (Timestamped le (LogicalTime (NodeName nn) lt) pt) =
 
 display :: LogEntry -> String
 display (LogSend (LocalRef i) (RemoteRef a j) msg)
-  = show i ++ " --> " ++ show j ++ "@" ++ a
+  = show i ++ " --> " ++ show j ++ " @" ++ a
 display (LogResumeContinuation (RemoteRef a i) (LocalRef j) msg)
-  = show j ++ " <-- " ++ show i ++ "@" ++ a
+  = show j ++ " <-- " ++ show i ++ " @" ++ a
 
 displaySelectedMessage :: AppState -> String
 displaySelectedMessage as = case L.listSelectedElement (asLog as) of
