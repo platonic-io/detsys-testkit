@@ -225,6 +225,11 @@ actorMapGetState lref am = case actorMapUnsafeLookup lref am of
     Just s -> (s, am)
     Nothing -> error "actorMapGetState: impossible, cast failed"
 
+getActorState :: Typeable s => EventLoop -> LocalRef -> IO s
+getActorState ls lref = do
+  am <- readTVarIO (lsActorMap ls)
+  return (fst (actorMapGetState lref am))
+
 ------------------------------------------------------------------------
 
 makeActorMapIO :: IO (TVar ActorMap)
@@ -648,14 +653,14 @@ makeEventLoopThreaded threaded threadpool clock seed tk atk codec dk name = do
   installHandler keyboardSignal (Catch handler) Nothing
   return ls
 
-  {-
-withEventLoop :: EventLoopName -> Codec -> (EventLoop -> FakeTimeHandle -> IO a) -> IO a
-withEventLoop name codec k =
-  withTransport (NamedPipe "/tmp") codec name $ \t -> do
-    (time, h) <- fakeTimeEpoch
+withEventLoop :: EventLoopName -> (EventLoop -> FakeClockHandle -> IO a) -> IO a
+withEventLoop name k =
+  withTransport (NamedPipe "/tmp") fakeCodec name $ \t -> do
+    (time, h) <- fakeClockEpoch
     let seed = makeSeed 0
     disk <- fakeDisk
-    ls <- initLoopState name time seed t disk
+    at <- namedPipeAdminTransport "/tmp" name
+    ls <- initLoopState name time seed t at disk
     a <- async (runHandlers seed
                  [ handleInbound1 ls
                  , handleAsyncIO1 ls
@@ -666,7 +671,6 @@ withEventLoop name codec k =
     x <- k ls h
     quit ls
     return x
--}
 
 runHandlers :: Seed -> [IO ()] -> IO ()
 runHandlers seed0 hs = go seed0

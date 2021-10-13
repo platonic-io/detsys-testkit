@@ -28,6 +28,7 @@ library
     Scheduler.Main
     Scheduler.Executor
     Debugger
+    Disruptor
     StuntDouble
     StuntDouble.ActorMap
     StuntDouble.Codec
@@ -110,6 +111,7 @@ test-suite test
     StuntDouble.FrontendTest
     StuntDouble.HistogramTest
     StuntDouble.QueueTest
+    DisruptorTest
     StuntDouble.Transport.HttpTest
     StuntDouble.Transport.NamedPipeTest
     StuntDouble.Transport.StmTest

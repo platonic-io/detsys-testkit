@@ -16,3 +16,6 @@ data Codec = Codec
   { codecEncode :: Envelope -> Encode
   , codecDecode :: ByteString -> Either String Envelope
   }
+
+fakeCodec :: Codec
+fakeCodec = Codec undefined undefined
