@@ -13,7 +13,7 @@ import qualified Data.Time.Clock as Time -- XXX: remove
 
 import Scheduler.Event
 import Scheduler.Executor
-import Scheduler.Fault (newFaultState, shouldDrop)
+import Scheduler.Fault (newFaultState, shouldDrop, manipulateEvent)
 import Scheduler.Faults (Faults(Faults))
 import Scheduler.State
 import Scheduler.Agenda (Agenda)
@@ -200,8 +200,8 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                                , logicalTime = succLogicalTime (logicalTime s)
                                , steps       = succ (steps s)
                                }
-
-              p <- send executorRef (InternalMessage (prettyEvent ev))
+              s <- get
+              p <- send executorRef (InternalMessage (prettyEvent $ manipulateEvent ev (faultState s)))
               -- currentLogicalTime <- Time.currentLogicalClock timeC
               -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
               on p (\(InternalMessageR (InternalMessage' "Events" args)) -> do
