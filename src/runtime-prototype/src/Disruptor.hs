@@ -153,6 +153,8 @@ nextBatch :: RingBuffer e -> Int -> IO SequenceNumber
 nextBatch rb n
   | n < 1 || fromIntegral n > ringBufferCapacity rb =
       error "nextBatch: n must be >= 1 and =< ringBufferCapacity"
+  -- NOTE: This is the multiple-producer case, we might want to add a simpler
+  -- single-producer case also.
   | otherwise = do
       (current, nextSequence) <- atomicModifyIORef' (rbSequenceNumber rb) $ \current ->
                                    let
