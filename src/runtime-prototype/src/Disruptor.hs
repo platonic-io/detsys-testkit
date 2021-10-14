@@ -20,6 +20,10 @@ import System.Posix.Files
 
 newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Int64 }
   deriving (Num, Eq, Ord, Real, Enum, Integral, Show, Bounded)
+-- ^ NOTE: `(maxBound :: Int64) == 9223372036854775807` so if we write 10M events
+-- per second (`10_000_000*60*60*24*365 == 315360000000000) then it would take
+-- us `9223372036854775807 / 315360000000000 == 29247.1208677536` years before
+-- we overflow.
 
 -- * Ring-buffer
 
@@ -148,10 +152,35 @@ next rb = nextBatch rb 1
 nextBatch :: RingBuffer e -> Int -> IO SequenceNumber
 nextBatch rb n
   | n < 1 || fromIntegral n > ringBufferCapacity rb =
-    error "nextBatch: n < 1 || n > ringBufferCapacity"
+      error "nextBatch: n must be >= 1 and =< ringBufferCapacity"
   | otherwise = do
-    undefined
-    -- XXX: ...
+      (current, nextSequence) <- atomicModifyIORef' (rbSequenceNumber rb) $ \current ->
+                                   let
+                                     nextSequence = current + fromIntegral n
+                                   in
+                                     (nextSequence, (current, nextSequence))
+
+      let wrapPoint :: SequenceNumber
+          wrapPoint = nextSequence - fromIntegral (ringBufferCapacity rb)
+
+      cachedGatingSequence <- getCachedGatingSequence rb
+
+      when (wrapPoint > cachedGatingSequence || cachedGatingSequence > current) $
+        waitForConsumers wrapPoint
+
+      return nextSequence
+  where
+    waitForConsumers :: SequenceNumber -> IO ()
+    waitForConsumers wrapPoint = go
+      where
+        go :: IO ()
+        go = do
+          gatingSequence <- minimumSequence rb
+          if wrapPoint > gatingSequence
+          then do
+            threadDelay 1
+            go
+          else setCachedGatingSequence rb gatingSequence
 
 -- Try to return the next sequence number to write to. If `Nothing` is returned,
 -- then the last consumer has not yet processed the event we are about to
