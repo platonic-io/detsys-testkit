@@ -140,6 +140,7 @@ newEventProducer rb p backPressure s0 = do
           Just snr -> do
             (e, s') <- p s
             set rb snr e
+            -- XXX: removing the following line causes a loop?
             putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
             publish rb snr
             halt <- isItTimeToShutdown shutdownVar
@@ -373,14 +374,11 @@ newEventConsumer rb handler s0 barriers (Sleep n) = do
             -- couple of tries go into a takeMTVar sleep waiting for a producer to
             -- wake us up.
             threadDelay n
-            putStrLn ("nothing to do, mySrn = " ++ show (getSequenceNumber mySnr))
             halt <- isItTimeToShutdown shutdownVar
             if halt
             then return s
             else go s
           Just bSnr -> do
-            putStrLn ("something to do, mySrn = " ++ show (getSequenceNumber mySnr) ++
-                      ", bSnr  = " ++ show (getSequenceNumber bSnr))
             -- XXX: what if handler throws exception? https://youtu.be/eTeWxZvlCZ8?t=2271
             s' <- foldM (\ih snr -> unsafeGet rb snr >>= \e ->
                             handler ih e snr (snr == bSnr)) s [mySnr + 1..bSnr]
@@ -397,8 +395,6 @@ waitFor snr rb [] = waitFor snr rb [RingBufferBarrier rb]
 waitFor snr rb bs = do
   let snrs = map getSequenceNumberRef bs
   minSnr <- minimum <$> mapM readIORef snrs
-  putStrLn ("waitFor: snr = " ++ show (getSequenceNumber snr) ++
-            ", minSrn = " ++ show (getSequenceNumber minSnr))
   if snr < minSnr
   then return (Just minSnr)
   else return Nothing
