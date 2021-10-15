@@ -4,14 +4,12 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Exception
 import Control.Monad
 import Data.IORef
 import System.IO
 import System.IO.Error
 import Test.HUnit
 import Test.QuickCheck
-import Test.QuickCheck.Monadic
 
 import Disruptor
 
@@ -71,14 +69,19 @@ unit_ringBufferMulti = do
   publish rb j
   get rb j @?-> Just 'b'
 
-unit_ringBufferTwoProducersOneConsumer :: Assertion
-unit_ringBufferTwoProducersOneConsumer = do
-  rb <- newRingBuffer SingleProducer 128
+unit_ringBufferFiveProducersOneConsumer :: Assertion
+unit_ringBufferFiveProducersOneConsumer = do
+  rb <- newRingBuffer MultiProducer 128
   counter <- newIORef 0 :: IO (IORef Int)
+
   let production   () = atomicModifyIORef' counter (\n -> (n + 1, (n, ())))
       backPressure () = return ()
   ep1 <- newEventProducer rb production backPressure ()
   ep2 <- newEventProducer rb production backPressure ()
+  ep3 <- newEventProducer rb production backPressure ()
+  ep4 <- newEventProducer rb production backPressure ()
+  ep5 <- newEventProducer rb production backPressure ()
+
   let handler seen n _snr endOfBatch
         | n `Set.member` seen = error (show n ++ " appears twice")
         | otherwise           = return (Set.insert n seen)
@@ -88,7 +91,7 @@ unit_ringBufferTwoProducersOneConsumer = do
 
       areWeDoneProducing = do
         n <- readIORef counter
-        if n >= 10
+        if n >= atLeastThisManyEvents
         then return ()
         else do
           threadDelay 10000
@@ -96,7 +99,7 @@ unit_ringBufferTwoProducersOneConsumer = do
 
       areWeDoneConsuming = do
         snr <- readIORef (ecSequenceNumber ec)
-        if snr >= fromIntegral 10
+        if snr >= fromIntegral atLeastThisManyEvents
         then return ()
         else do
           threadDelay 10000
@@ -104,14 +107,24 @@ unit_ringBufferTwoProducersOneConsumer = do
 
   withEventProducer ep1 $ \aep1 ->
     withEventProducer ep2 $ \aep2 ->
-      withEventConsumer ec $ \aec ->
-        withAsync areWeThereYet $ \a -> do
-          wait a
-          mapM_ shutdownProducer [ep1, ep2]
-          shutdownConsumer ec
-          mapM_ wait [aep1, aep2]
-          seen <- wait aec
-          print seen
+      withEventProducer ep3 $ \aep3 ->
+        withEventProducer ep4 $ \aep4 ->
+          withEventProducer ep5 $ \aep5 ->
+            withEventConsumer ec $ \aec ->
+              withAsync areWeThereYet $ \a -> do
+                wait a
+                mapM_ shutdownProducer [ep1, ep2, ep3, ep4, ep5]
+                shutdownConsumer ec
+                mapM_ wait [aep1, aep2, aep3, aep4, aep5]
+                seen <- wait aec
+                assert (increasingByOneFrom 0 (Set.toList seen))
+  where
+    atLeastThisManyEvents = 10000
+
+    increasingByOneFrom n [] = n >= atLeastThisManyEvents && n < atLeastThisManyEvents + 500
+    increasingByOneFrom n (i : is) | n == i    = increasingByOneFrom (n + 1) is
+                                   | otherwise = False
+
 
   {-
 main :: IO ()
