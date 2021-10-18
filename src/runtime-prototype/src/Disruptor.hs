@@ -4,7 +4,7 @@
 module Disruptor where
 
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (Async, withAsync, link)
+import Control.Concurrent.Async (Async, link, withAsync, withAsyncOn)
 import Control.Concurrent.STM
        (TMVar, atomically, isEmptyTMVar, newEmptyTMVarIO, tryPutTMVar)
 import Control.Monad (foldM, void, when)
@@ -33,7 +33,7 @@ newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Int64 }
 
 -- * Ring-buffer
 
-data RingBufferMode
+data ProducerType
   = SingleProducer
 
   -- | The lock-free multi-producer implementation is presented in the following
@@ -52,25 +52,29 @@ data RingBufferMode
   | MultiProducer
 
 data RingBuffer e = RingBuffer
-  { rbMode            :: RingBufferMode
+  {
+  -- | Keeps track of if the ring buffer was created for single or multiple
+  -- producer(s).
+    rbProducerType :: ProducerType
   -- | The capacity, or maximum amount of values, of the ring buffer.
-  , rbCapacity        :: Int64
-  , rbSequenceNumber  :: IORef SequenceNumber
+  , rbCapacity :: Int64
+  -- | The cursor pointing to the head of the ring buffer.
+  , rbSequenceNumber :: IORef SequenceNumber
   -- | The values of the ring buffer.
-  , rbEvents          :: IOVector e
+  , rbEvents :: IOVector e
   -- | References to the last consumers' sequence numbers, used in order to
   -- avoid wrapping the buffer and overwriting events that have not been
   -- consumed yet.
-  , rbGatingSequences      :: IORef [IORef SequenceNumber]
+  , rbGatingSequences :: IORef [IORef SequenceNumber]
   -- | Cached value of computing the last consumers' sequence numbers using the
   -- above references.
   , rbCachedGatingSequence :: IORef SequenceNumber
   -- | Used to keep track of what has been published in the multi-producer case.
-  , rbAvailableBuffer      :: IOVector Int
+  , rbAvailableBuffer :: IOVector Int
   }
 
-newRingBuffer :: RingBufferMode -> Int -> IO (RingBuffer e)
-newRingBuffer mode capacity
+newRingBuffer :: ProducerType -> Int -> IO (RingBuffer e)
+newRingBuffer producerType capacity
   | capacity <= 0          =
       error "newRingBuffer: capacity must be greater than 0"
   | popCount capacity /= 1 =
@@ -81,11 +85,11 @@ newRingBuffer mode capacity
       v   <- Vector.new capacity
       gs  <- newIORef []
       cgs <- newIORef (-1)
-      ab  <- Vector.new (case mode of
+      ab  <- Vector.new (case producerType of
                            SingleProducer -> 0
                            MultiProducer  -> capacity)
       Vector.set ab (-1)
-      return (RingBuffer mode (fromIntegral capacity) snr v gs cgs ab)
+      return (RingBuffer producerType (fromIntegral capacity) snr v gs cgs ab)
 
 ringBufferCapacity :: RingBuffer e -> Int64
 ringBufferCapacity = rbCapacity
@@ -174,6 +178,12 @@ withEventProducer ep k = withAsync (epWorker ep (epInitialState ep)) $ \a -> do
   link a
   k a
 
+withEventProducerOn :: Int -> EventProducer s -> (Async s -> IO a) -> IO a
+withEventProducerOn capability ep k =
+  withAsyncOn capability (epWorker ep (epInitialState ep)) $ \a -> do
+    link a
+    k a
+
 -- | Claim the next event in sequence for publishing.
 next :: RingBuffer e -> IO SequenceNumber
 next rb = nextBatch rb 1
@@ -235,7 +245,7 @@ tryNext rb = tryNextBatch rb 1
 tryNextBatch :: RingBuffer e -> Int -> IO (Maybe SequenceNumber)
 tryNextBatch rb n
   | n < 1     = error "tryNextBatch: n must be > 0"
-  | otherwise = case rbMode rb of
+  | otherwise = case rbProducerType rb of
       SingleProducer -> sp
       MultiProducer  -> mp
   where
@@ -320,20 +330,20 @@ set :: RingBuffer e -> SequenceNumber -> e -> IO ()
 set rb snr e = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
 
 publish :: RingBuffer e -> SequenceNumber -> IO ()
-publish rb snr = case rbMode rb of
+publish rb snr = case rbProducerType rb of
   SingleProducer -> claim rb snr
   MultiProducer  ->
     setAvailable rb snr
     -- XXX: Wake up consumers that are using a sleep wait strategy.
 
 publishBatch :: RingBuffer e -> SequenceNumber -> SequenceNumber -> IO ()
-publishBatch rb lo hi = case rbMode rb of
+publishBatch rb lo hi = case rbProducerType rb of
   SingleProducer -> claim rb hi
   MultiProducer  -> mapM_ (setAvailable rb) [lo..hi]
     -- XXX: Wake up consumers that are using a sleep wait strategy.
 
 unsafeGet :: RingBuffer e -> SequenceNumber -> IO e
-unsafeGet rb current = case rbMode rb of
+unsafeGet rb current = case rbProducerType rb of
   SingleProducer -> Vector.read (rbEvents rb) (index (rbCapacity rb) current)
   MultiProducer  -> go
   where
@@ -380,7 +390,12 @@ withEventConsumer :: EventConsumer s -> (Async s -> IO a) -> IO a
 withEventConsumer ec k = withAsync (ecWorker ec (ecInitialState ec)) $ \a -> do
   link a
   k a
-  -- ^ XXX: Pin to a specific CPU core with `withAsyncOn`?
+
+withEventConsumerOn :: Int -> EventConsumer s -> (Async s -> IO a) -> IO a
+withEventConsumerOn capability ec k =
+  withAsyncOn capability (ecWorker ec (ecInitialState ec)) $ \a -> do
+    link a
+    k a
 
 newtype Shutdown = Shutdown (TMVar ())
 
