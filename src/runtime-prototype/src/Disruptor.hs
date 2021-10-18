@@ -61,6 +61,9 @@ data RingBuffer e = RingBuffer
   -- consumed yet.
   , rbGatingSequences      :: IORef [IORef SequenceNumber]
   , rbCachedGatingSequence :: IORef SequenceNumber
+  -- | Used to keep track of what has been published in the single-producer case.
+  , rbNextSequence         :: IORef SequenceNumber
+  -- | Used to keep track of what has been published in the multi-producer case.
   , rbAvailableBuffer      :: IOVector Int
   }
 
@@ -76,11 +79,15 @@ newRingBuffer mode capacity
       v   <- Vector.new capacity
       gs  <- newIORef []
       cgs <- newIORef (-1)
+      ns  <- case mode of
+        SingleProducer -> newIORef (-1)
+        MultiProducer  -> newIORef
+          (error "Impossible, rbNextSequence is never used in the multi-producer case.")
       ab  <- Vector.new (case mode of
                            SingleProducer -> 0
                            MultiProducer  -> capacity)
       Vector.set ab (-1)
-      return (RingBuffer mode (fromIntegral capacity) snr v gs cgs ab)
+      return (RingBuffer mode (fromIntegral capacity) snr v gs cgs ns ab)
 
 ringBufferCapacity :: RingBuffer e -> Int64
 ringBufferCapacity = rbCapacity
@@ -156,7 +163,7 @@ newEventProducer rb p backPressure s0 = do
             (e, s') <- p s
             set rb snr e
             -- XXX: removing the following line causes a loop.
-            threadDelay 10
+            -- threadDelay 10
             publish rb snr
             putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
             halt <- isItTimeToShutdown shutdownVar
@@ -232,9 +239,23 @@ tryNext rb = tryNextBatch rb 1
 tryNextBatch :: RingBuffer e -> Int -> IO (Maybe SequenceNumber)
 tryNextBatch rb n
   | n < 1     = error "tryNextBatch: n must be > 0"
-  | otherwise = go
+  | otherwise = case rbMode rb of
+      SingleProducer -> sp
+      MultiProducer  -> mp
   where
-    go = do
+    sp :: IO (Maybe SequenceNumber)
+    sp = do
+      current <- readIORef (rbSequenceNumber rb)
+      next    <- (fromIntegral n +) <$> readIORef (rbNextSequence rb)
+      b <- hasCapacity' rb n current
+      if not b
+      then return Nothing
+      else do
+        atomicWriteIORef (rbNextSequence rb) next
+        return (Just next)
+
+    mp :: IO (Maybe SequenceNumber)
+    mp = do
       current <- readForCAS (rbSequenceNumber rb)
       let current_ = peekTicket current
           next     = current_ + fromIntegral n
@@ -242,12 +263,10 @@ tryNextBatch rb n
       if not b
       then return Nothing
       else do
-        -- NOTE: In the SingleProducer case we could just use writeIORef here,
-        -- but not sure if it's worth the extra branch...
         (success, _current') <- casIORef (rbSequenceNumber rb) current next
         if success
         then return (Just next)
-        else go
+        else mp
 
 remainingCapacity :: RingBuffer e -> IO Int64
 remainingCapacity rb = do

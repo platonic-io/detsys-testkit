@@ -74,7 +74,7 @@ unit_ringBufferSingleProducerSingleConsumer = do
   rb <- newRingBuffer SingleProducer 128
   counter <- newIORef 0 :: IO (IORef Int)
 
-  let production   () = atomicModifyIORef' counter (\n -> (n + 1, (n, ())))
+  let production   () = threadDelay 1000 >> atomicModifyIORef' counter (\n -> (n + 1, (n, ())))
       backPressure () = return ()
   ep <- newEventProducer rb production backPressure ()
   let handler seen n _snr endOfBatch
