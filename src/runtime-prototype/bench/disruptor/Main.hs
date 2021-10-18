@@ -11,7 +11,7 @@ import Disruptor
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64
-iTERATIONS = 1000 * 1000 * 100 -- 2000
+iTERATIONS = 1000 * 1000 * 100
 
 main :: IO ()
 main = do
@@ -20,7 +20,7 @@ main = do
   let ringBufferCapacity = 1024 * 64
   rb <- newRingBuffer SingleProducer ringBufferCapacity
 
-  let production   () = return ((), ())
+  let production   () = return (1 :: Int, ())
       backPressure () = return ()
   ep <- newEventProducer rb production backPressure ()
   let handler _s _n snr _endOfBatch = return (getSequenceNumber snr)
@@ -33,12 +33,12 @@ main = do
         if snr >= fromIntegral iTERATIONS - 1
         then return ()
         else do
-          threadDelay 1000
+          threadDelay 10000
           areWeDoneConsuming
   start <- getCurrentTime
-  withEventProducerOn 1 ep $ \aep ->
-    withEventConsumerOn 2 ec $ \aec ->
-     withAsyncOn 3 areWeDoneConsuming $ \a -> do
+  withEventProducer ep $ \aep ->
+    withEventConsumer ec $ \aec ->
+     withAsync areWeDoneConsuming $ \a -> do
        wait a
        shutdownProducer ep
        wait aep
