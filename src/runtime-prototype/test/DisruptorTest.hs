@@ -69,6 +69,62 @@ unit_ringBufferMulti = do
   publish rb j
   get rb j @?-> Just 'b'
 
+unit_ringBufferSingleProducerSingleConsumer :: Assertion
+unit_ringBufferSingleProducerSingleConsumer = do
+  rb <- newRingBuffer SingleProducer 128
+  counter <- newIORef 0 :: IO (IORef Int)
+
+  let production   () = atomicModifyIORef' counter (\n -> (n + 1, (n, ())))
+      backPressure () = return ()
+  ep <- newEventProducer rb production backPressure ()
+  let handler seen n _snr endOfBatch
+        | n `Set.member` seen = error (show n ++ " appears twice")
+        | otherwise           = do
+            putStrLn ("consumer got: " ++ show n ++
+                      if endOfBatch then ". End of batch!" else "")
+            return (Set.insert n seen)
+  ec <- newEventConsumer rb handler Set.empty [] (Sleep 1000)
+
+  let areWeDoneProducing = do
+        n <- readIORef counter
+        if n >= atLeastThisManyEvents
+        then return ()
+        else do
+          threadDelay 10000
+          areWeDoneProducing
+
+      areWeDoneConsuming = do
+        snr <- readIORef (ecSequenceNumber ec)
+        -- NOTE: We need -1 below because the sequence number starts at 0. We
+        -- don't really need it in `areWeDoneProducing`, because producing one
+        -- extra event doesn't matter.
+        if snr >= fromIntegral atLeastThisManyEvents - 1
+        then return ()
+        else do
+          threadDelay 10000
+          areWeDoneConsuming
+
+  withEventProducer ep $ \aep ->
+    withEventConsumer ec $ \aec ->
+      withAsync areWeDoneProducing $ \ap -> do
+        withAsync areWeDoneConsuming $ \ac -> do
+          wait ap
+          shutdownProducer ep
+          wait aep
+          putStrLn "Done producing!"
+          wait ac
+          shutdownConsumer ec
+          seen <- wait aec
+          putStrLn "Done consuming!"
+          assert (increasingByOneFrom 0 (Set.toList seen))
+  where
+    atLeastThisManyEvents = 1000
+
+    increasingByOneFrom :: Int -> [Int] -> Bool
+    increasingByOneFrom n [] = n >= atLeastThisManyEvents && n < atLeastThisManyEvents + 500
+    increasingByOneFrom n (i : is) | n == i    = increasingByOneFrom (n + 1) is
+                                   | otherwise = False
+
 unit_ringBufferFiveProducersOneConsumer :: Assertion
 unit_ringBufferFiveProducersOneConsumer = do
   rb <- newRingBuffer MultiProducer 128
@@ -129,6 +185,7 @@ unit_ringBufferFiveProducersOneConsumer = do
   where
     atLeastThisManyEvents = 10
 
+    increasingByOneFrom :: Int -> [Int] -> Bool
     increasingByOneFrom n [] = n >= atLeastThisManyEvents && n < atLeastThisManyEvents + 500
     increasingByOneFrom n (i : is) | n == i    = increasingByOneFrom (n + 1) is
                                    | otherwise = False

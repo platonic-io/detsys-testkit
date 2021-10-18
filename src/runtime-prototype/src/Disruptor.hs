@@ -33,7 +33,23 @@ newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Int64 }
 
 -- * Ring-buffer
 
-data RingBufferMode = SingleProducer | MultiProducer
+data RingBufferMode
+  = SingleProducer
+
+  -- | The lock-free multi-producer implementation is presented in the following
+  -- talk:
+  --
+  --   https://youtu.be/VBnLW9mKMh4?t=1813
+  --
+  -- and also discussed in the following thread:
+  --
+  --   https://groups.google.com/g/lmax-disruptor/c/UhmRuz_CL6E/m/-hVt86bHvf8J
+  --
+  -- Note that one can also achieve a similar result by using multiple
+  -- single-producers and combine them into one as outlined in this thread:
+  --
+  -- https://groups.google.com/g/lmax-disruptor/c/hvJVE-h2Xu0/m/mBW0j_3SrmIJ
+  | MultiProducer
 
 data RingBuffer e = RingBuffer
   { rbMode            :: RingBufferMode
@@ -290,10 +306,6 @@ minimumSequence' gatingSequences cursorValue = do
 set :: RingBuffer e -> SequenceNumber -> e -> IO ()
 set rb snr e = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
 
--- TODO: Non-blocking multi-producer: https://youtu.be/VBnLW9mKMh4?t=1813
--- https://groups.google.com/g/lmax-disruptor/c/UhmRuz_CL6E/m/-hVt86bHvf8J
--- Multiple single-producers combined into one:
--- https://groups.google.com/g/lmax-disruptor/c/hvJVE-h2Xu0/m/mBW0j_3SrmIJ
 publish :: RingBuffer e -> SequenceNumber -> IO ()
 publish rb snr = case rbMode rb of
   SingleProducer -> claim rb snr
