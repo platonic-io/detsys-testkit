@@ -17,7 +17,6 @@ import Data.IORef
        , atomicWriteIORef
        , newIORef
        , readIORef
-       , writeIORef
        )
 import Data.Int (Int64)
 import Data.Vector.Mutable (IOVector)
@@ -140,9 +139,10 @@ newEventProducer rb p backPressure s0 = do
           Just snr -> do
             (e, s') <- p s
             set rb snr e
-            -- XXX: removing the following line causes a loop?
-            putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
+            -- XXX: removing the following line causes a loop.
+            threadDelay 10
             publish rb snr
+            putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
             halt <- isItTimeToShutdown shutdownVar
             if halt
             then return s'
@@ -222,8 +222,8 @@ tryNextBatch rb n
       current <- readForCAS (rbSequenceNumber rb)
       let current_ = peekTicket current
           next     = current_ + fromIntegral n
-      hasCapacity <- hasAvailableCapacity' rb n current_
-      if not hasCapacity
+      b <- hasCapacity' rb n current_
+      if not b
       then return Nothing
       else do
         -- NOTE: In the SingleProducer case we could just use writeIORef here,
@@ -239,13 +239,13 @@ remainingCapacity rb = do
   produced <- getCursor rb
   return (ringBufferCapacity rb - fromIntegral (produced - consumed))
 
-hasAvailableCapacity :: RingBuffer e -> Int -> IO Bool
-hasAvailableCapacity rb requiredCapacity = do
+hasCapacity :: RingBuffer e -> Int -> IO Bool
+hasCapacity rb requiredCapacity = do
   cursorValue <- getCursor rb
-  hasAvailableCapacity' rb requiredCapacity cursorValue
+  hasCapacity' rb requiredCapacity cursorValue
 
-hasAvailableCapacity' :: RingBuffer e -> Int -> SequenceNumber -> IO Bool
-hasAvailableCapacity' rb requiredCapacity cursorValue = do
+hasCapacity' :: RingBuffer e -> Int -> SequenceNumber -> IO Bool
+hasCapacity' rb requiredCapacity cursorValue = do
   let wrapPoint = (cursorValue + fromIntegral requiredCapacity) -
                   fromIntegral (ringBufferCapacity rb)
   cachedGatingSequence <- getCachedGatingSequence rb
@@ -257,6 +257,25 @@ hasAvailableCapacity' rb requiredCapacity cursorValue = do
     then return False
     else return True
   else return True
+
+isAvailable :: RingBuffer e -> SequenceNumber -> IO Bool
+isAvailable rb snr =
+  (==) <$> Vector.read (rbAvailableBuffer rb) (index capacity snr)
+       <*> pure (availabilityFlag capacity snr)
+  where
+    capacity = rbCapacity rb
+
+highestPublished :: RingBuffer e -> SequenceNumber -> SequenceNumber
+                 -> IO SequenceNumber
+highestPublished rb lowerBound availableSequence = go lowerBound
+  where
+    go sequence
+      | sequence > availableSequence = return availableSequence
+      | otherwise                    = do
+          available <- isAvailable rb sequence
+          if not (available)
+          then return (sequence - 1)
+          else go (sequence + 1)
 
 minimumSequence :: RingBuffer e -> IO SequenceNumber
 minimumSequence rb = do
@@ -382,7 +401,7 @@ newEventConsumer rb handler s0 barriers (Sleep n) = do
             -- XXX: what if handler throws exception? https://youtu.be/eTeWxZvlCZ8?t=2271
             s' <- foldM (\ih snr -> unsafeGet rb snr >>= \e ->
                             handler ih e snr (snr == bSnr)) s [mySnr + 1..bSnr]
-            writeIORef snrRef bSnr
+            atomicWriteIORef snrRef bSnr
             halt <- isItTimeToShutdown shutdownVar
             if halt
             then return s'
@@ -395,6 +414,7 @@ waitFor snr rb [] = waitFor snr rb [RingBufferBarrier rb]
 waitFor snr rb bs = do
   let snrs = map getSequenceNumberRef bs
   minSnr <- minimum <$> mapM readIORef snrs
+  putStrLn $ "waitFor: snr = " ++ show (getSequenceNumber snr) ++ ", minSrn = " ++ show (getSequenceNumber minSnr)
   if snr < minSnr
   then return (Just minSnr)
   else return Nothing

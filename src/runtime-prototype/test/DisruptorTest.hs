@@ -84,12 +84,13 @@ unit_ringBufferFiveProducersOneConsumer = do
 
   let handler seen n _snr endOfBatch
         | n `Set.member` seen = error (show n ++ " appears twice")
-        | otherwise           = return (Set.insert n seen)
+        | otherwise           = do
+            putStrLn ("consumer got: " ++ show n ++
+                      if endOfBatch then ". End of batch!" else "")
+            return (Set.insert n seen)
   ec <- newEventConsumer rb handler Set.empty [] (Sleep 1000)
 
-  let areWeThereYet = areWeDoneProducing >> areWeDoneConsuming
-
-      areWeDoneProducing = do
+  let areWeDoneProducing = do
         n <- readIORef counter
         if n >= atLeastThisManyEvents
         then return ()
@@ -99,7 +100,10 @@ unit_ringBufferFiveProducersOneConsumer = do
 
       areWeDoneConsuming = do
         snr <- readIORef (ecSequenceNumber ec)
-        if snr >= fromIntegral atLeastThisManyEvents
+        -- NOTE: We need -1 below because the sequence number starts at 0. We
+        -- don't really need it in `areWeDoneProducing`, because producing one
+        -- extra event doesn't matter.
+        if snr >= fromIntegral atLeastThisManyEvents - 1
         then return ()
         else do
           threadDelay 10000
@@ -111,15 +115,19 @@ unit_ringBufferFiveProducersOneConsumer = do
         withEventProducer ep4 $ \aep4 ->
           withEventProducer ep5 $ \aep5 ->
             withEventConsumer ec $ \aec ->
-              withAsync areWeThereYet $ \a -> do
-                wait a
-                mapM_ shutdownProducer [ep1, ep2, ep3, ep4, ep5]
-                shutdownConsumer ec
-                mapM_ wait [aep1, aep2, aep3, aep4, aep5]
-                seen <- wait aec
-                assert (increasingByOneFrom 0 (Set.toList seen))
+              withAsync areWeDoneProducing $ \ap -> do
+                withAsync areWeDoneConsuming $ \ac -> do
+                  wait ap
+                  mapM_ shutdownProducer [ep1, ep2, ep3, ep4, ep5]
+                  mapM_ wait [aep1, aep2, aep3, aep4, aep5]
+                  putStrLn "Done producing!"
+                  wait ac
+                  shutdownConsumer ec
+                  seen <- wait aec
+                  putStrLn "Done consuming!"
+                  assert (increasingByOneFrom 0 (Set.toList seen))
   where
-    atLeastThisManyEvents = 10000
+    atLeastThisManyEvents = 10
 
     increasingByOneFrom n [] = n >= atLeastThisManyEvents && n < atLeastThisManyEvents + 500
     increasingByOneFrom n (i : is) | n == i    = increasingByOneFrom (n + 1) is
