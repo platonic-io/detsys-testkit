@@ -53,13 +53,17 @@ data RingBufferMode
 
 data RingBuffer e = RingBuffer
   { rbMode            :: RingBufferMode
+  -- | The capacity, or maximum amount of values, of the ring buffer.
   , rbCapacity        :: Int64
   , rbSequenceNumber  :: IORef SequenceNumber
+  -- | The values of the ring buffer.
   , rbEvents          :: IOVector e
   -- | References to the last consumers' sequence numbers, used in order to
   -- avoid wrapping the buffer and overwriting events that have not been
   -- consumed yet.
   , rbGatingSequences      :: IORef [IORef SequenceNumber]
+  -- | Cached value of computing the last consumers' sequence numbers using the
+  -- above references.
   , rbCachedGatingSequence :: IORef SequenceNumber
   -- | Used to keep track of what has been published in the single-producer case.
   , rbNextSequence         :: IORef SequenceNumber
@@ -354,8 +358,12 @@ unsafeGet rb current = case rbMode rb of
 
     go = do
       v <- getAvailable rb ix
+      putStrLn ("unsafeGet: v = " ++ show v ++ ", availableValue = " ++ show availableValue)
       if v /= availableValue
-      then go -- XXX: a bit of sleep?
+      then do
+        -- XXX: remove
+        threadDelay 100000
+        go
       else Vector.read (rbEvents rb) ix
 
 get :: RingBuffer e -> SequenceNumber -> IO (Maybe e)
