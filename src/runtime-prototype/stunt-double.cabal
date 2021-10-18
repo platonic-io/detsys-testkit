@@ -172,3 +172,27 @@ benchmark bench-http
     , time
   ghc-options:    -threaded -eventlog -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
+
+benchmark bench-disruptor
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/disruptor
+  main-is:        Main.hs
+  build-depends:
+      async
+    , base
+    , stunt-double
+    , time
+  ghc-options:    -threaded -eventlog -rtsopts -with-rtsopts=-N
+  default-language: Haskell2010
+
+benchmark bench-disruptor-tbqueue
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/disruptor
+  main-is:        TBQueue.hs
+  build-depends:
+      async
+    , base
+    , stm
+    , time
+  ghc-options:    -threaded -eventlog -rtsopts -with-rtsopts=-N
+  default-language: Haskell2010
