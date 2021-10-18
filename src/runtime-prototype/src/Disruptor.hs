@@ -338,10 +338,7 @@ unsafeGet rb current = case rbMode rb of
   MultiProducer  -> go
   where
     availableValue :: Int
-    availableValue = fromIntegral (getSequenceNumber current `shiftR` indexShift)
-      where
-        indexShift :: Int
-        indexShift = logBase2 (rbCapacity rb)
+    availableValue = availabilityFlag (rbCapacity rb) current
 
     ix :: Int
     ix = index (rbCapacity rb) current
