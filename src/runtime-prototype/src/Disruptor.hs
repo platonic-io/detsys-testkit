@@ -349,10 +349,7 @@ unsafeGet rb current = case rbMode rb of
     go = do
       v <- getAvailable rb ix
       if v /= availableValue
-      then do
-        -- XXX: remove
-        threadDelay 100000
-        go
+      then go
       else Vector.read (rbEvents rb) ix
 
 get :: RingBuffer e -> SequenceNumber -> IO (Maybe e)

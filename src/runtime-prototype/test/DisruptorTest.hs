@@ -155,7 +155,7 @@ unit_ringBufferFiveProducersOneConsumer = do
         if n >= atLeastThisManyEvents
         then return ()
         else do
-          threadDelay 10000
+          threadDelay 10
           areWeDoneProducing
 
       areWeDoneConsuming = do
@@ -166,7 +166,7 @@ unit_ringBufferFiveProducersOneConsumer = do
         if snr >= fromIntegral atLeastThisManyEvents - 1
         then return ()
         else do
-          threadDelay 10000
+          threadDelay 10
           areWeDoneConsuming
 
   withEventProducer ep1 $ \aep1 ->
@@ -185,14 +185,21 @@ unit_ringBufferFiveProducersOneConsumer = do
                   shutdownConsumer ec
                   seen <- wait aec
                   putStrLn "Done consuming!"
-                  assert (increasingByOneFrom 0 (Set.toList seen))
+                  assertEqual "increasingByOneFrom"
+                    (Right ())
+                    (increasingByOneFrom 0 (Set.toList seen))
   where
-    atLeastThisManyEvents = 10
+    atLeastThisManyEvents = 1024
 
-    increasingByOneFrom :: Int -> [Int] -> Bool
-    increasingByOneFrom n [] = n >= atLeastThisManyEvents && n < atLeastThisManyEvents + 500
+    increasingByOneFrom :: Int -> [Int] -> Either String ()
+    increasingByOneFrom n []
+      | n >= atLeastThisManyEvents = Right ()
+      | n <  atLeastThisManyEvents =
+          Left ("n (= " ++ show n ++ ") < atLeastThisManyEvents (= " ++
+                show atLeastThisManyEvents ++ ")")
     increasingByOneFrom n (i : is) | n == i    = increasingByOneFrom (n + 1) is
-                                   | otherwise = False
+                                   | otherwise =
+      Left ("Expected: " ++ show n ++ ", but got: " ++ show i)
 
 
   {-
