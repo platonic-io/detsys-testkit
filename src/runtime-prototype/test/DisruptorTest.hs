@@ -69,6 +69,58 @@ unit_ringBufferMulti = do
   publish rb j
   get rb j @?-> Just 'b'
 
+unit_ringBufferSingleProducerSingleConsumer :: Assertion
+unit_ringBufferSingleProducerSingleConsumer = do
+  rb <- newRingBuffer SingleProducer 128
+  counter <- newIORef 0 :: IO (IORef Int)
+
+  let production   () = threadDelay 1000 >> atomicModifyIORef' counter (\n -> (n + 1, (n, ())))
+      backPressure () = return ()
+  ep <- newEventProducer rb production backPressure ()
+  let handler seen n _snr endOfBatch
+        | n /= seen = error (show n ++ " appears twice")
+        | otherwise = do
+            putStrLn ("consumer got: " ++ show n ++
+                      if endOfBatch then ". End of batch!" else "")
+            return (succ seen)
+  ec <- newEventConsumer rb handler 0 [] (Sleep 1000)
+
+  setGatingSequences rb [Exists ec]
+
+  let areWeDoneProducing = do
+        n <- readIORef counter
+        if n >= atLeastThisManyEvents
+        then return ()
+        else do
+          threadDelay 10000
+          areWeDoneProducing
+
+      areWeDoneConsuming = do
+        snr <- readIORef (ecSequenceNumber ec)
+        -- NOTE: We need -1 below because the sequence number starts at 0. We
+        -- don't really need it in `areWeDoneProducing`, because producing one
+        -- extra event doesn't matter.
+        if snr >= fromIntegral atLeastThisManyEvents - 1
+        then return ()
+        else do
+          threadDelay 10000
+          areWeDoneConsuming
+
+  withEventProducer ep $ \aep ->
+    withEventConsumer ec $ \aec ->
+      withAsync areWeDoneProducing $ \ap -> do
+        withAsync areWeDoneConsuming $ \ac -> do
+          wait ap
+          shutdownProducer ep
+          wait aep
+          putStrLn "Done producing!"
+          wait ac
+          shutdownConsumer ec
+          seen <- wait aec
+          putStrLn "Done consuming!"
+  where
+    atLeastThisManyEvents = 1000
+
 unit_ringBufferFiveProducersOneConsumer :: Assertion
 unit_ringBufferFiveProducersOneConsumer = do
   rb <- newRingBuffer MultiProducer 128
@@ -90,12 +142,14 @@ unit_ringBufferFiveProducersOneConsumer = do
             return (Set.insert n seen)
   ec <- newEventConsumer rb handler Set.empty [] (Sleep 1000)
 
+  setGatingSequences rb [Exists ec]
+
   let areWeDoneProducing = do
         n <- readIORef counter
         if n >= atLeastThisManyEvents
         then return ()
         else do
-          threadDelay 10000
+          threadDelay 10
           areWeDoneProducing
 
       areWeDoneConsuming = do
@@ -106,7 +160,7 @@ unit_ringBufferFiveProducersOneConsumer = do
         if snr >= fromIntegral atLeastThisManyEvents - 1
         then return ()
         else do
-          threadDelay 10000
+          threadDelay 10
           areWeDoneConsuming
 
   withEventProducer ep1 $ \aep1 ->
@@ -125,49 +179,18 @@ unit_ringBufferFiveProducersOneConsumer = do
                   shutdownConsumer ec
                   seen <- wait aec
                   putStrLn "Done consuming!"
-                  assert (increasingByOneFrom 0 (Set.toList seen))
+                  assertEqual "increasingByOneFrom"
+                    (Right ())
+                    (increasingByOneFrom 0 (Set.toList seen))
   where
-    atLeastThisManyEvents = 10
+    atLeastThisManyEvents = 1024
 
-    increasingByOneFrom n [] = n >= atLeastThisManyEvents && n < atLeastThisManyEvents + 500
+    increasingByOneFrom :: Int -> [Int] -> Either String ()
+    increasingByOneFrom n []
+      | n >= atLeastThisManyEvents = Right ()
+      | n <  atLeastThisManyEvents =
+          Left ("n (= " ++ show n ++ ") < atLeastThisManyEvents (= " ++
+                show atLeastThisManyEvents ++ ")")
     increasingByOneFrom n (i : is) | n == i    = increasingByOneFrom (n + 1) is
-                                   | otherwise = False
-
-
-  {-
-main :: IO ()
-main = do
-  let pipe = "/tmp/producer-pipe"
-  safeCreateNamedPipe pipe
-  h <- openFile pipe ReadWriteMode
-  hSetBuffering h LineBuffering
-  let backPressure = const (threadDelay 1000000)
-  ep <- newEventProducer rb producer backPressure h
-  link (epAsync ep)
-  ec <- newEventConsumer handler rb [] (Sleep 1000000)
-  setGatingSequences rb [ec]
-  link (ecAsync ec)
-  threadDelay 5000000
-  cancel (epAsync ep)
-  cancel (ecAsync ec)
-  return ()
-  where
-    handler str snr eob = putStrLn (show (getSequenceNumber snr) ++ ": " ++ str ++
-                                    if eob then ";" else "")
-    producer h = do
-      l <- hGetLine h
-      return (l, h)
-
-safeCreateNamedPipe :: FilePath -> IO ()
-safeCreateNamedPipe fp =
-  catchJust
-    (\e -> if isAlreadyExistsErrorType (ioeGetErrorType e)
-           then Just ()
-           else Nothing)
-    (createNamedPipe fp
-      (namedPipeMode `unionFileModes`
-       ownerReadMode `unionFileModes`
-       ownerWriteMode))
-    return
-
--}
+                                   | otherwise =
+      Left ("Expected: " ++ show n ++ ", but got: " ++ show i)

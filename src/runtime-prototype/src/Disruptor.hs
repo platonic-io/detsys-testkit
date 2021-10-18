@@ -33,18 +33,39 @@ newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Int64 }
 
 -- * Ring-buffer
 
-data RingBufferMode = SingleProducer | MultiProducer
+data RingBufferMode
+  = SingleProducer
+
+  -- | The lock-free multi-producer implementation is presented in the following
+  -- talk:
+  --
+  --   https://youtu.be/VBnLW9mKMh4?t=1813
+  --
+  -- and also discussed in the following thread:
+  --
+  --   https://groups.google.com/g/lmax-disruptor/c/UhmRuz_CL6E/m/-hVt86bHvf8J
+  --
+  -- Note that one can also achieve a similar result by using multiple
+  -- single-producers and combine them into one as outlined in this thread:
+  --
+  -- https://groups.google.com/g/lmax-disruptor/c/hvJVE-h2Xu0/m/mBW0j_3SrmIJ
+  | MultiProducer
 
 data RingBuffer e = RingBuffer
   { rbMode            :: RingBufferMode
+  -- | The capacity, or maximum amount of values, of the ring buffer.
   , rbCapacity        :: Int64
   , rbSequenceNumber  :: IORef SequenceNumber
+  -- | The values of the ring buffer.
   , rbEvents          :: IOVector e
   -- | References to the last consumers' sequence numbers, used in order to
   -- avoid wrapping the buffer and overwriting events that have not been
   -- consumed yet.
   , rbGatingSequences      :: IORef [IORef SequenceNumber]
+  -- | Cached value of computing the last consumers' sequence numbers using the
+  -- above references.
   , rbCachedGatingSequence :: IORef SequenceNumber
+  -- | Used to keep track of what has been published in the multi-producer case.
   , rbAvailableBuffer      :: IOVector Int
   }
 
@@ -111,8 +132,10 @@ availabilityFlag capacity (SequenceNumber snr) =
   where
     indexShift = logBase2 capacity
 
+-- Taken from:
+-- https://hackage.haskell.org/package/base-4.15.0.0/docs/Data-Bits.html#v:countLeadingZeros
 logBase2 :: Int64 -> Int
-logBase2 w = finiteBitSize w - 1 - countLeadingZeros w
+logBase2 i = finiteBitSize i - 1 - countLeadingZeros i
 
 -- * Event producers
 
@@ -130,7 +153,6 @@ newEventProducer rb p backPressure s0 = do
         mSnr <- tryNext rb
         case mSnr of
           Nothing -> do
-            putStrLn "producer: consumer is too slow"
             backPressure s
             halt <- isItTimeToShutdown shutdownVar
             if halt
@@ -139,10 +161,7 @@ newEventProducer rb p backPressure s0 = do
           Just snr -> do
             (e, s') <- p s
             set rb snr e
-            -- XXX: removing the following line causes a loop.
-            threadDelay 10
             publish rb snr
-            putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
             halt <- isItTimeToShutdown shutdownVar
             if halt
             then return s'
@@ -216,9 +235,21 @@ tryNext rb = tryNextBatch rb 1
 tryNextBatch :: RingBuffer e -> Int -> IO (Maybe SequenceNumber)
 tryNextBatch rb n
   | n < 1     = error "tryNextBatch: n must be > 0"
-  | otherwise = go
+  | otherwise = case rbMode rb of
+      SingleProducer -> sp
+      MultiProducer  -> mp
   where
-    go = do
+    sp :: IO (Maybe SequenceNumber)
+    sp = do
+      current <- readIORef (rbSequenceNumber rb)
+      let next = current + fromIntegral n
+      b <- hasCapacity' rb n current
+      if not b
+      then return Nothing
+      else return (Just next)
+
+    mp :: IO (Maybe SequenceNumber)
+    mp = do
       current <- readForCAS (rbSequenceNumber rb)
       let current_ = peekTicket current
           next     = current_ + fromIntegral n
@@ -226,12 +257,10 @@ tryNextBatch rb n
       if not b
       then return Nothing
       else do
-        -- NOTE: In the SingleProducer case we could just use writeIORef here,
-        -- but not sure if it's worth the extra branch...
         (success, _current') <- casIORef (rbSequenceNumber rb) current next
         if success
         then return (Just next)
-        else go
+        else mp
 
 remainingCapacity :: RingBuffer e -> IO Int64
 remainingCapacity rb = do
@@ -290,10 +319,6 @@ minimumSequence' gatingSequences cursorValue = do
 set :: RingBuffer e -> SequenceNumber -> e -> IO ()
 set rb snr e = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
 
--- TODO: Non-blocking multi-producer: https://youtu.be/VBnLW9mKMh4?t=1813
--- https://groups.google.com/g/lmax-disruptor/c/UhmRuz_CL6E/m/-hVt86bHvf8J
--- Multiple single-producers combined into one:
--- https://groups.google.com/g/lmax-disruptor/c/hvJVE-h2Xu0/m/mBW0j_3SrmIJ
 publish :: RingBuffer e -> SequenceNumber -> IO ()
 publish rb snr = case rbMode rb of
   SingleProducer -> claim rb snr
@@ -313,18 +338,15 @@ unsafeGet rb current = case rbMode rb of
   MultiProducer  -> go
   where
     availableValue :: Int
-    availableValue = fromIntegral current `shiftR` indexShift
+    availableValue = availabilityFlag (rbCapacity rb) current
 
     ix :: Int
     ix = index (rbCapacity rb) current
 
-    indexShift :: Int
-    indexShift = logBase2 (rbCapacity rb)
-
     go = do
       v <- getAvailable rb ix
       if v /= availableValue
-      then go -- XXX: a bit of sleep?
+      then go
       else Vector.read (rbEvents rb) ix
 
 get :: RingBuffer e -> SequenceNumber -> IO (Maybe e)
@@ -414,7 +436,6 @@ waitFor snr rb [] = waitFor snr rb [RingBufferBarrier rb]
 waitFor snr rb bs = do
   let snrs = map getSequenceNumberRef bs
   minSnr <- minimum <$> mapM readIORef snrs
-  putStrLn $ "waitFor: snr = " ++ show (getSequenceNumber snr) ++ ", minSrn = " ++ show (getSequenceNumber minSnr)
   if snr < minSnr
   then return (Just minSnr)
   else return Nothing
