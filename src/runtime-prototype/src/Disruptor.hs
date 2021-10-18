@@ -132,8 +132,10 @@ availabilityFlag capacity (SequenceNumber snr) =
   where
     indexShift = logBase2 capacity
 
+-- Taken from:
+-- https://hackage.haskell.org/package/base-4.15.0.0/docs/Data-Bits.html#v:countLeadingZeros
 logBase2 :: Int64 -> Int
-logBase2 w = finiteBitSize w - 1 - countLeadingZeros w
+logBase2 i = finiteBitSize i - 1 - countLeadingZeros i
 
 -- * Event producers
 
@@ -151,7 +153,6 @@ newEventProducer rb p backPressure s0 = do
         mSnr <- tryNext rb
         case mSnr of
           Nothing -> do
-            putStrLn "producer: consumer is too slow"
             backPressure s
             halt <- isItTimeToShutdown shutdownVar
             if halt
@@ -160,10 +161,7 @@ newEventProducer rb p backPressure s0 = do
           Just snr -> do
             (e, s') <- p s
             set rb snr e
-            -- XXX: removing the following line causes a loop.
-            -- threadDelay 10
             publish rb snr
-            putStrLn ("wrote to srn: " ++ show (getSequenceNumber snr))
             halt <- isItTimeToShutdown shutdownVar
             if halt
             then return s'
@@ -350,7 +348,6 @@ unsafeGet rb current = case rbMode rb of
 
     go = do
       v <- getAvailable rb ix
-      putStrLn ("unsafeGet: v = " ++ show v ++ ", availableValue = " ++ show availableValue)
       if v /= availableValue
       then do
         -- XXX: remove
@@ -445,7 +442,6 @@ waitFor snr rb [] = waitFor snr rb [RingBufferBarrier rb]
 waitFor snr rb bs = do
   let snrs = map getSequenceNumberRef bs
   minSnr <- minimum <$> mapM readIORef snrs
-  putStrLn $ "waitFor: snr = " ++ show (getSequenceNumber snr) ++ ", minSrn = " ++ show (getSequenceNumber minSnr)
   if snr < minSnr
   then return (Just minSnr)
   else return Nothing

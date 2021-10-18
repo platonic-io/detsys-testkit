@@ -85,6 +85,8 @@ unit_ringBufferSingleProducerSingleConsumer = do
             return (Set.insert n seen)
   ec <- newEventConsumer rb handler Set.empty [] (Sleep 1000)
 
+  setGatingSequences rb [Exists ec]
+
   let areWeDoneProducing = do
         n <- readIORef counter
         if n >= atLeastThisManyEvents
@@ -145,6 +147,8 @@ unit_ringBufferFiveProducersOneConsumer = do
                       if endOfBatch then ". End of batch!" else "")
             return (Set.insert n seen)
   ec <- newEventConsumer rb handler Set.empty [] (Sleep 1000)
+
+  setGatingSequences rb [Exists ec]
 
   let areWeDoneProducing = do
         n <- readIORef counter
