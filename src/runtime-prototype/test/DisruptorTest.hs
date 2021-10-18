@@ -78,12 +78,12 @@ unit_ringBufferSingleProducerSingleConsumer = do
       backPressure () = return ()
   ep <- newEventProducer rb production backPressure ()
   let handler seen n _snr endOfBatch
-        | n `Set.member` seen = error (show n ++ " appears twice")
-        | otherwise           = do
+        | n /= seen = error (show n ++ " appears twice")
+        | otherwise = do
             putStrLn ("consumer got: " ++ show n ++
                       if endOfBatch then ". End of batch!" else "")
-            return (Set.insert n seen)
-  ec <- newEventConsumer rb handler Set.empty [] (Sleep 1000)
+            return (succ seen)
+  ec <- newEventConsumer rb handler 0 [] (Sleep 1000)
 
   setGatingSequences rb [Exists ec]
 
@@ -118,14 +118,8 @@ unit_ringBufferSingleProducerSingleConsumer = do
           shutdownConsumer ec
           seen <- wait aec
           putStrLn "Done consuming!"
-          assert (increasingByOneFrom 0 (Set.toList seen))
   where
     atLeastThisManyEvents = 1000
-
-    increasingByOneFrom :: Int -> [Int] -> Bool
-    increasingByOneFrom n [] = n >= atLeastThisManyEvents && n < atLeastThisManyEvents + 500
-    increasingByOneFrom n (i : is) | n == i    = increasingByOneFrom (n + 1) is
-                                   | otherwise = False
 
 unit_ringBufferFiveProducersOneConsumer :: Assertion
 unit_ringBufferFiveProducersOneConsumer = do
