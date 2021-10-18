@@ -65,8 +65,6 @@ data RingBuffer e = RingBuffer
   -- | Cached value of computing the last consumers' sequence numbers using the
   -- above references.
   , rbCachedGatingSequence :: IORef SequenceNumber
-  -- | Used to keep track of what has been published in the single-producer case.
-  , rbNextSequence         :: IORef SequenceNumber
   -- | Used to keep track of what has been published in the multi-producer case.
   , rbAvailableBuffer      :: IOVector Int
   }
@@ -83,15 +81,11 @@ newRingBuffer mode capacity
       v   <- Vector.new capacity
       gs  <- newIORef []
       cgs <- newIORef (-1)
-      ns  <- case mode of
-        SingleProducer -> newIORef (-1)
-        MultiProducer  -> newIORef
-          (error "Impossible, rbNextSequence is never used in the multi-producer case.")
       ab  <- Vector.new (case mode of
                            SingleProducer -> 0
                            MultiProducer  -> capacity)
       Vector.set ab (-1)
-      return (RingBuffer mode (fromIntegral capacity) snr v gs cgs ns ab)
+      return (RingBuffer mode (fromIntegral capacity) snr v gs cgs ab)
 
 ringBufferCapacity :: RingBuffer e -> Int64
 ringBufferCapacity = rbCapacity
@@ -250,13 +244,11 @@ tryNextBatch rb n
     sp :: IO (Maybe SequenceNumber)
     sp = do
       current <- readIORef (rbSequenceNumber rb)
-      next    <- (fromIntegral n +) <$> readIORef (rbNextSequence rb)
+      let next = current + fromIntegral n
       b <- hasCapacity' rb n current
       if not b
       then return Nothing
-      else do
-        atomicWriteIORef (rbNextSequence rb) next
-        return (Just next)
+      else return (Just next)
 
     mp :: IO (Maybe SequenceNumber)
     mp = do
@@ -348,13 +340,13 @@ unsafeGet rb current = case rbMode rb of
   MultiProducer  -> go
   where
     availableValue :: Int
-    availableValue = fromIntegral current `shiftR` indexShift
+    availableValue = fromIntegral (getSequenceNumber current `shiftR` indexShift)
+      where
+        indexShift :: Int
+        indexShift = logBase2 (rbCapacity rb)
 
     ix :: Int
     ix = index (rbCapacity rb) current
-
-    indexShift :: Int
-    indexShift = logBase2 (rbCapacity rb)
 
     go = do
       v <- getAvailable rb ix
