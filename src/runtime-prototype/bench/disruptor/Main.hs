@@ -9,7 +9,7 @@ import Data.Int
 import Text.Printf
 
 import Disruptor
-import StuntDouble.Histogram
+import StuntDouble.Histogram.SingleProducer
 
 ------------------------------------------------------------------------
 
