@@ -19,18 +19,28 @@ main = do
   putStrLn ("CPU capabilities: " ++ show n)
   let ringBufferCapacity = 1024 * 64
   rb <- newRingBuffer SingleProducer ringBufferCapacity
+  transactions <- newIORef 0
+  throughput   <- newIORef 0
 
-  let production   () = return (1 :: Int, ())
+  let production () = do
+        atomicModifyIORef' transactions (\n -> (n + 1, ()))
+        return (1 :: Int, ())
       backPressure () = return ()
   ep <- newEventProducer rb production backPressure ()
-  let handler _s _n snr _endOfBatch = return (getSequenceNumber snr)
+  let handler _s _n snr _endOfBatch = do
+        t' <- atomicModifyIORef' transactions (\n -> let n' = n - 1 in (n', n'))
+        n <- readIORef throughput
+        let n' = n + 1
+        writeIORef throughput n'
+        -- print (realToFrac t' / realToFrac n' * 1000)
+        return snr
+
   ec <- newEventConsumer rb handler 0 [] (Sleep 1)
   setGatingSequences rb [Exists ec]
 
   let areWeDoneConsuming = do
-        snr <- readIORef (ecSequenceNumber ec)
-        -- NOTE: We need -1 below because the sequence number starts at 0.
-        if snr >= fromIntegral iTERATIONS - 1
+        t <- readIORef throughput
+        if t >= fromIntegral iTERATIONS - 1
         then return ()
         else do
           threadDelay 10000

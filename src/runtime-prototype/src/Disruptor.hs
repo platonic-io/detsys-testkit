@@ -17,6 +17,7 @@ import Data.IORef
        , atomicWriteIORef
        , newIORef
        , readIORef
+       , writeIORef
        )
 import Data.Int (Int64)
 import Data.Vector.Mutable (IOVector)
@@ -97,8 +98,9 @@ ringBufferCapacity = rbCapacity
 getCursor :: RingBuffer e -> IO SequenceNumber
 getCursor rb = readIORef (rbSequenceNumber rb)
 
+{-# INLINE claim #-}
 claim :: RingBuffer e -> SequenceNumber -> IO ()
-claim rb = atomicWriteIORef (rbSequenceNumber rb)
+claim rb = writeIORef (rbSequenceNumber rb)
 
 data Exists f = forall x. Exists (f x)
 
@@ -114,22 +116,26 @@ getCachedGatingSequence rb = readIORef (rbCachedGatingSequence rb)
 setCachedGatingSequence :: RingBuffer e -> SequenceNumber -> IO ()
 setCachedGatingSequence rb = atomicWriteIORef (rbCachedGatingSequence rb)
 
+{-# INLINE setAvailable #-}
 setAvailable :: RingBuffer e -> SequenceNumber -> IO ()
 setAvailable rb snr = Vector.write
   (rbAvailableBuffer rb)
   (index (rbCapacity rb) snr)
   (availabilityFlag (rbCapacity rb) snr)
 
+{-# INLINE getAvailable #-}
 getAvailable :: RingBuffer e -> Int -> IO Int
 getAvailable rb ix = Vector.read (rbAvailableBuffer rb) ix
 
 -- > quickCheck $ \(Positive i) j -> let capacity = 2^i in
 --     j `mod` capacity == j Data.Bits..&. (capacity - 1)
+{-# INLINE index #-}
 index :: Int64 -> SequenceNumber -> Int
 index capacity (SequenceNumber snr) = fromIntegral (snr .&. indexMask)
   where
     indexMask = capacity - 1
 
+{-# INLINE availabilityFlag #-}
 availabilityFlag :: Int64 -> SequenceNumber -> Int
 availabilityFlag capacity (SequenceNumber snr) =
   fromIntegral (snr `shiftR` indexShift)
@@ -138,6 +144,7 @@ availabilityFlag capacity (SequenceNumber snr) =
 
 -- Taken from:
 -- https://hackage.haskell.org/package/base-4.15.0.0/docs/Data-Bits.html#v:countLeadingZeros
+{-# INLINE logBase2 #-}
 logBase2 :: Int64 -> Int
 logBase2 i = finiteBitSize i - 1 - countLeadingZeros i
 
@@ -148,6 +155,23 @@ data EventProducer s = EventProducer
   , epInitialState :: s
   , epShutdown     :: Shutdown
   }
+
+newEventProducer' :: RingBuffer e -> (s -> IO (e, s)) -> (s -> IO ()) -> s
+                  -> IO (EventProducer s)
+newEventProducer' rb p backPressure s0 = do
+  shutdownVar <- newShutdownVar
+  let go s = do
+        let n = 1024
+        hi <- nextBatch rb n
+        let lo = hi - fromIntegral (n - 1)
+        s' <- foldM (\ih snr -> p ih >>= \(e, s') -> set rb snr e >> return s') s [lo..hi]
+        publishBatch rb lo hi
+        halt <- isItTimeToShutdown shutdownVar
+        if halt
+        then return s'
+        else go s'
+
+  return (EventProducer go s0 shutdownVar)
 
 newEventProducer :: RingBuffer e -> (s -> IO (e, s)) -> (s -> IO ()) -> s
                  -> IO (EventProducer s)
@@ -169,7 +193,7 @@ newEventProducer rb p backPressure s0 = do
             halt <- isItTimeToShutdown shutdownVar
             if halt
             then return s'
-            else go s'
+            else go s' -- SPIN
 
   return (EventProducer go s0 shutdownVar)
 
@@ -185,6 +209,7 @@ withEventProducerOn capability ep k =
     k a
 
 -- | Claim the next event in sequence for publishing.
+{-# INLINE next #-}
 next :: RingBuffer e -> IO SequenceNumber
 next rb = nextBatch rb 1
 
@@ -203,25 +228,40 @@ next rb = nextBatch rb 1
 nextBatch :: RingBuffer e -> Int -> IO SequenceNumber
 nextBatch rb n
   | n < 1 || fromIntegral n > ringBufferCapacity rb =
-      error "nextBatch: n must be >= 1 and =< ringBufferCapacity"
-  -- NOTE: This is the multiple-producer case, we might want to add a simpler
-  -- single-producer case also.
-  | otherwise = do
-      (current, nextSequence) <- atomicModifyIORef' (rbSequenceNumber rb) $ \current ->
-                                   let
-                                     nextSequence = current + fromIntegral n
-                                   in
-                                     (nextSequence, (current, nextSequence))
+      error ("nextBatch: n (= " ++ show n ++ ") must be >= 1 and =< ringBufferCapacity")
+  | otherwise = case rbProducerType rb of
+      SingleProducer -> do
+        current <- getCursor rb
+        let nextSequence :: SequenceNumber
+            nextSequence = current + fromIntegral n
 
-      let wrapPoint :: SequenceNumber
-          wrapPoint = nextSequence - fromIntegral (ringBufferCapacity rb)
+            wrapPoint :: SequenceNumber
+            wrapPoint = nextSequence - fromIntegral (ringBufferCapacity rb)
 
-      cachedGatingSequence <- getCachedGatingSequence rb
+        claim rb nextSequence
+        cachedGatingSequence <- getCachedGatingSequence rb
 
-      when (wrapPoint > cachedGatingSequence || cachedGatingSequence > current) $
-        waitForConsumers wrapPoint
+        when (wrapPoint > cachedGatingSequence || cachedGatingSequence > current) $
+          waitForConsumers wrapPoint
 
-      return nextSequence
+        return nextSequence
+
+      MultiProducer  -> do
+        (current, nextSequence) <- atomicModifyIORef' (rbSequenceNumber rb) $ \current ->
+                                     let
+                                       nextSequence = current + fromIntegral n
+                                     in
+                                       (nextSequence, (current, nextSequence))
+
+        let wrapPoint :: SequenceNumber
+            wrapPoint = nextSequence - fromIntegral (ringBufferCapacity rb)
+
+        cachedGatingSequence <- getCachedGatingSequence rb
+
+        when (wrapPoint > cachedGatingSequence || cachedGatingSequence > current) $
+          waitForConsumers wrapPoint
+
+        return nextSequence
   where
     waitForConsumers :: SequenceNumber -> IO ()
     waitForConsumers wrapPoint = go
@@ -230,15 +270,14 @@ nextBatch rb n
         go = do
           gatingSequence <- minimumSequence rb
           if wrapPoint > gatingSequence
-          then do
-            threadDelay 1
-            go
+          then go
           else setCachedGatingSequence rb gatingSequence
 
 -- Try to return the next sequence number to write to. If `Nothing` is returned,
 -- then the last consumer has not yet processed the event we are about to
 -- overwrite (due to the ring buffer wrapping around) -- the callee of `tryNext`
 -- should apply back-pressure upstream if this happens.
+{-# INLINE tryNext #-}
 tryNext :: RingBuffer e -> IO (Maybe SequenceNumber)
 tryNext rb = tryNextBatch rb 1
 
@@ -438,19 +477,18 @@ newEventConsumer rb handler s0 barriers (Sleep n) = do
             -- XXX: what if handler throws exception? https://youtu.be/eTeWxZvlCZ8?t=2271
             s' <- foldM (\ih snr -> unsafeGet rb snr >>= \e ->
                             handler ih e snr (snr == bSnr)) s [mySnr + 1..bSnr]
-            atomicWriteIORef snrRef bSnr
+            writeIORef snrRef bSnr
             halt <- isItTimeToShutdown shutdownVar
             if halt
             then return s'
-            else go s'
+            else go s' -- SPIN
 
   return (EventConsumer snrRef go s0 shutdownVar)
 
 waitFor :: SequenceNumber -> RingBuffer e -> [SequenceBarrier e] -> IO (Maybe SequenceNumber)
 waitFor snr rb [] = waitFor snr rb [RingBufferBarrier rb]
 waitFor snr rb bs = do
-  let snrs = map getSequenceNumberRef bs
-  minSnr <- minimum <$> mapM readIORef snrs
+  minSnr <- minimum <$> mapM readIORef (map getSequenceNumberRef bs)
   if snr < minSnr
   then return (Just minSnr)
   else return Nothing
