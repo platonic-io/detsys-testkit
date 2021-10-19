@@ -381,6 +381,10 @@ publishBatch rb lo hi = case rbProducerType rb of
   MultiProducer  -> mapM_ (setAvailable rb) [lo..hi]
     -- XXX: Wake up consumers that are using a sleep wait strategy.
 
+unsafeGetSP :: RingBuffer e -> SequenceNumber -> IO e
+unsafeGetSP rb current = Vector.read (rbEvents rb) (index (rbCapacity rb) current)
+{-# INLINE unsafeGetSP #-}
+
 unsafeGet :: RingBuffer e -> SequenceNumber -> IO e
 unsafeGet rb current = case rbProducerType rb of
   SingleProducer -> Vector.read (rbEvents rb) (index (rbCapacity rb) current)
@@ -484,7 +488,7 @@ newEventConsumer rb handler s0 barriers (Sleep n) = do
             where
               go' lo hi s | lo >  hi = return s
                           | lo <= hi = do
-                e <- unsafeGet rb lo
+                e <- unsafeGetSP rb lo
                 s' <- {-# SCC handler #-} handler s e lo (lo == hi)
                 go' (lo + 1) hi s'
 

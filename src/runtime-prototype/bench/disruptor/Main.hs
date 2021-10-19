@@ -6,8 +6,10 @@ import Data.Time
 import Data.IORef
 import Data.Atomics.Counter
 import Data.Int
+import Text.Printf
 
 import Disruptor
+import StuntDouble.Histogram
 
 ------------------------------------------------------------------------
 
@@ -17,11 +19,11 @@ iTERATIONS = 1000 * 1000 * 100
 main :: IO ()
 main = do
   n <- getNumCapabilities
-  putStrLn ("CPU capabilities: " ++ show n)
+  printf "%-25.25s%10d\n" "CPU capabilities" n
   let ringBufferCapacity = 1024 * 64
   rb <- newRingBuffer SingleProducer ringBufferCapacity
+  histo <- newHistogram
   transactions <- newCounter 0
-  throughput   <- newIORef (0 :: Int)
 
   let production () = do
         {-# SCC "transactions+1" #-} incrCounter 1 transactions
@@ -30,17 +32,14 @@ main = do
   ep <- newEventProducer rb production backPressure ()
   let handler _s _n snr _endOfBatch = do
         t' <- {-# SCC "transactions-1" #-} incrCounter (-1) transactions
-        n <- {-# SCC "throughput.read" #-} readIORef throughput
-        let n' = n + 1
-        {-# SCC "throughput.write" #-} writeIORef throughput n'
-        -- print (realToFrac t' / realToFrac n' * 1000)
+        measure (fromIntegral t') histo
         return snr
 
   ec <- newEventConsumer rb handler 0 [] (Sleep 1)
   setGatingSequences rb [Exists ec]
 
   let areWeDoneConsuming = do
-        t <- readIORef throughput
+        t <- readIORef (ecSequenceNumber ec)
         if t >= fromIntegral iTERATIONS - 1
         then return ()
         else do
@@ -56,7 +55,9 @@ main = do
        shutdownConsumer ec
        events <- wait aec
        end <- getCurrentTime
-       putStrLn ("Total number of events: " ++ show events)
-       putStrLn ("Duration: " ++ show (realToFrac (diffUTCTime end start)) ++ " seconds")
-       putStrLn ("Average: " ++
-         show (realToFrac events / realToFrac (diffUTCTime end start)) ++ " events/s")
+       printf "%-25.25s%10d\n"     "Total number of events" (getSequenceNumber events)
+       printf "%-25.25s%10.2f s\n" "Duration" (realToFrac (diffUTCTime end start) :: Double)
+       let throughput = realToFrac events / realToFrac (diffUTCTime end start)
+       printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
+       Just meanTransactions <- percentile 50 histo
+       printf "%-25.25s%10.2f ms\n" "Latency" ((meanTransactions / throughput) * 1000)
