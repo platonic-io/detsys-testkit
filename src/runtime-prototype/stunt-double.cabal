@@ -182,6 +182,7 @@ benchmark bench-disruptor
     , base
     , stunt-double
     , time
+    , atomic-primops
   ghc-options:    -threaded -eventlog -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 

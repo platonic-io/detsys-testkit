@@ -4,6 +4,7 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Data.Time
 import Data.IORef
+import Data.Atomics.Counter
 import Data.Int
 
 import Disruptor
@@ -19,19 +20,19 @@ main = do
   putStrLn ("CPU capabilities: " ++ show n)
   let ringBufferCapacity = 1024 * 64
   rb <- newRingBuffer SingleProducer ringBufferCapacity
-  transactions <- newIORef 0
-  throughput   <- newIORef 0
+  transactions <- newCounter 0
+  throughput   <- newIORef (0 :: Int)
 
   let production () = do
-        atomicModifyIORef' transactions (\n -> (n + 1, ()))
+        {-# SCC "transactions+1" #-} incrCounter 1 transactions
         return (1 :: Int, ())
       backPressure () = return ()
   ep <- newEventProducer rb production backPressure ()
   let handler _s _n snr _endOfBatch = do
-        t' <- atomicModifyIORef' transactions (\n -> let n' = n - 1 in (n', n'))
-        n <- readIORef throughput
+        t' <- {-# SCC "transactions-1" #-} incrCounter (-1) transactions
+        n <- {-# SCC "throughput.read" #-} readIORef throughput
         let n' = n + 1
-        writeIORef throughput n'
+        {-# SCC "throughput.write" #-} writeIORef throughput n'
         -- print (realToFrac t' / realToFrac n' * 1000)
         return snr
 

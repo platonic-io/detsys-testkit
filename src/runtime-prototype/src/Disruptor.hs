@@ -177,17 +177,17 @@ newEventProducer :: RingBuffer e -> (s -> IO (e, s)) -> (s -> IO ()) -> s
                  -> IO (EventProducer s)
 newEventProducer rb p backPressure s0 = do
   shutdownVar <- newShutdownVar
-  let go s = do
+  let go s = {-# SCC go #-} do
         mSnr <- tryNext rb
         case mSnr of
           Nothing -> do
-            backPressure s
+            {-# SCC backPresure #-} backPressure s
             halt <- isItTimeToShutdown shutdownVar
             if halt
             then return s
             else go s
           Just snr -> do
-            (e, s') <- p s
+            (e, s') <- {-# SCC p #-} p s
             set rb snr e
             publish rb snr
             halt <- isItTimeToShutdown shutdownVar
@@ -459,7 +459,7 @@ newEventConsumer rb handler s0 barriers (Sleep n) = do
   snrRef <- newIORef (-1)
   shutdownVar <- newShutdownVar
 
-  let go s = do
+  let go s = {-# SCC go #-} do
         mySnr <- readIORef snrRef
         mbSnr <- waitFor mySnr rb barriers
         case mbSnr of
@@ -475,13 +475,18 @@ newEventConsumer rb handler s0 barriers (Sleep n) = do
             else go s
           Just bSnr -> do
             -- XXX: what if handler throws exception? https://youtu.be/eTeWxZvlCZ8?t=2271
-            s' <- foldM (\ih snr -> unsafeGet rb snr >>= \e ->
-                            handler ih e snr (snr == bSnr)) s [mySnr + 1..bSnr]
+            s' <- {-# SCC go' #-} go' (mySnr + 1) bSnr s
             writeIORef snrRef bSnr
             halt <- isItTimeToShutdown shutdownVar
             if halt
             then return s'
             else go s' -- SPIN
+            where
+              go' lo hi s | lo >  hi = return s
+                          | lo <= hi = do
+                e <- unsafeGet rb lo
+                s' <- {-# SCC handler #-} handler s e lo (lo == hi)
+                go' (lo + 1) hi s'
 
   return (EventConsumer snrRef go s0 shutdownVar)
 
