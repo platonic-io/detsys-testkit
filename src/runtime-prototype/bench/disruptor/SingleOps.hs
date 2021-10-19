@@ -4,8 +4,10 @@ module Main where
 
 import Control.Monad
 import Data.Time
+import Data.Word
 import Data.Atomics.Counter
 import Data.IORef
+import System.CPUTime
 
 import StuntDouble.Histogram
 
@@ -14,6 +16,8 @@ import StuntDouble.Histogram
 main :: IO ()
 main = do
   many "getCurrentTime" (return ()) (const getCurrentTime)
+
+  many "getCPUTime" (return ()) (const getCPUTime)
 
   many "incrCounter1" (newCounter 0) (incrCounter 1)
 
@@ -33,9 +37,14 @@ many name create use = do
 
 once :: Histogram -> IO a -> IO ()
 once h io = do
-  start <- getCurrentTime
+  start <- fromInteger <$> getCPUTime
   _     <- io
-  end   <- getCurrentTime
-  -- NOTE: diffUTCTime has a precision of 10^-12 s, so by multiplying by 10^9 we
-  -- get milliseconds.
-  void (measure (realToFrac (diffUTCTime end start) * 1_000_000_000) h)
+  end   <- fromInteger <$> getCPUTime
+
+  let diffPico :: Word64
+      diffPico = end - start
+
+      diffNano :: Double
+      diffNano = realToFrac (fromIntegral diffPico) * 1e-3
+
+  void (measure diffNano h)
