@@ -26,8 +26,8 @@ sIZEOF_CACHELINE :: Int
 sIZEOF_CACHELINE = 64
 {-# INLINE sIZEOF_CACHELINE #-}
 
--- | Create a new atomic counter padded with 64-bytes (an x86 cache line) on
--- either side to try to avoid false sharing.
+-- | Create a new atomic counter padded with 64-bytes (an x86 cache line) to try
+-- to avoid false sharing.
 newCounter :: Int -> IO AtomicCounter
 newCounter (I# n) = IO $ \realWorld ->
   let I# sz = sIZEOF_CACHELINE in
