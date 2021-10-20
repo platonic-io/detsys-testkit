@@ -39,7 +39,7 @@ newCounter (I# n) = IO $ \realWorld ->
 incrCounter :: Int -> AtomicCounter -> IO Int
 incrCounter (I# incr) (AtomicCounter arr) =
   IO (\realWorld -> case fetchAddIntArray# arr 0# incr realWorld of
-                      (# realWorld', i #) -> (# realWorld', I# i #))
+                      (# realWorld', i #) -> (# realWorld', I# (i +# incr) #))
 {-# INLINE incrCounter #-}
 
 readCounter :: AtomicCounter -> IO Int
