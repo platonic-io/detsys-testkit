@@ -49,4 +49,6 @@ main = do
        printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
        meanTransactions <- hmean histo
        printf "%-25.25s%10.2f\n" "Mean concurrent txs" meanTransactions
+       Just maxTransactions <- percentile 100.0 histo
+       printf "%-25.25s%10.2f\n" "Max concurrent txs" maxTransactions
        printf "%-25.25s%10.2f ns\n" "Latency" ((meanTransactions / throughput) * 1000000)
