@@ -14,7 +14,7 @@ import StuntDouble.Histogram.SingleProducer
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64
-iTERATIONS = 1000 * 1000 * 10
+iTERATIONS = 1000 * 1000 * 50
 
 main :: IO ()
 main = do
