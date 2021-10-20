@@ -23,7 +23,7 @@ main = do
   let ringBufferCapacity = 1024 * 64
   rb <- newRingBuffer SingleProducer ringBufferCapacity
   histo <- newHistogram
-  transactions <- newCounter (0 :: Int)
+  transactions <- newCounter 0
 
   let production () = do
         {-# SCC "transactions+1" #-} incrCounter_ 1 transactions

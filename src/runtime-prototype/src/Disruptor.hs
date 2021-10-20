@@ -56,22 +56,22 @@ data RingBuffer e = RingBuffer
   {
   -- | Keeps track of if the ring buffer was created for single or multiple
   -- producer(s).
-    rbProducerType :: ProducerType
+    rbProducerType :: !ProducerType
   -- | The capacity, or maximum amount of values, of the ring buffer.
-  , rbCapacity :: Int64
+  , rbCapacity :: {-# UNPACK #-} !Int64
   -- | The cursor pointing to the head of the ring buffer.
-  , rbSequenceNumber :: IORef SequenceNumber
+  , rbSequenceNumber :: {-# UNPACK #-} !(IORef SequenceNumber)
   -- | The values of the ring buffer.
-  , rbEvents :: IOVector e
+  , rbEvents :: {-# UNPACK #-} !(IOVector e)
   -- | References to the last consumers' sequence numbers, used in order to
   -- avoid wrapping the buffer and overwriting events that have not been
   -- consumed yet.
-  , rbGatingSequences :: IORef [IORef SequenceNumber]
+  , rbGatingSequences :: {-# UNPACK #-} !(IORef [IORef SequenceNumber])
   -- | Cached value of computing the last consumers' sequence numbers using the
   -- above references.
-  , rbCachedGatingSequence :: IORef SequenceNumber
+  , rbCachedGatingSequence :: {-# UNPACK #-} !(IORef SequenceNumber)
   -- | Used to keep track of what has been published in the multi-producer case.
-  , rbAvailableBuffer :: IOVector Int
+  , rbAvailableBuffer :: {-# UNPACK #-} !(IOVector Int)
   }
 
 newRingBuffer :: ProducerType -> Int -> IO (RingBuffer e)
