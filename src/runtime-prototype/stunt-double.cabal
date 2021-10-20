@@ -35,6 +35,7 @@ library
     StuntDouble.Envelope
     StuntDouble.FreeMonad
     StuntDouble.Frontend.Http
+    StuntDouble.AtomicCounterPadded
     StuntDouble.Histogram
     StuntDouble.Histogram.SingleProducer
     StuntDouble.IO
@@ -72,6 +73,8 @@ library
       aeson
     , async
     , atomic-primops
+    , primitive
+    , ghc-prim
     , brick
     , bytestring
     , hashable
@@ -207,6 +210,7 @@ benchmark bench-disruptor-singleops
   main-is:        SingleOps.hs
   build-depends:
       atomic-primops
+    , async
     , base
     , stunt-double
     , time

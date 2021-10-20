@@ -51,8 +51,8 @@ newHistogram = Histogram
 -- compression loss is less than @1%@.
 measure :: RealFrac a => a -> Histogram -> IO Int
 measure v h = do
-  modifyIORef' (histoSum h)     (+ round v)
-  modifyIORef' (histoCount h)   (+ 1)
+  modifyIORef' (histoSum   h) (+ round v)
+  modifyIORef' (histoCount h) (+ 1)
   let ix = fromIntegral (compress v)
   count <- Vector.read (histoValues h) ix
   Vector.write (histoValues h) ix (count + 1)
