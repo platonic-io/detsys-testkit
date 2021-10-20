@@ -28,10 +28,12 @@ getDbPath = do
 main :: String -> IO ()
 main version = do
   let executorPort = 3001
-      executorRef = RemoteRef ("http://localhost:" ++ show executorPort ++ "/api/v1/event") 0
+      --executorRef = RemoteRef ("http://localhost:" ++ show executorPort ++ "/api/v1/event") 0
+      executorRef = RemoteRef "executor" 0
       schedulerPort = 3005
+      schedulerIncoming = "/tmp/"
   fp <- getDbPath
-  el <- makeEventLoop realClock (makeSeed 0) HttpSync (AdminNamedPipe "/tmp/")
+  el <- makeEventLoop realClock (makeSeed 0) (NamedPipeCodec schedulerIncoming) (AdminNamedPipe "/tmp/")
           executorCodec (RealDisk fp) (EventLoopName "scheduler")
   now <- getCurrentTime realClock
   lref <- spawn el (fakeScheduler executorRef) (initState now (makeSeed 0))

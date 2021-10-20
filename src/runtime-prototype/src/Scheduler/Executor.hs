@@ -3,7 +3,7 @@
 
 module Scheduler.Executor where
 
-import Data.Aeson
+import Data.Aeson as Aeson
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Char (toLower)
@@ -25,7 +25,7 @@ instance FromJSON ExecutorResponse
 data UnscheduledEvent = UnscheduledEvent
   { ueKind  :: String
   , ueEvent :: String
-  , ueArgs  :: Data.Aeson.Value
+  , ueArgs  :: Aeson.Value
   , ueTo    :: [String]
   , ueFrom  :: String
   }
@@ -47,24 +47,72 @@ fromSDatatype at (SList
   = Just [ SchedulerEvent kind event args to from at Nothing | SString to <- tos ]
 fromSDatatype _at _d = Nothing
 
+data ExecutorEnvelopeMessage = ExecutorEnvelopeMessage
+  { executorEnvelopeMessageKind :: String
+  , executorEnvelopeMessageMessage :: Aeson.Value
+  } deriving (Generic)
+
+executorEnvelopeMessageOptions = defaultOptions
+  { fieldLabelModifier = \s -> map toLower $ drop (length ("executorEnvelopeMessage" :: String)) s}
+
+instance ToJSON ExecutorEnvelopeMessage where
+  toJSON = genericToJSON executorEnvelopeMessageOptions
+instance FromJSON ExecutorEnvelopeMessage where
+  parseJSON = genericParseJSON executorEnvelopeMessageOptions
+
+data ExecutorEnvelope = ExecutorEnvelope
+  { executorEnvelopeKind          :: EnvelopeKind
+  , executorEnvelopeSender        :: RemoteRef
+  , executorEnvelopeMessage       :: ExecutorEnvelopeMessage
+  , executorEnvelopeReceiver      :: RemoteRef
+  , executorEnvelopeCorrelationId :: CorrelationId
+  , executorEnvelopeLogicalTime   :: Int -- we don't need to send the name part
+  }
+  deriving (Generic)
+
+executorEnvelopeOptions = defaultOptions
+  { fieldLabelModifier = \s -> 'e':drop (length ("executorE" :: String)) s}
+
+instance ToJSON ExecutorEnvelope where
+  toJSON = genericToJSON executorEnvelopeOptions
+instance FromJSON ExecutorEnvelope where
+  parseJSON = genericParseJSON executorEnvelopeOptions
+
+toExecutorEnvelope :: Envelope -> ExecutorEnvelope
+toExecutorEnvelope e = ExecutorEnvelope
+  { executorEnvelopeKind          = envelopeKind e
+  , executorEnvelopeSender        = envelopeSender e
+  -- this is silly.. going back and forth between json..
+  , executorEnvelopeMessage       = ExecutorEnvelopeMessage "receive" $ case eitherDecode . LBS.pack . getMessage $ envelopeMessage e of
+      Left err -> error err
+      Right x -> x
+  , executorEnvelopeReceiver      = envelopeReceiver e
+  , executorEnvelopeCorrelationId = envelopeCorrelationId e
+  , executorEnvelopeLogicalTime   = let LogicalTime _ i = envelopeLogicalTime e in i
+  }
+
+fromExecutorEnvelope :: ExecutorEnvelope -> Envelope
+fromExecutorEnvelope e = Envelope
+  { envelopeKind          = executorEnvelopeKind e
+  , envelopeSender        = executorEnvelopeSender e
+  , envelopeMessage       = InternalMessage' "Events" $ case Aeson.fromJSON (executorEnvelopeMessageMessage $ executorEnvelopeMessage e) of
+      Aeson.Error err -> error err
+      Aeson.Success (ExecutorResponse evs _) -> map toSDatatype evs
+  , envelopeReceiver      = executorEnvelopeReceiver e
+  , envelopeCorrelationId = executorEnvelopeCorrelationId e
+  , envelopeLogicalTime   = LogicalTime "executor" $ executorEnvelopeLogicalTime e
+  }
+
+
 executorCodec :: Codec
 executorCodec = Codec encode decode
   where
     encode :: Envelope -> Encode
     encode e = Encode (address (envelopeReceiver e))
                       (getCorrelationId (envelopeCorrelationId e))
-                      (LBS.pack (getMessage (envelopeMessage e)))
+                      (Aeson.encode $ toExecutorEnvelope e)
 
     decode :: ByteString -> Either String Envelope
     decode bs = case eitherDecode bs of
-      Right (ExecutorResponse evs corrId) -> Right $
-        Envelope
-          { envelopeKind          = ResponseKind
-          , envelopeSender        = RemoteRef "executor" 0
-          -- XXX: going to sdatatype here seems suboptimal...
-          , envelopeMessage       = InternalMessage' "Events" (map toSDatatype evs)
-          , envelopeReceiver      = RemoteRef "scheduler" 0
-          , envelopeCorrelationId = corrId
-          , envelopeLogicalTime   = LogicalTime "executor" (-1)
-          }
+      Right x -> Right (fromExecutorEnvelope x)
       Left err -> error err

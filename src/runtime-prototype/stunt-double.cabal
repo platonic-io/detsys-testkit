@@ -61,6 +61,7 @@ library
     StuntDouble.Transport.Http
     StuntDouble.Transport.HttpSync
     StuntDouble.Transport.NamedPipe
+    StuntDouble.Transport.NamedPipeCodec
     StuntDouble.Transport.Stm
     StuntDouble.AdminTransport
     StuntDouble.AdminTransport.NamedPipe

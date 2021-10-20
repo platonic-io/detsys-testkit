@@ -4,7 +4,7 @@ import StuntDouble.Envelope
 
 ------------------------------------------------------------------------
 
-data TransportKind = NamedPipe FilePath | Http Int | HttpSync | Stm
+data TransportKind = NamedPipe FilePath | NamedPipeCodec FilePath | Http Int | HttpSync | Stm
 
 data Transport m = Transport
   { transportSend     :: Envelope -> m ()

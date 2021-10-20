@@ -50,6 +50,7 @@ import StuntDouble.Transport
 import StuntDouble.Transport.Http
 import StuntDouble.Transport.HttpSync
 import StuntDouble.Transport.NamedPipe
+import qualified StuntDouble.Transport.NamedPipeCodec as NPC
 import StuntDouble.Transport.Stm
 
 ------------------------------------------------------------------------
@@ -617,6 +618,7 @@ makeEventLoopThreaded :: Threaded -> ThreadPool -> Clock -> Seed -> TransportKin
 makeEventLoopThreaded threaded threadpool clock seed tk atk codec dk name = do
   t <- case tk of
          NamedPipe fp -> namedPipeTransport fp name
+         NamedPipeCodec fp -> NPC.namedPipeTransport fp name codec
          Http port    -> httpTransport port
          HttpSync     -> httpSyncTransport codec
          Stm          -> stmTransport
