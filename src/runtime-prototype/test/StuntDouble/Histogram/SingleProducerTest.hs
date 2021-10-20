@@ -1,16 +1,16 @@
-module StuntDouble.HistogramTest where
+module StuntDouble.Histogram.SingleProducerTest where
 
 import GHC.Float
 import Control.Monad
 import Test.QuickCheck
 import Test.HUnit
 
-import StuntDouble.Histogram
+import StuntDouble.Histogram.SingleProducer
 
 ------------------------------------------------------------------------
 
-prop_histoMPRoundtrip :: Positive Double -> Property
-prop_histoMPRoundtrip (Positive d) = withMaxSuccess 100000 $
+prop_histoSPRoundtrip :: Positive Double -> Property
+prop_histoSPRoundtrip (Positive d) = withMaxSuccess 100000 $
   d >= 1 ==>
   classify (1    <= d && d < 10)   "1-9" $
   classify (10   <= d && d < 100)  "10-99" $
@@ -20,8 +20,8 @@ prop_histoMPRoundtrip (Positive d) = withMaxSuccess 100000 $
   where
     d' = decompress (compress d)
 
-prop_histoMPRoundtripLarge :: Large Int -> Property
-prop_histoMPRoundtripLarge (Large i) = withMaxSuccess 100000 $
+prop_histoSPRoundtripLarge :: Large Int -> Property
+prop_histoSPRoundtripLarge (Large i) = withMaxSuccess 100000 $
   d >= 1 ==>
   classify (1     <= d && d < 10)       "1-9" $
   classify (10    <= d && d < 100)      "10-99" $
@@ -40,8 +40,8 @@ assertIO io y = do
   x <- io
   x @?= y
 
-unit_histoMPMeasure :: Assertion
-unit_histoMPMeasure = do
+unit_histoSPMeasure :: Assertion
+unit_histoSPMeasure = do
   h <- newHistogram
   assertIO (measure 1 h) 1
   assertIO (measure 1 h) 2
@@ -55,8 +55,8 @@ unit_histoMPMeasure = do
   assertIO (fmap round <$> percentile 80.1  h) (Just 3)
   assertIO (fmap round <$> percentile 100.0 h) (Just 3)
 
-unit_histoMPMeasureBig :: Assertion
-unit_histoMPMeasureBig = do
+unit_histoSPMeasureBig :: Assertion
+unit_histoSPMeasureBig = do
   h <- newHistogram
 
   replicateM_ 9000 (measure 20 h)

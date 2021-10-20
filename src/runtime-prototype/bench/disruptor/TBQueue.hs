@@ -1,5 +1,4 @@
 module Main where
-
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
@@ -14,7 +13,7 @@ import StuntDouble.Histogram.SingleProducer
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64
-iTERATIONS = 1000 * 1000 * 100
+iTERATIONS = 1000 * 1000 * 50
 
 main :: IO ()
 main = do
@@ -33,7 +32,7 @@ main = do
       consumer = do
         n <- atomically (readTBQueue queue)
         t' <- {-# SCC "transactions-1" #-} incrCounter (-1) transactions
-        measure (fromIntegral t') histo
+        measureInt_ t' histo
         if n == iTERATIONS - 1
         then return ()
         else consumer
@@ -48,5 +47,8 @@ main = do
        printf "%-25.25s%10.2f s\n" "Duration" (realToFrac (diffUTCTime end start) :: Double)
        let throughput = realToFrac iTERATIONS / realToFrac (diffUTCTime end start)
        printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
-       Just meanTransactions <- percentile 50 histo
-       printf "%-25.25s%10.2f ms\n" "Latency" ((meanTransactions / throughput) * 1000)
+       meanTransactions <- hmean histo
+       printf "%-25.25s%10.2f\n" "Mean concurrent txs" meanTransactions
+       Just maxTransactions <- percentile 100.0 histo
+       printf "%-25.25s%10.2f\n" "Max concurrent txs" maxTransactions
+       printf "%-25.25s%10.2f ns\n" "Latency" ((meanTransactions / throughput) * 1000000)

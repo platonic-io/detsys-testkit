@@ -29,54 +29,84 @@ import Text.Printf
 
 ------------------------------------------------------------------------
 
-precision :: Double
-precision = 100.0
+pRECISION :: Double
+pRECISION = 100.0
+{-# INLINE pRECISION #-}
 
-buckets :: Word32
-buckets = 2 `shiftL` 16 -- 2^16
+bUCKETS :: Int
+bUCKETS = 2 ^ 16
+{-# INLINE bUCKETS #-}
 
-data Histogram = Histogram
-  { histoValues :: IOVector Word32
-  , histoSum    :: IORef Word32
-  , histoCount  :: IORef Word32
-  }
+newtype Histogram = Histogram { unHistogram :: IOVector Word32 }
+
+-- NOTE: The first two elements of the array are reserved for the sum and count,
+-- so the values start at position 2.
+hISTOGRAM_SUM_INDEX :: Int
+hISTOGRAM_SUM_INDEX = 0
+{-# INLINE hISTOGRAM_SUM_INDEX #-}
+
+hISTOGRAM_COUNT_INDEX :: Int
+hISTOGRAM_COUNT_INDEX = 1
+{-# INLINE hISTOGRAM_COUNT_INDEX #-}
+
+hISTOGRAM_VALUES_OFFSET :: Int
+hISTOGRAM_VALUES_OFFSET = 2
+{-# INLINE hISTOGRAM_VALUES_OFFSET #-}
 
 newHistogram :: IO Histogram
-newHistogram = Histogram
-  <$> Vector.replicate (fromIntegral buckets) 0
-  <*> newIORef 0
-  <*> newIORef 0
+newHistogram =
+  Histogram <$> Vector.replicate (bUCKETS + hISTOGRAM_VALUES_OFFSET) 0
+{-# INLINE newHistogram #-}
 
 -- | The value @v@ must be positive. For values larger or equal to @1@ the
 -- compression loss is less than @1%@.
-measure :: RealFrac a => a -> Histogram -> IO Int
-measure v h = do
-  modifyIORef' (histoSum h)     (+ round v)
-  modifyIORef' (histoCount h)   (+ 1)
-  let ix = fromIntegral (compress v)
-  count <- Vector.read (histoValues h) ix
-  Vector.write (histoValues h) ix (count + 1)
-  return (fromIntegral count)
+measure :: Double -> Histogram -> IO Word32
+measure v (Histogram h) = do
+  Vector.modify h (+ round v) hISTOGRAM_SUM_INDEX
+  Vector.modify h (+ 1) hISTOGRAM_COUNT_INDEX
+  let ix = compress v + hISTOGRAM_VALUES_OFFSET
+  count' <- (+ 1) <$> Vector.read h ix
+  Vector.write h ix count'
+  return count'
+{-# INLINABLE measure #-}
 
-compress :: RealFrac a => a -> Word16
+measure_ :: Double -> Histogram -> IO ()
+measure_ v (Histogram h) = do
+  Vector.modify h (+ fromIntegral (double2Int v)) hISTOGRAM_SUM_INDEX
+  Vector.modify h (+ 1) hISTOGRAM_COUNT_INDEX
+  Vector.modify h (+ 1) (compress v + hISTOGRAM_VALUES_OFFSET)
+{-# INLINE measure_ #-}
+
+measureInt_ :: Int -> Histogram -> IO ()
+measureInt_ v (Histogram h) = do
+  Vector.modify h (+ fromIntegral v) hISTOGRAM_SUM_INDEX
+  Vector.modify h (+ 1) hISTOGRAM_COUNT_INDEX
+  Vector.modify h (+ 1) (compressInt v + hISTOGRAM_VALUES_OFFSET)
+{-# INLINE measureInt_ #-}
+
+compress :: Double -> Int
 compress v =
-  let
-    d, d' :: Double
-    d = realToFrac v
+  assert (fromIntegral (fromEnum (pRECISION * log (1.0 + abs v) + 0.5))
+           <= realToFrac (maxBound :: Word16))
+  (fromEnum (pRECISION * log (1.0 + abs v) + 0.5))
+{-# INLINE compress #-}
 
-    d' = precision * log (1.0 + abs d) + 0.5
-  in
-    assert (d' <= realToFrac (maxBound :: Word16))
-      (fromIntegral (fromEnum d'))
+compressInt :: Int -> Int
+compressInt v =
+  assert (fromIntegral (fromEnum (pRECISION * log (1.0 + int2Double (abs v)) + 0.5))
+           <= realToFrac (maxBound :: Word16))
+  (fromEnum (pRECISION * log (1.0 + int2Double (abs v)) + 0.5))
+{-# INLINE compressInt #-}
 
-decompress :: Word16 -> Double
-decompress w = exp (realToFrac w / precision) - 1
+decompress :: Int -> Double
+decompress i = exp (int2Double i / pRECISION) - 1
+{-# INLINE decompress #-}
 
 percentile :: Double -> Histogram -> IO (Maybe Double)
-percentile p h
+percentile p (Histogram h)
   | p > 100.0 = error "percentile: percentiles cannot be over 100"
   | otherwise  = do
-      count <- readIORef (histoCount h)
+      count <- Vector.read h hISTOGRAM_COUNT_INDEX
       if count == 0
       then return Nothing
       else do
@@ -85,28 +115,39 @@ percentile p h
                         d = realToFrac count * (p / 100.0)
                      in
                         if d == 0.0 then 1.0 else d
-        go target (histoValues h)
+        go target h
       where
         go :: Double -> IOVector Word32 -> IO (Maybe Double)
         go target xs = go' 0 0.0
           where
-            arrayLength = fromIntegral (Vector.length xs) - 1
+            len = fromIntegral (Vector.length xs) - hISTOGRAM_VALUES_OFFSET - 1
 
-            go' :: Word16 -> Double -> IO (Maybe Double)
+            go' :: Int -> Double -> IO (Maybe Double)
             go' idx acc
-              | idx > arrayLength  = return Nothing
-              | idx <= arrayLength = do
-                  v <- Vector.read xs (fromIntegral idx)
+              | idx > len  = return Nothing
+              | idx <= len = do
+                  v <- Vector.read xs (idx + hISTOGRAM_VALUES_OFFSET)
                   let sum' = realToFrac v + acc
                   if sum' >= target
                   then return (Just (decompress idx))
                   else go' (succ idx) sum'
 
 hsum :: Histogram -> IO Int
-hsum = fmap fromIntegral . readIORef . histoSum
+hsum
+  = fmap fromIntegral
+  . flip Vector.read hISTOGRAM_SUM_INDEX
+  . unHistogram
+{-# INLINE hsum #-}
 
 hcount :: Histogram -> IO Int
-hcount = fmap fromIntegral . readIORef . histoCount
+hcount
+  = fmap fromIntegral
+  . flip Vector.read hISTOGRAM_COUNT_INDEX
+  . unHistogram
+{-# INLINE hcount #-}
+
+hmean :: Histogram -> IO Double
+hmean h = (/) <$> fmap int2Double (hsum h) <*> fmap int2Double (hcount h)
 
 -- | @hstats@ returns `Nothing` if no @measure@s have been made, otherwise it
 -- returns `Just` of a list of the minimum, median, the 90-, 99-, 99.9- and
