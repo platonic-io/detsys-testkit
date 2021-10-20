@@ -91,7 +91,7 @@ compress v =
 {-# SPECIALIZE compress :: Double -> Int #-}
 
 decompress :: Int -> Double
-decompress w = exp (realToFrac w / pRECISION) - 1
+decompress i = exp (realToFrac i / pRECISION) - 1
 {-# INLINE decompress #-}
 
 percentile :: Double -> Histogram -> IO (Maybe Double)
@@ -110,15 +110,15 @@ percentile p (Histogram h)
         go target h
       where
         go :: Double -> IOVector Word32 -> IO (Maybe Double)
-        go target xs = go' hISTOGRAM_VALUES_OFFSET 0.0
+        go target xs = go' 0 0.0
           where
             len = fromIntegral (Vector.length xs) - hISTOGRAM_VALUES_OFFSET - 1
 
             go' :: Int -> Double -> IO (Maybe Double)
             go' idx acc
-              | idx - hISTOGRAM_VALUES_OFFSET > len  = return Nothing
-              | idx - hISTOGRAM_VALUES_OFFSET <= len = do
-                  v <- Vector.read xs idx
+              | idx > len  = return Nothing
+              | idx <= len = do
+                  v <- Vector.read xs (idx + hISTOGRAM_VALUES_OFFSET)
                   let sum' = realToFrac v + acc
                   if sum' >= target
                   then return (Just (decompress idx))
