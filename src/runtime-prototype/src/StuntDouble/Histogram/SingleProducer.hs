@@ -60,38 +60,46 @@ newHistogram =
 
 -- | The value @v@ must be positive. For values larger or equal to @1@ the
 -- compression loss is less than @1%@.
-measure :: RealFrac a => a -> Histogram -> IO Int
+measure :: Double -> Histogram -> IO Word32
 measure v (Histogram h) = do
   Vector.modify h (+ round v) hISTOGRAM_SUM_INDEX
   Vector.modify h (+ 1) hISTOGRAM_COUNT_INDEX
   let ix = compress v + hISTOGRAM_VALUES_OFFSET
   count' <- (+ 1) <$> Vector.read h ix
   Vector.write h ix count'
-  return (fromIntegral count')
+  return count'
 {-# INLINABLE measure #-}
-{-# SPECIALIZE measure :: Double -> Histogram -> IO Int #-}
 
-measure_ :: RealFrac a => a -> Histogram -> IO ()
+measure_ :: Double -> Histogram -> IO ()
 measure_ v (Histogram h) = do
-  Vector.modify h (+ round v) hISTOGRAM_SUM_INDEX
+  Vector.modify h (+ fromIntegral (double2Int v)) hISTOGRAM_SUM_INDEX
   Vector.modify h (+ 1) hISTOGRAM_COUNT_INDEX
   Vector.modify h (+ 1) (compress v + hISTOGRAM_VALUES_OFFSET)
-{-# INLINABLE measure_ #-}
-{-# SPECIALIZE measure_ :: Double -> Histogram -> IO () #-}
+{-# INLINE measure_ #-}
 
-compress :: RealFrac a => a -> Int
+measureInt_ :: Int -> Histogram -> IO ()
+measureInt_ v (Histogram h) = do
+  Vector.modify h (+ fromIntegral v) hISTOGRAM_SUM_INDEX
+  Vector.modify h (+ 1) hISTOGRAM_COUNT_INDEX
+  Vector.modify h (+ 1) (compressInt v + hISTOGRAM_VALUES_OFFSET)
+{-# INLINE measureInt_ #-}
+
+compress :: Double -> Int
 compress v =
-  let
-    d :: Double
-    d = pRECISION * log (1.0 + abs (realToFrac v)) + 0.5
-  in
-    assert (fromIntegral (fromEnum d) <= realToFrac (maxBound :: Word16))
-           (fromEnum d)
+  assert (fromIntegral (fromEnum (pRECISION * log (1.0 + abs v) + 0.5))
+           <= realToFrac (maxBound :: Word16))
+  (fromEnum (pRECISION * log (1.0 + abs v) + 0.5))
 {-# INLINE compress #-}
-{-# SPECIALIZE compress :: Double -> Int #-}
+
+compressInt :: Int -> Int
+compressInt v =
+  assert (fromIntegral (fromEnum (pRECISION * log (1.0 + int2Double (abs v)) + 0.5))
+           <= realToFrac (maxBound :: Word16))
+  (fromEnum (pRECISION * log (1.0 + int2Double (abs v)) + 0.5))
+{-# INLINE compressInt #-}
 
 decompress :: Int -> Double
-decompress i = exp (realToFrac i / pRECISION) - 1
+decompress i = exp (int2Double i / pRECISION) - 1
 {-# INLINE decompress #-}
 
 percentile :: Double -> Histogram -> IO (Maybe Double)
@@ -137,6 +145,9 @@ hcount
   . flip Vector.read hISTOGRAM_COUNT_INDEX
   . unHistogram
 {-# INLINE hcount #-}
+
+hmean :: Histogram -> IO Double
+hmean h = (/) <$> fmap int2Double (hsum h) <*> fmap int2Double (hcount h)
 
 -- | @hstats@ returns `Nothing` if no @measure@s have been made, otherwise it
 -- returns `Just` of a list of the minimum, median, the 90-, 99-, 99.9- and
