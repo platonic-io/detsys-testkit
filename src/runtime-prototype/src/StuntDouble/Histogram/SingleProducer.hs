@@ -34,7 +34,7 @@ pRECISION = 100.0
 {-# INLINE pRECISION #-}
 
 bUCKETS :: Int
-bUCKETS = 2 `shiftL` 16 -- 2^16
+bUCKETS = 2 ^ 16
 {-# INLINE bUCKETS #-}
 
 newtype Histogram = Histogram { unHistogram :: IOVector Word32 }
