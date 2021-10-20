@@ -3,9 +3,13 @@ module Main where
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
+import Data.Atomics.Counter
 import Data.IORef
 import Data.Int
 import Data.Time
+import Text.Printf
+
+import StuntDouble.Histogram.SingleProducer
 
 ------------------------------------------------------------------------
 
@@ -15,16 +19,21 @@ iTERATIONS = 1000 * 1000 * 100
 main :: IO ()
 main = do
   n <- getNumCapabilities
-  putStrLn ("CPU capabilities: " ++ show n)
+  printf "%-25.25s%10d\n" "CPU capabilities" n
   queue <- newTBQueueIO (1024 * 64)
+  histo <- newHistogram
+  transactions <- newCounter 0
 
   let producer n | n == iTERATIONS = return ()
                  | otherwise       = do
         atomically (writeTBQueue queue n)
+        {-# SCC "transactions+1" #-} incrCounter 1 transactions
         producer (n + 1)
 
       consumer = do
         n <- atomically (readTBQueue queue)
+        t' <- {-# SCC "transactions-1" #-} incrCounter (-1) transactions
+        measure (fromIntegral t') histo
         if n == iTERATIONS - 1
         then return ()
         else consumer
@@ -35,7 +44,9 @@ main = do
        wait ap
        wait ac
        end <- getCurrentTime
-       putStrLn ("Total number of events: " ++ show iTERATIONS)
-       putStrLn ("Duration: " ++ show (realToFrac (diffUTCTime end start)) ++ " seconds")
-       putStrLn ("Average: " ++
-         show (realToFrac iTERATIONS / realToFrac (diffUTCTime end start)) ++ " events/s")
+       printf "%-25.25s%10d\n"     "Total number of events" iTERATIONS
+       printf "%-25.25s%10.2f s\n" "Duration" (realToFrac (diffUTCTime end start) :: Double)
+       let throughput = realToFrac iTERATIONS / realToFrac (diffUTCTime end start)
+       printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
+       Just meanTransactions <- percentile 50 histo
+       printf "%-25.25s%10.2f ms\n" "Latency" ((meanTransactions / throughput) * 1000)
