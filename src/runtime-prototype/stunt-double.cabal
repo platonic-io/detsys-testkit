@@ -114,6 +114,7 @@ test-suite test
     StuntDouble.ActorMapTest
     StuntDouble.FrontendTest
     StuntDouble.HistogramTest
+    StuntDouble.Histogram.SingleProducerTest
     StuntDouble.QueueTest
     DisruptorTest
     StuntDouble.Transport.HttpTest

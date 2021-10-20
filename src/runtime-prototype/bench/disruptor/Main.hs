@@ -14,7 +14,7 @@ import StuntDouble.Histogram.SingleProducer
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64
-iTERATIONS = 1000 * 1000 * 100
+iTERATIONS = 1000 * 1000 * 1 -- 00
 
 main :: IO ()
 main = do
@@ -32,7 +32,7 @@ main = do
   ep <- newEventProducer rb production backPressure ()
   let handler _s _n snr _endOfBatch = do
         t' <- {-# SCC "transactions-1" #-} incrCounter (-1) transactions
-        measure (fromIntegral t') histo
+        measure_ (fromIntegral t') histo
         return snr
 
   ec <- newEventConsumer rb handler 0 [] (Sleep 1)
