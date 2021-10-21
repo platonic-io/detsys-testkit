@@ -10,32 +10,37 @@ import Disruptor.RingBuffer.SingleProducer
 data EventProducer s = EventProducer
   { epWorker       :: s -> IO s
   , epInitialState :: s
-  , epShutdown     :: Shutdown
   }
 
 newEventProducer :: RingBuffer e -> (s -> IO (e, s)) -> (s -> IO ()) -> s
                  -> IO (EventProducer s)
 newEventProducer rb p backPressure s0 = do
-  shutdownVar <- newShutdownVar
   let go s = {-# SCC go #-} do
         mSnr <- tryNext rb
         case mSnr of
           Nothing -> do
             {-# SCC backPresure #-} backPressure s
-            halt <- isItTimeToShutdown shutdownVar
-            if halt
-            then return s
-            else go s
+            go s
           Just snr -> do
             (e, s') <- {-# SCC p #-} p s
             set rb snr e
             publish rb snr
-            halt <- isItTimeToShutdown shutdownVar
-            if halt
-            then return s'
-            else go s' -- SPIN
+            go s'
 
-  return (EventProducer go s0 shutdownVar)
+  return (EventProducer go s0)
+
+-- XXX: 2x slower than above...
+newEventProducer' :: RingBuffer e -> (s -> IO (e, s)) -> (s -> IO ()) -> s
+                  -> IO (EventProducer s)
+newEventProducer' rb p backPressure s0 = do
+  let go s = {-# SCC go #-} do
+        snr <- next rb
+        (e, s') <- {-# SCC p #-} p s
+        set rb snr e
+        publish rb snr
+        go s'
+
+  return (EventProducer go s0)
 
 withEventProducer :: EventProducer s -> (Async s -> IO a) -> IO a
 withEventProducer ep k = withAsync (epWorker ep (epInitialState ep)) $ \a -> do
@@ -47,19 +52,3 @@ withEventProducerOn capability ep k =
   withAsyncOn capability (epWorker ep (epInitialState ep)) $ \a -> do
     link a
     k a
-
-------------------------------------------------------------------------
-
-newtype Shutdown = Shutdown (TMVar ())
-
-newShutdownVar :: IO Shutdown
-newShutdownVar = Shutdown <$> newEmptyTMVarIO
-
-tellToShutdown :: Shutdown -> IO ()
-tellToShutdown (Shutdown tmvar) = () <$ atomically (tryPutTMVar tmvar ())
-
-shutdownProducer :: EventProducer s -> IO ()
-shutdownProducer = tellToShutdown . epShutdown
-
-isItTimeToShutdown :: Shutdown -> IO Bool
-isItTimeToShutdown (Shutdown tmvar) = not <$> atomically (isEmptyTMVar tmvar)
