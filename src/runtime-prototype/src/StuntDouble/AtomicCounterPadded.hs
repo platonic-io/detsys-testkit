@@ -20,7 +20,7 @@ import GHC.Types
 
 ------------------------------------------------------------------------
 
-data AtomicCounter = AtomicCounter (MutableByteArray# RealWorld)
+data AtomicCounter = AtomicCounter !(MutableByteArray# RealWorld)
 
 sIZEOF_CACHELINE :: Int
 sIZEOF_CACHELINE = 64
