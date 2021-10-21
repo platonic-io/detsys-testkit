@@ -26,7 +26,6 @@ import Disruptor.SequenceNumber
 
 ------------------------------------------------------------------------
 
-
 -- * Ring-buffer
 
 data ProducerType
