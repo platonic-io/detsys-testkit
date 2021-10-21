@@ -9,20 +9,21 @@ import Data.Char (toLower)
 import qualified Data.Text.Encoding as Text
 import GHC.Generics (Generic)
 import Database.SQLite.Simple
+import qualified Data.Time as Time
 
 import StuntDouble.IO
 import StuntDouble.Time
 
 data Fault
   = Omission
-      { from :: String,
-        to :: String,
-        at :: Int
-      }
+    { from :: String
+    , to :: String
+    , at :: Int
+    }
   | Crash
-      { from :: String,
-        at :: Int
-      }
+    { from :: String
+    , at :: Int
+    }
   -- new ones
   | Pause
     { node :: String
@@ -32,7 +33,20 @@ data Fault
   | Partition
     { node :: String
     , cantReceiveFrom :: [String]
-    , fromtime :: Time
+    , fromTime :: Time
+    , toTime :: Time
+    }
+  | ClockSkewBump
+    { node :: String
+    , bumpDuration :: Time.NominalDiffTime
+    , fromTime :: Time
+    , toTime :: Time
+    }
+  | ClockSkewStrobe
+    { node :: String
+    , strobeDelta :: Time.NominalDiffTime
+    , strobePeriod :: Time.NominalDiffTime
+    , fromTime :: Time
     , toTime :: Time
     }
   deriving (Generic, Show)
