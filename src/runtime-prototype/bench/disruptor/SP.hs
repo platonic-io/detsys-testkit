@@ -8,7 +8,9 @@ import Data.Atomics.Counter
 import Data.Int
 import Text.Printf
 
-import Disruptor
+import Disruptor.RingBuffer.SingleProducer
+import Disruptor.Consumer
+import Disruptor.Producer
 import Disruptor.SequenceNumber
 import StuntDouble.Histogram.SingleProducer
 
@@ -22,7 +24,7 @@ main = do
   n <- getNumCapabilities
   printf "%-25.25s%10d\n" "CPU capabilities" n
   let ringBufferCapacity = 1024 * 64
-  rb <- newRingBuffer SingleProducer ringBufferCapacity
+  rb <- newRingBuffer ringBufferCapacity
   histo <- newHistogram
   transactions <- newCounter 0
 
@@ -37,7 +39,7 @@ main = do
         return snr
 
   ec <- newEventConsumer rb handler 0 [] (Sleep 1)
-  setGatingSequences rb [Exists ec]
+  setGatingSequences rb [ecSequenceNumber ec]
 
   let areWeDoneConsuming = do
         t <- readIORef (ecSequenceNumber ec)

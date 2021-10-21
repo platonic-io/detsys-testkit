@@ -29,6 +29,11 @@ library
     Scheduler.Executor
     Debugger
     Disruptor
+    Disruptor.SequenceNumber
+    Disruptor.Consumer
+    Disruptor.Producer
+    Disruptor.RingBuffer.SingleProducer
+    Disruptor.RingBuffer.MultiProducer
     StuntDouble
     StuntDouble.ActorMap
     StuntDouble.Codec
@@ -156,7 +161,7 @@ benchmark bench
 
   -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/using-concurrent.html
   --  -with-rtsopts=-qa -with-rtsopts=-qm
-  ghc-options:    -threaded -eventlog -rtsopts -with-rtsopts=-N
+  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 
 benchmark bench-http
@@ -175,7 +180,7 @@ benchmark bench-http
     , warp
     , stm
     , time
-  ghc-options:    -threaded -eventlog -rtsopts -with-rtsopts=-N
+  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 
 benchmark bench-disruptor
@@ -188,7 +193,7 @@ benchmark bench-disruptor
     , base
     , stunt-double
     , time
-  ghc-options:    -threaded -eventlog -rtsopts -with-rtsopts=-N
+  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 
 benchmark bench-disruptor-tbqueue
@@ -202,7 +207,7 @@ benchmark bench-disruptor-tbqueue
     , stm
     , stunt-double
     , time
-  ghc-options:    -threaded -eventlog -rtsopts -with-rtsopts=-N
+  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 
 benchmark bench-disruptor-singleops
@@ -215,5 +220,18 @@ benchmark bench-disruptor-singleops
     , base
     , stunt-double
     , time
-  ghc-options:    -threaded -eventlog -rtsopts -with-rtsopts=-N
+  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
+  default-language: Haskell2010
+
+benchmark bench-disruptor-sp
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/disruptor
+  main-is:        SP.hs
+  build-depends:
+      async
+    , atomic-primops
+    , base
+    , stunt-double
+    , time
+  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
   default-language: Haskell2010

@@ -1,5 +1,4 @@
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Disruptor where
 
@@ -23,33 +22,14 @@ import Data.Int (Int64)
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
 
-------------------------------------------------------------------------
+import Disruptor.SequenceNumber
 
-newtype SequenceNumber = SequenceNumber { getSequenceNumber :: Int64 }
-  deriving (Num, Eq, Ord, Real, Enum, Integral, Show, Bounded)
--- ^ NOTE: `(maxBound :: Int64) == 9223372036854775807` so if we write 10M events
--- per second (`10_000_000*60*60*24*365 == 315360000000000) then it would take
--- us `9223372036854775807 / 315360000000000 == 29247.1208677536` years before
--- we overflow.
+------------------------------------------------------------------------
 
 -- * Ring-buffer
 
 data ProducerType
   = SingleProducer
-
-  -- | The lock-free multi-producer implementation is presented in the following
-  -- talk:
-  --
-  --   https://youtu.be/VBnLW9mKMh4?t=1813
-  --
-  -- and also discussed in the following thread:
-  --
-  --   https://groups.google.com/g/lmax-disruptor/c/UhmRuz_CL6E/m/-hVt86bHvf8J
-  --
-  -- Note that one can also achieve a similar result by using multiple
-  -- single-producers and combine them into one as outlined in this thread:
-  --
-  -- https://groups.google.com/g/lmax-disruptor/c/hvJVE-h2Xu0/m/mBW0j_3SrmIJ
   | MultiProducer
 
 data RingBuffer e = RingBuffer
@@ -106,7 +86,7 @@ data Exists f = forall x. Exists (f x)
 
 setGatingSequences :: RingBuffer e -> [Exists EventConsumer] -> IO ()
 setGatingSequences rb eps =
-  atomicWriteIORef (rbGatingSequences rb) (map go eps)
+  writeIORef (rbGatingSequences rb) (map go eps)
   where
     go (Exists ec) = ecSequenceNumber ec
 
@@ -114,7 +94,7 @@ getCachedGatingSequence :: RingBuffer e -> IO SequenceNumber
 getCachedGatingSequence rb = readIORef (rbCachedGatingSequence rb)
 
 setCachedGatingSequence :: RingBuffer e -> SequenceNumber -> IO ()
-setCachedGatingSequence rb = atomicWriteIORef (rbCachedGatingSequence rb)
+setCachedGatingSequence rb = writeIORef (rbCachedGatingSequence rb)
 
 {-# INLINE setAvailable #-}
 setAvailable :: RingBuffer e -> SequenceNumber -> IO ()
@@ -126,27 +106,6 @@ setAvailable rb snr = Vector.write
 {-# INLINE getAvailable #-}
 getAvailable :: RingBuffer e -> Int -> IO Int
 getAvailable rb ix = Vector.read (rbAvailableBuffer rb) ix
-
--- > quickCheck $ \(Positive i) j -> let capacity = 2^i in
---     j `mod` capacity == j Data.Bits..&. (capacity - 1)
-{-# INLINE index #-}
-index :: Int64 -> SequenceNumber -> Int
-index capacity (SequenceNumber snr) = fromIntegral (snr .&. indexMask)
-  where
-    indexMask = capacity - 1
-
-{-# INLINE availabilityFlag #-}
-availabilityFlag :: Int64 -> SequenceNumber -> Int
-availabilityFlag capacity (SequenceNumber snr) =
-  fromIntegral (snr `shiftR` indexShift)
-  where
-    indexShift = logBase2 capacity
-
--- Taken from:
--- https://hackage.haskell.org/package/base-4.15.0.0/docs/Data-Bits.html#v:countLeadingZeros
-{-# INLINE logBase2 #-}
-logBase2 :: Int64 -> Int
-logBase2 i = finiteBitSize i - 1 - countLeadingZeros i
 
 -- * Event producers
 
