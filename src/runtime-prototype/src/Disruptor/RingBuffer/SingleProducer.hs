@@ -128,7 +128,7 @@ nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
           if wrapPoint > gatingSequence
           then go
           else setCachedGatingSequence rb gatingSequence
-{-# INLINABLE nextBatch #-}
+{-# INLINE nextBatch #-}
 
 -- Try to return the next sequence number to write to. If `Nothing` is returned,
 -- then the last consumer has not yet processed the event we are about to

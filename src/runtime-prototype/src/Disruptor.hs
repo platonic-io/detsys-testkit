@@ -269,6 +269,7 @@ tryNextBatch rb n
         if success
         then return (Just next)
         else mp
+{-# INLINE tryNextBatch #-}
 
 remainingCapacity :: RingBuffer e -> IO Int64
 remainingCapacity rb = do
