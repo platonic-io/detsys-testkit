@@ -2,11 +2,12 @@ module Disruptor.RingBuffer.SingleProducer where
 
 import Control.Exception (assert)
 import Control.Monad (when)
-import Data.Int (Int64)
-import Data.Vector.Mutable (IOVector)
-import qualified Data.Vector.Mutable as Vector
 import Data.Bits (popCount)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.Int (Int64)
+import qualified Data.Vector as ImmutableVector
+import Data.Vector.Mutable (IOVector)
+import qualified Data.Vector.Mutable as Vector
 
 import Disruptor.SequenceNumber
 
@@ -23,7 +24,7 @@ data RingBuffer e = RingBuffer
   -- | References to the last consumers' sequence numbers, used in order to
   -- avoid wrapping the buffer and overwriting events that have not been
   -- consumed yet.
-  , rbGatingSequences :: {-# UNPACK #-} !(IORef [IORef SequenceNumber])
+  , rbGatingSequences :: {-# UNPACK #-} !(IORef (IOVector (IORef SequenceNumber)))
   -- | Cached value of computing the last consumers' sequence numbers using the
   -- above references.
   , rbCachedGatingSequence :: {-# UNPACK #-} !(IORef SequenceNumber)
@@ -39,10 +40,10 @@ newRingBuffer capacity
   | otherwise              = do
       snr <- newIORef (-1)
       v   <- Vector.new capacity
-      gs  <- newIORef []
+      gs  <- newIORef =<< Vector.new 0
       cgs <- newIORef (-1)
       return (RingBuffer (fromIntegral capacity) snr v gs cgs)
-{-# INLINABLE newRingBuffer #-}
+{-# INLINE newRingBuffer #-}
 
 -- | The capacity, or maximum amount of values, of the ring buffer.
 capacity :: RingBuffer e -> Int64
@@ -54,7 +55,9 @@ getCursor rb = readIORef (rbCursor rb)
 {-# INLINE getCursor #-}
 
 setGatingSequences :: RingBuffer e -> [IORef SequenceNumber] -> IO ()
-setGatingSequences rb = writeIORef (rbGatingSequences rb)
+setGatingSequences rb gs = do
+  v <- ImmutableVector.thaw (ImmutableVector.fromList gs)
+  writeIORef (rbGatingSequences rb) v
 {-# INLINE setGatingSequences #-}
 
 getCachedGatingSequence :: RingBuffer e -> IO SequenceNumber
@@ -71,10 +74,25 @@ minimumSequence rb = do
   minimumSequence' (rbGatingSequences rb) cursorValue
 {-# INLINE minimumSequence #-}
 
-minimumSequence' :: IORef [IORef SequenceNumber] -> SequenceNumber -> IO SequenceNumber
+minimumSequence' :: IORef (IOVector (IORef SequenceNumber)) -> SequenceNumber
+                 -> IO SequenceNumber
 minimumSequence' gatingSequences cursorValue = do
-  snrs <- mapM readIORef =<< readIORef gatingSequences
-  return (minimum (cursorValue : snrs))
+  gs <- readIORef gatingSequences
+  go gs
+  where
+    go :: IOVector (IORef SequenceNumber) -> IO SequenceNumber
+    go gs = go' 0 cursorValue
+      where
+        len :: Int
+        len = Vector.length gs - 1
+
+        go' :: Int -> SequenceNumber -> IO SequenceNumber
+        go' ix minSequence | ix >  len = return minSequence
+                           | ix <= len = do
+          g <- readIORef =<< Vector.read gs ix
+          if g < minSequence
+          then go' (ix + 1) g
+          else go' (ix + 1) minSequence
 {-# INLINE minimumSequence' #-}
 
 -- | Currently available slots to write to.
@@ -83,7 +101,7 @@ size rb = do
   consumed <- minimumSequence rb
   produced <- getCursor rb
   return (capacity rb - fromIntegral (produced - consumed))
-{-# INLINABLE size #-}
+{-# INLINE size #-}
 
 -- | Claim the next event in sequence for publishing.
 next :: RingBuffer e -> IO SequenceNumber
