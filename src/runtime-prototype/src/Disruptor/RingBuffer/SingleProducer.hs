@@ -152,11 +152,13 @@ nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
 -- then the last consumer has not yet processed the event we are about to
 -- overwrite (due to the ring buffer wrapping around) -- the callee of `tryNext`
 -- should apply back-pressure upstream if this happens.
-tryNext :: RingBuffer e -> IO (Maybe SequenceNumber)
+tryNext :: RingBuffer e -> IO MaybeSequenceNumber
 tryNext rb = tryNextBatch rb 1
 {-# INLINE tryNext #-}
 
-tryNextBatch :: RingBuffer e -> Int -> IO (Maybe SequenceNumber)
+data MaybeSequenceNumber = None | Some {-# UNPACK #-} !SequenceNumber
+
+tryNextBatch :: RingBuffer e -> Int -> IO MaybeSequenceNumber
 tryNextBatch rb n = assert (n > 0) $ do
   current <- getCursor rb
   let next = current + fromIntegral n
@@ -167,9 +169,9 @@ tryNextBatch rb n = assert (n > 0) $ do
     minSequence <- minimumSequence' (rbGatingSequences rb) current
     setCachedGatingSequence rb minSequence
     if (wrapPoint > minSequence)
-    then return Nothing
-    else return (Just next)
-  else return (Just next)
+    then return None
+    else return (Some next)
+  else return (Some next)
 {-# INLINE tryNextBatch #-}
 
 set :: RingBuffer e -> SequenceNumber -> e -> IO ()
