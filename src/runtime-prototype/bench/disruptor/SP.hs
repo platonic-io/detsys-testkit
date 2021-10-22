@@ -39,11 +39,11 @@ main = do
             {-# SCC "transactions+1" #-} incrCounter_ 1 transactions
             mSnr <- tryNext rb
             case mSnr of
-              Just snr -> do
+              Some snr -> do
                 set rb snr (1 :: Int)
                 publish rb snr
                 go (n - 1)
-              Nothing -> go n
+              None -> go n
 
   let handler _s _n snr endOfBatch = do
         t' <- {-# SCC "transactions-1" #-} incrCounter (-1) transactions

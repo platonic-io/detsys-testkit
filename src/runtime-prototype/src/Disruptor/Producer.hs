@@ -18,10 +18,10 @@ newEventProducer rb p backPressure s0 = do
   let go s = {-# SCC go #-} do
         mSnr <- tryNext rb
         case mSnr of
-          Nothing -> do
+          None -> do
             {-# SCC backPresure #-} backPressure s
             go s
-          Just snr -> do
+          Some snr -> do
             (e, s') <- {-# SCC p #-} p s
             set rb snr e
             publish rb snr
