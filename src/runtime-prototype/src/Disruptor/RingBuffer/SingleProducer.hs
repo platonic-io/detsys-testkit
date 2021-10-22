@@ -1,3 +1,4 @@
+{-# language BangPatterns#-}
 module Disruptor.RingBuffer.SingleProducer where
 
 import Control.Exception (assert)
@@ -159,10 +160,10 @@ tryNext rb = tryNextBatch rb 1
 data MaybeSequenceNumber = None | Some {-# UNPACK #-} !SequenceNumber
 
 tryNextBatch :: RingBuffer e -> Int -> IO MaybeSequenceNumber
-tryNextBatch rb n = assert (n > 0) $ do
+tryNextBatch rb n = do -- assert (n > 0) $ do
   current <- getCursor rb
-  let next = current + fromIntegral n
-      wrapPoint = next - fromIntegral (capacity rb)
+  let !next = current + fromIntegral n
+      !wrapPoint = next - fromIntegral (capacity rb)
   cachedGatingSequence <- getCachedGatingSequence rb
   if (wrapPoint > cachedGatingSequence || cachedGatingSequence > current)
   then do
@@ -187,5 +188,7 @@ publishBatch rb _lo hi = writeIORef (rbCursor rb) hi
 {-# INLINE publishBatch #-}
 
 unsafeGet :: RingBuffer e -> SequenceNumber -> IO e
-unsafeGet rb current = Vector.read (rbEvents rb) (index (capacity rb) current)
+unsafeGet rb current =
+  let i = (index (capacity rb) current)
+  in {- i `seq` -} Vector.unsafeRead (rbEvents rb) i
 {-# INLINE unsafeGet #-}

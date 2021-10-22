@@ -47,7 +47,8 @@ newEventConsumer rb handler s0 barriers (Sleep n) = do
 
   let go s = {-# SCC go #-} do
         mySnr <- readIORef snrRef
-        mbSnr <- waitFor mySnr rb barriers
+        bSnr <- waitForB mySnr rb -- barriers
+  {-
         case mbSnr of
           Nothing -> do
             -- XXX: Other wait strategies could be implemented here, e.g. we could
@@ -57,18 +58,25 @@ newEventConsumer rb handler s0 barriers (Sleep n) = do
             threadDelay n
             go s -- SPIN
           Just bSnr -> do
-            -- XXX: what if handler throws exception? https://youtu.be/eTeWxZvlCZ8?t=2271
-            s' <- {-# SCC go' #-} go' (mySnr + 1) bSnr s
-            writeIORef snrRef bSnr
-            go s'
+-}
+          -- XXX: what if handler throws exception? https://youtu.be/eTeWxZvlCZ8?t=2271
+        s' <- {-# SCC go' #-} go' (mySnr + 1) bSnr s
+        writeIORef snrRef bSnr
+        go s'
             where
               go' lo hi s | lo >  hi = return s
                           | lo <= hi = do
                 e <- unsafeGet rb lo
                 s' <- {-# SCC handler #-} handler s e lo (lo == hi)
                 go' (lo + 1) hi s'
-
   return (EventConsumer snrRef go s0)
+
+waitForB :: SequenceNumber -> RingBuffer e -> IO (SequenceNumber)
+waitForB snr rb = do
+  minSnr <- readIORef (rbCursor rb)
+  if snr < minSnr
+  then return minSnr
+  else do {threadDelay 1; waitForB snr rb}
 
 waitFor :: SequenceNumber -> RingBuffer e -> [SequenceBarrier e] -> IO (Maybe SequenceNumber)
 waitFor snr rb [] = do

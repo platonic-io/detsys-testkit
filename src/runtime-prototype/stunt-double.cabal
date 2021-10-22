@@ -96,6 +96,7 @@ library
     , wai
     , warp
 
+  ghc-options: -fforce-recomp -ddump-simpl -ddump-to-file -O2 -dsuppress-coercions -dsuppress-type-applications -dsuppress-idinfo -fasm
   default-language: Haskell2010
 
 test-suite test
@@ -233,5 +234,5 @@ benchmark bench-disruptor-sp
     , base
     , stunt-double
     , time
-  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
+  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N -fforce-recomp -ddump-simpl -ddump-to-file
   default-language: Haskell2010
