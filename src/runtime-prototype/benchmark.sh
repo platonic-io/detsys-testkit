@@ -33,10 +33,7 @@ for policy in /sys/devices/system/cpu/cpufreq/policy*; do
 done
 
 # Compile workloads.
-cabal configure "${BENCHMARK_WORKLOAD1}" \
-      --disable-profiling \
-      --ghc-options='-O2 -threaded -rtsopts -with-rtsopts=-N'
-cabal configure "${BENCHMARK_WORKLOAD2}" \
+cabal configure \
       --disable-profiling \
       --ghc-options='-O2 -threaded -rtsopts -with-rtsopts=-N'
 
@@ -56,10 +53,10 @@ for i in $(seq ${BENCHMARK_NUMBER_OF_RUNS}); do
     echo "Running benchmark run ${i}"
     perf stat -e cache-misses,branch-misses,dTLB-load-misses,iTLB-load-misses \
          cabal run -O2 "${BENCHMARK_WORKLOAD1}" \
-         >> /tmp/${BENCHMARK_WORKLOAD1}.txt
+         &>> /tmp/${BENCHMARK_WORKLOAD1}.txt
     perf stat -e cache-misses,branch-misses,dTLB-load-misses,iTLB-load-misses \
          cabal run -O2 "${BENCHMARK_WORKLOAD2}" \
-         >> /tmp/${BENCHMARK_WORKLOAD2}.txt
+         &>> /tmp/${BENCHMARK_WORKLOAD2}.txt
 
     # XXX: Can't get the below to work, ${BENCHMARK_WORKLOAD} env var doesn't
     # get interpolated correctly into the string?
@@ -105,6 +102,8 @@ EOF
 # to setup the permissions for using `perf`. Also note that on some systems,
 # e.g. Ubuntu, `/usr/bin/perf` is not the actual binary but rather a bash script
 # that calls the binary. Note that the steps in the admin guide needs to be
-# performed on the binary and not the shell script.
+# performed on the binary and not the shell script. Since Linux 5.8 there's a
+# special capability for capturing perf data called `cap_perfmon`, if you are on
+# a older version you need `cap_sys_admin` instead.
 #
 # For more see: https://brendangregg.com/perf.html
