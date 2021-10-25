@@ -5,7 +5,7 @@
 
 module Disruptor.SequenceNumber where
 
-import Data.Bits (countLeadingZeros, finiteBitSize, shiftR, (.&.))
+import Data.Bits (countLeadingZeros, finiteBitSize, unsafeShiftR, (.&.))
 import Data.Int (Int64)
 import Data.Primitive.Types (Prim)
 
@@ -28,7 +28,7 @@ index capacity (SequenceNumber i) = fromIntegral (i .&. indexMask)
 
 availabilityFlag :: Int64 -> SequenceNumber -> Int
 availabilityFlag capacity (SequenceNumber i) =
-  fromIntegral (i `shiftR` indexShift)
+  fromIntegral (i `unsafeShiftR` indexShift)
   where
     indexShift = logBase2 capacity
 {-# INLINE availabilityFlag #-}
