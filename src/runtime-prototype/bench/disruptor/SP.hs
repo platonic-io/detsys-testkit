@@ -1,10 +1,11 @@
+{-# LANGUAGE NumericUnderscores #-}
+
 module Main where
 
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import Control.Monad
-import Data.Atomics.Counter
 import Data.IORef
 import Data.Int
 import Data.Time
@@ -15,11 +16,12 @@ import Disruptor.Producer
 import Disruptor.RingBuffer.SingleProducer
 import Disruptor.SequenceNumber
 import StuntDouble.Histogram.SingleProducer
+import StuntDouble.AtomicCounterPadded
 
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64
-iTERATIONS = 1000 * 1000 * 5
+iTERATIONS = 50_000_000
 
 main :: IO ()
 main = do
@@ -36,17 +38,17 @@ main = do
           go :: Int64 -> IO ()
           go 0 = return ()
           go n = do
-            {-# SCC "transactions+1" #-} incrCounter_ 1 transactions
             mSnr <- tryNext rb
             case mSnr of
               Some snr -> do
+                {-# SCC "transactions+1" #-} incrCounter_ 1 transactions
                 set rb snr (1 :: Int)
                 publish rb snr
                 go (n - 1)
               None -> go n
 
   let handler _s _n snr endOfBatch = do
-        t' <- {-# SCC "transactions-1" #-} incrCounter (-1) transactions
+        t' <- {-# SCC "transactions-1" #-} decrCounter 1 transactions
         measureInt_ t' histo
         when (endOfBatch && getSequenceNumber snr == iTERATIONS - 1) $
           putMVar consumerFinished ()
@@ -65,7 +67,8 @@ main = do
       end <- getCurrentTime
       printf "%-25.25s%10d\n"     "Total number of events" iTERATIONS
       printf "%-25.25s%10.2f s\n" "Duration" (realToFrac (diffUTCTime end start) :: Double)
-      let throughput = realToFrac iTERATIONS / realToFrac (diffUTCTime end start)
+      let throughput :: Double
+          throughput = realToFrac iTERATIONS / realToFrac (diffUTCTime end start)
       printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
       meanTransactions <- hmean histo
       printf "%-25.25s%10.2f\n" "Mean concurrent txs" meanTransactions

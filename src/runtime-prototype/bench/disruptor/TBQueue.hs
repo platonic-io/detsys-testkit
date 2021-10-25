@@ -1,19 +1,22 @@
+{-# LANGUAGE NumericUnderscores #-}
+
 module Main where
+
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
-import Data.Atomics.Counter
 import Data.IORef
 import Data.Int
 import Data.Time
 import Text.Printf
 
 import StuntDouble.Histogram.SingleProducer
+import StuntDouble.AtomicCounterPadded
 
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64
-iTERATIONS = 1000 * 1000 * 5
+iTERATIONS = 50_000_000
 
 main :: IO ()
 main = do
@@ -31,7 +34,7 @@ main = do
 
       consumer = do
         n <- atomically (readTBQueue queue)
-        t' <- {-# SCC "transactions-1" #-} incrCounter (-1) transactions
+        t' <- {-# SCC "transactions-1" #-} decrCounter 1 transactions
         measureInt_ t' histo
         if n == iTERATIONS - 1
         then return ()
@@ -45,7 +48,8 @@ main = do
        end <- getCurrentTime
        printf "%-25.25s%10d\n"     "Total number of events" iTERATIONS
        printf "%-25.25s%10.2f s\n" "Duration" (realToFrac (diffUTCTime end start) :: Double)
-       let throughput = realToFrac iTERATIONS / realToFrac (diffUTCTime end start)
+       let throughput :: Double
+           throughput = realToFrac iTERATIONS / realToFrac (diffUTCTime end start)
        printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
        meanTransactions <- hmean histo
        printf "%-25.25s%10.2f\n" "Mean concurrent txs" meanTransactions
