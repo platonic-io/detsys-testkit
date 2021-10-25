@@ -5,10 +5,14 @@ set -euo pipefail
 # Inspired by: https://sled.rs/perf.html#experimental-design
 
 BENCHMARK_WORKLOAD1="bench-disruptor-sp"
-BENCHMARK_WORKLOAD1_GITHASH="XXX: NOT USED YET"
-BENCHMARK_WORKLOAD2="bench-disruptor-tbqueue"
-BENCHMARK_WORKLOAD2_GITHASH="XXX: NOT USED YET"
+BENCHMARK_GITHASH1="XXX: NOT USED YET"
+BENCHMARK_WORKLOAD2="bench-disruptor-sp-unboxed"
+BENCHMARK_GITHASH2="XXX: NOT USED YET"
 BENCHMARK_NUMBER_OF_RUNS=5
+BENCHMARK_GHC_OPTS=""
+
+BENCHMARK_BIN1="/tmp/${BENCHMARK_GITHASH1}-${BENCHMARK_WORKLOAD1}"
+BENCHMARK_BIN2="/tmp/${BENCHMARK_GITHASH2}-${BENCHMARK_WORKLOAD2}"
 
 # Save info about current hardware and OS setup.
 uname --kernel-name --kernel-release --kernel-version --machine --operating-system
@@ -26,6 +30,15 @@ if [ -n "${FIREFOX_PID}" ]; then
     esac
 fi
 
+if [ -f "/tmp/${BENCHMARK_WORKLOAD1}.txt" ] || [ -f "/tmp/${BENCHMARK_WORKLOAD2}.txt" ]; then
+    read -r -p "Old benchmark results exist, wanna remove them? [y/N] " yn
+    case $yn in
+        [Yy]*) rm -f "/tmp/${BENCHMARK_WORKLOAD1}.txt";
+               rm -f "/tmp/${BENCHMARK_WORKLOAD2}.txt" ;;
+        *) ;;
+    esac
+fi
+
 # Use the performance governor instead of powersave (for laptops).
 for policy in /sys/devices/system/cpu/cpufreq/policy*; do
     echo "${policy}"
@@ -35,9 +48,15 @@ done
 # Compile workloads.
 cabal configure \
       --disable-profiling \
-      --ghc-options='-O2 -threaded -rtsopts -with-rtsopts=-N'
+      --ghc-options='-O2 -threaded -rtsopts -with-rtsopts=-N -fproc-alignment=64
+                     -fexcess-precision -fasm'
 
-cabal build -O2 "${BENCHMARK_WORKLOAD1}"
+# if [ -n "${BENCHMARK_GITHASH1}" ] && [ ! -f "${BENCHMARK_BIN1}" ] ; then
+#     git checkout "${BENCHMARK_GITHASH1}"
+#     cabal build -O2 "${BENCHMARK_WORKLOAD1}"
+#     cp $(cabal list-bin "${BENCHMARK_WORKLOAD1}") "${BENCHMARK_BIN1}"
+# fi
+
 cabal build -O2 "${BENCHMARK_WORKLOAD2}"
 
 # Disable turbo boost.
@@ -73,6 +92,12 @@ done
 # Re-enable turbo boost.
 echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
 
+# Go back to powersave governor.
+for policy in /sys/devices/system/cpu/cpufreq/policy*; do
+    echo "${policy}"
+    echo "powersave" | sudo tee "${policy}/scaling_governor"
+done
+
 # Output throughput data for R analysis.
 R_FILE="/tmp/${BENCHMARK_WORKLOAD1}-${BENCHMARK_WORKLOAD2}.r"
 
@@ -94,6 +119,8 @@ t.test(Throughput ~ Workload, data=Data,
        var.equal=TRUE,
        conf.level=0.95)
 EOF
+
+Rscript "${R_FILE}"
 
 # Profiling
 

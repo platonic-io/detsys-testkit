@@ -2,6 +2,7 @@
 
 module Main where
 
+import System.Mem (performGC)
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
@@ -40,6 +41,7 @@ main = do
         then return ()
         else consumer
 
+  performGC
   start <- getCurrentTime
   withAsync (producer 0) $ \ap ->
     withAsync consumer $ \ac -> do

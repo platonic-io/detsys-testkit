@@ -4,7 +4,6 @@ import Control.Exception (assert)
 import Control.Monad (when)
 import Data.Bits (popCount)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Data.IORef.Unboxed (IORefU, newIORefU, readIORefU, writeIORefU)
 import Data.Int (Int64)
 import qualified Data.Vector as ImmutableVector
 import qualified Data.Vector.Mutable as Boxed
@@ -20,16 +19,16 @@ data RingBuffer e = RingBuffer
   -- | The capacity, or maximum amount of values, of the ring buffer.
     rbCapacity :: {-# UNPACK #-} !Int64
   -- | The cursor pointing to the head of the ring buffer.
-  , rbCursor :: {-# UNPACK #-} !(IORefU SequenceNumber)
+  , rbCursor :: {-# UNPACK #-} !(IORef SequenceNumber)
   -- | The values of the ring buffer.
   , rbEvents :: !(IOVector e)
   -- | References to the last consumers' sequence numbers, used in order to
   -- avoid wrapping the buffer and overwriting events that have not been
   -- consumed yet.
-  , rbGatingSequences :: {-# UNPACK #-} !(IORef (Boxed.IOVector (IORefU SequenceNumber)))
+  , rbGatingSequences :: {-# UNPACK #-} !(IORef (Boxed.IOVector (IORef SequenceNumber)))
   -- | Cached value of computing the last consumers' sequence numbers using the
   -- above references.
-  , rbCachedGatingSequence :: {-# UNPACK #-} !(IORefU SequenceNumber)
+  , rbCachedGatingSequence :: {-# UNPACK #-} !(IORef SequenceNumber)
   }
 
 newRingBuffer :: Unbox e => Int -> IO (RingBuffer e)
@@ -40,10 +39,10 @@ newRingBuffer capacity
       -- NOTE: The use of bitwise and (`.&.`) in `index` relies on this.
       error "newRingBuffer: capacity must be a power of 2"
   | otherwise              = do
-      snr <- newIORefU (-1)
+      snr <- newIORef (-1)
       v   <- Vector.new capacity
       gs  <- newIORef =<< Boxed.new 0
-      cgs <- newIORefU (-1)
+      cgs <- newIORef (-1)
       return (RingBuffer (fromIntegral capacity) snr v gs cgs)
 
 -- | The capacity, or maximum amount of values, of the ring buffer.
@@ -52,21 +51,21 @@ capacity = rbCapacity
 {-# INLINE capacity #-}
 
 getCursor :: RingBuffer e -> IO SequenceNumber
-getCursor rb = readIORefU (rbCursor rb)
+getCursor rb = readIORef (rbCursor rb)
 {-# INLINE getCursor #-}
 
-setGatingSequences :: RingBuffer e -> [IORefU SequenceNumber] -> IO ()
+setGatingSequences :: RingBuffer e -> [IORef SequenceNumber] -> IO ()
 setGatingSequences rb gs = do
   v <- ImmutableVector.thaw (ImmutableVector.fromList gs)
   writeIORef (rbGatingSequences rb) v
 {-# INLINE setGatingSequences #-}
 
 getCachedGatingSequence :: RingBuffer e -> IO SequenceNumber
-getCachedGatingSequence rb = readIORefU (rbCachedGatingSequence rb)
+getCachedGatingSequence rb = readIORef (rbCachedGatingSequence rb)
 {-# INLINE getCachedGatingSequence #-}
 
 setCachedGatingSequence :: RingBuffer e -> SequenceNumber -> IO ()
-setCachedGatingSequence rb = writeIORefU (rbCachedGatingSequence rb)
+setCachedGatingSequence rb = writeIORef (rbCachedGatingSequence rb)
 {-# INLINE setCachedGatingSequence #-}
 
 minimumSequence :: RingBuffer e -> IO SequenceNumber
@@ -75,13 +74,13 @@ minimumSequence rb = do
   minimumSequence' (rbGatingSequences rb) cursorValue
 {-# INLINE minimumSequence #-}
 
-minimumSequence' :: IORef (Boxed.IOVector (IORefU SequenceNumber)) -> SequenceNumber
+minimumSequence' :: IORef (Boxed.IOVector (IORef SequenceNumber)) -> SequenceNumber
                  -> IO SequenceNumber
 minimumSequence' gatingSequences cursorValue = do
   gs <- readIORef gatingSequences
   go gs
   where
-    go :: Boxed.IOVector (IORefU SequenceNumber) -> IO SequenceNumber
+    go :: Boxed.IOVector (IORef SequenceNumber) -> IO SequenceNumber
     go gs = go' 0 cursorValue
       where
         len :: Int
@@ -90,7 +89,7 @@ minimumSequence' gatingSequences cursorValue = do
         go' :: Int -> SequenceNumber -> IO SequenceNumber
         go' ix minSequence | ix >  len = return minSequence
                            | ix <= len = do
-          g <- readIORefU =<< Boxed.read gs ix
+          g <- readIORef =<< Boxed.read gs ix
           if g < minSequence
           then go' (ix + 1) g
           else go' (ix + 1) minSequence
@@ -130,7 +129,7 @@ nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
       wrapPoint :: SequenceNumber
       wrapPoint = nextSequence - fromIntegral (capacity rb)
 
-  writeIORefU (rbCursor rb) nextSequence
+  writeIORef (rbCursor rb) nextSequence
   cachedGatingSequence <- getCachedGatingSequence rb
 
   when (wrapPoint > cachedGatingSequence || cachedGatingSequence > current) $
@@ -176,17 +175,17 @@ tryNextBatch rb n = assert (n > 0) $ do
 {-# INLINE tryNextBatch #-}
 
 set :: Unbox e => RingBuffer e -> SequenceNumber -> e -> IO ()
-set rb snr e = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
+set rb snr e = Vector.unsafeWrite (rbEvents rb) (index (rbCapacity rb) snr) e
 {-# INLINE set #-}
 
 publish :: RingBuffer e -> SequenceNumber -> IO ()
-publish rb = writeIORefU (rbCursor rb)
+publish rb = writeIORef (rbCursor rb)
 {-# INLINE publish #-}
 
 publishBatch :: RingBuffer e -> SequenceNumber -> SequenceNumber -> IO ()
-publishBatch rb _lo hi = writeIORefU (rbCursor rb) hi
+publishBatch rb _lo hi = writeIORef (rbCursor rb) hi
 {-# INLINE publishBatch #-}
 
 unsafeGet :: Unbox e => RingBuffer e -> SequenceNumber -> IO e
-unsafeGet rb current = Vector.read (rbEvents rb) (index (capacity rb) current)
+unsafeGet rb current = Vector.unsafeRead (rbEvents rb) (index (capacity rb) current)
 {-# INLINE unsafeGet #-}

@@ -6,10 +6,10 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import Control.Monad
-import Data.Atomics.Counter
 import Data.IORef
 import Data.Int
 import Data.Time
+import System.Mem (performGC)
 import Text.Printf
 
 import Disruptor.ConsumerUnboxed
@@ -17,11 +17,12 @@ import Disruptor.Producer
 import Disruptor.RingBuffer.SingleProducerUnboxed
 import Disruptor.SequenceNumber
 import StuntDouble.Histogram.SingleProducer
+import StuntDouble.AtomicCounterPadded
 
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64
-iTERATIONS = 70000
+iTERATIONS = 50_000_000
 
 main :: IO ()
 main = do
@@ -45,10 +46,13 @@ main = do
                 set rb snr (1 :: Int)
                 publish rb snr
                 go (n - 1)
-              None -> go n
+              None -> do
+                yield -- NOTE: This seems to be needed in the unboxed case, but
+                      -- not in the boxed one, why?
+                go n
 
   let handler _s _n snr endOfBatch = do
-        -- t' <- {-# SCC "transactions-1" #-} incrCounter (-1) transactions
+        -- t' <- {-# SCC "transactions-1" #-} decrCounter 1 transactions
         -- measureInt_ t' histo
         when (endOfBatch && getSequenceNumber snr == iTERATIONS - 1) $
           putMVar consumerFinished ()
@@ -57,6 +61,7 @@ main = do
   ec <- newEventConsumer rb handler () [] (Sleep 1)
   setGatingSequences rb [ecSequenceNumber ec]
 
+  performGC
   start <- getCurrentTime
   withEventProducer ep $ \aep ->
     withEventConsumer ec $ \aec -> do
