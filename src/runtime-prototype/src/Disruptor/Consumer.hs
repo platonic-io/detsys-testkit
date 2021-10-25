@@ -13,7 +13,7 @@ import Disruptor.RingBuffer.SingleProducer
 ------------------------------------------------------------------------
 
 data EventConsumer s = EventConsumer
-  { ecSequenceNumber :: IORef SequenceNumber
+  { ecSequenceNumber :: {-# UNPACK #-} !(IORef SequenceNumber)
   , ecWorker         :: s -> IO s
   , ecInitialState   :: s
   }

@@ -43,7 +43,6 @@ newRingBuffer capacity
       gs  <- newIORef =<< Vector.new 0
       cgs <- newIORef (-1)
       return (RingBuffer (fromIntegral capacity) snr v gs cgs)
-{-# INLINE newRingBuffer #-}
 
 -- | The capacity, or maximum amount of values, of the ring buffer.
 capacity :: RingBuffer e -> Int64
@@ -89,7 +88,7 @@ minimumSequence' gatingSequences cursorValue = do
         go' :: Int -> SequenceNumber -> IO SequenceNumber
         go' ix minSequence | ix >  len = return minSequence
                            | ix <= len = do
-          g <- readIORef =<< Vector.read gs ix
+          g <- readIORef =<< Vector.unsafeRead gs ix
           if g < minSequence
           then go' (ix + 1) g
           else go' (ix + 1) minSequence
@@ -175,7 +174,7 @@ tryNextBatch rb n = assert (n > 0) $ do
 {-# INLINE tryNextBatch #-}
 
 set :: RingBuffer e -> SequenceNumber -> e -> IO ()
-set rb snr e = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
+set rb snr e = Vector.unsafeWrite (rbEvents rb) (index (rbCapacity rb) snr) e
 {-# INLINE set #-}
 
 publish :: RingBuffer e -> SequenceNumber -> IO ()
@@ -187,5 +186,5 @@ publishBatch rb _lo hi = writeIORef (rbCursor rb) hi
 {-# INLINE publishBatch #-}
 
 unsafeGet :: RingBuffer e -> SequenceNumber -> IO e
-unsafeGet rb current = Vector.read (rbEvents rb) (index (capacity rb) current)
+unsafeGet rb current = Vector.unsafeRead (rbEvents rb) (index (capacity rb) current)
 {-# INLINE unsafeGet #-}
