@@ -19,8 +19,8 @@
 module StuntDouble.Histogram.SingleProducer where
 
 import Control.Exception
-import Data.Vector.Mutable (IOVector)
-import qualified Data.Vector.Mutable as Vector
+import Data.Vector.Unboxed.Mutable (IOVector)
+import qualified Data.Vector.Unboxed.Mutable as Vector
 import Data.Word
 import Data.Bits
 import GHC.Float
@@ -32,6 +32,10 @@ import Text.Printf
 pRECISION :: Double
 pRECISION = 100.0
 {-# INLINE pRECISION #-}
+
+pRECISION' :: Double
+pRECISION' = 1 / pRECISION
+{-# INLINE pRECISION' #-}
 
 bUCKETS :: Int
 bUCKETS = 2 ^ 16
@@ -62,26 +66,26 @@ newHistogram =
 -- compression loss is less than @1%@.
 measure :: Double -> Histogram -> IO Word32
 measure v (Histogram h) = do
-  Vector.modify h (+ round v) hISTOGRAM_SUM_INDEX
-  Vector.modify h (+ 1) hISTOGRAM_COUNT_INDEX
+  Vector.unsafeModify h (+ round v) hISTOGRAM_SUM_INDEX
+  Vector.unsafeModify h (+ 1) hISTOGRAM_COUNT_INDEX
   let ix = compress v + hISTOGRAM_VALUES_OFFSET
-  count' <- (+ 1) <$> Vector.read h ix
-  Vector.write h ix count'
+  count' <- (+ 1) <$> Vector.unsafeRead h ix
+  Vector.unsafeWrite h ix count'
   return count'
 {-# INLINABLE measure #-}
 
 measure_ :: Double -> Histogram -> IO ()
 measure_ v (Histogram h) = do
-  Vector.modify h (+ fromIntegral (double2Int v)) hISTOGRAM_SUM_INDEX
-  Vector.modify h (+ 1) hISTOGRAM_COUNT_INDEX
-  Vector.modify h (+ 1) (compress v + hISTOGRAM_VALUES_OFFSET)
+  Vector.unsafeModify h (+ fromIntegral (double2Int v)) hISTOGRAM_SUM_INDEX
+  Vector.unsafeModify h (+ 1) hISTOGRAM_COUNT_INDEX
+  Vector.unsafeModify h (+ 1) (compress v + hISTOGRAM_VALUES_OFFSET)
 {-# INLINE measure_ #-}
 
 measureInt_ :: Int -> Histogram -> IO ()
 measureInt_ v (Histogram h) = do
-  Vector.modify h (+ fromIntegral v) hISTOGRAM_SUM_INDEX
-  Vector.modify h (+ 1) hISTOGRAM_COUNT_INDEX
-  Vector.modify h (+ 1) (compressInt v + hISTOGRAM_VALUES_OFFSET)
+  Vector.unsafeModify h (+ fromIntegral v) hISTOGRAM_SUM_INDEX
+  Vector.unsafeModify h (+ 1) hISTOGRAM_COUNT_INDEX
+  Vector.unsafeModify h (+ 1) (compressInt v + hISTOGRAM_VALUES_OFFSET)
 {-# INLINE measureInt_ #-}
 
 compress :: Double -> Int
@@ -99,20 +103,20 @@ compressInt v =
 {-# INLINE compressInt #-}
 
 decompress :: Int -> Double
-decompress i = exp (int2Double i / pRECISION) - 1
+decompress i = exp (int2Double i * pRECISION') - 1
 {-# INLINE decompress #-}
 
 percentile :: Double -> Histogram -> IO (Maybe Double)
 percentile p (Histogram h)
   | p > 100.0 = error "percentile: percentiles cannot be over 100"
   | otherwise  = do
-      count <- Vector.read h hISTOGRAM_COUNT_INDEX
+      count <- Vector.unsafeRead h hISTOGRAM_COUNT_INDEX
       if count == 0
       then return Nothing
       else do
         let target :: Double
             target = let
-                        d = realToFrac count * (p / 100.0)
+                        d = realToFrac count * (p * 0.01)
                      in
                         if d == 0.0 then 1.0 else d
         go target h
@@ -126,7 +130,7 @@ percentile p (Histogram h)
             go' idx acc
               | idx > len  = return Nothing
               | idx <= len = do
-                  v <- Vector.read xs (idx + hISTOGRAM_VALUES_OFFSET)
+                  v <- Vector.unsafeRead xs (idx + hISTOGRAM_VALUES_OFFSET)
                   let sum' = realToFrac v + acc
                   if sum' >= target
                   then return (Just (decompress idx))
@@ -135,14 +139,14 @@ percentile p (Histogram h)
 hsum :: Histogram -> IO Int
 hsum
   = fmap fromIntegral
-  . flip Vector.read hISTOGRAM_SUM_INDEX
+  . flip Vector.unsafeRead hISTOGRAM_SUM_INDEX
   . unHistogram
 {-# INLINE hsum #-}
 
 hcount :: Histogram -> IO Int
 hcount
   = fmap fromIntegral
-  . flip Vector.read hISTOGRAM_COUNT_INDEX
+  . flip Vector.unsafeRead hISTOGRAM_COUNT_INDEX
   . unHistogram
 {-# INLINE hcount #-}
 
