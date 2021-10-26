@@ -1,15 +1,14 @@
 {-# LANGUAGE ExistentialQuantification #-} -- XXX
 
-module Disruptor.ConsumerUnboxed where
+module Disruptor.MP.Consumer where
 
 import Control.Concurrent.Async
 import Control.Concurrent
 import Control.Concurrent.STM -- XXX
 import Data.IORef
-import Data.Vector.Unboxed (Unbox)
 
 import Disruptor.SequenceNumber
-import Disruptor.RingBuffer.SingleProducerUnboxed
+import Disruptor.MP.RingBuffer
 
 ------------------------------------------------------------------------
 
@@ -41,7 +40,7 @@ withEventConsumerOn capability ec k =
     link a
     k a
 
-newEventConsumer :: Unbox e => RingBuffer e -> EventHandler s e -> s -> [SequenceBarrier e]
+newEventConsumer :: RingBuffer e -> EventHandler s e -> s -> [SequenceBarrier e]
                  -> WaitStrategy -> IO (EventConsumer s)
 newEventConsumer rb handler s0 _barriers (Sleep n) = do
   snrRef <- newIORef (-1)
@@ -81,4 +80,8 @@ waitFor consumed rb = go
         -- try to recurse immediately here, and if there's no work after a
         -- couple of tries go into a takeMTVar sleep waiting for a producer to
         -- wake us up.
+
+    _getSequenceNumberRef :: SequenceBarrier e -> IORef SequenceNumber
+    _getSequenceNumberRef (RingBufferBarrier    rb) = rbCursor rb
+    _getSequenceNumberRef (EventConsumerBarrier ec) = ecSequenceNumber ec
 {-# INLINE waitFor #-}

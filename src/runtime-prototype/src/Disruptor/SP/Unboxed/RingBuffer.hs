@@ -1,4 +1,4 @@
-module Disruptor.RingBuffer.SingleProducerUnboxed where
+module Disruptor.SP.Unboxed.RingBuffer where
 
 import Control.Exception (assert)
 import Control.Monad (when)
@@ -155,8 +155,6 @@ nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
 tryNext :: RingBuffer e -> IO MaybeSequenceNumber
 tryNext rb = tryNextBatch rb 1
 {-# INLINE tryNext #-}
-
-data MaybeSequenceNumber = None | Some {-# UNPACK #-} !SequenceNumber
 
 tryNextBatch :: RingBuffer e -> Int -> IO MaybeSequenceNumber
 tryNextBatch rb n = assert (n > 0) $ do

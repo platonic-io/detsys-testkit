@@ -38,3 +38,7 @@ availabilityFlag capacity (SequenceNumber i) =
 logBase2 :: Int64 -> Int
 logBase2 i = finiteBitSize i - 1 - countLeadingZeros i
 {-# INLINE logBase2 #-}
+
+data MaybeSequenceNumber = None | Some {-# UNPACK #-} !SequenceNumber
+  deriving (Eq, Show)
+-- ^ TODO: compare with: https://hackage.haskell.org/package/unpacked-maybe-text-0.1.0.0/docs/src/Data.Maybe.Unpacked.Text.Short.html#MaybeShortText

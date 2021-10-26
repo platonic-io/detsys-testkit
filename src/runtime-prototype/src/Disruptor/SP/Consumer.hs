@@ -1,6 +1,6 @@
 {-# LANGUAGE ExistentialQuantification #-} -- XXX
 
-module Disruptor.Consumer where
+module Disruptor.SP.Consumer where
 
 import Control.Concurrent.Async
 import Control.Concurrent
@@ -8,7 +8,7 @@ import Control.Concurrent.STM -- XXX
 import Data.IORef
 
 import Disruptor.SequenceNumber
-import Disruptor.RingBuffer.SingleProducer
+import Disruptor.SP.RingBuffer
 
 ------------------------------------------------------------------------
 

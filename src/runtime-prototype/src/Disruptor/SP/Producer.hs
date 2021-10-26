@@ -1,9 +1,9 @@
-module Disruptor.Producer where
+module Disruptor.SP.Producer where
 
 import Control.Concurrent.Async
-import Control.Concurrent.STM -- XXX
 
-import Disruptor.RingBuffer.SingleProducer
+import Disruptor.SP.RingBuffer
+import Disruptor.SequenceNumber
 
 ------------------------------------------------------------------------
 

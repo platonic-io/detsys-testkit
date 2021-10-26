@@ -29,13 +29,15 @@ library
     Scheduler.Executor
     Debugger
     Disruptor
+    Disruptor.SP.Consumer
+    Disruptor.SP.Producer
+    Disruptor.SP.RingBuffer
+    Disruptor.SP.Unboxed.Consumer
+    Disruptor.SP.Unboxed.RingBuffer
+    Disruptor.MP.Consumer
+    Disruptor.MP.Producer
+    Disruptor.MP.RingBuffer
     Disruptor.SequenceNumber
-    Disruptor.Consumer
-    Disruptor.ConsumerUnboxed
-    Disruptor.Producer
-    Disruptor.RingBuffer.SingleProducer
-    Disruptor.RingBuffer.SingleProducerUnboxed
-    Disruptor.RingBuffer.MultiProducer
     StuntDouble
     StuntDouble.ActorMap
     StuntDouble.Codec
@@ -243,6 +245,12 @@ benchmark bench-disruptor-sp
   -- Some of these options are taking from:
   --   https://wiki.haskell.org/Performance/GHC#Use_optimisation
   -- XXX: try with -fllvm
+
+  -- To inspect core:
+               -- -fforce-recomp
+               -- -ddump-simpl
+               -- -dsuppress-all
+               -- -ddump-to-file
   ghc-options:
               -O2
               -fproc-alignment=64
@@ -250,7 +258,8 @@ benchmark bench-disruptor-sp
               -fasm
               -optc-O3
               -optc-ffast-math
-              -threaded -eventlog -rtsopts -with-rtsopts=-N
+              -- -threaded -eventlog -rtsopts -with-rtsopts=-N
+              -threaded -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 
 benchmark bench-disruptor-sp-unboxed
@@ -271,5 +280,6 @@ benchmark bench-disruptor-sp-unboxed
               -fasm
               -optc-O3
               -optc-ffast-math
-              -threaded -eventlog -rtsopts -with-rtsopts=-N
+              -- -threaded -eventlog -rtsopts -with-rtsopts=-N
+              -threaded -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
