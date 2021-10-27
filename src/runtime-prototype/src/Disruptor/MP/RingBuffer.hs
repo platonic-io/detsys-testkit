@@ -1,11 +1,11 @@
-module Disruptor.RingBuffer.SingleProducer where
+module Disruptor.MP.RingBuffer where
 
 import Control.Exception (assert)
 import Control.Monad (when)
-import Data.Bits (popCount)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.Atomics (casIORef, peekTicket, readForCAS)
+import Data.IORef (IORef, newIORef, atomicModifyIORef', readIORef, writeIORef)
 import Data.Int (Int64)
-import qualified Data.Vector as ImmutableVector
+import Data.Bits (popCount)
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
 
@@ -13,6 +13,20 @@ import Disruptor.SequenceNumber
 
 ------------------------------------------------------------------------
 
+-- | The lock-free multi-producer implementation is presented in the following
+-- talk:
+--
+--   https://youtu.be/VBnLW9mKMh4?t=1813
+--
+-- and also discussed in the following thread:
+--
+--   https://groups.google.com/g/lmax-disruptor/c/UhmRuz_CL6E/m/-hVt86bHvf8J
+--
+-- Note that one can also achieve a similar result by using multiple
+-- single-producers and combine them into one as outlined in this thread:
+--
+-- https://groups.google.com/g/lmax-disruptor/c/hvJVE-h2Xu0/m/mBW0j_3SrmIJ
+--
 data RingBuffer e = RingBuffer
   {
   -- | The capacity, or maximum amount of values, of the ring buffer.
@@ -24,10 +38,12 @@ data RingBuffer e = RingBuffer
   -- | References to the last consumers' sequence numbers, used in order to
   -- avoid wrapping the buffer and overwriting events that have not been
   -- consumed yet.
-  , rbGatingSequences :: {-# UNPACK #-} !(IORef (IOVector (IORef SequenceNumber)))
+  , rbGatingSequences :: {-# UNPACK #-} !(IORef [IORef SequenceNumber])
   -- | Cached value of computing the last consumers' sequence numbers using the
   -- above references.
   , rbCachedGatingSequence :: {-# UNPACK #-} !(IORef SequenceNumber)
+  -- | Used to keep track of what has been published in the multi-producer case.
+  , rbAvailableBuffer :: {-# UNPACK #-} !(IOVector Int)
   }
 
 newRingBuffer :: Int -> IO (RingBuffer e)
@@ -40,10 +56,12 @@ newRingBuffer capacity
   | otherwise              = do
       snr <- newIORef (-1)
       v   <- Vector.new capacity
-      gs  <- newIORef =<< Vector.new 0
+      gs  <- newIORef []
       cgs <- newIORef (-1)
-      return (RingBuffer (fromIntegral capacity) snr v gs cgs)
-{-# INLINE newRingBuffer #-}
+      ab  <- Vector.new capacity
+      Vector.set ab (-1)
+      return (RingBuffer (fromIntegral capacity) snr v gs cgs ab)
+{-# INLINABLE newRingBuffer #-}
 
 -- | The capacity, or maximum amount of values, of the ring buffer.
 capacity :: RingBuffer e -> Int64
@@ -55,9 +73,7 @@ getCursor rb = readIORef (rbCursor rb)
 {-# INLINE getCursor #-}
 
 setGatingSequences :: RingBuffer e -> [IORef SequenceNumber] -> IO ()
-setGatingSequences rb gs = do
-  v <- ImmutableVector.thaw (ImmutableVector.fromList gs)
-  writeIORef (rbGatingSequences rb) v
+setGatingSequences rb = writeIORef (rbGatingSequences rb)
 {-# INLINE setGatingSequences #-}
 
 getCachedGatingSequence :: RingBuffer e -> IO SequenceNumber
@@ -68,31 +84,27 @@ setCachedGatingSequence :: RingBuffer e -> SequenceNumber -> IO ()
 setCachedGatingSequence rb = writeIORef (rbCachedGatingSequence rb)
 {-# INLINE setCachedGatingSequence #-}
 
+setAvailable :: RingBuffer e -> SequenceNumber -> IO ()
+setAvailable rb snr = Vector.write
+  (rbAvailableBuffer rb)
+  (index (rbCapacity rb) snr)
+  (availabilityFlag (rbCapacity rb) snr)
+{-# INLINE setAvailable #-}
+
+getAvailable :: RingBuffer e -> Int -> IO Int
+getAvailable rb ix = Vector.read (rbAvailableBuffer rb) ix
+{-# INLINE getAvailable #-}
+
 minimumSequence :: RingBuffer e -> IO SequenceNumber
 minimumSequence rb = do
   cursorValue <- getCursor rb
   minimumSequence' (rbGatingSequences rb) cursorValue
 {-# INLINE minimumSequence #-}
 
-minimumSequence' :: IORef (IOVector (IORef SequenceNumber)) -> SequenceNumber
-                 -> IO SequenceNumber
+minimumSequence' :: IORef [IORef SequenceNumber] -> SequenceNumber -> IO SequenceNumber
 minimumSequence' gatingSequences cursorValue = do
-  gs <- readIORef gatingSequences
-  go gs
-  where
-    go :: IOVector (IORef SequenceNumber) -> IO SequenceNumber
-    go gs = go' 0 cursorValue
-      where
-        len :: Int
-        len = Vector.length gs - 1
-
-        go' :: Int -> SequenceNumber -> IO SequenceNumber
-        go' ix minSequence | ix >  len = return minSequence
-                           | ix <= len = do
-          g <- readIORef =<< Vector.read gs ix
-          if g < minSequence
-          then go' (ix + 1) g
-          else go' (ix + 1) minSequence
+  snrs <- mapM readIORef =<< readIORef gatingSequences
+  return (minimum (cursorValue : snrs))
 {-# INLINE minimumSequence' #-}
 
 -- | Currently available slots to write to.
@@ -101,7 +113,7 @@ size rb = do
   consumed <- minimumSequence rb
   produced <- getCursor rb
   return (capacity rb - fromIntegral (produced - consumed))
-{-# INLINE size #-}
+{-# INLINABLE size #-}
 
 -- | Claim the next event in sequence for publishing.
 next :: RingBuffer e -> IO SequenceNumber
@@ -122,14 +134,15 @@ next rb = nextBatch rb 1
 --
 nextBatch :: RingBuffer e -> Int -> IO SequenceNumber
 nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
-  current <- getCursor rb
-  let nextSequence :: SequenceNumber
-      nextSequence = current + fromIntegral n
+  (current, nextSequence) <- atomicModifyIORef' (rbCursor rb) $ \current ->
+                               let
+                                 nextSequence = current + fromIntegral n
+                               in
+                                 (nextSequence, (current, nextSequence))
 
-      wrapPoint :: SequenceNumber
+  let wrapPoint :: SequenceNumber
       wrapPoint = nextSequence - fromIntegral (capacity rb)
 
-  writeIORef (rbCursor rb) nextSequence
   cachedGatingSequence <- getCachedGatingSequence rb
 
   when (wrapPoint > cachedGatingSequence || cachedGatingSequence > current) $
@@ -146,7 +159,7 @@ nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
           if wrapPoint > gatingSequence
           then go
           else setCachedGatingSequence rb gatingSequence
-{-# INLINE nextBatch #-}
+{-# INLINABLE nextBatch #-}
 
 -- Try to return the next sequence number to write to. If `Nothing` is returned,
 -- then the last consumer has not yet processed the event we are about to
@@ -156,36 +169,90 @@ tryNext :: RingBuffer e -> IO MaybeSequenceNumber
 tryNext rb = tryNextBatch rb 1
 {-# INLINE tryNext #-}
 
-data MaybeSequenceNumber = None | Some {-# UNPACK #-} !SequenceNumber
-
 tryNextBatch :: RingBuffer e -> Int -> IO MaybeSequenceNumber
-tryNextBatch rb n = assert (n > 0) $ do
-  current <- getCursor rb
-  let next = current + fromIntegral n
-      wrapPoint = next - fromIntegral (capacity rb)
+tryNextBatch rb n = assert (n > 0) go
+  where
+    go = do
+      current <- readForCAS (rbCursor rb)
+      let current_ = peekTicket current
+          next     = current_ + fromIntegral n
+      b <- hasCapacity rb n current_
+      if not b
+      then return None
+      else do
+        (success, _current') <- casIORef (rbCursor rb) current next
+        if success
+        then return (Some next)
+        else go -- SPIN
+{-# INLINE tryNextBatch #-}
+
+hasCapacity :: RingBuffer e -> Int -> SequenceNumber -> IO Bool
+hasCapacity rb requiredCapacity cursorValue = do
+  let wrapPoint = (cursorValue + fromIntegral requiredCapacity) -
+                  fromIntegral (capacity rb)
   cachedGatingSequence <- getCachedGatingSequence rb
-  if (wrapPoint > cachedGatingSequence || cachedGatingSequence > current)
+  if (wrapPoint > cachedGatingSequence || cachedGatingSequence > cursorValue)
   then do
-    minSequence <- minimumSequence' (rbGatingSequences rb) current
+    minSequence <- minimumSequence' (rbGatingSequences rb) cursorValue
     setCachedGatingSequence rb minSequence
     if (wrapPoint > minSequence)
-    then return None
-    else return (Some next)
-  else return (Some next)
-{-# INLINE tryNextBatch #-}
+    then return False
+    else return True
+  else return True
+{-# INLINE hasCapacity #-}
 
 set :: RingBuffer e -> SequenceNumber -> e -> IO ()
 set rb snr e = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
 {-# INLINE set #-}
 
 publish :: RingBuffer e -> SequenceNumber -> IO ()
-publish rb = writeIORef (rbCursor rb)
+publish rb = setAvailable rb
 {-# INLINE publish #-}
+    -- XXX: Wake up consumers that are using a sleep wait strategy.
 
 publishBatch :: RingBuffer e -> SequenceNumber -> SequenceNumber -> IO ()
-publishBatch rb _lo hi = writeIORef (rbCursor rb) hi
+publishBatch rb lo hi = mapM_ (setAvailable rb) [lo..hi]
 {-# INLINE publishBatch #-}
 
 unsafeGet :: RingBuffer e -> SequenceNumber -> IO e
-unsafeGet rb current = Vector.read (rbEvents rb) (index (capacity rb) current)
-{-# INLINE unsafeGet #-}
+unsafeGet rb current = go
+  where
+    availableValue :: Int
+    availableValue = availabilityFlag (rbCapacity rb) current
+
+    ix :: Int
+    ix = index (rbCapacity rb) current
+
+    go = do
+      v <- getAvailable rb ix
+      if v /= availableValue
+      then go
+      else Vector.read (rbEvents rb) ix
+
+get :: RingBuffer e -> SequenceNumber -> IO (Maybe e)
+get rb want = do
+  produced <- getCursor rb
+  if want <= produced
+  then Just <$> unsafeGet rb want
+  else return Nothing
+{-# INLINE get #-}
+
+isAvailable :: RingBuffer e -> SequenceNumber -> IO Bool
+isAvailable rb snr =
+  (==) <$> Vector.read (rbAvailableBuffer rb) (index capacity snr)
+       <*> pure (availabilityFlag capacity snr)
+  where
+    capacity = rbCapacity rb
+{-# INLINE isAvailable #-}
+
+highestPublished :: RingBuffer e -> SequenceNumber -> SequenceNumber
+                 -> IO SequenceNumber
+highestPublished rb lowerBound availableSequence = go lowerBound
+  where
+    go sequence
+      | sequence > availableSequence = return availableSequence
+      | otherwise                    = do
+          available <- isAvailable rb sequence
+          if not (available)
+          then return (sequence - 1)
+          else go (sequence + 1)

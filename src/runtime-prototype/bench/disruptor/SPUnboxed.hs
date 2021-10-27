@@ -12,12 +12,12 @@ import Data.Time
 import System.Mem (performGC)
 import Text.Printf
 
-import Disruptor.SP.Consumer
-import Disruptor.SP.Producer
-import Disruptor.SP.RingBuffer
+import Disruptor.SP.Unboxed.Consumer
+import Disruptor.SP.Unboxed.Producer
+import Disruptor.SP.Unboxed.RingBuffer
 import Disruptor.SequenceNumber
-import StuntDouble.AtomicCounterPadded
 import StuntDouble.Histogram.SingleProducer
+import StuntDouble.AtomicCounterPadded
 
 ------------------------------------------------------------------------
 
@@ -28,11 +28,6 @@ main :: IO ()
 main = do
   n <- getNumCapabilities
   printf "%-25.25s%10d\n" "CPU capabilities" n
-  printf "%-25.25s%10d\n" "Total number of events" iTERATIONS
-  mapM_ (\i -> printf "%s %d:\n" "Run" i >> once) [(0 :: Int)..7]
-
-once :: IO ()
-once = do
   let ringBufferCapacity = 1024 * 64
   rb <- newRingBuffer ringBufferCapacity
   -- histo <- newHistogram
@@ -52,7 +47,8 @@ once = do
                 publish rb snr
                 go (n - 1)
               None -> do
-                -- yield
+                threadDelay 1 -- NOTE: This seems to be needed in the unboxed
+                              -- case, but not in the boxed one, why?
                 go n
 
   let handler _s _n snr endOfBatch = do
@@ -73,14 +69,11 @@ once = do
       end <- getCurrentTime
       cancel aep
       cancel aec
-      let duration :: Double
-          duration = realToFrac (diffUTCTime end start)
-
-          throughput :: Double
-          throughput = realToFrac iTERATIONS / duration
+      printf "%-25.25s%10d\n"     "Total number of events" iTERATIONS
+      printf "%-25.25s%10.2f s\n" "Duration" (realToFrac (diffUTCTime end start) :: Double)
+      let throughput :: Double
+          throughput = realToFrac iTERATIONS / realToFrac (diffUTCTime end start)
       printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
-      printf "%-25.25s%10.2f s\n" "Duration" duration
-      -- XXX: prettyPrintHistogram histo
       -- meanTransactions <- hmean histo
       -- printf "%-25.25s%10.2f\n" "Mean concurrent txs" meanTransactions
       -- Just maxTransactions <- percentile 100.0 histo

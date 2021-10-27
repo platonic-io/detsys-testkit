@@ -10,6 +10,9 @@ module StuntDouble.AtomicCounterPadded
     ( AtomicCounter()
     , newCounter
     , incrCounter
+    , incrCounter_
+    , decrCounter
+    , decrCounter_
     , readCounter
     ) where
 
@@ -41,6 +44,24 @@ incrCounter (I# incr) (AtomicCounter arr) =
   IO (\realWorld -> case fetchAddIntArray# arr 0# incr realWorld of
                       (# realWorld', i #) -> (# realWorld', I# (i +# incr) #))
 {-# INLINE incrCounter #-}
+
+incrCounter_ :: Int -> AtomicCounter -> IO ()
+incrCounter_ (I# incr) (AtomicCounter arr) =
+  IO (\realWorld -> case fetchAddIntArray# arr 0# incr realWorld of
+                      (# realWorld', _i #) -> (# realWorld', () #))
+{-# INLINE incrCounter_ #-}
+
+decrCounter :: Int -> AtomicCounter -> IO Int
+decrCounter (I# decr) (AtomicCounter arr) =
+  IO (\realWorld -> case fetchSubIntArray# arr 0# decr realWorld of
+                      (# realWorld', i #) -> (# realWorld', I# (i -# decr) #))
+{-# INLINE decrCounter #-}
+
+decrCounter_ :: Int -> AtomicCounter -> IO ()
+decrCounter_ (I# decr) (AtomicCounter arr) =
+  IO (\realWorld -> case fetchSubIntArray# arr 0# decr realWorld of
+                      (# realWorld', _i #) -> (# realWorld', () #))
+{-# INLINE decrCounter_ #-}
 
 readCounter :: AtomicCounter -> IO Int
 readCounter (AtomicCounter arr) =

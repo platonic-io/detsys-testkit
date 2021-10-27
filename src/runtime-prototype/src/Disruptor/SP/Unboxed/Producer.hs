@@ -1,9 +1,10 @@
-module Disruptor.Producer where
+module Disruptor.SP.Unboxed.Producer where
 
 import Control.Concurrent.Async
-import Control.Concurrent.STM -- XXX
+import Data.Vector.Unboxed.Mutable (Unbox)
 
-import Disruptor.RingBuffer.SingleProducer
+import Disruptor.SP.Unboxed.RingBuffer
+import Disruptor.SequenceNumber
 
 ------------------------------------------------------------------------
 
@@ -12,7 +13,7 @@ data EventProducer s = EventProducer
   , epInitialState :: s
   }
 
-newEventProducer :: RingBuffer e -> (s -> IO (e, s)) -> (s -> IO ()) -> s
+newEventProducer :: Unbox e => RingBuffer e -> (s -> IO (e, s)) -> (s -> IO ()) -> s
                  -> IO (EventProducer s)
 newEventProducer rb p backPressure s0 = do
   let go s = {-# SCC go #-} do
@@ -26,19 +27,6 @@ newEventProducer rb p backPressure s0 = do
             set rb snr e
             publish rb snr
             go s'
-
-  return (EventProducer go s0)
-
--- XXX: 2x slower than above...
-newEventProducer' :: RingBuffer e -> (s -> IO (e, s)) -> (s -> IO ()) -> s
-                  -> IO (EventProducer s)
-newEventProducer' rb p backPressure s0 = do
-  let go s = {-# SCC go #-} do
-        snr <- next rb
-        (e, s') <- {-# SCC p #-} p s
-        set rb snr e
-        publish rb snr
-        go s'
 
   return (EventProducer go s0)
 

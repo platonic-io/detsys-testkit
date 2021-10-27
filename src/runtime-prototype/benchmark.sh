@@ -5,10 +5,14 @@ set -euo pipefail
 # Inspired by: https://sled.rs/perf.html#experimental-design
 
 BENCHMARK_WORKLOAD1="bench-disruptor-sp"
-BENCHMARK_WORKLOAD1_GITHASH="XXX: NOT USED YET"
-BENCHMARK_WORKLOAD2="bench-disruptor-tbqueue"
-BENCHMARK_WORKLOAD2_GITHASH="XXX: NOT USED YET"
+BENCHMARK_GITHASH1="XXX: NOT USED YET"
+BENCHMARK_WORKLOAD2="bench-disruptor-unagi-chan"
+BENCHMARK_GITHASH2="XXX: NOT USED YET"
 BENCHMARK_NUMBER_OF_RUNS=5
+BENCHMARK_GHC_OPTS=""
+
+BENCHMARK_BIN1="/tmp/${BENCHMARK_GITHASH1}-${BENCHMARK_WORKLOAD1}"
+BENCHMARK_BIN2="/tmp/${BENCHMARK_GITHASH2}-${BENCHMARK_WORKLOAD2}"
 
 # Save info about current hardware and OS setup.
 uname --kernel-name --kernel-release --kernel-version --machine --operating-system
@@ -26,6 +30,15 @@ if [ -n "${FIREFOX_PID}" ]; then
     esac
 fi
 
+if [ -f "/tmp/${BENCHMARK_WORKLOAD1}.txt" ] || [ -f "/tmp/${BENCHMARK_WORKLOAD2}.txt" ]; then
+    read -r -p "Old benchmark results exist, wanna remove them? [y/N] " yn
+    case $yn in
+        [Yy]*) rm -f "/tmp/${BENCHMARK_WORKLOAD1}.txt";
+               rm -f "/tmp/${BENCHMARK_WORKLOAD2}.txt" ;;
+        *) ;;
+    esac
+fi
+
 # Use the performance governor instead of powersave (for laptops).
 for policy in /sys/devices/system/cpu/cpufreq/policy*; do
     echo "${policy}"
@@ -33,14 +46,17 @@ for policy in /sys/devices/system/cpu/cpufreq/policy*; do
 done
 
 # Compile workloads.
-cabal configure "${BENCHMARK_WORKLOAD1}" \
+cabal configure \
       --disable-profiling \
-      --ghc-options='-O2 -threaded -rtsopts -with-rtsopts=-N'
-cabal configure "${BENCHMARK_WORKLOAD2}" \
-      --disable-profiling \
-      --ghc-options='-O2 -threaded -rtsopts -with-rtsopts=-N'
+      --ghc-options='-O2 -threaded -rtsopts -with-rtsopts=-N -fproc-alignment=64
+                     -fexcess-precision -fasm'
 
-cabal build -O2 "${BENCHMARK_WORKLOAD1}"
+# if [ -n "${BENCHMARK_GITHASH1}" ] && [ ! -f "${BENCHMARK_BIN1}" ] ; then
+#     git checkout "${BENCHMARK_GITHASH1}"
+#     cabal build -O2 "${BENCHMARK_WORKLOAD1}"
+#     cp $(cabal list-bin "${BENCHMARK_WORKLOAD1}") "${BENCHMARK_BIN1}"
+# fi
+
 cabal build -O2 "${BENCHMARK_WORKLOAD2}"
 
 # Disable turbo boost.
@@ -56,10 +72,10 @@ for i in $(seq ${BENCHMARK_NUMBER_OF_RUNS}); do
     echo "Running benchmark run ${i}"
     perf stat -e cache-misses,branch-misses,dTLB-load-misses,iTLB-load-misses \
          cabal run -O2 "${BENCHMARK_WORKLOAD1}" \
-         >> /tmp/${BENCHMARK_WORKLOAD1}.txt
+         &>> /tmp/${BENCHMARK_WORKLOAD1}.txt
     perf stat -e cache-misses,branch-misses,dTLB-load-misses,iTLB-load-misses \
          cabal run -O2 "${BENCHMARK_WORKLOAD2}" \
-         >> /tmp/${BENCHMARK_WORKLOAD2}.txt
+         &>> /tmp/${BENCHMARK_WORKLOAD2}.txt
 
     # XXX: Can't get the below to work, ${BENCHMARK_WORKLOAD} env var doesn't
     # get interpolated correctly into the string?
@@ -75,6 +91,12 @@ done
 
 # Re-enable turbo boost.
 echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
+
+# Go back to powersave governor.
+for policy in /sys/devices/system/cpu/cpufreq/policy*; do
+    echo "${policy}"
+    echo "powersave" | sudo tee "${policy}/scaling_governor"
+done
 
 # Output throughput data for R analysis.
 R_FILE="/tmp/${BENCHMARK_WORKLOAD1}-${BENCHMARK_WORKLOAD2}.r"
@@ -98,6 +120,8 @@ t.test(Throughput ~ Workload, data=Data,
        conf.level=0.95)
 EOF
 
+Rscript "${R_FILE}"
+
 # Profiling
 
 # On Linux install `perf` See
@@ -105,6 +129,8 @@ EOF
 # to setup the permissions for using `perf`. Also note that on some systems,
 # e.g. Ubuntu, `/usr/bin/perf` is not the actual binary but rather a bash script
 # that calls the binary. Note that the steps in the admin guide needs to be
-# performed on the binary and not the shell script.
+# performed on the binary and not the shell script. Since Linux 5.8 there's a
+# special capability for capturing perf data called `cap_perfmon`, if you are on
+# a older version you need `cap_sys_admin` instead.
 #
 # For more see: https://brendangregg.com/perf.html
