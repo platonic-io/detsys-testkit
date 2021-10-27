@@ -1,11 +1,13 @@
 module Disruptor.MP.RingBuffer where
 
+import Control.Concurrent (threadDelay, yield)
 import Control.Exception (assert)
 import Control.Monad (when)
 import Data.Atomics (casIORef, peekTicket, readForCAS)
-import Data.IORef (IORef, newIORef, atomicModifyIORef', readIORef, writeIORef)
-import Data.Int (Int64)
 import Data.Bits (popCount)
+import Data.IORef
+       (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
+import Data.Int (Int64)
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
 
@@ -87,8 +89,8 @@ setCachedGatingSequence rb = writeIORef (rbCachedGatingSequence rb)
 setAvailable :: RingBuffer e -> SequenceNumber -> IO ()
 setAvailable rb snr = Vector.write
   (rbAvailableBuffer rb)
-  (index (rbCapacity rb) snr)
-  (availabilityFlag (rbCapacity rb) snr)
+  (index (capacity rb) snr)
+  (availabilityFlag (capacity rb) snr)
 {-# INLINE setAvailable #-}
 
 getAvailable :: RingBuffer e -> Int -> IO Int
@@ -157,7 +159,10 @@ nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
         go = do
           gatingSequence <- minimumSequence rb
           if wrapPoint > gatingSequence
-          then go
+          then do
+            yield
+            -- threadDelay 1
+            go -- SPIN
           else setCachedGatingSequence rb gatingSequence
 {-# INLINABLE nextBatch #-}
 
@@ -183,8 +188,11 @@ tryNextBatch rb n = assert (n > 0) go
         (success, _current') <- casIORef (rbCursor rb) current next
         if success
         then return (Some next)
-        else go -- SPIN
-{-# INLINE tryNextBatch #-}
+        else do
+          threadDelay 1
+          -- yield
+          go -- SPIN
+{-# INLINABLE tryNextBatch #-}
 
 hasCapacity :: RingBuffer e -> Int -> SequenceNumber -> IO Bool
 hasCapacity rb requiredCapacity cursorValue = do
@@ -202,7 +210,7 @@ hasCapacity rb requiredCapacity cursorValue = do
 {-# INLINE hasCapacity #-}
 
 set :: RingBuffer e -> SequenceNumber -> e -> IO ()
-set rb snr e = Vector.write (rbEvents rb) (index (rbCapacity rb) snr) e
+set rb snr e = Vector.unsafeWrite (rbEvents rb) (index (capacity rb) snr) e
 {-# INLINE set #-}
 
 publish :: RingBuffer e -> SequenceNumber -> IO ()
@@ -214,32 +222,35 @@ publishBatch :: RingBuffer e -> SequenceNumber -> SequenceNumber -> IO ()
 publishBatch rb lo hi = mapM_ (setAvailable rb) [lo..hi]
 {-# INLINE publishBatch #-}
 
-unsafeGet :: RingBuffer e -> SequenceNumber -> IO e
-unsafeGet rb current = go
+-- |
+get :: RingBuffer e -> SequenceNumber -> IO e
+get rb current = go
   where
     availableValue :: Int
-    availableValue = availabilityFlag (rbCapacity rb) current
+    availableValue = availabilityFlag (capacity rb) current
 
     ix :: Int
-    ix = index (rbCapacity rb) current
+    ix = index (capacity rb) current
 
     go = do
       v <- getAvailable rb ix
       if v /= availableValue
-      then go
-      else Vector.read (rbEvents rb) ix
+      then do
+        threadDelay 1
+        go -- SPIN
+      else Vector.unsafeRead (rbEvents rb) ix
 
-get :: RingBuffer e -> SequenceNumber -> IO (Maybe e)
-get rb want = do
+tryGet :: RingBuffer e -> SequenceNumber -> IO (Maybe e)
+tryGet rb want = do
   produced <- getCursor rb
   if want <= produced
-  then Just <$> unsafeGet rb want
+  then Just <$> get rb want
   else return Nothing
-{-# INLINE get #-}
+{-# INLINE tryGet #-}
 
 isAvailable :: RingBuffer e -> SequenceNumber -> IO Bool
 isAvailable rb snr =
-  (==) <$> Vector.read (rbAvailableBuffer rb) (index capacity snr)
+  (==) <$> Vector.unsafeRead (rbAvailableBuffer rb) (index capacity snr)
        <*> pure (availabilityFlag capacity snr)
   where
     capacity = rbCapacity rb

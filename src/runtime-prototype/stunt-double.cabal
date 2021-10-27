@@ -304,3 +304,24 @@ benchmark bench-disruptor-unagi-chan
               -- -threaded -eventlog -rtsopts -with-rtsopts=-N
               -threaded -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
+
+benchmark bench-disruptor-mp
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/disruptor
+  main-is:        MP.hs
+  build-depends:
+      async
+    , atomic-primops
+    , base
+    , stunt-double
+    , time
+  ghc-options:
+              -O2
+              -fproc-alignment=64
+              -fexcess-precision
+              -fasm
+              -optc-O3
+              -optc-ffast-math
+              -- -threaded -eventlog -rtsopts -with-rtsopts=-N
+              -threaded -rtsopts -with-rtsopts=-N
+  default-language: Haskell2010

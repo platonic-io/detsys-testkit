@@ -69,10 +69,9 @@ waitFor consumed rb = go
       if consumed < produced
       then return produced
       else do
-        yield -- NOTE: removing this or the sleep seems to cause
-              -- non-termination... XXX: Why though? the consumer should be
-              -- running on its own thread?
-        -- threadDelay 1
+        threadDelay 1 -- NOTE: removing the sleep seems to cause
+                      -- non-termination... XXX: Why though? the consumer should be
+                      -- running on its own thread?
         go -- SPIN
         -- ^ XXX: waitStrategy should be passed in and acted on here.
         --
