@@ -29,7 +29,7 @@ main = do
   n <- getNumCapabilities
   printf "%-25.25s%10d\n" "CPU capabilities" n
   printf "%-25.25s%10d\n" "Total number of events" iTERATIONS
-  mapM_ (\i -> printf "%s %d:\n" "Run" i >> once) [(0 :: Int)..7]
+  mapM_ (\i -> printf "%s %d:\n" "Run" i >> once) [(0 :: Int)..0]
 
 once :: IO ()
 once = do
@@ -43,17 +43,26 @@ once = do
         where
           go :: Int64 -> IO ()
           go 0 = return ()
-          go n = do
-            mSnr <- tryNext rb
-            case mSnr of
-              Some snr -> do
+          go n = blocking n
+            where
+              blocking n = do
+                snr <- next rb
                 -- {-# SCC "transactions+1" #-} incrCounter_ 1 transactions
                 set rb snr (1 :: Int)
                 publish rb snr
                 go (n - 1)
-              None -> do
-                threadDelay 1
-                go n
+
+              nonBlocking n = do
+                mSnr <- tryNext rb
+                case mSnr of
+                  Some snr -> do
+                    -- {-# SCC "transactions+1" #-} incrCounter_ 1 transactions
+                    set rb snr (1 :: Int)
+                    publish rb snr
+                    go (n - 1)
+                  None -> do
+                    threadDelay 1
+                    go n
 
   let handler _s _n snr endOfBatch = do
         -- t' <- {-# SCC "transactions-1" #-} decrCounter 1 transactions

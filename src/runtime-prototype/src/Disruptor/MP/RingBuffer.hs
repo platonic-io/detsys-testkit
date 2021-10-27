@@ -87,14 +87,14 @@ setCachedGatingSequence rb = writeIORef (rbCachedGatingSequence rb)
 {-# INLINE setCachedGatingSequence #-}
 
 setAvailable :: RingBuffer e -> SequenceNumber -> IO ()
-setAvailable rb snr = Vector.write
+setAvailable rb snr = Vector.unsafeWrite
   (rbAvailableBuffer rb)
   (index (capacity rb) snr)
   (availabilityFlag (capacity rb) snr)
 {-# INLINE setAvailable #-}
 
 getAvailable :: RingBuffer e -> Int -> IO Int
-getAvailable rb ix = Vector.read (rbAvailableBuffer rb) ix
+getAvailable rb ix = Vector.unsafeRead (rbAvailableBuffer rb) ix
 {-# INLINE getAvailable #-}
 
 minimumSequence :: RingBuffer e -> IO SequenceNumber
@@ -136,7 +136,11 @@ next rb = nextBatch rb 1
 --
 nextBatch :: RingBuffer e -> Int -> IO SequenceNumber
 nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
-  (current, nextSequence) <- atomicModifyIORef' (rbCursor rb) $ \current ->
+  (current, nextSequence) <- {-# SCC "atomicModifyIORef'" #-}
+                             -- XXX: The atomic takes 60% of the time of
+                             -- `nextBatch`... Try using `AtomicCounter` instead
+                             -- of `IORef SequneceNumber`.
+                             atomicModifyIORef' (rbCursor rb) $ \current ->
                                let
                                  nextSequence = current + fromIntegral n
                                in
@@ -160,8 +164,8 @@ nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
           gatingSequence <- minimumSequence rb
           if wrapPoint > gatingSequence
           then do
-            yield
-            -- threadDelay 1
+            -- yield
+            threadDelay 1
             go -- SPIN
           else setCachedGatingSequence rb gatingSequence
 {-# INLINABLE nextBatch #-}
@@ -178,18 +182,18 @@ tryNextBatch :: RingBuffer e -> Int -> IO MaybeSequenceNumber
 tryNextBatch rb n = assert (n > 0) go
   where
     go = do
-      current <- readForCAS (rbCursor rb)
+      current <- {-# SCC "readForCas" #-} readForCAS (rbCursor rb)
       let current_ = peekTicket current
           next     = current_ + fromIntegral n
-      b <- hasCapacity rb n current_
+      b <- {-# SCC "hasCapacity" #-} hasCapacity rb n current_
       if not b
       then return None
       else do
-        (success, _current') <- casIORef (rbCursor rb) current next
+        (success, _current') <- {-# SCC "casIORef"#-} casIORef (rbCursor rb) current next
         if success
         then return (Some next)
         else do
-          threadDelay 1
+          {-# SCC "threadDelay" #-}threadDelay 1
           -- yield
           go -- SPIN
 {-# INLINABLE tryNextBatch #-}

@@ -5,7 +5,7 @@ set -euo pipefail
 # Inspired by: https://sled.rs/perf.html#experimental-design
 
 BENCHMARK_WORKLOAD1="bench-disruptor-sp"
-BENCHMARK_WORKLOAD2="bench-disruptor-sp-unboxed"
+BENCHMARK_WORKLOAD2="bench-disruptor-mp"
 BENCHMARK_NUMBER_OF_RUNS=5
 BENCHMARK_CABAL_BUILD_OPTS=("--disable-profiling" "-O2")
 BENCHMARK_CABAL_RUN_OPTS=("-O2")

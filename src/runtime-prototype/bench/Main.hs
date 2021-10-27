@@ -19,6 +19,7 @@ import StuntDouble
 
 ------------------------------------------------------------------------
 
+  {-
 scheduler :: Message -> Actor
 scheduler (ClientRequest "write" cref) = Actor $ do
   s <- get
@@ -185,3 +186,5 @@ main = do
     (const (run total stop shutdown))
     `finally` do
       printStats el total errors now
+
+-}
