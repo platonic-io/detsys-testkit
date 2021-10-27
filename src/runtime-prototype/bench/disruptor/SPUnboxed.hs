@@ -12,9 +12,9 @@ import Data.Time
 import System.Mem (performGC)
 import Text.Printf
 
-import Disruptor.ConsumerUnboxed
-import Disruptor.Producer
-import Disruptor.RingBuffer.SingleProducerUnboxed
+import Disruptor.SP.Unboxed.Consumer
+import Disruptor.SP.Unboxed.Producer
+import Disruptor.SP.Unboxed.RingBuffer
 import Disruptor.SequenceNumber
 import StuntDouble.Histogram.SingleProducer
 import StuntDouble.AtomicCounterPadded
@@ -22,7 +22,7 @@ import StuntDouble.AtomicCounterPadded
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64
-iTERATIONS = 50_000_000
+iTERATIONS = 100_000_000
 
 main :: IO ()
 main = do
@@ -47,8 +47,8 @@ main = do
                 publish rb snr
                 go (n - 1)
               None -> do
-                yield -- NOTE: This seems to be needed in the unboxed case, but
-                      -- not in the boxed one, why?
+                threadDelay 1 -- NOTE: This seems to be needed in the unboxed
+                              -- case, but not in the boxed one, why?
                 go n
 
   let handler _s _n snr endOfBatch = do
@@ -69,7 +69,6 @@ main = do
       end <- getCurrentTime
       cancel aep
       cancel aec
-      end <- getCurrentTime
       printf "%-25.25s%10d\n"     "Total number of events" iTERATIONS
       printf "%-25.25s%10.2f s\n" "Duration" (realToFrac (diffUTCTime end start) :: Double)
       let throughput :: Double

@@ -9,6 +9,7 @@ import Disruptor.SP.Consumer
 -- * Single-producer unboxed
 
 import Disruptor.SP.Unboxed.RingBuffer
+import Disruptor.SP.Unboxed.Producer
 import Disruptor.SP.Unboxed.Consumer
 
 -- * Multiple-producers

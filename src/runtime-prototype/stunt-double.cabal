@@ -33,6 +33,7 @@ library
     Disruptor.SP.Producer
     Disruptor.SP.RingBuffer
     Disruptor.SP.Unboxed.Consumer
+    Disruptor.SP.Unboxed.Producer
     Disruptor.SP.Unboxed.RingBuffer
     Disruptor.MP.Consumer
     Disruptor.MP.Producer
@@ -273,6 +274,26 @@ benchmark bench-disruptor-sp-unboxed
     , stunt-double
     , time
   -- XXX: try with -fllvm
+  ghc-options:
+              -O2
+              -fproc-alignment=64
+              -fexcess-precision
+              -fasm
+              -optc-O3
+              -optc-ffast-math
+              -- -threaded -eventlog -rtsopts -with-rtsopts=-N
+              -threaded -rtsopts -with-rtsopts=-N
+  default-language: Haskell2010
+
+benchmark bench-disruptor-unagi-chan
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/disruptor
+  main-is:        SPUnagiChan.hs
+  build-depends:
+      async
+    , base
+    , time
+    , unagi-chan
   ghc-options:
               -O2
               -fproc-alignment=64

@@ -12,9 +12,9 @@ import Data.Time
 import System.Mem (performGC)
 import Text.Printf
 
-import Disruptor.Consumer
-import Disruptor.Producer
-import Disruptor.RingBuffer.SingleProducer
+import Disruptor.SP.Consumer
+import Disruptor.SP.Producer
+import Disruptor.SP.RingBuffer
 import Disruptor.SequenceNumber
 import StuntDouble.AtomicCounterPadded
 import StuntDouble.Histogram.SingleProducer
@@ -22,12 +22,17 @@ import StuntDouble.Histogram.SingleProducer
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64
-iTERATIONS = 50_000_000
+iTERATIONS = 100_000_000
 
 main :: IO ()
 main = do
   n <- getNumCapabilities
   printf "%-25.25s%10d\n" "CPU capabilities" n
+  printf "%-25.25s%10d\n" "Total number of events" iTERATIONS
+  mapM_ (\i -> printf "%s %d:\n" "Run" i >> once) [(0 :: Int)..7]
+
+once :: IO ()
+once = do
   let ringBufferCapacity = 1024 * 64
   rb <- newRingBuffer ringBufferCapacity
   -- histo <- newHistogram
@@ -68,12 +73,14 @@ main = do
       end <- getCurrentTime
       cancel aep
       cancel aec
-      end <- getCurrentTime
-      printf "%-25.25s%10d\n"     "Total number of events" iTERATIONS
-      printf "%-25.25s%10.2f s\n" "Duration" (realToFrac (diffUTCTime end start) :: Double)
-      let throughput :: Double
-          throughput = realToFrac iTERATIONS / realToFrac (diffUTCTime end start)
+      let duration :: Double
+          duration = realToFrac (diffUTCTime end start)
+
+          throughput :: Double
+          throughput = realToFrac iTERATIONS / duration
       printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
+      printf "%-25.25s%10.2f s\n" "Duration" duration
+      -- XXX: prettyPrintHistogram histo
       -- meanTransactions <- hmean histo
       -- printf "%-25.25s%10.2f\n" "Mean concurrent txs" meanTransactions
       -- Just maxTransactions <- percentile 100.0 histo
