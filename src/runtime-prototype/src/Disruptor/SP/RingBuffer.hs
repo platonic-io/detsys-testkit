@@ -1,5 +1,6 @@
 module Disruptor.SP.RingBuffer where
 
+import Control.Concurrent (threadDelay)
 import Control.Exception (assert)
 import Control.Monad (when)
 import Data.Bits (popCount)
@@ -145,9 +146,11 @@ nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
         go = do
           gatingSequence <- minimumSequence rb
           if wrapPoint > gatingSequence
-          then go
+          then do
+            threadDelay 1
+            go -- SPIN
           else setCachedGatingSequence rb gatingSequence
-{-# INLINE nextBatch #-}
+{-# INLINABLE nextBatch #-}
 
 -- Try to return the next sequence number to write to. If `Nothing` is returned,
 -- then the last consumer has not yet processed the event we are about to
