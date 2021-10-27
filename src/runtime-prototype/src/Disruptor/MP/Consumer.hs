@@ -55,7 +55,7 @@ newEventConsumer rb handler s0 _barriers (Sleep n) = do
         where
           go' lo hi s | lo >  hi = return s
                       | lo <= hi = do
-            e <- unsafeGet rb lo
+            e <- get rb lo
             s' <- {-# SCC handler #-} handler s e lo (lo == hi)
             go' (lo + 1) hi s'
 
@@ -69,9 +69,9 @@ waitFor consumed rb = go
       if consumed < produced
       then return produced
       else do
-        yield -- NOTE: removing this or the sleep seems to cause
-              -- non-termination... XXX: Why though? the consumer should be
-              -- running on its own thread?
+        -- NOTE: Removing the sleep seems to cause non-termination... XXX: Why
+        -- though? the consumer should be running on its own thread?
+        yield
         -- threadDelay 1
         go -- SPIN
         -- ^ XXX: waitStrategy should be passed in and acted on here.

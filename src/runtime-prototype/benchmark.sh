@@ -5,14 +5,11 @@ set -euo pipefail
 # Inspired by: https://sled.rs/perf.html#experimental-design
 
 BENCHMARK_WORKLOAD1="bench-disruptor-sp"
-BENCHMARK_GITHASH1="XXX: NOT USED YET"
-BENCHMARK_WORKLOAD2="bench-disruptor-unagi-chan"
-BENCHMARK_GITHASH2="XXX: NOT USED YET"
+BENCHMARK_WORKLOAD2="bench-disruptor-sp-unboxed"
 BENCHMARK_NUMBER_OF_RUNS=5
-BENCHMARK_GHC_OPTS=""
-
-BENCHMARK_BIN1="/tmp/${BENCHMARK_GITHASH1}-${BENCHMARK_WORKLOAD1}"
-BENCHMARK_BIN2="/tmp/${BENCHMARK_GITHASH2}-${BENCHMARK_WORKLOAD2}"
+BENCHMARK_CABAL_BUILD_OPTS=("--disable-profiling" "-O2")
+BENCHMARK_CABAL_RUN_OPTS=("-O2")
+BENCHMARK_PERF_EVENTS="L1-dcache-loads,L1-dcache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses"
 
 # Save info about current hardware and OS setup.
 uname --kernel-name --kernel-release --kernel-version --machine --operating-system
@@ -46,36 +43,37 @@ for policy in /sys/devices/system/cpu/cpufreq/policy*; do
 done
 
 # Compile workloads.
-cabal configure \
-      --disable-profiling \
-      --ghc-options='-O2 -threaded -rtsopts -with-rtsopts=-N -fproc-alignment=64
-                     -fexcess-precision -fasm'
 
+# XXX: enable benchmarking against old versions of same test
+# BENCHMARK_GITHASH1="XXX: NOT USED YET"
+# BENCHMARK_GITHASH2="XXX: NOT USED YET"
+# BENCHMARK_BIN1="/tmp/${BENCHMARK_GITHASH1}-${BENCHMARK_WORKLOAD1}"
+# BENCHMARK_BIN2="/tmp/${BENCHMARK_GITHASH2}-${BENCHMARK_WORKLOAD2}"
 # if [ -n "${BENCHMARK_GITHASH1}" ] && [ ! -f "${BENCHMARK_BIN1}" ] ; then
 #     git checkout "${BENCHMARK_GITHASH1}"
 #     cabal build -O2 "${BENCHMARK_WORKLOAD1}"
 #     cp $(cabal list-bin "${BENCHMARK_WORKLOAD1}") "${BENCHMARK_BIN1}"
 # fi
 
-cabal build -O2 "${BENCHMARK_WORKLOAD2}"
+cabal build "${BENCHMARK_CABAL_BUILD_OPTS[@]}" "${BENCHMARK_WORKLOAD2}"
 
 # Disable turbo boost.
 echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
 
 # The following run is just a (CPU) warm up, the results are discarded.
-cabal run -O2 ${BENCHMARK_WORKLOAD2}
+cabal run "${BENCHMARK_CABAL_RUN_OPTS[@]}" "${BENCHMARK_WORKLOAD2}"
 
 # Run the benchmarks. By running workloads interleaved with each other, we
 # reduce the risk of having particular transient system-wide effects impact only
 # a single measurement.
 for i in $(seq ${BENCHMARK_NUMBER_OF_RUNS}); do
     echo "Running benchmark run ${i}"
-    perf stat -e cache-misses,branch-misses,dTLB-load-misses,iTLB-load-misses \
-         cabal run -O2 "${BENCHMARK_WORKLOAD1}" \
-         &>> /tmp/${BENCHMARK_WORKLOAD1}.txt
-    perf stat -e cache-misses,branch-misses,dTLB-load-misses,iTLB-load-misses \
-         cabal run -O2 "${BENCHMARK_WORKLOAD2}" \
-         &>> /tmp/${BENCHMARK_WORKLOAD2}.txt
+    perf stat --event="${BENCHMARK_PERF_EVENTS}" \
+         cabal run "${BENCHMARK_CABAL_RUN_OPTS[@]}" "${BENCHMARK_WORKLOAD1}" \
+         &>> "/tmp/${BENCHMARK_WORKLOAD1}.txt"
+    perf stat --event="${BENCHMARK_PERF_EVENTS}" \
+         cabal run "${BENCHMARK_CABAL_RUN_OPTS[@]}" "${BENCHMARK_WORKLOAD2}" \
+         &>> "/tmp/${BENCHMARK_WORKLOAD2}.txt"
 
     # XXX: Can't get the below to work, ${BENCHMARK_WORKLOAD} env var doesn't
     # get interpolated correctly into the string?
@@ -102,12 +100,13 @@ done
 R_FILE="/tmp/${BENCHMARK_WORKLOAD1}-${BENCHMARK_WORKLOAD2}.r"
 
 echo 'Input=("' > "${R_FILE}"
-echo "Workload Throughput" >> "${R_FILE}"
-awk -v wl1="${BENCHMARK_WORKLOAD1}" \
-    '/Throughput/ { print wl1, $2}' "/tmp/${BENCHMARK_WORKLOAD1}.txt" >> "${R_FILE}"
-awk -v wl2="${BENCHMARK_WORKLOAD2}" \
-    '/Throughput/ { print wl2, $2}' "/tmp/${BENCHMARK_WORKLOAD2}.txt" >> "${R_FILE}"
-echo '")' >> "${R_FILE}"
+{ echo "Workload Throughput";
+  awk -v wl1="${BENCHMARK_WORKLOAD1}" \
+      '/Throughput/ { print wl1, $2 }' "/tmp/${BENCHMARK_WORKLOAD1}.txt";
+  awk -v wl2="${BENCHMARK_WORKLOAD2}" \
+      '/Throughput/ { print wl2, $2 }' "/tmp/${BENCHMARK_WORKLOAD2}.txt";
+  echo '")'
+} >> "${R_FILE}"
 
 cat << EOF >> "${R_FILE}"
 Data = read.table(textConnection(Input),header=TRUE)

@@ -96,7 +96,7 @@ unit_ringBuffer1P1C = do
                        SP.publish rb snr
                        go (n + 1)
                      None -> do
-                       -- yield
+                       threadDelay 1
                        go n
 
   let handler seen n snr endOfBatch
@@ -118,6 +118,83 @@ unit_ringBuffer1P1C = do
       () <- takeMVar consumerFinished
       cancel aec
 
+unit_ringBuffer1P1C' :: Assertion
+unit_ringBuffer1P1C' = do
+  n <- getNumCapabilities
+  assertBool "getNumCapabilities < 2" (n >= 2)
+  rb <- MP.newRingBuffer 32
+  counter <- newIORef (-1 :: Int)
+  consumerFinished <- newEmptyMVar
+
+  let ep = MP.EventProducer (const go) ()
+        where
+          go :: IO ()
+          go = do
+            n <- atomicModifyIORef' counter (\n -> let n' = n + 1 in (n', n'))
+            putStrLn ("producer, n = " ++ show n)
+            if n > atLeastThisManyEvents
+            then putStrLn "producer: done" >> return ()
+            else do
+              putStrLn "producer: not done yet"
+              snr <- MP.next rb
+              putStrLn ("producer: setting " ++ show n ++ ", snr = " ++ show snr)
+              MP.set rb snr n
+              putStrLn ("producer: done setting " ++ show n)
+              MP.publish rb snr
+              putStrLn ("producer: published " ++ show n)
+              go
+
+              -- mSnr <- MP.tryNext rb
+              -- putStrLn ("producer: mSrn = " ++ show mSnr)
+              -- case mSnr of
+              --   Some snr -> do
+              --     putStrLn ("producer: setting " ++ show n)
+              --     MP.set rb snr n
+              --     putStrLn ("producer: done setting " ++ show n)
+              --     MP.publish rb snr
+              --     putStrLn ("producer: published " ++ show n)
+              --     go
+              --   None -> do
+              --     putStrLn "producer: none"
+              --     threadDelay 1
+              --     go
+
+  let handler seen n snr endOfBatch
+        | n `Set.member` seen = error (show n ++ " appears twice")
+        | otherwise           = do
+            putStrLn ("consumer got, n = " ++ show n ++ ", snr = " ++ show snr ++
+                      if endOfBatch then ". End of batch!" else "")
+            let seen' = Set.insert n seen
+            when (endOfBatch &&
+                  getSequenceNumber snr >= fromIntegral atLeastThisManyEvents) $ do
+              putMVar consumerFinished seen'
+              putStrLn "consumer: done"
+            return seen'
+  ec <- MP.newEventConsumer rb handler Set.empty [] (MP.Sleep 1000)
+
+  MP.setGatingSequences rb [MP.ecSequenceNumber ec]
+
+  MP.withEventProducer ep $ \aep ->
+    MP.withEventConsumer ec $ \aec -> do
+      seen <- takeMVar consumerFinished
+      cancel aec
+      cancel aep
+      assertEqual "increasingByOneFrom"
+        (Right ())
+        (increasingByOneFrom 0 (Set.toList seen))
+
+atLeastThisManyEvents = 128
+
+increasingByOneFrom :: Int -> [Int] -> Either String ()
+increasingByOneFrom n []
+  | n >  atLeastThisManyEvents = Right ()
+  | n <= atLeastThisManyEvents =
+      Left ("n (= " ++ show n ++ ") < atLeastThisManyEvents (= " ++
+            show atLeastThisManyEvents ++ ")")
+increasingByOneFrom n (i : is) | n == i    = increasingByOneFrom (n + 1) is
+                               | otherwise =
+  Left ("Expected: " ++ show n ++ ", but got: " ++ show i)
+
 unit_ringBuffer5P1C :: Assertion
 unit_ringBuffer5P1C = do
   rb <- MP.newRingBuffer 32
@@ -129,20 +206,23 @@ unit_ringBuffer5P1C = do
           go :: IO ()
           go = do
             n <- atomicModifyIORef' counter (\n -> let n' = n + 1 in (n', n'))
+            putStrLn ("producer, n = " ++ show n)
             if n > atLeastThisManyEvents
             then putStrLn "producer: done" >> return ()
             else do
+              putStrLn "producer: not done yet"
               mSnr <- MP.tryNext rb
+              putStrLn ("producer: mSrn = " ++ show mSnr)
               case mSnr of
                 Some snr -> do
                   putStrLn ("producer: setting " ++ show n)
                   MP.set rb snr n
-                  threadDelay 100
                   MP.publish rb snr
+                  putStrLn ("producer: published " ++ show n)
                   go
                 None -> do
                   putStrLn "producer: none"
-                  -- yield
+                  threadDelay 1
                   go
 
   let handler seen n snr endOfBatch
@@ -171,15 +251,3 @@ unit_ringBuffer5P1C = do
               assertEqual "increasingByOneFrom"
                 (Right ())
                 (increasingByOneFrom 0 (Set.toList seen))
-  where
-    atLeastThisManyEvents = 128
-
-    increasingByOneFrom :: Int -> [Int] -> Either String ()
-    increasingByOneFrom n []
-      | n >= atLeastThisManyEvents = Right ()
-      | n <  atLeastThisManyEvents =
-          Left ("n (= " ++ show n ++ ") < atLeastThisManyEvents (= " ++
-                show atLeastThisManyEvents ++ ")")
-    increasingByOneFrom n (i : is) | n == i    = increasingByOneFrom (n + 1) is
-                                   | otherwise =
-      Left ("Expected: " ++ show n ++ ", but got: " ++ show i)
