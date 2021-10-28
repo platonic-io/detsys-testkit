@@ -67,7 +67,7 @@ once = do
   let handler _s _n snr endOfBatch = do
         -- t' <- {-# SCC "transactions-1" #-} decrCounter 1 transactions
         -- measureInt_ t' histo
-        when (endOfBatch && getSequenceNumber snr == (iTERATIONS * 2) - 1) $
+        when (endOfBatch && getSequenceNumber snr == (iTERATIONS * 3) - 1) $
           putMVar consumerFinished ()
         return ()
 
@@ -78,22 +78,24 @@ once = do
   start <- getCurrentTime
   withEventProducer ep $ \aep1 ->
     withEventProducer ep $ \aep2 ->
-      withEventConsumer ec $ \aec -> do
-        () <- takeMVar consumerFinished
-        end <- getCurrentTime
-        cancel aep1
-        cancel aep2
-        cancel aec
-        let duration :: Double
-            duration = realToFrac (diffUTCTime end start)
+      withEventProducer ep $ \aep3 ->
+        withEventConsumer ec $ \aec -> do
+          () <- takeMVar consumerFinished
+          end <- getCurrentTime
+          cancel aep1
+          cancel aep2
+          cancel aep3
+          cancel aec
+          let duration :: Double
+              duration = realToFrac (diffUTCTime end start)
 
-            throughput :: Double
-            throughput = realToFrac iTERATIONS / duration
-        printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
-        printf "%-25.25s%10.2f s\n" "Duration" duration
-        -- XXX: prettyPrintHistogram histo
-        -- meanTransactions <- hmean histo
-        -- printf "%-25.25s%10.2f\n" "Mean concurrent txs" meanTransactions
-        -- Just maxTransactions <- percentile 100.0 histo
-        -- printf "%-25.25s%10.2f\n" "Max concurrent txs" maxTransactions
-        -- printf "%-25.25s%10.2f ns\n" "Latency" ((meanTransactions / throughput) * 1000000)
+              throughput :: Double
+              throughput = realToFrac iTERATIONS / duration
+          printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
+          printf "%-25.25s%10.2f s\n" "Duration" duration
+          -- XXX: prettyPrintHistogram histo
+          -- meanTransactions <- hmean histo
+          -- printf "%-25.25s%10.2f\n" "Mean concurrent txs" meanTransactions
+          -- Just maxTransactions <- percentile 100.0 histo
+          -- printf "%-25.25s%10.2f\n" "Max concurrent txs" maxTransactions
+          -- printf "%-25.25s%10.2f ns\n" "Latency" ((meanTransactions / throughput) * 1000000)

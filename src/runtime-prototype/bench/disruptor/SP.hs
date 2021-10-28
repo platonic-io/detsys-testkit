@@ -29,7 +29,7 @@ main = do
   n <- getNumCapabilities
   printf "%-25.25s%10d\n" "CPU capabilities" n
   printf "%-25.25s%10d\n" "Total number of events" iTERATIONS
-  mapM_ (\i -> printf "%s %d:\n" "Run" i >> once) [(0 :: Int)..7]
+  mapM_ (\i -> printf "%s %d:\n" "Run" i >> once) [(0 :: Int)..0]
 
 once :: IO ()
 once = do

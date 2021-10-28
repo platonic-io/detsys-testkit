@@ -21,24 +21,26 @@ main = do
   (i, o) <- newChan
 
   let producer = replicateM_ iTERATIONS (writeChan i (1 :: Int))
-      consumer = replicateM_ (iTERATIONS * 2) (readChan (threadDelay 1) o)
+      consumer = replicateM_ (iTERATIONS * 3) (readChan (threadDelay 1) o)
 
   performGC
   start <- getCurrentTime
 
   withAsync producer $ \ap1 ->
     withAsync producer $ \ap2 ->
-      withAsync consumer $ \ac -> do
-        wait ap1
-        wait ap2
-        wait ac
-        end <- getCurrentTime
+      withAsync producer $ \ap3 ->
+        withAsync consumer $ \ac -> do
+          wait ac
+          end <- getCurrentTime
+          wait ap1
+          wait ap2
+          wait ap3
 
-        let duration :: Double
-            duration = realToFrac (diffUTCTime end start)
+          let duration :: Double
+              duration = realToFrac (diffUTCTime end start)
 
-            throughput :: Double
-            throughput = realToFrac iTERATIONS / duration
+              throughput :: Double
+              throughput = realToFrac iTERATIONS / duration
 
-        printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
-        printf "%-25.25s%10.2f s\n" "Duration" duration
+          printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
+          printf "%-25.25s%10.2f s\n" "Duration" duration
