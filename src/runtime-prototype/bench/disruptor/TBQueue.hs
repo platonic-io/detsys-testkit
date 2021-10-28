@@ -12,7 +12,7 @@ import Data.Time
 import Text.Printf
 
 import StuntDouble.Histogram.SingleProducer
-import StuntDouble.AtomicCounterPadded
+import Disruptor.AtomicCounterPadded
 
 ------------------------------------------------------------------------
 

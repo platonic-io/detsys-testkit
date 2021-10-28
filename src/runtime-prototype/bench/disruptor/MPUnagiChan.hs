@@ -2,7 +2,7 @@
 
 module Main where
 
-import Control.Concurrent (yield)
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (wait, withAsync)
 import Control.Monad (replicateM_)
 import Data.Time (getCurrentTime, diffUTCTime)
@@ -21,7 +21,7 @@ main = do
   (i, o) <- newChan
 
   let producer = replicateM_ iTERATIONS (writeChan i (1 :: Int))
-      consumer = replicateM_ (iTERATIONS * 2) (readChan yield o)
+      consumer = replicateM_ (iTERATIONS * 2) (readChan (threadDelay 1) o)
 
   performGC
   start <- getCurrentTime

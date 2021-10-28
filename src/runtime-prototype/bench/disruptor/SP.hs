@@ -16,7 +16,7 @@ import Disruptor.SP.Consumer
 import Disruptor.SP.Producer
 import Disruptor.SP.RingBuffer
 import Disruptor.SequenceNumber
-import StuntDouble.AtomicCounterPadded
+import Disruptor.AtomicCounterPadded
 import StuntDouble.Histogram.SingleProducer
 
 ------------------------------------------------------------------------

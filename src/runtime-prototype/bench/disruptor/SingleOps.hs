@@ -11,7 +11,7 @@ import Data.IORef
 import System.CPUTime
 
 import StuntDouble.Histogram
-import qualified StuntDouble.AtomicCounterPadded as Padded
+import qualified Disruptor.AtomicCounterPadded as Padded
 
 ------------------------------------------------------------------------
 
