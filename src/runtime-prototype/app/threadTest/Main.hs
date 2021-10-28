@@ -1,13 +1,40 @@
-{-# language NumericUnderscores#-}
+{-# LANGUAGE NumericUnderscores#-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE UnboxedTuples #-}
+
 module Main where
 
 import Control.Concurrent
-import Control.Concurrent.Async
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import GHC.Exts
+import GHC.Types
+
+data AtomicCounter = AtomicCounter !(MutableByteArray# RealWorld)
+
+newCounter :: Int -> IO AtomicCounter
+newCounter (I# n) = IO $ \s ->
+  case newAlignedPinnedByteArray# size alignment s of
+    (# s', arr #) -> case writeIntArray# arr 0# n s' of
+      s'' -> (# s'', AtomicCounter arr #)
+  where
+    !(I# size)      = 64
+    !(I# alignment) = 64
+{-# INLINE newCounter #-}
+
+incrCounter :: Int -> AtomicCounter -> IO Int
+incrCounter (I# incr) (AtomicCounter arr) = IO $ \s ->
+  case fetchAddIntArray# arr 0# incr s of
+    (# s', i #) -> (# s', I# (i +# incr) #)
+{-# INLINE incrCounter #-}
+
+readCounter :: AtomicCounter -> IO Int
+readCounter (AtomicCounter arr) = IO $ \s ->
+  case readIntArray# arr 0# s of
+    (# s', i #) -> (# s', I# i #)
+{-# INLINE readCounter #-}
 
 limit = 100_000_000
 
-looper :: IORef Int -> IO ()
+looper :: AtomicCounter -> IO ()
 looper ref = do
   tid <- myThreadId
   putStr "looper: "
@@ -15,10 +42,10 @@ looper ref = do
   go
   where
     go = do
-      r <- readIORef ref
+      r <- readCounter ref -- NOTE: Using readIORef here instead causes a stall.
       if r > limit then return () else go
 
-other :: IORef Int -> IO ()
+other :: AtomicCounter -> IO ()
 other ref = do
   tid <- myThreadId
   putStr "other: "
@@ -26,17 +53,16 @@ other ref = do
   go
   where
     go = do
-      r <- readIORef ref
+      r <- incrCounter 1 ref
       putStrLn $ "other running at " <> show r <> " out of " <> show limit
-      writeIORef ref (r+1)
       if r > limit then return () else go
 
 main :: IO ()
 main = do
   n <- getNumCapabilities
   print n
-  ref <- newIORef 0
-  withAsyncOn 1 (looper ref) $ \ l ->
-    withAsyncOn 4 (other ref) $ \ o -> do
-      wait o
-      wait l
+  ref <- newCounter 0
+  tid1 <- forkOn 2 (looper ref)
+  tid2 <- forkOn 4 (other ref)
+  threadDelay 100000000
+  putStrLn "time's up"
