@@ -1,20 +1,29 @@
 {-# language NumericUnderscores#-}
 module Main where
 
+import Control.Concurrent
 import Control.Concurrent.Async
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 
 limit = 100_000_000
 
 looper :: IORef Int -> IO ()
-looper ref = go
+looper ref = do
+  tid <- myThreadId
+  putStr "looper: "
+  print =<< threadCapability tid
+  go
   where
     go = do
       r <- readIORef ref
       if r > limit then return () else go
 
 other :: IORef Int -> IO ()
-other ref = go
+other ref = do
+  tid <- myThreadId
+  putStr "other: "
+  print =<< threadCapability tid
+  go
   where
     go = do
       r <- readIORef ref
@@ -24,8 +33,10 @@ other ref = go
 
 main :: IO ()
 main = do
+  n <- getNumCapabilities
+  print n
   ref <- newIORef 0
-  withAsync (looper ref) $ \ l ->
-    withAsync (other ref) $ \ o -> do
+  withAsyncOn 1 (looper ref) $ \ l ->
+    withAsyncOn 4 (other ref) $ \ o -> do
       wait o
       wait l
