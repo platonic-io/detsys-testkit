@@ -1,4 +1,4 @@
-cabal-version:      >=1.10
+cabal-version:      2.2
 name:               stunt-double
 version:            0.0.0
 synopsis:           Actors that can be faked.
@@ -6,7 +6,7 @@ description:
   See README at <https://github.com/symbiont-io/detsys-testkit/tree/main/src/runtime-prototype#readme>
 
 bug-reports:        https://github.com/symbiont-io/detsys-testkit/issues
-license:            AllRightsReserved
+license:            NONE
 license-file:       LICENSE
 author:             Stevan Andjelkovic, Daniel Gustafsson
 maintainer:         symbiont-stevan-andjelkovic@users.noreply.github.com
@@ -153,96 +153,8 @@ executable debugger
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 
-benchmark bench
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/
-  main-is:        Main.hs
-  build-depends:
-      atomic-primops
-    , async
-    , base
-    , http-client
-    , stm
-    , stunt-double
-    , time
-
-  -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/using-concurrent.html
-  --  -with-rtsopts=-qa -with-rtsopts=-qm
-  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
-  default-language: Haskell2010
-
-benchmark bench-http
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/http
-  main-is:        Main.hs
-  build-depends:
-      atomic-primops
-    , async
-    , base
-    , bytestring
-    , http-client
-    , http-types
-    , network
-    , wai
-    , warp
-    , stm
-    , time
-  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
-  default-language: Haskell2010
-
-benchmark bench-disruptor
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        Main.hs
-  build-depends:
-      async
-    , atomic-primops
-    , base
-    , stunt-double
-    , time
-  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
-  default-language: Haskell2010
-
-benchmark bench-disruptor-tbqueue
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        TBQueue.hs
-  build-depends:
-      async
-    , atomic-primops
-    , base
-    , stm
-    , stunt-double
-    , time
-  ghc-options:      -O2
-                    -fproc-alignment=64
-                    -fexcess-precision
-                    -threaded -eventlog -rtsopts -with-rtsopts=-N
-  default-language: Haskell2010
-
-benchmark bench-disruptor-singleops
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        SingleOps.hs
-  build-depends:
-      atomic-primops
-    , async
-    , base
-    , stunt-double
-    , time
-  ghc-options:      -O2 -threaded -eventlog -rtsopts -with-rtsopts=-N
-  default-language: Haskell2010
-
-benchmark bench-disruptor-sp
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        SP.hs
-  build-depends:
-      async
-    , atomic-primops
-    , base
-    , stunt-double
-    , time
+common bench-ghc-options
+  -- XXX: try with -fllvm
   -- Some of these options are taking from:
   --   https://wiki.haskell.org/Performance/GHC#Use_optimisation
   -- XXX: try with -fllvm
@@ -261,9 +173,97 @@ benchmark bench-disruptor-sp
               -optc-ffast-math
               -- -threaded -eventlog -rtsopts -with-rtsopts=-N
               -threaded -rtsopts -with-rtsopts=-N
+
+benchmark bench
+  import: bench-ghc-options
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/
+  main-is:        Main.hs
+  build-depends:
+      atomic-primops
+    , async
+    , base
+    , http-client
+    , stm
+    , stunt-double
+    , time
+
+  default-language: Haskell2010
+
+benchmark bench-http
+  import: bench-ghc-options
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/http
+  main-is:        Main.hs
+  build-depends:
+      atomic-primops
+    , async
+    , base
+    , bytestring
+    , http-client
+    , http-types
+    , network
+    , wai
+    , warp
+    , stm
+    , time
+  default-language: Haskell2010
+
+benchmark bench-disruptor
+  import: bench-ghc-options
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/disruptor
+  main-is:        Main.hs
+  build-depends:
+      async
+    , atomic-primops
+    , base
+    , stunt-double
+    , time
+  default-language: Haskell2010
+
+benchmark bench-disruptor-sp-tbqueue
+  import: bench-ghc-options
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/disruptor
+  main-is:        SPTBQueue.hs
+  build-depends:
+      async
+    , base
+    , stm
+    , time
+  other-modules: Common
+  default-language: Haskell2010
+
+benchmark bench-disruptor-singleops
+  import: bench-ghc-options
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/disruptor
+  main-is:        SingleOps.hs
+  build-depends:
+      atomic-primops
+    , async
+    , base
+    , stunt-double
+    , time
+  default-language: Haskell2010
+
+benchmark bench-disruptor-sp
+  import: bench-ghc-options
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/disruptor
+  main-is:        SP.hs
+  build-depends:
+      async
+    , atomic-primops
+    , base
+    , stunt-double
+    , time
+  other-modules: Common
   default-language: Haskell2010
 
 benchmark bench-disruptor-sp-unboxed
+  import: bench-ghc-options
   type:           exitcode-stdio-1.0
   hs-source-dirs: bench/disruptor
   main-is:        SPUnboxed.hs
@@ -273,19 +273,11 @@ benchmark bench-disruptor-sp-unboxed
     , base
     , stunt-double
     , time
-  -- XXX: try with -fllvm
-  ghc-options:
-              -O2
-              -fproc-alignment=64
-              -fexcess-precision
-              -fasm
-              -optc-O3
-              -optc-ffast-math
-              -- -threaded -eventlog -rtsopts -with-rtsopts=-N
-              -threaded -rtsopts -with-rtsopts=-N
+  other-modules: Common
   default-language: Haskell2010
 
 benchmark bench-disruptor-sp-unagi-chan
+  import: bench-ghc-options
   type:           exitcode-stdio-1.0
   hs-source-dirs: bench/disruptor
   main-is:        SPUnagiChan.hs
@@ -294,18 +286,11 @@ benchmark bench-disruptor-sp-unagi-chan
     , base
     , time
     , unagi-chan
-  ghc-options:
-              -O2
-              -fproc-alignment=64
-              -fexcess-precision
-              -fasm
-              -optc-O3
-              -optc-ffast-math
-              -- -threaded -eventlog -rtsopts -with-rtsopts=-N
-              -threaded -rtsopts -with-rtsopts=-N
+  other-modules: Common
   default-language: Haskell2010
 
 benchmark bench-disruptor-mp-unagi-chan
+  import: bench-ghc-options
   type:           exitcode-stdio-1.0
   hs-source-dirs: bench/disruptor
   main-is:        MPUnagiChan.hs
@@ -314,18 +299,10 @@ benchmark bench-disruptor-mp-unagi-chan
     , base
     , time
     , unagi-chan
-  ghc-options:
-              -O2
-              -fproc-alignment=64
-              -fexcess-precision
-              -fasm
-              -optc-O3
-              -optc-ffast-math
-              -- -threaded -eventlog -rtsopts -with-rtsopts=-N
-              -threaded -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 
 benchmark bench-disruptor-mp
+  import: bench-ghc-options
   type:           exitcode-stdio-1.0
   hs-source-dirs: bench/disruptor
   main-is:        MP.hs
@@ -335,13 +312,5 @@ benchmark bench-disruptor-mp
     , base
     , stunt-double
     , time
-  ghc-options:
-              -O2
-              -fproc-alignment=64
-              -fexcess-precision
-              -fasm
-              -optc-O3
-              -optc-ffast-math
-              -- -threaded -eventlog -rtsopts -with-rtsopts=-N
-              -threaded -rtsopts -with-rtsopts=-N
+  other-modules: Common
   default-language: Haskell2010

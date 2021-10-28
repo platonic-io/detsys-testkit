@@ -1,42 +1,20 @@
-{-# LANGUAGE NumericUnderscores #-}
-
 module Main where
 
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (wait, withAsync)
+import Control.Concurrent.MVar
 import Control.Monad (replicateM_)
-import Data.Time (getCurrentTime, diffUTCTime)
-import System.Mem (performGC)
-import Text.Printf (printf)
 
 import Control.Concurrent.Chan.Unagi.NoBlocking.Unboxed
 
+import Common
+
 ------------------------------------------------------------------------
 
-iTERATIONS :: Int
-iTERATIONS = 100_000_000
-
 main :: IO ()
-main = do
-  (i, o) <- newChan
+main = spsc newChan (producer . fst) (\(_i, o) -> consumer o)
+  where
+    producer i = replicateM_ iTERATIONS (writeChan i (1 :: Int))
 
-  let producer = replicateM_ iTERATIONS (writeChan i (1 :: Int))
-      consumer = replicateM_ iTERATIONS (readChan (threadDelay 1) o)
-
-  performGC
-  start <- getCurrentTime
-
-  withAsync producer $ \ap ->
-    withAsync consumer $ \ac -> do
-      wait ap
-      wait ac
-      end <- getCurrentTime
-
-      let duration :: Double
-          duration = realToFrac (diffUTCTime end start)
-
-          throughput :: Double
-          throughput = realToFrac iTERATIONS / duration
-
-      printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
-      printf "%-25.25s%10.2f s\n" "Duration" duration
+    consumer o consumerFinished = do
+      replicateM_ iTERATIONS (readChan (threadDelay 1) o)
+      putMVar consumerFinished ()

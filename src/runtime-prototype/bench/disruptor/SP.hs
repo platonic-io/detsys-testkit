@@ -1,88 +1,53 @@
-{-# LANGUAGE NumericUnderscores #-}
-
 module Main where
 
-import Control.Concurrent
-import Control.Concurrent.Async
-import Control.Concurrent.MVar
-import Control.Monad
-import Data.IORef
-import Data.Int
-import Data.Time
+import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar)
+import Control.Monad (when)
 import System.Mem (performGC)
-import Text.Printf
 
+import Common (iTERATIONS, spsc)
 import Disruptor.SP.Consumer
 import Disruptor.SP.Producer
 import Disruptor.SP.RingBuffer
 import Disruptor.SequenceNumber
-import Disruptor.AtomicCounterPadded
-import StuntDouble.Histogram.SingleProducer
 
 ------------------------------------------------------------------------
 
-iTERATIONS :: Int64
-iTERATIONS = 100_000_000
-
-main :: IO ()
-main = do
-  n <- getNumCapabilities
-  printf "%-25.25s%10d\n" "CPU capabilities" n
-  printf "%-25.25s%10d\n" "Total number of events" iTERATIONS
-  mapM_ (\i -> printf "%s %d:\n" "Run" i >> once) [(0 :: Int)..0]
-
-once :: IO ()
-once = do
+setup :: IO (RingBuffer Int)
+setup = do
   let ringBufferCapacity = 1024 * 64
-  rb <- newRingBuffer ringBufferCapacity
-  -- histo <- newHistogram
-  -- transactions <- newCounter 0
-  consumerFinished <- newEmptyMVar
+  newRingBuffer ringBufferCapacity
 
-  let ep = EventProducer (const (go iTERATIONS)) ()
-        where
-          go :: Int64 -> IO ()
-          go 0 = return ()
-          go n = do
-            mSnr <- tryNext rb
-            case mSnr of
-              Some snr -> do
-                -- {-# SCC "transactions+1" #-} incrCounter_ 1 transactions
-                set rb snr (1 :: Int)
-                publish rb snr
-                go (n - 1)
-              None -> do
-                -- yield
-                go n
+producer :: RingBuffer Int -> IO ()
+producer rb = go iTERATIONS
+  where
+    go :: Int -> IO ()
+    go 0 = return ()
+    go n = do
+      mSnr <- tryNext rb
+      case mSnr of
+        Some snr -> do
+          -- NOTE: Measuring transactions, which is useful for calculating
+          -- latency, seriously slows down the benchmark.
 
+          -- {-# SCC "transactions+1" #-} incrCounter_ 1 transactions
+          set rb snr (1 :: Int)
+          publish rb snr
+          go (n - 1)
+        None -> do
+          -- yield
+          go n
+
+consumer :: RingBuffer Int -> MVar () -> IO ()
+consumer rb consumerFinished = do
   let handler _s _n snr endOfBatch = do
         -- t' <- {-# SCC "transactions-1" #-} decrCounter 1 transactions
         -- measureInt_ t' histo
-        when (endOfBatch && getSequenceNumber snr == iTERATIONS - 1) $
+        when (endOfBatch && getSequenceNumber snr == fromIntegral (iTERATIONS - 1)) $
           putMVar consumerFinished ()
         return ()
-
   ec <- newEventConsumer rb handler () [] (Sleep 1)
   setGatingSequences rb [ecSequenceNumber ec]
+  ecWorker ec ()
 
-  performGC
-  start <- getCurrentTime
-  withEventProducer ep $ \aep ->
-    withEventConsumer ec $ \aec -> do
-      () <- takeMVar consumerFinished
-      end <- getCurrentTime
-      cancel aep
-      cancel aec
-      let duration :: Double
-          duration = realToFrac (diffUTCTime end start)
-
-          throughput :: Double
-          throughput = realToFrac iTERATIONS / duration
-      printf "%-25.25s%10.2f events/s\n" "Throughput" throughput
-      printf "%-25.25s%10.2f s\n" "Duration" duration
-      -- XXX: prettyPrintHistogram histo
-      -- meanTransactions <- hmean histo
-      -- printf "%-25.25s%10.2f\n" "Mean concurrent txs" meanTransactions
-      -- Just maxTransactions <- percentile 100.0 histo
-      -- printf "%-25.25s%10.2f\n" "Max concurrent txs" maxTransactions
-      -- printf "%-25.25s%10.2f ns\n" "Latency" ((meanTransactions / throughput) * 1000000)
+main :: IO ()
+main = spsc setup producer consumer
