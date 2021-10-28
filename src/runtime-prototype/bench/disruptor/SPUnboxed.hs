@@ -12,12 +12,12 @@ import Data.Time
 import System.Mem (performGC)
 import Text.Printf
 
+import Disruptor.AtomicCounterPadded
 import Disruptor.SP.Unboxed.Consumer
 import Disruptor.SP.Unboxed.Producer
 import Disruptor.SP.Unboxed.RingBuffer
 import Disruptor.SequenceNumber
 import StuntDouble.Histogram.SingleProducer
-import StuntDouble.AtomicCounterPadded
 
 ------------------------------------------------------------------------
 

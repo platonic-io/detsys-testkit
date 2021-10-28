@@ -65,14 +65,14 @@ waitFor :: SequenceNumber -> RingBuffer e -> IO SequenceNumber
 waitFor consumed rb = go
   where
     go = do
-      produced <- readIORef (rbCursor rb)
+      produced <- getCursor rb
       if consumed < produced
       then return produced
       else do
         -- NOTE: Removing the sleep seems to cause non-termination... XXX: Why
         -- though? the consumer should be running on its own thread?
-        yield
-        -- threadDelay 1
+        -- yield
+        threadDelay 1
         go -- SPIN
         -- ^ XXX: waitStrategy should be passed in and acted on here.
         --
@@ -80,8 +80,4 @@ waitFor consumed rb = go
         -- try to recurse immediately here, and if there's no work after a
         -- couple of tries go into a takeMTVar sleep waiting for a producer to
         -- wake us up.
-
-    _getSequenceNumberRef :: SequenceBarrier e -> IORef SequenceNumber
-    _getSequenceNumberRef (RingBufferBarrier    rb) = rbCursor rb
-    _getSequenceNumberRef (EventConsumerBarrier ec) = ecSequenceNumber ec
 {-# INLINE waitFor #-}

@@ -16,13 +16,13 @@ import Disruptor.MP.Consumer
 import Disruptor.MP.Producer
 import Disruptor.MP.RingBuffer
 import Disruptor.SequenceNumber
-import StuntDouble.AtomicCounterPadded
+import Disruptor.AtomicCounterPadded
 import StuntDouble.Histogram.SingleProducer
 
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64
-iTERATIONS = 10_000_000
+iTERATIONS = 100_000_000
 
 main :: IO ()
 main = do
@@ -48,8 +48,8 @@ once = do
               blocking n = do
                 snr <- next rb
                 -- {-# SCC "transactions+1" #-} incrCounter_ 1 transactions
-                set rb snr (1 :: Int)
-                publish rb snr
+                {-# SCC set #-} set rb snr (1 :: Int)
+                {-# SCC publish #-} publish rb snr
                 go (n - 1)
 
               nonBlocking n = do

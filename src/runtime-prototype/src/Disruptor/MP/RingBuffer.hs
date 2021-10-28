@@ -10,8 +10,10 @@ import Data.IORef
 import Data.Int (Int64)
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
+import qualified Data.Vector.Unboxed.Mutable as Unboxed
 
 import Disruptor.SequenceNumber
+import Disruptor.AtomicCounterPadded
 
 ------------------------------------------------------------------------
 
@@ -34,7 +36,7 @@ data RingBuffer e = RingBuffer
   -- | The capacity, or maximum amount of values, of the ring buffer.
     rbCapacity :: {-# UNPACK #-} !Int64
   -- | The cursor pointing to the head of the ring buffer.
-  , rbCursor :: {-# UNPACK #-} !(IORef SequenceNumber)
+  , rbCursor :: {-# UNPACK #-} !AtomicCounter
   -- | The values of the ring buffer.
   , rbEvents :: {-# UNPACK #-} !(IOVector e)
   -- | References to the last consumers' sequence numbers, used in order to
@@ -45,7 +47,7 @@ data RingBuffer e = RingBuffer
   -- above references.
   , rbCachedGatingSequence :: {-# UNPACK #-} !(IORef SequenceNumber)
   -- | Used to keep track of what has been published in the multi-producer case.
-  , rbAvailableBuffer :: {-# UNPACK #-} !(IOVector Int)
+  , rbAvailableBuffer :: {-# UNPACK #-} !(Unboxed.IOVector Int)
   }
 
 newRingBuffer :: Int -> IO (RingBuffer e)
@@ -56,12 +58,12 @@ newRingBuffer capacity
       -- NOTE: The use of bitwise and (`.&.`) in `index` relies on this.
       error "newRingBuffer: capacity must be a power of 2"
   | otherwise              = do
-      snr <- newIORef (-1)
+      snr <- newCounter (-1)
       v   <- Vector.new capacity
       gs  <- newIORef []
       cgs <- newIORef (-1)
-      ab  <- Vector.new capacity
-      Vector.set ab (-1)
+      ab  <- Unboxed.new capacity
+      Unboxed.set ab (-1)
       return (RingBuffer (fromIntegral capacity) snr v gs cgs ab)
 {-# INLINABLE newRingBuffer #-}
 
@@ -71,7 +73,7 @@ capacity = rbCapacity
 {-# INLINE capacity #-}
 
 getCursor :: RingBuffer e -> IO SequenceNumber
-getCursor rb = readIORef (rbCursor rb)
+getCursor rb = fromIntegral <$> readCounter (rbCursor rb)
 {-# INLINE getCursor #-}
 
 setGatingSequences :: RingBuffer e -> [IORef SequenceNumber] -> IO ()
@@ -87,14 +89,14 @@ setCachedGatingSequence rb = writeIORef (rbCachedGatingSequence rb)
 {-# INLINE setCachedGatingSequence #-}
 
 setAvailable :: RingBuffer e -> SequenceNumber -> IO ()
-setAvailable rb snr = Vector.unsafeWrite
+setAvailable rb snr = Unboxed.unsafeWrite
   (rbAvailableBuffer rb)
   (index (capacity rb) snr)
   (availabilityFlag (capacity rb) snr)
 {-# INLINE setAvailable #-}
 
 getAvailable :: RingBuffer e -> Int -> IO Int
-getAvailable rb ix = Vector.unsafeRead (rbAvailableBuffer rb) ix
+getAvailable rb ix = Unboxed.unsafeRead (rbAvailableBuffer rb) ix
 {-# INLINE getAvailable #-}
 
 minimumSequence :: RingBuffer e -> IO SequenceNumber
@@ -136,17 +138,21 @@ next rb = nextBatch rb 1
 --
 nextBatch :: RingBuffer e -> Int -> IO SequenceNumber
 nextBatch rb n = assert (n > 0 && fromIntegral n <= capacity rb) $ do
-  (current, nextSequence) <- {-# SCC "atomicModifyIORef'" #-}
-                             -- XXX: The atomic takes 60% of the time of
-                             -- `nextBatch`... Try using `AtomicCounter` instead
-                             -- of `IORef SequneceNumber`.
-                             atomicModifyIORef' (rbCursor rb) $ \current ->
-                               let
-                                 nextSequence = current + fromIntegral n
-                               in
-                                 (nextSequence, (current, nextSequence))
+  -- (current, nextSequence) <- -- {-# SCC "atomicModifyIORef'" #-}
+  --                            -- XXX: The atomic takes 60% of the time of
+  --                            -- `nextBatch`... Try using `AtomicCounter` instead
+  --                            -- of `IORef SequneceNumber`.
+  --                            atomicModifyIORef' (rbCursor rb) $ \current ->
+  --                              let
+  --                                nextSequence = current + fromIntegral n
+  --                              in
+  --                                (nextSequence, (current, nextSequence))
+  nextSequence <- fromIntegral <$> {-# SCC incrCounter #-} incrCounter n (rbCursor rb)
 
-  let wrapPoint :: SequenceNumber
+  let current :: SequenceNumber
+      current = nextSequence - fromIntegral n
+
+      wrapPoint :: SequenceNumber
       wrapPoint = nextSequence - fromIntegral (capacity rb)
 
   cachedGatingSequence <- getCachedGatingSequence rb
@@ -182,6 +188,22 @@ tryNextBatch :: RingBuffer e -> Int -> IO MaybeSequenceNumber
 tryNextBatch rb n = assert (n > 0) go
   where
     go = do
+      current_ <- {-# SCC "readCounter" #-} readCounter (rbCursor rb)
+      let current = fromIntegral current_
+          next_   = current_ + n
+          next    = fromIntegral next_
+      b <- {-# SCC "hasCapacity" #-} hasCapacity rb n current
+      if not b
+      then return None
+      else do
+        success <- {-# SCC casCounter #-} casCounter (rbCursor rb) current_ next_
+        if success
+        then return (Some next)
+        else do
+          {-# SCC "threadDelay" #-} threadDelay 1
+          -- yield
+          go -- SPIN
+      {--
       current <- {-# SCC "readForCas" #-} readForCAS (rbCursor rb)
       let current_ = peekTicket current
           next     = current_ + fromIntegral n
@@ -196,6 +218,7 @@ tryNextBatch rb n = assert (n > 0) go
           {-# SCC "threadDelay" #-}threadDelay 1
           -- yield
           go -- SPIN
+-}
 {-# INLINABLE tryNextBatch #-}
 
 hasCapacity :: RingBuffer e -> Int -> SequenceNumber -> IO Bool
@@ -254,7 +277,7 @@ tryGet rb want = do
 
 isAvailable :: RingBuffer e -> SequenceNumber -> IO Bool
 isAvailable rb snr =
-  (==) <$> Vector.unsafeRead (rbAvailableBuffer rb) (index capacity snr)
+  (==) <$> Unboxed.unsafeRead (rbAvailableBuffer rb) (index capacity snr)
        <*> pure (availabilityFlag capacity snr)
   where
     capacity = rbCapacity rb

@@ -39,13 +39,13 @@ library
     Disruptor.MP.Producer
     Disruptor.MP.RingBuffer
     Disruptor.SequenceNumber
+    Disruptor.AtomicCounterPadded
     StuntDouble
     StuntDouble.ActorMap
     StuntDouble.Codec
     StuntDouble.Envelope
     StuntDouble.FreeMonad
     StuntDouble.Frontend.Http
-    StuntDouble.AtomicCounterPadded
     StuntDouble.Histogram
     StuntDouble.Histogram.SingleProducer
     StuntDouble.IO
