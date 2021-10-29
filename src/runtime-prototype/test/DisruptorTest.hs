@@ -20,6 +20,7 @@ import qualified Disruptor.SP.Consumer as SP
 import qualified Disruptor.SP.Producer as SP
 import qualified Disruptor.SP.RingBuffer as SP
 import Disruptor.SequenceNumber
+import Disruptor.AtomicCounterPadded
 
 ------------------------------------------------------------------------
 
@@ -70,14 +71,14 @@ unit_ringBufferMulti = do
   Some i <- MP.tryNext rb
   MP.set rb i 'a'
   MP.publish rb i
-  MP.get rb i @?-> Just 'a'
+  MP.tryGet rb i @?-> Just 'a'
   Some j <- MP.tryNext rb
   MP.set rb j 'b'
   MP.publish rb j
-  MP.get rb j @?-> Just 'b'
+  MP.tryGet rb j @?-> Just 'b'
 
-unit_ringBuffer1P1C :: Assertion
-unit_ringBuffer1P1C = do
+unit_ringBufferSP1P1C :: Assertion
+unit_ringBufferSP1P1C = do
   rb <- SP.newRingBuffer 128
   consumerFinished <- newEmptyMVar
 
@@ -108,7 +109,7 @@ unit_ringBuffer1P1C = do
               putMVar consumerFinished ()
             return (seen + 1)
 
-  ec <- SP.newEventConsumer rb handler 0 [] (SP.Sleep 1000)
+  ec <- SP.newEventConsumer rb handler 0 [] (SP.Sleep 1)
 
   SP.setGatingSequences rb [SP.ecSequenceNumber ec]
 
@@ -118,8 +119,8 @@ unit_ringBuffer1P1C = do
       () <- takeMVar consumerFinished
       cancel aec
 
-unit_ringBuffer1P1C' :: Assertion
-unit_ringBuffer1P1C' = do
+unit_ringBufferMP1P1C :: Assertion
+unit_ringBufferMP1P1C = do
   n <- getNumCapabilities
   assertBool "getNumCapabilities < 2" (n >= 2)
   rb <- MP.newRingBuffer 32
@@ -170,7 +171,7 @@ unit_ringBuffer1P1C' = do
               putMVar consumerFinished seen'
               putStrLn "consumer: done"
             return seen'
-  ec <- MP.newEventConsumer rb handler Set.empty [] (MP.Sleep 1000)
+  ec <- MP.newEventConsumer rb handler Set.empty [] (MP.Sleep 1)
 
   MP.setGatingSequences rb [MP.ecSequenceNumber ec]
 
@@ -198,14 +199,14 @@ increasingByOneFrom n (i : is) | n == i    = increasingByOneFrom (n + 1) is
 unit_ringBuffer5P1C :: Assertion
 unit_ringBuffer5P1C = do
   rb <- MP.newRingBuffer 32
-  counter <- newIORef 0 :: IO (IORef Int)
+  counter <- newCounter (-1)
   consumerFinished <- newEmptyMVar
 
   let ep = MP.EventProducer (const go) ()
         where
           go :: IO ()
           go = do
-            n <- atomicModifyIORef' counter (\n -> let n' = n + 1 in (n', n'))
+            n <- incrCounter 1 counter
             putStrLn ("producer, n = " ++ show n)
             if n > atLeastThisManyEvents
             then putStrLn "producer: done" >> return ()
@@ -218,7 +219,7 @@ unit_ringBuffer5P1C = do
                   putStrLn ("producer: setting " ++ show n)
                   MP.set rb snr n
                   MP.publish rb snr
-                  putStrLn ("producer: published " ++ show n)
+                  putStrLn ("producer: published n = " ++ show n ++ ", snr = " ++ show snr)
                   go
                 None -> do
                   putStrLn "producer: none"
@@ -228,14 +229,14 @@ unit_ringBuffer5P1C = do
   let handler seen n snr endOfBatch
         | n `Set.member` seen = error (show n ++ " appears twice")
         | otherwise           = do
-            putStrLn ("consumer got: " ++ show n ++
+            putStrLn ("consumer got: n = " ++ show n ++ ", snr = " ++ show snr ++
                       if endOfBatch then ". End of batch!" else "")
             let seen' = Set.insert n seen
             when (endOfBatch &&
-                  getSequenceNumber snr >= fromIntegral atLeastThisManyEvents - 1) $
+                  getSequenceNumber snr >= fromIntegral atLeastThisManyEvents) $
               putMVar consumerFinished seen'
             return seen'
-  ec <- MP.newEventConsumer rb handler Set.empty [] (MP.Sleep 1000)
+  ec <- MP.newEventConsumer rb handler Set.empty [] (MP.Sleep 1)
 
   MP.setGatingSequences rb [MP.ecSequenceNumber ec]
 
