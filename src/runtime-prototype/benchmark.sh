@@ -4,8 +4,8 @@ set -euo pipefail
 
 # Inspired by: https://sled.rs/perf.html#experimental-design
 
-BENCHMARK_WORKLOAD1="bench-disruptor-sp"
-BENCHMARK_WORKLOAD2="bench-disruptor-sp-tbqueue"
+BENCHMARK_WORKLOAD1="bench-disruptor-mp"
+BENCHMARK_WORKLOAD2="bench-disruptor-mp-unagi-chan"
 BENCHMARK_NUMBER_OF_RUNS=5
 BENCHMARK_GHC_OPTS=("-threaded" "-rtsopts" "-with-rtsopts=-N")
 BENCHMARK_CABAL_BUILD_OPTS=("--disable-profiling"

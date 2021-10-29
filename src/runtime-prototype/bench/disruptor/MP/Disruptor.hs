@@ -28,8 +28,8 @@ main = mpsc setup producer consumer
               set rb snr vALUE_TO_WRITE
               publish rb snr
               go (n - 1)
-            None -> do
-              -- threadDelay sLEEP_TIME
+            None ->
+              -- NOTE: No sleep needed here.
               go n
 
     consumer :: RingBuffer Int -> MVar () -> IO ()
