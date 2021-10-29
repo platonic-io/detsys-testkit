@@ -3,6 +3,7 @@
 module Main where
 
 import Control.Monad
+import Control.Concurrent
 import Control.Concurrent.Async
 import Data.Time
 import Data.Word
@@ -31,14 +32,21 @@ main = do
 
   many "getCPUTime" (return ()) (const getCPUTime)
 
+  many "threadDelay 0" (return ()) (const (threadDelay 0))
+  many "threadDelay 1" (return ()) (const (threadDelay 1))
+  many "yield" (return ()) (const yield)
+  manyConcurrent "threadDelay 0 (concurrent)" 3 (return ()) (const (threadDelay 0))
+  manyConcurrent "threadDelay 1 (concurrent)" 3 (return ()) (const (threadDelay 1))
+  manyConcurrent "yield (concurrent)" 3 (return ()) (const yield)
+
   many "incrCounter1" (newCounter 0) (incrCounter 1)
   many "incrCounter1Padded" (Padded.newCounter 0) (Padded.incrCounter 1)
   -- many "incrCounter1FastMutInt" (newFastMutInt 0)
   --      (\r -> readFastMutInt r >>= \v -> writeFastMutInt r (v +1))
 
-  manyConcurrent "incrCounter1Concurrent"
+  manyConcurrent "incrCounter1 (concurrent)"
     3 (newCounter 0) (incrCounter 1)
-  manyConcurrent "incrCounter1PaddedConcurrent"
+  manyConcurrent "incrCounter1Padded (concurrent)"
     3 (Padded.newCounter 0) (Padded.incrCounter 1)
 
   many "modifyIORef'" (newIORef (0 :: Int)) (\r -> modifyIORef' r succ)
@@ -46,7 +54,7 @@ main = do
   many "atomicModifyIORef'"
     (newIORef (0 :: Int)) (\r -> atomicModifyIORef' r (\n -> ((n + 1), ())))
 
-  manyConcurrent "atomicModifyIORef'Concurrent" 3
+  manyConcurrent "atomicModifyIORef' (concurrent)" 3
     (newIORef (0 :: Int)) (\r -> atomicModifyIORef' r (\n -> ((n + 1), ())))
 
 many :: String -> IO a -> (a -> IO b) -> IO ()
