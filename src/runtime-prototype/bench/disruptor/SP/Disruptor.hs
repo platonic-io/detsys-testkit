@@ -1,13 +1,13 @@
 module Main where
 
-import Control.Concurrent.MVar
-import Control.Monad
+import Control.Concurrent.MVar (MVar, putMVar)
+import Control.Monad (when)
 
-import Disruptor.SP.Unboxed.Consumer
-import Disruptor.SP.Unboxed.Producer
-import Disruptor.SP.Unboxed.RingBuffer
-import Disruptor.SequenceNumber
 import Common
+import Disruptor.SP.Consumer
+import Disruptor.SP.Producer
+import Disruptor.SP.RingBuffer
+import Disruptor.SequenceNumber
 
 ------------------------------------------------------------------------
 
@@ -15,9 +15,7 @@ main :: IO ()
 main = spsc setup producer consumer
   where
     setup :: IO (RingBuffer Int)
-    setup = do
-      let ringBufferCapacity = 1024 * 64
-      newRingBuffer ringBufferCapacity
+    setup = newRingBuffer bUFFER_CAPACITY
 
     producer :: RingBuffer Int -> IO ()
     producer rb = go iTERATIONS
@@ -32,7 +30,7 @@ main = spsc setup producer consumer
               -- latency, seriously slows down the benchmark.
 
               -- {-# SCC "transactions+1" #-} incrCounter_ 1 transactions
-              set rb snr (1 :: Int)
+              set rb snr vALUE_TO_WRITE
               publish rb snr
               go (n - 1)
             None -> do
@@ -47,6 +45,6 @@ main = spsc setup producer consumer
             when (endOfBatch && getSequenceNumber snr == fromIntegral (iTERATIONS - 1)) $
               putMVar consumerFinished ()
             return ()
-      ec <- newEventConsumer rb handler () [] (Sleep 1)
+      ec <- newEventConsumer rb handler () [] (Sleep sLEEP_TIME)
       setGatingSequences rb [ecSequenceNumber ec]
       ecWorker ec ()

@@ -11,9 +11,10 @@ import Common
 main :: IO ()
 main = spsc setup producer consumer
   where
-    setup = newTBQueueIO (1024 * 64)
+    setup = newTBQueueIO (fromIntegral bUFFER_CAPACITY)
 
-    producer q = replicateM_ iTERATIONS (atomically (writeTBQueue q 1))
+    producer q = replicateM_ iTERATIONS
+                             (atomically (writeTBQueue q vALUE_TO_WRITE))
 
     consumer q consumerFinished = do
       replicateM_ iTERATIONS (atomically (readTBQueue q))
