@@ -246,10 +246,33 @@ benchmark bench-disruptor-sp-unboxed
   build-depends: stunt-double
   type:          exitcode-stdio-1.0
 
+benchmark bench-disruptor-sp-chan
+  import:        bench-common-sp
+  main-is:       Chan.hs
+  type:          exitcode-stdio-1.0
+
 benchmark bench-disruptor-sp-tbqueue
   import:        bench-common-sp
   main-is:       TBQueue.hs
   build-depends: stm
+  type:          exitcode-stdio-1.0
+
+benchmark bench-disruptor-sp-chaselev-deque
+  import:        bench-common-sp
+  main-is:       ChaseLevDeque.hs
+  build-depends: chaselev-deque
+  type:          exitcode-stdio-1.0
+
+benchmark bench-disruptor-sp-lockfree-queue
+  import:        bench-common-sp
+  main-is:       LockFreeQueue.hs
+  build-depends: lockfree-queue
+  type:          exitcode-stdio-1.0
+
+benchmark bench-disruptor-sp-ringbuffer
+  import:        bench-common-sp
+  main-is:       RingBuffer.hs
+  build-depends: ring-buffer, vector
   type:          exitcode-stdio-1.0
 
 benchmark bench-disruptor-sp-unagi-chan

@@ -10,3 +10,8 @@ package stunt-double
 
 allow-older: *
 allow-newer: *
+
+source-repository-package
+  type: git
+  location: http://github.com/bgamari/ring-buffer
+  tag: 2cb4a801fdfad778bd36664a2e417ef699dfac69
