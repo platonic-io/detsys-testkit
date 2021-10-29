@@ -6,7 +6,7 @@ description:
   See README at <https://github.com/symbiont-io/detsys-testkit/tree/main/src/runtime-prototype#readme>
 
 bug-reports:        https://github.com/symbiont-io/detsys-testkit/issues
-license:            NONE
+license:
 license-file:       LICENSE
 author:             Stevan Andjelkovic, Daniel Gustafsson
 maintainer:         symbiont-stevan-andjelkovic@users.noreply.github.com
@@ -19,29 +19,31 @@ tested-with:        GHC ==8.10.4
 library
   hs-source-dirs:   src/
   exposed-modules:
-    Scheduler
-    Scheduler.Agenda
-    Scheduler.Event
-    Scheduler.Fault
-    Scheduler.Faults
-    Scheduler.State
-    Scheduler.Main
-    Scheduler.Executor
     Debugger
     Disruptor
+    Disruptor.AtomicCounterPadded
+    Disruptor.MP.Consumer
+    Disruptor.MP.Producer
+    Disruptor.MP.RingBuffer
+    Disruptor.SequenceNumber
     Disruptor.SP.Consumer
     Disruptor.SP.Producer
     Disruptor.SP.RingBuffer
     Disruptor.SP.Unboxed.Consumer
     Disruptor.SP.Unboxed.Producer
     Disruptor.SP.Unboxed.RingBuffer
-    Disruptor.MP.Consumer
-    Disruptor.MP.Producer
-    Disruptor.MP.RingBuffer
-    Disruptor.SequenceNumber
-    Disruptor.AtomicCounterPadded
+    Scheduler
+    Scheduler.Agenda
+    Scheduler.Event
+    Scheduler.Executor
+    Scheduler.Fault
+    Scheduler.Faults
+    Scheduler.Main
+    Scheduler.State
     StuntDouble
     StuntDouble.ActorMap
+    StuntDouble.AdminTransport
+    StuntDouble.AdminTransport.NamedPipe
     StuntDouble.Codec
     StuntDouble.Envelope
     StuntDouble.FreeMonad
@@ -50,26 +52,24 @@ library
     StuntDouble.Histogram.SingleProducer
     StuntDouble.IO
     StuntDouble.Log
+    StuntDouble.LogicalTime
     StuntDouble.Message
     StuntDouble.Metrics
+    StuntDouble.Queue
     StuntDouble.Random
     StuntDouble.Reference
     StuntDouble.Supervisor
     StuntDouble.Time
-    StuntDouble.LogicalTime
     StuntDouble.Transport
     StuntDouble.Transport.Http
     StuntDouble.Transport.HttpSync
     StuntDouble.Transport.NamedPipe
     StuntDouble.Transport.Stm
-    StuntDouble.AdminTransport
-    StuntDouble.AdminTransport.NamedPipe
-    StuntDouble.Queue
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
   build-depends:
-      base        >=4.14 && <4.15
+    , base        ^>=4.14
     , containers
     , directory
     , filepath
@@ -80,27 +80,27 @@ library
     , unix
 
   build-depends:
-      aeson
+    , aeson
     , async
     , atomic-primops
-    , primitive
-    , ghc-prim
     , brick
     , bytestring
+    , direct-sqlite
+    , ghc-prim
     , hashable
     , heaps
     , http-client
     , http-types
+    , primitive
     , random
-    , direct-sqlite
     , sqlite-simple
+    , unboxed-ref
     , unordered-containers
     , vector
     , vty
-    , word-wrap
     , wai
     , warp
-    , unboxed-ref
+    , word-wrap
 
   ghc-options:      -O2
   default-language: Haskell2010
@@ -110,11 +110,11 @@ test-suite test
   hs-source-dirs:   test/
   main-is:          Main.hs
   build-depends:
-      async
+    , async
     , base
     , containers
-    , HUnit
     , http-client
+    , HUnit
     , QuickCheck
     , stunt-double
     , tasty
@@ -123,12 +123,12 @@ test-suite test
     , text
 
   other-modules:
+    DisruptorTest
     StuntDouble.ActorMapTest
     StuntDouble.FrontendTest
-    StuntDouble.HistogramTest
     StuntDouble.Histogram.SingleProducerTest
+    StuntDouble.HistogramTest
     StuntDouble.QueueTest
-    DisruptorTest
     StuntDouble.Transport.HttpTest
     StuntDouble.Transport.NamedPipeTest
     StuntDouble.Transport.StmTest
@@ -140,48 +140,30 @@ test-suite test
 executable scheduler
   hs-source-dirs:   app/scheduler
   main-is:          Main.hs
-  build-depends:    base,
-                    stunt-double
+  build-depends:
+    , base
+    , stunt-double
+
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 
 executable debugger
   hs-source-dirs:   app/debugger
   main-is:          Main.hs
-  build-depends:    base,
-                    stunt-double
+  build-depends:
+    , base
+    , stunt-double
+
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
 
-common bench-ghc-options
-  -- XXX: try with -fllvm
-  -- Some of these options are taking from:
-  --   https://wiki.haskell.org/Performance/GHC#Use_optimisation
-  -- XXX: try with -fllvm
-
-  -- To inspect core:
-               -- -fforce-recomp
-               -- -ddump-simpl
-               -- -dsuppress-all
-               -- -ddump-to-file
-  ghc-options:
-              -O2
-              -fproc-alignment=64
-              -fexcess-precision
-              -fasm
-              -optc-O3
-              -optc-ffast-math
-              -- -threaded -eventlog -rtsopts -with-rtsopts=-N
-              -threaded -rtsopts -with-rtsopts=-N
-
 benchmark bench
-  import: bench-ghc-options
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/
-  main-is:        Main.hs
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   bench/
+  main-is:          Main.hs
   build-depends:
-      atomic-primops
     , async
+    , atomic-primops
     , base
     , http-client
     , stm
@@ -191,126 +173,99 @@ benchmark bench
   default-language: Haskell2010
 
 benchmark bench-http
-  import: bench-ghc-options
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/http
-  main-is:        Main.hs
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   bench/http
+  main-is:          Main.hs
   build-depends:
-      atomic-primops
     , async
+    , atomic-primops
     , base
     , bytestring
     , http-client
     , http-types
     , network
+    , stm
+    , time
     , wai
     , warp
-    , stm
-    , time
+
   default-language: Haskell2010
 
-benchmark bench-disruptor
-  import: bench-ghc-options
-  type:           exitcode-stdio-1.0
+common bench-common
   hs-source-dirs: bench/disruptor
-  main-is:        Main.hs
   build-depends:
-      async
-    , atomic-primops
-    , base
-    , stunt-double
-    , time
-  default-language: Haskell2010
-
-benchmark bench-disruptor-sp-tbqueue
-  import: bench-ghc-options
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        SPTBQueue.hs
-  build-depends:
-      async
-    , base
-    , stm
-    , time
-  other-modules: Common
-  default-language: Haskell2010
-
-benchmark bench-disruptor-singleops
-  import: bench-ghc-options
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        SingleOps.hs
-  build-depends:
-      atomic-primops
     , async
     , base
-    , stunt-double
     , time
+
+  other-modules:    Common
+
+  -- XXX: try with -fllvm
+  -- Some of these options are taking from:
+  --   https://wiki.haskell.org/Performance/GHC#Use_optimisation
+  -- XXX: try with -fllvm
+
+  -- To inspect core:
+  -- -fforce-recomp
+  -- -ddump-simpl
+  -- -dsuppress-all
+  -- -ddump-to-file
+  ghc-options:
+    -O2 -fproc-alignment=64 -fexcess-precision -fasm -optc-O3
+    -optc-ffast-math -threaded -rtsopts -with-rtsopts=-N
+
+  -- -threaded -eventlog -rtsopts -with-rtsopts=-N
   default-language: Haskell2010
+
+common bench-common-sp
+  import:         bench-common
+  hs-source-dirs: bench/disruptor/SP
+
+common bench-common-mp
+  import:         bench-common
+  hs-source-dirs: bench/disruptor/MP
+
+benchmark bench-disruptor-singleops
+  import:         bench-common
+  main-is:        SingleOps.hs
+  build-depends:
+    , atomic-primops
+    , stunt-double
+
+  type:           exitcode-stdio-1.0
 
 benchmark bench-disruptor-sp
-  import: bench-ghc-options
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        SP.hs
-  build-depends:
-      async
-    , atomic-primops
-    , base
-    , stunt-double
-    , time
-  other-modules: Common
-  default-language: Haskell2010
+  import:        bench-common-sp
+  main-is:       Disruptor.hs
+  build-depends: stunt-double
+  type:          exitcode-stdio-1.0
 
 benchmark bench-disruptor-sp-unboxed
-  import: bench-ghc-options
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        SPUnboxed.hs
-  build-depends:
-      async
-    , atomic-primops
-    , base
-    , stunt-double
-    , time
-  other-modules: Common
-  default-language: Haskell2010
+  import:        bench-common-sp
+  main-is:       DisruptorUnboxed.hs
+  build-depends: stunt-double
+  type:          exitcode-stdio-1.0
+
+benchmark bench-disruptor-sp-tbqueue
+  import:        bench-common-sp
+  main-is:       TBQueue.hs
+  build-depends: stm
+  type:          exitcode-stdio-1.0
 
 benchmark bench-disruptor-sp-unagi-chan
-  import: bench-ghc-options
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        SPUnagiChan.hs
-  build-depends:
-      async
-    , base
-    , time
-    , unagi-chan
-  other-modules: Common
-  default-language: Haskell2010
-
-benchmark bench-disruptor-mp-unagi-chan
-  import: bench-ghc-options
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        MPUnagiChan.hs
-  build-depends:
-      async
-    , base
-    , time
-    , unagi-chan
-  default-language: Haskell2010
+  import:        bench-common-sp
+  main-is:       UnagiChan.hs
+  build-depends: unagi-chan
+  type:          exitcode-stdio-1.0
 
 benchmark bench-disruptor-mp
-  import: bench-ghc-options
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/disruptor
-  main-is:        MP.hs
-  build-depends:
-      async
-    , atomic-primops
-    , base
-    , stunt-double
-    , time
-  other-modules: Common
-  default-language: Haskell2010
+  import:        bench-common-mp
+  main-is:       Disruptor.hs
+  build-depends: stunt-double
+  type:          exitcode-stdio-1.0
+
+benchmark bench-disruptor-mp-unagi-chan
+  import:        bench-common-mp
+  main-is:       UnagiChan.hs
+  build-depends: unagi-chan
+  type:          exitcode-stdio-1.0
