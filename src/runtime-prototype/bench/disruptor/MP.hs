@@ -19,6 +19,8 @@ import Disruptor.SequenceNumber
 import Disruptor.AtomicCounterPadded
 import StuntDouble.Histogram.SingleProducer
 
+import Common
+
 ------------------------------------------------------------------------
 
 iTERATIONS :: Int64

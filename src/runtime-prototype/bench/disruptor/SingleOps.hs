@@ -13,6 +13,16 @@ import System.CPUTime
 import StuntDouble.Histogram
 import qualified Disruptor.AtomicCounterPadded as Padded
 
+-- Can't load FastMutInt:
+--    Could not load module `FastMutInt'
+--    It is a member of the hidden package `ghc-8.10.4'.
+--    Perhaps you need to add `ghc' to the build-depends in your .cabal file.
+--
+-- But when I add ghc to build-depends it says it can't find a build plan, and
+-- also https://hackage.haskell.org/package/ghc doesn't seem to have 8.10.4...
+--
+-- import FastMutInt
+
 ------------------------------------------------------------------------
 
 main :: IO ()
@@ -23,6 +33,8 @@ main = do
 
   many "incrCounter1" (newCounter 0) (incrCounter 1)
   many "incrCounter1Padded" (Padded.newCounter 0) (Padded.incrCounter 1)
+  -- many "incrCounter1FastMutInt" (newFastMutInt 0)
+  --      (\r -> readFastMutInt r >>= \v -> writeFastMutInt r (v +1))
 
   manyConcurrent "incrCounter1Concurrent"
     3 (newCounter 0) (incrCounter 1)

@@ -7,8 +7,12 @@ set -euo pipefail
 BENCHMARK_WORKLOAD1="bench-disruptor-sp"
 BENCHMARK_WORKLOAD2="bench-disruptor-mp"
 BENCHMARK_NUMBER_OF_RUNS=5
-BENCHMARK_CABAL_BUILD_OPTS=("--disable-profiling" "-O2")
-BENCHMARK_CABAL_RUN_OPTS=("-O2")
+BENCHMARK_GHC_OPTS=("-threaded" "-rtsopts" "-with-rtsopts=-N")
+BENCHMARK_CABAL_BUILD_OPTS=("--disable-profiling"
+                            "-O2"
+                            "--ghc-options=${BENCHMARK_GHC_OPTS[*]}")
+BENCHMARK_CABAL_RUN_OPTS=("-O2"
+                          "--ghc-options=${BENCHMARK_GHC_OPTS[*]}")
 BENCHMARK_PERF_EVENTS="L1-dcache-loads,L1-dcache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses"
 
 # Save info about current hardware and OS setup.

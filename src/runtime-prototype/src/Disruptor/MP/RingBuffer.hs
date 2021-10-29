@@ -20,6 +20,7 @@ import Disruptor.AtomicCounterPadded
 -- | The lock-free multi-producer implementation is presented in the following
 -- talk:
 --
+--   Locks? We Don't Need No Stinkin' Locks! by Mike Barker (JAX London 2012)
 --   https://youtu.be/VBnLW9mKMh4?t=1813
 --
 -- and also discussed in the following thread:
