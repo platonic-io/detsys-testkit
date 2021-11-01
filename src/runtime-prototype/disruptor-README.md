@@ -106,7 +106,41 @@ above section:
 
 ### How it works
 
-* TODO: high level description of how the above example works
+The ring buffer is implemented using a bounded array, it keeps track of a
+monotonically increasing sequence number and it knows its the capacity of the
+array, so to find out where to write the next value by simply taking the modulus
+of the sequence number and the capacity. This has several advantages over
+traditional queues:
+
+  1. We never remove elements when dequeing, merely overwrite them once we gone
+     all way around the ring. This removes write
+     [contention](https://en.wikipedia.org/wiki/Resource_contention) between the
+     producer and the consumer, one could also imagine avoiding garbage
+     collection by only allocating memory the first time around the ring;
+
+  2. Using an array rather than linked list increasing
+     [striding](https://en.wikipedia.org/wiki/Stride_of_an_array) due to
+     [spatial
+     locality](https://en.wikipedia.org/wiki/Locality_of_reference#Spatial_and_temporal_locality_usage).
+
+The ring buffer also keeps track of up to which sequence number its last
+consumer as consumed, in order to not overwrite events that haven't been handled
+yet.
+
+This also means that producers can ask how much capacity left a ring buffer has,
+and do batched writes. If there's no capacity left the producer can apply
+back-pressure upstream as appropriate.
+
+Consumers need keep track of which sequence number they have processed, in order
+to avoid having the ring buffer overwrite unprocessed events as already
+mentioned, but this also allows consumers to depend on each other.
+
+When a consumer is done processing an event, it asks the ring buffer for the
+event at its next sequence number, the ring buffer then replies that either
+there are no new events, in which case the consumer applies it wait strategy, or
+the ring buffer can reply that there are new events, the consumer the handles
+each one in turn and the last one will be have the end of batch flag set, so
+that the consumer can effectively batch the processing.
 
 ### Performance
 
