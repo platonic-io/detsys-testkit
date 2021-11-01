@@ -116,7 +116,8 @@ traditional queues:
      all way around the ring. This removes write
      [contention](https://en.wikipedia.org/wiki/Resource_contention) between the
      producer and the consumer, one could also imagine avoiding garbage
-     collection by only allocating memory the first time around the ring;
+     collection by only allocating memory the first time around the ring (but we
+     don't do this in Haskell);
 
   2. Using an array rather than linked list increasing
      [striding](https://en.wikipedia.org/wiki/Stride_of_an_array) due to
