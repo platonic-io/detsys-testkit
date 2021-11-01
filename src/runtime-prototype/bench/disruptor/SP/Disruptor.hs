@@ -4,10 +4,7 @@ import Control.Concurrent.MVar (MVar, putMVar)
 import Control.Monad (when)
 
 import Common
-import Disruptor.SP.Consumer
-import Disruptor.SP.Producer
-import Disruptor.SP.RingBuffer
-import Disruptor.SequenceNumber
+import Disruptor.SP
 
 ------------------------------------------------------------------------
 

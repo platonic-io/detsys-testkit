@@ -69,7 +69,7 @@ waitFor consumed rb = go
       if consumed < produced
       then return produced
       else do
-        threadDelay 1 -- NOTE: removing the sleep seems to cause
+        threadDelay 0 -- NOTE: removing the sleep seems to cause
                       -- non-termination... XXX: Why though? the consumer should be
                       -- running on its own thread?
         go -- SPIN
