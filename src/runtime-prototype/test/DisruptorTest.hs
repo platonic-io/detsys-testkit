@@ -119,8 +119,14 @@ unit_ringBufferSP1P1C = do
       () <- takeMVar consumerFinished
       cancel aec
 
-unit_ringBufferMP1P1C :: Assertion
-unit_ringBufferMP1P1C = do
+unit_ringBufferMP1P1CBlocking :: Assertion
+unit_ringBufferMP1P1CBlocking = ringBufferMP1P1C True
+
+unit_ringBufferMP1P1CNonBlocking :: Assertion
+unit_ringBufferMP1P1CNonBlocking = ringBufferMP1P1C False
+
+ringBufferMP1P1C :: Bool -> Assertion
+ringBufferMP1P1C blocking = do
   n <- getNumCapabilities
   assertBool "getNumCapabilities < 2" (n >= 2)
   rb <- MP.newRingBuffer 32
@@ -135,30 +141,32 @@ unit_ringBufferMP1P1C = do
             putStrLn ("producer, n = " ++ show n)
             if n > atLeastThisManyEvents
             then putStrLn "producer: done" >> return ()
-            else do
-              putStrLn "producer: not done yet"
-              snr <- MP.next rb
-              putStrLn ("producer: setting " ++ show n ++ ", snr = " ++ show snr)
-              MP.set rb snr n
-              putStrLn ("producer: done setting " ++ show n)
-              MP.publish rb snr
-              putStrLn ("producer: published " ++ show n)
-              go
-
-              -- mSnr <- MP.tryNext rb
-              -- putStrLn ("producer: mSrn = " ++ show mSnr)
-              -- case mSnr of
-              --   Some snr -> do
-              --     putStrLn ("producer: setting " ++ show n)
-              --     MP.set rb snr n
-              --     putStrLn ("producer: done setting " ++ show n)
-              --     MP.publish rb snr
-              --     putStrLn ("producer: published " ++ show n)
-              --     go
-              --   None -> do
-              --     putStrLn "producer: none"
-              --     threadDelay 1
-              --     go
+            else
+              if blocking
+              then do
+                putStrLn "producer: not done yet"
+                snr <- MP.next rb
+                putStrLn ("producer: setting " ++ show n ++ ", snr = " ++ show snr)
+                MP.set rb snr n
+                putStrLn ("producer: done setting " ++ show n)
+                MP.publish rb snr
+                putStrLn ("producer: published " ++ show n)
+                go
+              else do
+                mSnr <- MP.tryNext rb
+                putStrLn ("producer: mSrn = " ++ show mSnr)
+                case mSnr of
+                  Some snr -> do
+                    putStrLn ("producer: setting n = " ++ show n ++ ", snr = " ++ show snr)
+                    MP.set rb snr n
+                    putStrLn ("producer: done setting " ++ show n)
+                    MP.publish rb snr
+                    putStrLn ("producer: published " ++ show n)
+                    go
+                  None -> do
+                    putStrLn "producer: none"
+                    threadDelay 1
+                    go
 
   let handler seen n snr endOfBatch
         | n `Set.member` seen = error (show n ++ " appears twice")
