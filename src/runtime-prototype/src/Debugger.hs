@@ -8,22 +8,28 @@ import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center (center, hCenter)
 import qualified Brick.Widgets.List as L
 import Control.Concurrent.Async
+import qualified Control.Exception as E
 import Control.Monad
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Data.Vector as Vector
 import qualified Graphics.Vty as V
 import System.FilePath
 import System.IO
 import System.Posix.Files
 import Text.Wrap
+import Network.Socket
+import Network.Socket.ByteString.Lazy (recv, sendAll)
 
 import StuntDouble
+import qualified StuntDouble.Transport.UnixSocket as US
 
 ------------------------------------------------------------------------
 
-readLog :: IO (Maybe Log)
-readLog = do
-  let commandPipe  = "/tmp" </> "scheduler-admin"
-      responsePipe = "/tmp" </> "scheduler-admin-response"
+readLogFrom :: String -> IO (Maybe Log)
+readLogFrom el = do
+  let commandPipe  = "/tmp" </> el <> "-admin"
+      responsePipe = "/tmp" </> el <> "-admin-response"
   exists <- (,) <$> fileExist commandPipe <*> fileExist responsePipe
   if not (and exists)
   then return Nothing
@@ -36,9 +42,32 @@ readLog = do
       -- NOTE: We need to start reading the response before making the request to
       -- dump the log, otherwise the response will be written to the void.
       a <- async (withFile responsePipe ReadWriteMode hGetLine)
+      putStrLn "sending command"
       appendFile commandPipe "AdminDumpLog\n"
+      putStrLn "sent command"
       s <- wait a
+      putStrLn "Got the following log:"
+      putStrLn s
       return (Just (read s))
+
+readLog :: IO (Maybe Log)
+readLog = readLogFrom "scheduler"
+
+readLogExecutor :: IO (Maybe Log)
+readLogExecutor = withSocketsDo $ do
+  -- readLogFrom "executor"
+  putStrLn "Trying to read log from executor"
+  E.bracket open close client
+  where
+    client c = do
+      sendAll c "AdminDumpLog\n"
+      msg <- recv c (10*1024)
+      putStrLn "Got back from executor"
+      putStrLn $ LBS.unpack msg
+      return . Just $ read (LBS.unpack msg)
+    open = E.bracketOnError US.uSocket close $ \s -> do
+      connect s (SockAddrUnix "/tmp/executor-admin.sock")
+      return s
 
 drawUI :: AppState -> [Widget ()]
 drawUI as = [ui]
@@ -106,7 +135,7 @@ initialState (Log es) = AppState
 
 main :: IO ()
 main = do
-  ml <- readLog
+  ml <- readLogExecutor
   case ml of
     Nothing -> putStrLn "Couldn't connect to scheduler pipe."
     Just l  -> void (defaultMain brickApp (initialState l))
