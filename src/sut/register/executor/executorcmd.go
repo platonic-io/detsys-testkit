@@ -16,7 +16,7 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("Created admin\n")
-	commandT, err := executorEL.NewCommandTransport("/tmp/executor")
+	commandT, err := executorEL.NewCommandTransport("/tmp/executor.sock")
 	if err != nil {
 		panic(err)
 	}

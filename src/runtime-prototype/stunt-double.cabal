@@ -54,6 +54,7 @@ library
     StuntDouble.Transport.NamedPipe
     StuntDouble.Transport.NamedPipeCodec
     StuntDouble.Transport.Stm
+    StuntDouble.Transport.UnixSocket
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
@@ -80,6 +81,7 @@ library
     , heaps
     , http-client
     , http-types
+    , network
     , primitive
     , random
     , sqlite-simple
