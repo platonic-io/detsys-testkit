@@ -3,7 +3,7 @@ package executorEL
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
+	"net"
 	"os"
 )
 
@@ -14,11 +14,6 @@ type CommandTransport struct {
 }
 
 func NewCommandTransport(input string) (*CommandTransport, *error) {
-	err := createPipe(input)
-	if err != nil {
-		return nil, err
-	}
-
 	com := make(chan Envelope)
 	return &CommandTransport{
 		Started:       false,
@@ -33,18 +28,33 @@ func (ct *CommandTransport) Send(env Envelope) {
 		panic(err)
 	}
 
-	writePipe(env.Receiver.Address, string(j)+"\n")
+	c, err := net.Dial("unix", "/tmp/"+env.Receiver.Address+".sock")
+	if err != nil {
+		panic(err)
+	}
+	defer c.Close()
+
+	c.Write(j)
 }
 
 func (ct *CommandTransport) findIncoming() {
-	for {
+	if err := os.RemoveAll(ct.Incomming); err != nil {
+		panic(err)
+	}
 
-		file, err := openPipe(ct.Incomming, os.O_RDONLY)
+	l, err := net.Listen("unix", ct.Incomming)
+	if err != nil {
+		panic(err)
+	}
+	defer l.Close()
+	for {
+		conn, err := l.Accept()
 		if err != nil {
 			panic(err)
 		}
+		buf := bufio.NewScanner(conn)
+		defer conn.Close()
 
-		buf := bufio.NewScanner(file)
 		for buf.Scan() {
 			line := buf.Text() // is this correct?
 			if line == "" {

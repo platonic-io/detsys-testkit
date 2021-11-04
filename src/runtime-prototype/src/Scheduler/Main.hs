@@ -33,7 +33,7 @@ main version = do
       schedulerPort = 3005
       schedulerIncoming = "/tmp/"
   fp <- getDbPath
-  el <- makeEventLoop realClock (makeSeed 0) (NamedPipeCodec schedulerIncoming) (AdminNamedPipe "/tmp/")
+  el <- makeEventLoop realClock (makeSeed 0) (UnixDomainSocket schedulerIncoming) (AdminNamedPipe "/tmp/")
           executorCodec (RealDisk fp) (EventLoopName "scheduler")
   now <- getCurrentTime realClock
   lref <- spawn el (fakeScheduler executorRef) (initState now (makeSeed 0))

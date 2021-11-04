@@ -23,7 +23,7 @@ func NewEventLoop(ai *AdminInterface, ct *CommandTransport, executor *Executor) 
 		Log:              []TimestampedLogEntry{},
 		LogicalTime:      &lt,
 		Executor:         executor,
-		SchedulerRef:     RemoteRef{"/tmp/scheduler", 0},
+		SchedulerRef:     RemoteRef{"scheduler", 0},
 	}
 }
 
