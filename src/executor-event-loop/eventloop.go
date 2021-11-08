@@ -42,7 +42,7 @@ func (el *EventLoop) AddToLog(logDirection LogDirection, me LocalRef, env Messag
 }
 
 func (el *EventLoop) AddToAdminLog(cmd AdminCommand) {
-	el.AddToLog(LogResumeContinuation, LocalRef{0}, Message{"AdminCommand", []byte(fmt.Sprintf("Got command %d\n", cmd))})
+	el.AddToLog(LogResumeContinuation, LocalRef{0}, Message{"AdminCommand", []byte(fmt.Sprintf("\"Got command %d\\n\"", cmd))})
 }
 
 func (el *EventLoop) toSchedulerEnvelope(me RemoteRef, msg Message, correlationId CorrelationId) Envelope {
@@ -56,22 +56,25 @@ func (el *EventLoop) toSchedulerEnvelope(me RemoteRef, msg Message, correlationI
 	}
 }
 
-func (el *EventLoop) processAdmin(cmd AdminCommand) (bool, []string) {
-	switch cmd {
+func (el *EventLoop) processAdmin(cmd AdminCommand) bool {
+	switch cmd.Type {
 	case AdminQuit:
 		fmt.Printf("Shutting down....\n")
-		return true, []string{}
+		cmd.Response("ok\n")
+		return true
 	case AdminDumpLog:
 		fmt.Printf("dumping log\n")
 		log := make([]string, len(el.Log))
 		for _, e := range el.Log {
 			log = append(log, e.Serialise())
 		}
-		return false, log
+		cmd.Response(fmt.Sprintf("%v\n", log))
+		return false
 	case AdminResetLog:
 		fmt.Printf("resetting log\n")
 		el.Log = make([]TimestampedLogEntry, 0)
-		return false, []string{}
+		cmd.Response("Log reseted\n")
+		return false
 	default:
 		fmt.Printf("Unknown admin command: %#v\n", cmd)
 		panic("Unhandled admin command")
@@ -88,12 +91,9 @@ func (el *EventLoop) Run() {
 			fmt.Printf("Found admin command\n")
 			el.LogicalTime.Incr()
 			el.AddToAdminLog(cmd)
-			quit, output := el.processAdmin(cmd)
+			quit := el.processAdmin(cmd)
 			if quit {
 				return
-			}
-			for _, entry := range output {
-				el.Admin.Respond(entry)
 			}
 		case envelope := <-commands:
 			fmt.Printf("Found message\n")

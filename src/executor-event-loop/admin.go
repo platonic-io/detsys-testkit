@@ -7,10 +7,11 @@ package executorEL
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"os"
 )
 
-type AdminCommand int
+type AdminCommandType int
 
 const (
 	AdminQuit = iota
@@ -19,9 +20,14 @@ const (
 	AdminUnknown
 )
 
+type AdminCommand struct {
+	Type     AdminCommandType
+	Response func(string)
+}
+
 // panic galore if we don't have it
-func parseCommandFromString(command string) AdminCommand {
-	v, ok := map[string]AdminCommand{
+func parseCommandFromString(command string) AdminCommandType {
+	v, ok := map[string]AdminCommandType{
 		"AdminQuit":     AdminQuit,
 		"AdminDumpLog":  AdminDumpLog,
 		"AdminResetLog": AdminResetLog,
@@ -35,38 +41,35 @@ func parseCommandFromString(command string) AdminCommand {
 
 type AdminInterface struct {
 	Started       bool
-	Incoming      string
-	Outgoing      string
+	Domain        string
 	ListenChannel chan AdminCommand
 }
 
-func NewAdmin(input string, output string) (*AdminInterface, *error) {
-	err := createPipe(input)
-	if err != nil {
-		return nil, err
-	}
-
-	err = createPipe(output)
-	if err != nil {
-		return nil, err
-	}
-
+func NewAdmin(domain string) *AdminInterface {
 	com := make(chan AdminCommand)
 	return &AdminInterface{
 		Started:       false,
-		Incoming:      input,
-		Outgoing:      output,
+		Domain:        domain,
 		ListenChannel: com,
-	}, nil
+	}
 }
 
 func (a *AdminInterface) findIncoming() {
+	if err := os.RemoveAll(a.Domain); err != nil {
+		panic(err)
+	}
+	l, err := net.Listen("unix", a.Domain)
+	if err != nil {
+		panic(err)
+	}
+	defer l.Close()
 	for {
-		file, err := openPipe(a.Incoming, os.O_RDONLY)
+		conn, err := l.Accept()
 		if err != nil {
 			panic(err)
 		}
-		buf := bufio.NewScanner(file)
+		defer conn.Close()
+		buf := bufio.NewScanner(conn)
 		for buf.Scan() {
 			line := buf.Text()
 			if line == "" {
@@ -74,7 +77,10 @@ func (a *AdminInterface) findIncoming() {
 			}
 			command := parseCommandFromString(line)
 			if command != AdminUnknown {
-				a.ListenChannel <- command
+				a.ListenChannel <- AdminCommand{command, func(line string) {
+					conn.Write([]byte(line))
+					conn.Close()
+				}}
 			} else {
 				fmt.Printf("Unknown command: %s\n", line)
 			}
@@ -88,11 +94,4 @@ func (a *AdminInterface) Listen() <-chan AdminCommand {
 		a.Started = true
 	}
 	return a.ListenChannel
-}
-
-func (a *AdminInterface) Respond(line string) {
-	if !a.Started {
-		panic("Can't send on admin interface before you Listen()")
-	}
-	writePipe(a.Outgoing, line)
 }
