@@ -2,6 +2,7 @@ package executorEL
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -42,7 +43,7 @@ func (el *EventLoop) AddToLog(logDirection LogDirection, me LocalRef, env Messag
 }
 
 func (el *EventLoop) AddToAdminLog(cmd AdminCommand) {
-	el.AddToLog(LogResumeContinuation, LocalRef{0}, Message{"AdminCommand", []byte(fmt.Sprintf("\"Got command %d\\n\"", cmd))})
+	// el.AddToLog(LogResumeContinuation, LocalRef{0}, Message{"AdminCommand", []byte(fmt.Sprintf("\"Got command %d\\n\"", cmd))})
 }
 
 func (el *EventLoop) toSchedulerEnvelope(me RemoteRef, msg Message, correlationId CorrelationId) Envelope {
@@ -64,11 +65,12 @@ func (el *EventLoop) processAdmin(cmd AdminCommand) bool {
 		return true
 	case AdminDumpLog:
 		fmt.Printf("dumping log\n")
-		log := make([]string, len(el.Log))
+		log := make([]string, 0, len(el.Log))
 		for _, e := range el.Log {
 			log = append(log, e.Serialise())
 		}
-		cmd.Response(fmt.Sprintf("%v\n", log))
+		toSend := "Log [" + strings.Join(log, ", ") + "]\n"
+		cmd.Response(toSend)
 		return false
 	case AdminResetLog:
 		fmt.Printf("resetting log\n")
