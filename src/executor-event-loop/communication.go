@@ -13,13 +13,13 @@ type CommandTransport struct {
 	ListenChannel chan Envelope
 }
 
-func NewCommandTransport(input string) (*CommandTransport, *error) {
+func NewCommandTransport(input string) *CommandTransport {
 	com := make(chan Envelope)
 	return &CommandTransport{
 		Started:       false,
 		Incomming:     input,
 		ListenChannel: com,
-	}, nil
+	}
 }
 
 func (ct *CommandTransport) Send(env Envelope) {
