@@ -11,15 +11,9 @@ import (
 func main() {
 
 	fmt.Printf("Starting up executor\n")
-	adminI, err := executorEL.NewAdmin("/tmp/executor-admin", "/tmp/executor-admin-response")
-	if err != nil {
-		panic(err)
-	}
+	adminI := executorEL.NewAdmin("/tmp/executor-admin.sock")
 	fmt.Printf("Created admin\n")
-	commandT, err := executorEL.NewCommandTransport("/tmp/executor.sock")
-	if err != nil {
-		panic(err)
-	}
+	commandT := executorEL.NewCommandTransport("/tmp/executor.sock")
 	fmt.Printf("Created command transport\n")
 	topology := lib.NewTopology(
 		lib.Item{"frontend", sut.NewFrontEnd()},
