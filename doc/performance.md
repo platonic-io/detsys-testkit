@@ -51,18 +51,22 @@ If we add resource we get propotional increase in throughput.
 * universal scalability law (USL)
   + refinement of Amdahl's law
 
-  + C(N) = N / (1 + a(N - 1) + ((b * N) * (N - 1)))
+  + *C(N) = N / (1 + a(N - 1) + ((b * N) * (N - 1)))*
       where
-        C = capacity or throughput
-        N = number of processors
-        a = contention penality (time under some kind of lock)
-        b = coherence penality (time to agree, e.g. load the cache line with the
-                                shared reference)
+        *C* = capacity or throughput,
+        *N* = number of processors,
+        *a* = contention penality (time under some kind of lock),
+        *b* = coherence penality (time to agree, e.g. load the cache line with the
+              shared reference)
 
-  + contention = 95% (of the program can be done in parallel): a = 0.05
-    150 microseconds, b = 0.00015
+  + E.g. lets assume 95% of the program can be done in parallel, or 5% is spent
+    in a lock: *a = 0.05* and let say that the coherence penalty between the
+    processors is 150 microseconds: *b = 0.00015* then the graph looks like this:
 
    ![amdahl vs usl](amdahl_vs_usl.svg)
+
+  + Amdahl's law doesn't take coherence into account, if you set *b = 0* in the
+    USL formula you get Amdahl's law
 
   + speed up vs processors (bell curve): even if a program is highly parallel
     (95%) contention and coherence penalties will eventually make adding more
