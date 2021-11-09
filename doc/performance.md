@@ -4,7 +4,7 @@ This document tries to answer the following questions:
 
 * What do we mean by performance?
 * How is it different from scalability?
-* What do we need to know about our hardware in order to be able to write performat code?
+* What do we need to know about our hardware in order to be able to write performant code?
 * What techniques and tools are there in this space?
 * How to do proper benchmarks?
 
@@ -31,7 +31,7 @@ This document tries to answer the following questions:
   + (Generate using R with: `s = 200; p <- seq(0, 1, 0.1); svg("utilisation_vs_response_time.svg"); plot(p, (s*(2-p)) / (2*(1 - p)), type="l", col="red", xlab="utilisation", ylab="response time"); dev.off()`)
 
   + Little's law:
-    - the mean number of jobs in the system = arrival wate * mean waiting time in the system;
+    - the mean number of jobs in the system = arrival rate * mean waiting time in the system;
 
     - or, mean response time = mean number in system / mean throughput (aka
       bandwidth);
@@ -182,8 +182,9 @@ and striding.
       you remove the element
 
   - garbage collection
-    + reuse memory to prevent GC and compactation (replies on fixed size datastructures?)
-    + restart every day to clear the heap
+    + reuse memory to prevent GC and compactation (relies on fixed size datastructures?)
+    + restart every day to clear the heap (they could do this because exchange
+      wasn't operating 24/7)
 
   - makes pipelining, batching and sharding easy and clear where to apply
 
