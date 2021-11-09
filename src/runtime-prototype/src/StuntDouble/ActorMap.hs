@@ -364,7 +364,6 @@ act ls as = mapM_ go as
       -- If it doesn't exist we probably want to crash the sender, i.e. `from`.
       transportSend (lsTransport ls)
         (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i) lt)
-      lt <- timestamp (lsLogicalClock ls)
       t <- getCurrentTime (lsClock ls)
       logEvent (lsLog ls) (LogSend from to msg) lt t
       t <- getCurrentTime (lsClock ls)

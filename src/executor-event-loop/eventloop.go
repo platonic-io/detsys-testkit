@@ -103,6 +103,7 @@ func (el *EventLoop) Run() {
 			el.LogicalTime.Merge(envelope.LogicalTime)
 			el.AddToLog(LogResumeContinuation, me, envelope.Message)
 			outgoingMessage := el.Executor.processEnvelope(envelope)
+			el.LogicalTime.Incr()
 			outgoing := el.toSchedulerEnvelope(envelope.Receiver, outgoingMessage, envelope.CorrelationId)
 			el.AddToLog(LogSend, me, outgoingMessage)
 			el.CommandTransport.Send(outgoing)
