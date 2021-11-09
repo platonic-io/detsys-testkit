@@ -57,6 +57,18 @@ appendLog e lt t (Log es) = Log (Timestamped e lt t : es)
 getLog :: Log -> String
 getLog (Log es) = show (Log (reverse es))
 
+-- Assumes the logs are already sorted
+merge :: Log -> Log -> Log
+merge (Log es) (Log es') = Log (go es es')
+  where
+    lt :: Timestamped a -> LogicalTime
+    lt (Timestamped _ l _) = l
+    go :: [Timestamped a] -> [Timestamped a] -> [Timestamped a]
+    go [] es' = es'
+    go es [] = es
+    go es@(x:xs) es'@(y:ys)
+      | HappenedBeforeOrConcurrently <- relation (lt x) (lt y) = x : go xs es'
+      | otherwise = y : go es ys
   {-
 
 type EventLog = [LogEntry]

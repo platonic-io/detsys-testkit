@@ -135,7 +135,11 @@ initialState (Log es) = AppState
 
 main :: IO ()
 main = do
-  ml <- readLogExecutor
+  ml <- readLog
   case ml of
     Nothing -> putStrLn "Couldn't connect to scheduler pipe."
-    Just l  -> void (defaultMain brickApp (initialState l))
+    Just l  -> do
+      ml' <- readLogExecutor
+      case ml' of
+        Nothing -> putStrLn "Couldn't connect to executor."
+        Just l' -> void (defaultMain brickApp (initialState (merge l l')))
