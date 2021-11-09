@@ -122,7 +122,8 @@ and striding.
 
 * arithmetic tricks
   + avoid division as it's the most expensive operation, multiply instead, e.g.
-    `x / 100` becomes `x * 0.01`
+    `x / 100` becomes `x * 0.01` (good compilers should be able to do this
+    optimisation)
 
   + power of 2 to be able to replace modulos by bitwise and:
     `mod(j, 2^i) == j & (2^i - 1)`
@@ -141,12 +142,13 @@ and striding.
     two processors one working on even numbers and the other on odd numbers.
 
 * Zero-deserialisation
-  - binary codecs
-
-  - the idea is basically to instead of parsing a bytestring into a
-    struct/object, which allocates memory, to refer to the fields of the struct
-    by offsets in the bytestring (which we know because we know the types of the
-    the fields) and cast the bytes into the appropriate types upon need
+  - binary codecs: instead of pretty printing datastructures into json (utf8
+    strings) and then seralising that into bytes and then back, go straght to
+    bytes and when deserialising on the other side: instead of parsing a
+    bytestring into a struct/object, which allocates memory, to refer to the
+    fields of the struct by offsets in the bytestring (which we know because we
+    know the types of the the fields) and cast the bytes into the appropriate
+    types upon need
   - for more see, e.g.:
     + https://brunocalza.me/what-zero-copy-serialization-means/
     + https://rkyv.org/zero-copy-deserialization.html
@@ -196,7 +198,7 @@ and striding.
 
 * Turbo boost: modern (Intel?) CPUs will overclock when there's work to do until
   they hit some thermal limit, this creates unpredicatable performance and hence
-  should be turned off before measuring
+  should be turned off before measuring. On Linux:
   `echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
 
 * drop caches
