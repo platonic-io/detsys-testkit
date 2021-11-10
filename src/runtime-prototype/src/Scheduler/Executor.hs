@@ -83,9 +83,13 @@ toExecutorEnvelope e = ExecutorEnvelope
   { executorEnvelopeKind          = envelopeKind e
   , executorEnvelopeSender        = envelopeSender e
   -- this is silly.. going back and forth between json..
-  , executorEnvelopeMessage       = ExecutorEnvelopeMessage "receive" $ case eitherDecode . LBS.pack . getMessage $ envelopeMessage e of
-      Left err -> error err
-      Right x -> x
+  , executorEnvelopeMessage       =
+    let msg = getMessage $ envelopeMessage e in
+      case msg of
+        "INIT" -> ExecutorEnvelopeMessage "init" ""
+        _ -> ExecutorEnvelopeMessage "receive" $ case eitherDecode . LBS.pack $ msg of
+          Left err -> error err
+          Right x -> x
   , executorEnvelopeReceiver      = envelopeReceiver e
   , executorEnvelopeCorrelationId = envelopeCorrelationId e
   , executorEnvelopeLogicalTime   = let LogicalTime _ i = envelopeLogicalTime e in i

@@ -292,11 +292,24 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
         -}
   in
     Actor $ do
-      step
+      firstStep step
       return (InternalMessage "ok")
   where
     prettyEvent :: SchedulerEvent -> String
     prettyEvent = LBS.unpack . encode
+
+    firstStep step = do
+      p <- send executorRef (InternalMessage "INIT")
+      -- currentLogicalTime <- Time.currentLogicalClock timeC
+      -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
+      on p $ \(InternalMessageR (InternalMessage' "Events" args)) ->
+        let
+          Just evs = sequence (map (fromSDatatype zeroTime) args)
+          evs' = filter (\e -> kind e /= "ok") (concat evs)
+          agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
+        in do
+        modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
+        step
 fakeScheduler _ msg = error (show msg)
 
 -- XXX: Avoid going to string, not sure if we should use bytestring or text though?

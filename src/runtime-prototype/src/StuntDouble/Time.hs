@@ -17,6 +17,9 @@ newtype Time = Time Time.UTCTime
 instance FromJSON Time
 instance ToJSON Time
 
+zeroTime :: Time
+zeroTime = Time $ Time.UTCTime (Time.fromOrdinalDate 1970 0) 0
+
 addTime :: Time -> Time.NominalDiffTime -> Time
 addTime (Time t) dt = Time (Time.addUTCTime dt t)
 
