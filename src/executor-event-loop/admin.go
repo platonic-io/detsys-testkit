@@ -17,6 +17,7 @@ const (
 	AdminQuit = iota
 	AdminDumpLog
 	AdminResetLog
+	AdminResetReactors
 	AdminUnknown
 )
 
@@ -28,9 +29,10 @@ type AdminCommand struct {
 // panic galore if we don't have it
 func parseCommandFromString(command string) AdminCommandType {
 	v, ok := map[string]AdminCommandType{
-		"AdminQuit":     AdminQuit,
-		"AdminDumpLog":  AdminDumpLog,
-		"AdminResetLog": AdminResetLog,
+		"AdminQuit":          AdminQuit,
+		"AdminDumpLog":       AdminDumpLog,
+		"AdminResetLog":      AdminResetLog,
+		"AdminResetReactors": AdminResetReactors,
 	}[command]
 	if !ok {
 		return AdminUnknown
