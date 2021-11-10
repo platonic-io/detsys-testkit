@@ -24,17 +24,23 @@ type StepInfo struct {
 type ComponentUpdate = func(component string) StepInfo
 
 type Executor struct {
-	Topology  lib.Topology
-	Marshaler lib.Marshaler
+	Topology      lib.Topology
+	BuildTopology func() lib.Topology
+	Marshaler     lib.Marshaler
 	//Update    ComponentUpdate
 }
 
-func NewExecutor(topology lib.Topology, m lib.Marshaler) *Executor {
+func NewExecutor(buildTopology func() lib.Topology, m lib.Marshaler) *Executor {
 	return &Executor{
-		Topology:  topology,
-		Marshaler: m,
+		Topology:      buildTopology(),
+		BuildTopology: buildTopology,
+		Marshaler:     m,
 		//Update:    cu,
 	}
+}
+
+func (ex Executor) Reset() {
+	ex.Topology = ex.BuildTopology()
 }
 
 func (el Executor) processEnvelope(env Envelope) Message {

@@ -15,11 +15,13 @@ func main() {
 	fmt.Printf("Created admin\n")
 	commandT := executorEL.NewCommandTransport("/tmp/executor.sock")
 	fmt.Printf("Created command transport\n")
-	topology := lib.NewTopology(
-		lib.Item{"frontend", sut.NewFrontEnd()},
-		lib.Item{"register1", sut.NewRegister()},
-		lib.Item{"register2", sut.NewRegister()},
-	)
+	topology := func() lib.Topology {
+		return lib.NewTopology(
+			lib.Item{"frontend", sut.NewFrontEnd()},
+			lib.Item{"register1", sut.NewRegister()},
+			lib.Item{"register2", sut.NewRegister()},
+		)
+	}
 	exe := executorEL.NewExecutor(topology, sut.NewMarshaler())
 	el := executorEL.NewEventLoop(adminI, commandT, exe)
 

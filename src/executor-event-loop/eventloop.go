@@ -77,6 +77,11 @@ func (el *EventLoop) processAdmin(cmd AdminCommand) bool {
 		el.Log = make([]TimestampedLogEntry, 0)
 		cmd.Response("Log reseted\n")
 		return false
+	case AdminResetReactors:
+		fmt.Printf("resetting reactors\n")
+		el.Executor.Reset()
+		cmd.Response("Reactors restarted\n")
+		return false
 	default:
 		fmt.Printf("Unknown admin command: %#v\n", cmd)
 		panic("Unhandled admin command")
