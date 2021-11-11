@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NumericUnderscores #-}
 
 module Scheduler.Executor where
 
@@ -7,6 +8,7 @@ import Data.Aeson as Aeson
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Char (toLower)
+import Data.Ratio ((%))
 import GHC.Generics (Generic)
 
 import Scheduler.Event
@@ -22,30 +24,49 @@ data ExecutorResponse = ExecutorResponse
 
 instance FromJSON ExecutorResponse
 
-data UnscheduledEvent = UnscheduledEvent
-  { ueKind  :: String
-  , ueEvent :: String
+data UnscheduledEvent = UEMessage
+  { ueEvent :: String
   , ueArgs  :: Aeson.Value
   , ueTo    :: [String]
   , ueFrom  :: String
+  } |
+  UEOk
+  { ueEvent :: String
+  , ueArgs  :: Aeson.Value
+  , ueTo    :: [String]
+  , ueFrom  :: String
+  } |
+  UETimer
+  { ueArgs :: Aeson.Value
+  , ueFrom :: String
+  , ueDuration_ns :: Int
   }
   deriving (Generic, Eq, Ord, Show)
 
 instance FromJSON UnscheduledEvent where
   parseJSON = genericParseJSON defaultOptions
-    { fieldLabelModifier = \s -> case drop (length ("ue" :: String)) s of
+    { fieldLabelModifier = \s -> kebabify $ case drop (length ("ue" :: String)) s of
         (x : xs) -> toLower x : xs
-        [] -> error "parseJSON: impossible, unless the field names of `UnscheduledEvent` changed" }
+        [] -> error "parseJSON: impossible, unless the field names of `UnscheduledEvent` changed"
+    , sumEncoding = defaultTaggedObject
+      { tagFieldName = "kind"}
+    , constructorTagModifier = \s -> case drop (length ("UE" :: String)) s of
+        (x : xs) -> toLower x : xs
+        [] -> error "parseJSON: impossible, unless the constructor names of `UnscheduledEvent` changed"
+    }
+    where
+      kebabify = map (\x -> if x == '_' then '-' else x)
 
-toSDatatype :: UnscheduledEvent -> SDatatype
-toSDatatype (UnscheduledEvent kind event args to from) =
-  SList [SString kind, SString event, SValue args, SList (map SString to), SString from]
-
-fromSDatatype :: Time -> SDatatype -> Maybe [SchedulerEvent]
-fromSDatatype at (SList
-  [SString kind, SString event, SValue args, SList tos, SString from])
-  = Just [ SchedulerEvent kind event args to from at Nothing | SString to <- tos ]
-fromSDatatype _at _d = Nothing
+toScheduled :: Time -> UnscheduledEvent -> [SchedulerEvent]
+toScheduled at (UEMessage event args tos from)
+  = [ SchedulerEvent "message" event args to from at Nothing | to <- tos]
+toScheduled at (UEOk event args tos from)
+  = [ SchedulerEvent "ok" event args to from at Nothing | to <- tos]
+toScheduled at (UETimer args from duration)
+  = [ SchedulerEvent "timer" "timer" args from from at' Nothing]
+  where
+    at' = addTime at duration'
+    duration' = fromRational $ fromIntegral duration % 1_000_000_000
 
 data ExecutorEnvelopeMessage = ExecutorEnvelopeMessage
   { executorEnvelopeMessageKind :: String
@@ -82,14 +103,10 @@ toExecutorEnvelope :: Envelope -> ExecutorEnvelope
 toExecutorEnvelope e = ExecutorEnvelope
   { executorEnvelopeKind          = envelopeKind e
   , executorEnvelopeSender        = envelopeSender e
-  -- this is silly.. going back and forth between json..
   , executorEnvelopeMessage       =
-    let msg = getMessage $ envelopeMessage e in
-      case msg of
-        "INIT" -> ExecutorEnvelopeMessage "init" ""
-        _ -> ExecutorEnvelopeMessage "receive" $ case eitherDecode . LBS.pack $ msg of
-          Left err -> error err
-          Right x -> x
+    case envelopeMessage e of
+      InternalMessage' kind msg -> ExecutorEnvelopeMessage kind msg
+      msg -> error $ "Unknown message type: " <> show msg
   , executorEnvelopeReceiver      = envelopeReceiver e
   , executorEnvelopeCorrelationId = envelopeCorrelationId e
   , executorEnvelopeLogicalTime   = let LogicalTime _ i = envelopeLogicalTime e in i
@@ -99,9 +116,7 @@ fromExecutorEnvelope :: ExecutorEnvelope -> Envelope
 fromExecutorEnvelope e = Envelope
   { envelopeKind          = executorEnvelopeKind e
   , envelopeSender        = executorEnvelopeSender e
-  , envelopeMessage       = InternalMessage' "Events" $ case Aeson.fromJSON (executorEnvelopeMessageMessage $ executorEnvelopeMessage e) of
-      Aeson.Error err -> error err
-      Aeson.Success (ExecutorResponse evs _) -> map toSDatatype evs
+  , envelopeMessage       = InternalMessage' "Events" $ (executorEnvelopeMessageMessage $ executorEnvelopeMessage e)
   , envelopeReceiver      = executorEnvelopeReceiver e
   , envelopeCorrelationId = executorEnvelopeCorrelationId e
   , envelopeLogicalTime   = LogicalTime "executor" $ executorEnvelopeLogicalTime e
