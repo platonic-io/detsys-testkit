@@ -17,7 +17,7 @@ func main() {
 	fmt.Printf("Created command transport\n")
 	topology := func() lib.Topology {
 		return lib.NewTopology(
-			lib.Item{"frontend", sut.NewFrontEnd()},
+			lib.Item{"frontend", sut.NewFrontEnd4()},
 			lib.Item{"register1", sut.NewRegister()},
 			lib.Item{"register2", sut.NewRegister()},
 		)

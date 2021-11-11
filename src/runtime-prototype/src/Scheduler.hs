@@ -137,7 +137,7 @@ scheduleEvents aes = do
             Just dt -> t `addTime` dt
       in (time' `addTime` delta, tevent)
 
--- echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005 && echo "{\"tag\":\"InternalMessage'\",\"contents\":[\"Start\",[]]}" | http POST :3005
+-- echo "{\"tag\":\"ClientRequest''\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005 && echo "{\"tag\":\"ClientRequest''\",\"contents\":[\"Start\",[]]}" | http POST :3005
 
 fakeScheduler :: RemoteRef -> Message -> Actor SchedulerState
 fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $ do
@@ -201,14 +201,14 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                                , steps       = succ (steps s)
                                }
               s <- get
-              p <- send executorRef (InternalMessage (prettyEvent $ manipulateEvent ev (faultState s)))
+              p <- send executorRef (InternalMessage' (kind ev) (toJSON $ manipulateEvent ev (faultState s)))
               -- currentLogicalTime <- Time.currentLogicalClock timeC
               -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
               on p (\(InternalMessageR (InternalMessage' "Events" args)) -> do
                        -- XXX: we should generate an arrival time here using the seed.
                        -- XXX: with some probability duplicate the event?
-                       let Just evs = sequence (map (fromSDatatype t) args)
-                           evs' = filter (\e -> kind e /= "ok") (concat evs)
+                       let Success (ExecutorResponse evs _) = fromJSON args
+                           evs' = filter (\e -> kind e /= "ok") (concat $ map (toScheduled t) evs)
                            agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
                        modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
 
@@ -295,17 +295,14 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
       firstStep step
       return (InternalMessage "ok")
   where
-    prettyEvent :: SchedulerEvent -> String
-    prettyEvent = LBS.unpack . encode
-
     firstStep step = do
-      p <- send executorRef (InternalMessage "INIT")
+      p <- send executorRef (InternalMessage' "init" (object []))
       -- currentLogicalTime <- Time.currentLogicalClock timeC
       -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
       on p $ \(InternalMessageR (InternalMessage' "Events" args)) ->
         let
-          Just evs = sequence (map (fromSDatatype zeroTime) args)
-          evs' = filter (\e -> kind e /= "ok") (concat evs)
+          Success (ExecutorResponse evs _) = fromJSON args
+          evs' = filter (\e -> kind e /= "ok") (concat $ map (toScheduled zeroTime) evs)
           agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
         in do
         modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }

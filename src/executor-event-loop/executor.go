@@ -5,7 +5,7 @@ import (
 	"fmt"
 	// "io/ioutil"
 	// "strconv"
-	// "time"
+	"time"
 
 	// "go.uber.org/zap"
 	// "go.uber.org/zap/zapcore"
@@ -49,7 +49,9 @@ func (el Executor) processEnvelope(env Envelope) Message {
 
 	var returnMessage json.RawMessage
 	switch msg.Kind {
-	case "receive":
+	case "message":
+		fallthrough
+	case "invoke":
 		var sev lib.ScheduledEvent
 		bytesToDeserialise := msg.Message
 		fmt.Printf("About to deserialise message\n%s\n", string(bytesToDeserialise))
@@ -83,6 +85,19 @@ func (el Executor) processEnvelope(env Envelope) Message {
 			panic(err)
 		}
 		returnMessage = bs
+	case "timer":
+		type TimerRequest struct {
+			Reactor string       `json:"to"`
+			At      time.Time    `json:"at"`
+			Meta    lib.MetaInfo `json:"meta"`
+		}
+		var req TimerRequest
+		if err := json.Unmarshal(msg.Message, &req); err != nil {
+			panic(err)
+		}
+		reactor := el.Topology.Reactor(req.Reactor)
+		oevs := reactor.Timer(req.At)
+		returnMessage = lib.MarshalUnscheduledEvents(req.Reactor, int(env.CorrelationId), oevs)
 	default:
 		fmt.Printf("Unknown message type: %#v\n", msg.Kind)
 		panic("Unknown message type")

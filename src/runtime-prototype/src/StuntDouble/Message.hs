@@ -29,9 +29,10 @@ instance FromJSON SDatatype
 
 data Message
   = InternalMessage String -- XXX: remove unprimed variants...
-  | InternalMessage' Verb Args
+  | InternalMessage' Verb Value
   | ClientRequest String ClientRef
   | ClientRequest' Verb Args ClientRef
+  | ClientRequest'' Verb Args
   deriving (Eq, Show, Read, Generic)
 
 instance ToJSON Message
@@ -42,9 +43,11 @@ getMessage (InternalMessage msg) = msg
 getMessage (InternalMessage' msg _args) = msg
 getMessage (ClientRequest msg _cid) = msg
 getMessage (ClientRequest' msg _args _cid) = msg
+getMessage (ClientRequest'' msg _args) = msg
 
 getArgs :: Message -> Args
 getArgs InternalMessage {}               = []
-getArgs (InternalMessage' _msg args)     = args
+getArgs (InternalMessage' _msg args)     = [SValue args]
 getArgs ClientRequest {}                 = []
 getArgs (ClientRequest' _msg args _cref) = args
+getArgs (ClientRequest'' _msg args)      = args
