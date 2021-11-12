@@ -19,7 +19,7 @@ import System.IO
 import System.Posix.Files
 import Text.Wrap
 import Network.Socket
-import Network.Socket.ByteString.Lazy (recv, sendAll)
+import qualified Network.Socket.ByteString.Lazy as Socket
 
 import StuntDouble
 import qualified StuntDouble.Transport.UnixSocket as US
@@ -60,8 +60,8 @@ readLogExecutor = withSocketsDo $ do
   E.bracket open close client
   where
     client c = do
-      sendAll c "AdminDumpLog\n"
-      msg <- recv c (10*1024)
+      Socket.sendAll c "AdminDumpLog\n"
+      msg <- Socket.getContents c
       putStrLn "Got back from executor"
       putStrLn $ LBS.unpack msg
       return . Just $ read (LBS.unpack msg)
