@@ -35,9 +35,10 @@ data Envelope = Envelope
   , envelopeMessage       :: Message
   , envelopeReceiver      :: RemoteRef
   , envelopeCorrelationId :: CorrelationId
-  , envelopeLogicalTime   :: LogicalTime -- XXX: we don't need to send
-                                         -- the NodeName part, only the
-                                         -- integer part over the wire...
+  , envelopeLogicalTime   :: LogicalTimeInt -- | NOTE: We don't need to send the
+                                            -- `NodeName` part of `LogicalTime`,
+                                            -- only the integer part over the
+                                            -- wire...
   }
   deriving (Generic, Eq, Show, Read)
 

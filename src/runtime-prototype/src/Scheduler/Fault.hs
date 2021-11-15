@@ -42,7 +42,7 @@ newtype ClockSkew = ClockSkew
   } deriving newtype (Semigroup, Monoid, Show)
 
 data FaultStateForActor = FaultStateForActor
-  { fsOmissions :: Set Int -- should be LogicalTime
+  { fsOmissions :: Set LogicalTimeInt
   , fsPermanentCrash :: Maybe LogicalTime
   , fsPause :: TimeIntervals
   , fsPartition :: Map ActorName TimeIntervals

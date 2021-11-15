@@ -359,11 +359,12 @@ act ls as = mapM_ go as
     go :: Action -> IO ()
     go (SendAction from msg to p@(Promise i)) = do
       lt <- timestamp (lsLogicalClock ls)
+      let lti = getLogicalTimeInt lt
       -- XXX: What do we do if `transportSend` fails here? We should probably
       -- call the failure handler/continuation for this promise, if it exists.
       -- If it doesn't exist we probably want to crash the sender, i.e. `from`.
       transportSend (lsTransport ls)
-        (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i) lt)
+        (Envelope RequestKind (localToRemoteRef (lsName ls) from) msg to (CorrelationId i) lti)
       t <- getCurrentTime (lsClock ls)
       logEvent (lsLog ls) (LogSend from to msg) lt t
       t <- getCurrentTime (lsClock ls)
@@ -849,9 +850,9 @@ handleEvent (Admin cmd) ls = case cmd of
     atomically (putTMVar returnVar reply)
   AdminSend rref msg p returnVar -> do
     let dummyAdminRef = localToRemoteRef (lsName ls) (LocalRef (-1))
-    lt <- timestamp (lsLogicalClock ls)
+    lti <- timestampInt (lsLogicalClock ls)
     transportSend (lsTransport ls)
-      (Envelope RequestKind dummyAdminRef msg rref (CorrelationId (unPromise p)) lt)
+      (Envelope RequestKind dummyAdminRef msg rref (CorrelationId (unPromise p)) lti)
     atomically (modifyTVar' (lsAsyncState ls)
                 (\as -> as { asyncStateAdminSend =
                              Map.insert p returnVar (asyncStateAdminSend as) }))

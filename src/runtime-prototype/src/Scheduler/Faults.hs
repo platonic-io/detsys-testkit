@@ -13,16 +13,17 @@ import qualified Data.Time as Time
 
 import StuntDouble.IO
 import StuntDouble.Time
+import StuntDouble.LogicalTime
 
 data Fault
   = Omission
     { from :: String
     , to :: String
-    , at :: Int
+    , at :: LogicalTimeInt
     }
   | Crash
     { from :: String
-    , at :: Int
+    , at :: LogicalTimeInt
     }
   -- new ones
   | Pause

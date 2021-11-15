@@ -42,6 +42,8 @@ httpFrontend ls lref req respond = do
 parseReq :: Wai.Request -> IO (Either String Message)
 parseReq req = do
   body <- Wai.lazyRequestBody req
+  --- XXX: codec should be used here... but codec is for `Envelope` rather than
+  --- just `Message`...
   return (eitherDecode body)
 
 prettyResponse :: Message -> Wai.Response

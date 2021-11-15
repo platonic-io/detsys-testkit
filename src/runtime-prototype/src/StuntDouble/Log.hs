@@ -15,7 +15,7 @@ newtype Log = Log [Timestamped LogEntry]
 data Timestamped a = Timestamped a LogicalTime Time
   deriving (Show, Read)
 
-data TimestampedLogically a = TimestampedLogically a LogicalTime
+data TimestampedLogically a = TimestampedLogically a LogicalTimeInt
   deriving (Show, Read)
 
 data LogEntry
