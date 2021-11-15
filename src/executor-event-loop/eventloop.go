@@ -75,6 +75,7 @@ func (el *EventLoop) processAdmin(cmd AdminCommand) bool {
 	case AdminResetLog:
 		fmt.Printf("resetting log\n")
 		el.Log = make([]TimestampedLogEntry, 0)
+		*el.LogicalTime = 0
 		cmd.Response("Log reseted\n")
 		return false
 	case AdminResetReactors:
