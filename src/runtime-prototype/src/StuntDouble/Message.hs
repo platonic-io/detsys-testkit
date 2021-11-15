@@ -4,13 +4,12 @@ module StuntDouble.Message where
 
 import Data.Aeson (FromJSON, ToJSON, Value)
 import GHC.Generics (Generic)
-import Data.HashMap.Strict (HashMap)
 
 import StuntDouble.Reference
 
 ------------------------------------------------------------------------
 
-type Verb = String
+type Tag = String
 
 type Args = [SDatatype]
 
@@ -29,10 +28,10 @@ instance FromJSON SDatatype
 
 data Message
   = InternalMessage String -- XXX: remove unprimed variants...
-  | InternalMessage' Verb Value
-  | ClientRequest String ClientRef
-  | ClientRequest' Verb Args ClientRef
-  | ClientRequest'' Verb Args
+  | InternalMessage' Tag Value
+  | ClientRequest Tag ClientRef
+  | ClientRequest' Tag Args ClientRef
+  | ClientRequest'' Tag Args
   deriving (Eq, Show, Read, Generic)
 
 instance ToJSON Message

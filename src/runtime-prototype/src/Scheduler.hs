@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Scheduler where
@@ -139,8 +140,10 @@ scheduleEvents aes = do
 
 -- echo "{\"tag\":\"ClientRequest''\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005 && echo "{\"tag\":\"ClientRequest''\",\"contents\":[\"Start\",[]]}" | http POST :3005
 
+pattern CreateTest tid cid = ClientRequest' "CreateTest" [SInt tid] cid
+
 fakeScheduler :: RemoteRef -> Message -> Actor SchedulerState
-fakeScheduler executorRef (ClientRequest' "CreateTest" [SInt tid] cid) = Actor $ do
+fakeScheduler executorRef (CreateTest tid cid) = Actor $ do
   p <- asyncIO (IOQuery "SELECT agenda FROM test_info WHERE test_id = :tid" [":tid" := tid])
   q <- asyncIO (IOQuery "SELECT IFNULL(MAX(run_id), -1) + 1 FROM run_info WHERE test_id = :tid"
                 [":tid" := tid])

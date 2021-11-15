@@ -92,7 +92,7 @@ data ExecutorEnvelope = ExecutorEnvelope
   deriving (Generic)
 
 executorEnvelopeOptions = defaultOptions
-  { fieldLabelModifier = \s -> 'e':drop (length ("executorE" :: String)) s}
+  { fieldLabelModifier = \s -> 'e' : drop (length ("executorE" :: String)) s}
 
 instance ToJSON ExecutorEnvelope where
   toJSON = genericToJSON executorEnvelopeOptions
