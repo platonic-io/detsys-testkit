@@ -19,13 +19,22 @@ newtype NodeName = NodeName String
 instance ToJSON NodeName
 instance FromJSON NodeName
 
-data LogicalClock = LogicalClock NodeName (IORef Int)
+data LogicalClock = LogicalClock NodeName (IORef LogicalTimeInt)
 
-data LogicalTime = LogicalTime NodeName Int
+newtype LogicalTimeInt = LogicalTimeInt Int
+  deriving (Show, Eq, Read, Generic, Num, Ord, Enum)
+
+instance ToJSON LogicalTimeInt
+instance FromJSON LogicalTimeInt
+
+data LogicalTime = LogicalTime NodeName LogicalTimeInt
   deriving (Show, Eq, Read, Generic)
 
 instance ToJSON LogicalTime
 instance FromJSON LogicalTime
+
+getLogicalTimeInt :: LogicalTime -> LogicalTimeInt
+getLogicalTimeInt (LogicalTime _n i) = i
 
 succLogicalTime :: LogicalTime -> LogicalTime
 succLogicalTime (LogicalTime n i) = LogicalTime n (succ i)
@@ -46,10 +55,14 @@ newLogicalClock n = do
 -- creating the timestamp.
 timestamp :: LogicalClock -> IO LogicalTime
 timestamp (LogicalClock n c) = do
-  t <- atomicModifyIORef' c (\t -> (t + 1, t + 1))
-  return (LogicalTime n t)
+  t' <- atomicModifyIORef' c (\t -> let t' = t + 1 in (t', t'))
+  return (LogicalTime n t')
+
+timestampInt :: LogicalClock -> IO LogicalTimeInt
+timestampInt (LogicalClock n c) = atomicModifyIORef' c (\t -> let t' = t + 1 in (t', t'))
 
 -- Upon receving a timestamped message we should update our clock.
-update :: LogicalClock -> LogicalTime -> IO LogicalTime
-update (LogicalClock n c) (LogicalTime _n' t') =
-  atomicModifyIORef' c (\t -> let t'' = max t t' + 1 in (t'', LogicalTime n t''))
+update :: LogicalClock -> LogicalTimeInt -> IO LogicalTime
+update (LogicalClock n c) t' =
+  atomicModifyIORef' c (\t -> let t'' = max t t' + 1
+                              in (t'', LogicalTime n t''))

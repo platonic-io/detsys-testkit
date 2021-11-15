@@ -87,7 +87,7 @@ data ExecutorEnvelope = ExecutorEnvelope
   , executorEnvelopeMessage       :: ExecutorEnvelopeMessage
   , executorEnvelopeReceiver      :: RemoteRef
   , executorEnvelopeCorrelationId :: CorrelationId
-  , executorEnvelopeLogicalTime   :: Int -- we don't need to send the name part
+  , executorEnvelopeLogicalTime   :: LogicalTimeInt
   }
   deriving (Generic)
 
@@ -109,7 +109,7 @@ toExecutorEnvelope e = ExecutorEnvelope
       msg -> error $ "Unknown message type: " <> show msg
   , executorEnvelopeReceiver      = envelopeReceiver e
   , executorEnvelopeCorrelationId = envelopeCorrelationId e
-  , executorEnvelopeLogicalTime   = let LogicalTime _ i = envelopeLogicalTime e in i
+  , executorEnvelopeLogicalTime   = envelopeLogicalTime e
   }
 
 fromExecutorEnvelope :: ExecutorEnvelope -> Envelope
@@ -119,7 +119,7 @@ fromExecutorEnvelope e = Envelope
   , envelopeMessage       = InternalMessage' "Events" $ (executorEnvelopeMessageMessage $ executorEnvelopeMessage e)
   , envelopeReceiver      = executorEnvelopeReceiver e
   , envelopeCorrelationId = executorEnvelopeCorrelationId e
-  , envelopeLogicalTime   = LogicalTime "executor" $ executorEnvelopeLogicalTime e
+  , envelopeLogicalTime   = executorEnvelopeLogicalTime e
   }
 
 
