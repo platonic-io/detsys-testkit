@@ -16,7 +16,7 @@ import System.IO.Error
 import System.Posix.Files
 import System.Timeout
 import Network.Socket
-import Network.Socket.ByteString.Lazy (recv, sendAll)
+import qualified Network.Socket.ByteString.Lazy as Socket
 
 import StuntDouble.Codec
 import StuntDouble.Envelope
@@ -59,7 +59,7 @@ runServer fp (Codec _ decode) queue = do
     loop s = forever $ E.bracketOnError (accept s) (close . fst) $ \ (conn, peer) -> do
       forkFinally (server conn) (const $ gracefulClose conn 5000)
     server conn = do
-      msg <- recv conn 1024
+      msg <- Socket.getContents conn
       case decode msg of
         Left err -> error err
         Right envelope -> do
@@ -72,7 +72,7 @@ transportSend' addr payload = do
   withSocketsDo $ E.bracket open close client
   where
     client c = do
-      sendAll c payload
+      Socket.sendAll c payload
     open = E.bracketOnError uSocket close $ \s -> do
       connect s (SockAddrUnix addr)
       return s
