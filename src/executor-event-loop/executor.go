@@ -108,6 +108,31 @@ func (el Executor) processEnvelope(env Envelope) Message {
 		reactor := el.Topology.Reactor(req.Reactor)
 		oevs := reactor.Timer(req.At)
 		returnMessage = lib.MarshalUnscheduledEvents(req.Reactor, int(env.CorrelationId), oevs)
+	case "fault":
+		type FaultRequest struct {
+			Reactor string `json:"to"`
+			Event   string `json:"event"`
+		}
+		var req FaultRequest
+		if err := json.Unmarshal(msg.Message, &req); err != nil {
+			panic(err)
+		}
+		switch req.Event {
+		case "restart":
+			el.Topology.Insert(req.Reactor, el.BuildReactor(req.Reactor))
+		default:
+			fmt.Printf("Unhandled fault type %s\n", req.Event)
+			panic("Unhandled fault type")
+		}
+		bs, err := json.Marshal(struct {
+			Events        []lib.Event   `json:"events"`
+			CorrelationId CorrelationId `json:"corrId"`
+		}{[]lib.Event{}, env.CorrelationId})
+		if err != nil {
+			panic(err)
+		}
+		returnMessage = bs
+
 	default:
 		fmt.Printf("Unknown message type: %#v\n", msg.Kind)
 		panic("Unknown message type")
