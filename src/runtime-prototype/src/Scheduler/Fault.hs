@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Scheduler.Fault where
 
+import qualified Data.Aeson as Aeson
 import Data.List (foldl')
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -92,6 +93,7 @@ newFaultState = foldMap mkFaultState . Faults.faults
      where ti = singleton $ TimeInterval f t
     translate (Faults.ClockSkewBump n d f t) = n !-> mempty { fsClockSkew = ClockSkew [(TimeInterval f t, CSABump d)]}
     translate (Faults.ClockSkewStrobe n d p f t) = n !-> mempty { fsClockSkew = ClockSkew [(TimeInterval f t, CSAStrobe d p)]}
+    translate Faults.RestartReactor{} = Nothing
 
     agendaItems :: Faults.Fault -> Agenda
     agendaItems Faults.Omission{} = mempty
@@ -100,6 +102,9 @@ newFaultState = foldMap mkFaultState . Faults.faults
     agendaItems Faults.Partition{} = mempty
     agendaItems Faults.ClockSkewBump{} = mempty
     agendaItems Faults.ClockSkewStrobe{} = mempty
+    agendaItems (Faults.RestartReactor n t) = Agenda.push (t, ev) mempty
+      where
+        ev = SchedulerEvent {kind = "fault", event = "restart", args = Aeson.object [], from = "god", to = n, at = t, meta = Nothing}
 
 ------------------------------------------------------------------------
 afterLogicalTime :: LogicalTime -> LogicalTime -> Bool

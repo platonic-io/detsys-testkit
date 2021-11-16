@@ -50,6 +50,10 @@ data Fault
     , fromTime :: Time
     , toTime :: Time
     }
+  | RestartReactor
+    { node :: String
+    , fromTime :: Time
+    }
   deriving (Generic, Show)
 
 customOptions :: Options
