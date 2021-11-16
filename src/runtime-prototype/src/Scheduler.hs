@@ -175,9 +175,11 @@ fakeScheduler executorRef (ClientRequest' "LoadTest" [SInt tid, SInt rid] cid) =
   on f (\(IOResultR (IORows rs)) -> case parseRows rs of
            Nothing          -> clientResponse cid (InternalMessage "parse error")
            Just [fs@Faults{}] -> do
+             let (fState, fAgenda) = newFaultState fs
              modify $ \s ->
-               s { faultState = newFaultState fs
+               s { faultState = fState
                  , runId = Just rid
+                 , agenda = agenda s <> fAgenda
                  })
              -- clientResponse cid (InternalMessage (show fs))) -- hmm should we just do one response?
   return (InternalMessage "ok")

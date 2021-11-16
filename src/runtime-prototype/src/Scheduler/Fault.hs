@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Scheduler.Fault where
 
+import qualified Data.Aeson as Aeson
 import Data.List (foldl')
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -10,6 +11,8 @@ import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import qualified Data.Time as Time
 
+import qualified Scheduler.Agenda as Agenda
+import Scheduler.Agenda (Agenda)
 import Scheduler.Event
 import qualified Scheduler.Faults as Faults
 import StuntDouble.LogicalTime
@@ -72,15 +75,17 @@ instance Semigroup FaultState where
 instance Monoid FaultState where
   mempty = FaultState mempty
 
-newFaultState :: Faults.Faults -> FaultState
+newFaultState :: Faults.Faults -> (FaultState, Agenda)
 newFaultState = foldMap mkFaultState . Faults.faults
   where
-    mkFaultState :: Faults.Fault -> FaultState
-    mkFaultState f = FaultState $ uncurry Map.singleton (translate f)
+    mkFaultState :: Faults.Fault -> (FaultState, Agenda)
+    mkFaultState f = (FaultState . fromMaybe mempty $ uncurry Map.singleton <$> (translate f)
+                     , agendaItems f)
 
     nodeName = NodeName "scheduler"
-    (!->) = (,)
-    translate :: Faults.Fault -> (ActorName, FaultStateForActor)
+    k !-> v = Just (k,v)
+
+    translate :: Faults.Fault -> Maybe (ActorName, FaultStateForActor)
     translate (Faults.Omission _f t a) = t !-> mempty { fsOmissions = Set.singleton a}
     translate (Faults.Crash f a) = f !-> mempty { fsPermanentCrash = Just $ LogicalTime nodeName{-?-} a}
     translate (Faults.Pause n f t) = n !-> mempty { fsPause = singleton (TimeInterval f t)}
@@ -88,6 +93,18 @@ newFaultState = foldMap mkFaultState . Faults.faults
      where ti = singleton $ TimeInterval f t
     translate (Faults.ClockSkewBump n d f t) = n !-> mempty { fsClockSkew = ClockSkew [(TimeInterval f t, CSABump d)]}
     translate (Faults.ClockSkewStrobe n d p f t) = n !-> mempty { fsClockSkew = ClockSkew [(TimeInterval f t, CSAStrobe d p)]}
+    translate Faults.RestartReactor{} = Nothing
+
+    agendaItems :: Faults.Fault -> Agenda
+    agendaItems Faults.Omission{} = mempty
+    agendaItems Faults.Crash{} = mempty
+    agendaItems Faults.Pause{} = mempty
+    agendaItems Faults.Partition{} = mempty
+    agendaItems Faults.ClockSkewBump{} = mempty
+    agendaItems Faults.ClockSkewStrobe{} = mempty
+    agendaItems (Faults.RestartReactor n t) = Agenda.push (t, ev) mempty
+      where
+        ev = SchedulerEvent {kind = "fault", event = "restart", args = Aeson.object [], from = "god", to = n, at = t, meta = Nothing}
 
 ------------------------------------------------------------------------
 afterLogicalTime :: LogicalTime -> LogicalTime -> Bool
