@@ -1,3 +1,5 @@
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Scheduler.Agenda where
 
 import Data.Heap (Entry(Entry), Heap)
@@ -10,6 +12,7 @@ import StuntDouble.Time
 ------------------------------------------------------------------------
 
 newtype Agenda = Agenda (Heap (Entry Time SchedulerEvent))
+  deriving newtype (Semigroup, Monoid)
 
 empty :: Agenda
 empty = Agenda Heap.empty
