@@ -304,14 +304,15 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
       p <- send executorRef (InternalMessage' "init" (object []))
       -- currentLogicalTime <- Time.currentLogicalClock timeC
       -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
-      on p $ \(InternalMessageR (InternalMessage' "Events" args)) ->
-        let
-          Success (ExecutorResponse evs _) = fromJSON args
-          evs' = filter (\e -> kind e /= "ok") (concat $ map (toScheduled zeroTime) evs)
-          agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
-        in do
-        modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
-        step
+      let k (InternalMessageR (InternalMessage' "Events" args)) =
+            let
+              Success (ExecutorResponse evs _) = fromJSON args
+              evs' = filter (\e -> kind e /= "ok") (concat $ map (toScheduled zeroTime) evs)
+              agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
+            in do
+              modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
+              step
+      on p k
 fakeScheduler _ msg = error (show msg)
 
 -- XXX: Avoid going to string, not sure if we should use bytestring or text though?
