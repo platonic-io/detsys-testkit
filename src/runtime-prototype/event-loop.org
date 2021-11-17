@@ -129,7 +129,7 @@ queue |  __    __    __              | -.
 *** scheduler/executor event logging is synchronous and slow
 *** scheduler implementation is complicated
 ** Convenience
-*** useful for non-async parts of smartlog
+*** useful for non-async parts of SUT
 *** sync communication between reactors that are "near"
 *** async disk I/O?
 **** leveldb async flag means no fsync...
@@ -182,7 +182,7 @@ queue |  __    __    __              | -.
 
 * Next steps
 ** reimplement scheduler on top of event loop
-*** some experience using this style of programming before adopting it for Smartlog
+*** some experience using this style of programming before adopting it for SUT
 *** solves problem with slow sync disk I/O
 *** and slow communication between executor and scheduler
 *** reduce scheduler complexity, make it testable and debuggable using the detsys
@@ -193,7 +193,7 @@ queue |  __    __    __              | -.
 *** same approach as Chuck's event loop, but for client side
 
 * Longer term
-** put the Smartlog reactors on top of the event loop
+** put the SUT reactors on top of the event loop
 *** timers?
 ** merge efforts with progress made by others on:
 *** scalability / benchmarking
