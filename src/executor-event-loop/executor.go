@@ -137,5 +137,5 @@ func (el Executor) processEnvelope(env Envelope) Message {
 		fmt.Printf("Unknown message type: %#v\n", msg.Kind)
 		panic("Unknown message type")
 	}
-	return Message{"what", returnMessage}
+	return Message{"Events", returnMessage}
 }

@@ -68,70 +68,15 @@ toScheduled at (UETimer args from duration)
     at' = addTime at duration'
     duration' = fromRational $ fromIntegral duration % 1_000_000_000
 
-data ExecutorEnvelopeMessage = ExecutorEnvelopeMessage
-  { executorEnvelopeMessageKind :: String
-  , executorEnvelopeMessageMessage :: Aeson.Value
-  } deriving (Generic)
-
-executorEnvelopeMessageOptions = defaultOptions
-  { fieldLabelModifier = \s -> map toLower $ drop (length ("executorEnvelopeMessage" :: String)) s}
-
-instance ToJSON ExecutorEnvelopeMessage where
-  toJSON = genericToJSON executorEnvelopeMessageOptions
-instance FromJSON ExecutorEnvelopeMessage where
-  parseJSON = genericParseJSON executorEnvelopeMessageOptions
-
-data ExecutorEnvelope = ExecutorEnvelope
-  { executorEnvelopeKind          :: EnvelopeKind
-  , executorEnvelopeSender        :: RemoteRef
-  , executorEnvelopeMessage       :: ExecutorEnvelopeMessage
-  , executorEnvelopeReceiver      :: RemoteRef
-  , executorEnvelopeCorrelationId :: CorrelationId
-  , executorEnvelopeLogicalTime   :: LogicalTimeInt
-  }
-  deriving (Generic)
-
-executorEnvelopeOptions = defaultOptions
-  { fieldLabelModifier = \s -> 'e' : drop (length ("executorE" :: String)) s}
-
-instance ToJSON ExecutorEnvelope where
-  toJSON = genericToJSON executorEnvelopeOptions
-instance FromJSON ExecutorEnvelope where
-  parseJSON = genericParseJSON executorEnvelopeOptions
-
-toExecutorEnvelope :: Envelope -> ExecutorEnvelope
-toExecutorEnvelope e = ExecutorEnvelope
-  { executorEnvelopeKind          = envelopeKind e
-  , executorEnvelopeSender        = envelopeSender e
-  , executorEnvelopeMessage       =
-    case envelopeMessage e of
-      InternalMessage' kind msg -> ExecutorEnvelopeMessage kind msg
-      msg -> error $ "Unknown message type: " <> show msg
-  , executorEnvelopeReceiver      = envelopeReceiver e
-  , executorEnvelopeCorrelationId = envelopeCorrelationId e
-  , executorEnvelopeLogicalTime   = envelopeLogicalTime e
-  }
-
-fromExecutorEnvelope :: ExecutorEnvelope -> Envelope
-fromExecutorEnvelope e = Envelope
-  { envelopeKind          = executorEnvelopeKind e
-  , envelopeSender        = executorEnvelopeSender e
-  , envelopeMessage       = InternalMessage' "Events" $ (executorEnvelopeMessageMessage $ executorEnvelopeMessage e)
-  , envelopeReceiver      = executorEnvelopeReceiver e
-  , envelopeCorrelationId = executorEnvelopeCorrelationId e
-  , envelopeLogicalTime   = executorEnvelopeLogicalTime e
-  }
-
-
 executorCodec :: Codec
 executorCodec = Codec encode decode
   where
     encode :: Envelope -> Encode
     encode e = Encode (address (envelopeReceiver e))
                       (getCorrelationId (envelopeCorrelationId e))
-                      (Aeson.encode $ toExecutorEnvelope e)
+                      (Aeson.encode e)
 
     decode :: ByteString -> Either String Envelope
     decode bs = case eitherDecode bs of
-      Right x -> Right (fromExecutorEnvelope x)
+      Right x -> Right x
       Left err -> error err
