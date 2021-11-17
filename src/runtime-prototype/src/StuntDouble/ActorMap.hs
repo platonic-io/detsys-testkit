@@ -409,7 +409,7 @@ data Reaction
 data ReactTask
   = NothingToDo
   | Request Envelope
-  | forall s. Typeable s => ResumeContinuation (Free (ActorF s) ()) LocalRef
+  | forall s. Typeable s => ResumeContinuation Resolution (Free (ActorF s) ()) LocalRef
   | AdminSendResponse (TMVar Message) Message
 
 react :: Reaction -> AsyncState -> ((ReactTask, Maybe (TimestampedLogically LogEntry)), AsyncState)
@@ -419,7 +419,8 @@ react (Receive p e) s =
     ResponseKind ->
       case Map.lookup p (asyncStateContinuations s) of
         Just (ResolutionClosure k, lref) ->
-          ((ResumeContinuation (k (InternalMessageR (envelopeMessage e))) lref,
+          let r = InternalMessageR (envelopeMessage e) in
+          ((ResumeContinuation r (k r) lref,
             Just (TimestampedLogically (LogResumeContinuation (envelopeSender e) lref (envelopeMessage e))
                    (envelopeLogicalTime e))),
             s { asyncStateContinuations =
@@ -433,14 +434,15 @@ react (Receive p e) s =
               ((AdminSendResponse returnVar (envelopeMessage e), Nothing),
                 s { asyncStateAdminSend =
                       Map.delete p (asyncStateAdminSend s) })
-react (SendTimeoutReaction a lref) s = ((ResumeContinuation a lref, Nothing), s)
+react (SendTimeoutReaction a lref) s = ((ResumeContinuation TimeoutR a lref, Nothing), s)
 react (AsyncIOFinished p result) s =
   case Map.lookup p (asyncStateContinuations s) of
     Nothing ->
       -- No continuation was registered for this async.
       ((NothingToDo, Nothing), s)
     Just (ResolutionClosure k, lref) ->
-      ((ResumeContinuation (k (IOResultR result)) lref, Nothing),
+      let r = IOResultR result in
+      ((ResumeContinuation r (k r) lref, Nothing),
         s { asyncStateContinuations =
               Map.delete p (asyncStateContinuations s) })
 react (AsyncIOFailed p exception) s =
@@ -449,7 +451,8 @@ react (AsyncIOFailed p exception) s =
       -- No continuation was registered for this async.
       ((NothingToDo, Nothing), s)
     Just (ResolutionClosure k, lref) ->
-      ((ResumeContinuation (k (ExceptionR exception)) lref, Nothing),
+      let r = ExceptionR exception in
+      ((ResumeContinuation r (k r) lref, Nothing),
         s { asyncStateContinuations =
               Map.delete p (asyncStateContinuations s) })
 
@@ -825,7 +828,11 @@ handleEvent (Reaction r) ls = do
       reply <- actorPokeIO ls lref (envelopeMessage e)
       -- XXX: return more than reply, and log event
       transportSend (lsTransport ls) (replyEnvelope e reply)
-    ResumeContinuation a lref -> do
+    ResumeContinuation r a lref -> do
+      a' <- catchJust (\e -> case e of
+                               PatternMatchFail err -> Just err)
+                (return $! a)
+                (\err -> error (show err ++ ", missing case: " ++ show r))
       as <- atomically $ do
         am   <- readTVar (lsActorMap ls)
         p    <- readTVar (lsNextPromise ls)
