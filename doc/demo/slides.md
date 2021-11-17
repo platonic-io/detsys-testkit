@@ -266,7 +266,7 @@ type fault
 * Future work
   * Test case generation, including extending existing/already run test cases;
   * Support for deployment, for testing upgrades and backup/restore;
-  * Integrate other parts of Assembly.
+  * Integrate other parts of platform.
 
 ---
 
