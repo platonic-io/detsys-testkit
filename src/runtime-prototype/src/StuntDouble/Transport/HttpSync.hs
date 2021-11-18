@@ -36,7 +36,7 @@ transportSyncSend manager codec@(Codec _encode decode) queue e = do
   -- to asynchronously take care of possible errors though). Some care needs to
   -- be taking with regards to the unsynchronised queue if this is done.
   resp <- responseBody <$> httpLbs request manager
-  case decode resp of
+  case decodeJSONEnvelope resp of
     Left err -> error ("transportSend: couldn't parse response: " ++ show err)
     Right envelope -> do
       ok <- enqueue envelope queue
@@ -44,9 +44,11 @@ transportSyncSend manager codec@(Codec _encode decode) queue e = do
 
 envelopeToRequestSync :: Codec -> Envelope -> IO Request
 envelopeToRequestSync (Codec encode _decode) e = do
-  let Encode address corrId payload = encode e
+  let addr    = address (envelopeReceiver e)
+      corrId  = getCorrelationId (envelopeCorrelationId e)
+      payload = encode (envelopeMessage e)
 
-  initialRequest <- parseRequest address
+  initialRequest <- parseRequest addr
 
   return initialRequest
            { method      = "POST"

@@ -3,7 +3,8 @@
 
 module StuntDouble.Envelope where
 
-import Data.Aeson (FromJSON, ToJSON)
+import Data.ByteString (ByteString)
+import Data.Aeson (FromJSON, ToJSON, toEncoding, parseJSON)
 import GHC.Generics (Generic)
 import Control.Concurrent.STM
 import Control.Concurrent.Async
@@ -29,23 +30,23 @@ data EnvelopeKind = RequestKind | ResponseKind
 instance ToJSON EnvelopeKind
 instance FromJSON EnvelopeKind
 
-data Envelope = Envelope
+type Envelope = Envelope' Message
+
+data Envelope' msg = Envelope
   { envelopeKind          :: EnvelopeKind
   , envelopeSender        :: RemoteRef
-  , envelopeMessage       :: Message
+  , envelopeMessage       :: msg
   , envelopeReceiver      :: RemoteRef
   , envelopeCorrelationId :: CorrelationId
-  , envelopeLogicalTime   :: LogicalTimeInt -- | NOTE: We don't need to send the
-                                            -- `NodeName` part of `LogicalTime`,
-                                            -- only the integer part over the
-                                            -- wire...
+  -- | NOTE: We don't need to send the `NodeName` part of `LogicalTime`, only
+  -- the integer part over the wire...
+  , envelopeLogicalTime   :: LogicalTimeInt
   }
-  deriving (Generic, Eq, Show, Read)
+  deriving (Eq, Show, Read, Generic)
 
-instance ToJSON Envelope
-instance FromJSON Envelope
+instance FromJSON msg => FromJSON (Envelope' msg)
 
-replyEnvelope :: Envelope -> Message -> Envelope
+replyEnvelope :: Envelope' msg -> Message -> Envelope
 replyEnvelope e msg
   | envelopeKind e == RequestKind =
     e { envelopeKind = ResponseKind

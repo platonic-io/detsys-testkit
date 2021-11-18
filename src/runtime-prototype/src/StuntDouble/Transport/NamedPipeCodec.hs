@@ -20,24 +20,27 @@ import StuntDouble.Transport
 
 ------------------------------------------------------------------------
 
-namedPipeTransport :: FilePath -> EventLoopName -> Codec ->IO (Transport IO)
-namedPipeTransport fp name (Codec encode decode) = do
+namedPipeTransport :: FilePath -> EventLoopName -> Codec -> IO (Transport IO)
+namedPipeTransport fp name codec@(Codec encode decode) = do
   safeCreateNamedPipe (fp </> getEventLoopName name)
   h <- openFile (fp </> getEventLoopName name) ReadWriteMode
   putStrLn $ "Listening on: " <> (fp </> getEventLoopName name)
   hSetBuffering h LineBuffering
   return Transport { transportSend = \e ->
-                       let Encode addr _corrId payload = encode e in
-                       withFile (fp </> addr) WriteMode $ \h' -> do
-                         hSetBuffering h' LineBuffering
-                         BSL.hPutStr h' (payload <> "\n")
+                       let
+                         addr    = address (envelopeReceiver e)
+                         payload = encode (envelopeMessage e)
+                       in
+                         withFile (fp </> addr) WriteMode $ \h' -> do
+                           hSetBuffering h' LineBuffering
+                           BSL.hPutStr h' (payload <> "\n")
                    , transportReceive = do
                        m <- hMaybeGetLine h
                        case m of
                          Nothing -> return Nothing
                          Just resp -> do
                            putStrLn "Found input"
-                           case decode resp of
+                           case decodeEnvelope codec resp of
                              Left err -> error ("transportReceive: couldn't parse response: " ++ show err)
                              Right envelope -> return . pure $ envelope
                    , transportShutdown = cleanUpNamedPipe fp name

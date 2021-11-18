@@ -49,17 +49,9 @@ data Message
   | ClientRequest'' Tag Args
   deriving (Eq, Show, Read, Generic)
 
-instance ToJSON Message where
-  toJSON (InternalMessage' t v) = object ["kind" .= t, "message" .= v]
-  toJSON msg = genericToJSON defaultOptions msg
-
-instance FromJSON Message where
-  parseJSON obj =
-    withObject "InternalMessage'" (\v -> InternalMessage'
-      <$> v .: "kind"
-      <*> v .: "message") obj
-    <|> genericParseJSON defaultOptions obj
-
+-- XXX: remove
+instance ToJSON Message
+instance FromJSON Message
 
 getMessage :: Message -> String
 getMessage (InternalMessage msg) = msg

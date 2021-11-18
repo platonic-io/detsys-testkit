@@ -60,6 +60,8 @@ library
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
   build-depends:
     , base        ^>=4.14
+    , binary
+    , bytestring
     , containers
     , directory
     , filepath
@@ -74,7 +76,6 @@ library
     , async
     , atomic-primops
     , brick
-    , bytestring
     , direct-sqlite
     , ghc-prim
     , hashable

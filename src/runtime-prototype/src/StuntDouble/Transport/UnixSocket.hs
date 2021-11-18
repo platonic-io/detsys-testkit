@@ -27,15 +27,18 @@ import StuntDouble.Transport
 ------------------------------------------------------------------------
 
 unixSocketTransport :: FilePath -> EventLoopName -> Codec -> IO (Transport IO)
-unixSocketTransport fp name c@(Codec encode _) = withSocketsDo $ do
+unixSocketTransport fp name codec@(Codec encode _) = withSocketsDo $ do
   queue <- newTBQueueIO 128 -- XXX: when/how does this grow?
   let udsFP = fp </> getEventLoopName name <> ".sock"
   putStrLn $ "Listening on: " <> udsFP
   cleanUpUnixDomainSocket udsFP
-  aServer <- async (runServer udsFP c queue)
+  aServer <- async (runServer udsFP codec queue)
   -- maybe we need to block until server is up?
   return Transport { transportSend = \e ->
-                       let Encode addr _corrId payload = encode e in
+                       let
+                         addr = address (envelopeReceiver e)
+                         payload = encodeEnvelope codec e
+                       in
                          transportSend' (fp </> addr <> ".sock") payload
                    , transportReceive = atomically (tryReadTBQueue queue)
                    , transportShutdown = do
@@ -46,7 +49,7 @@ unixSocketTransport fp name c@(Codec encode _) = withSocketsDo $ do
 uSocket = socket AF_UNIX Stream defaultProtocol
 
 runServer :: FilePath -> Codec -> TBQueue Envelope -> IO ()
-runServer fp (Codec _ decode) queue = do
+runServer fp codec@(Codec _ decode) queue = do
   E.bracket open close loop
   where
     open = E.bracketOnError uSocket close $ \s -> do
@@ -60,7 +63,7 @@ runServer fp (Codec _ decode) queue = do
       forkFinally (server conn) (const $ gracefulClose conn 5000)
     server conn = do
       msg <- Socket.getContents conn
-      case decode msg of
+      case decodeEnvelope codec msg of
         Left err -> error err
         Right envelope -> do
           atomically $ writeTBQueue queue envelope
