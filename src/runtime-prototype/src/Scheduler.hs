@@ -148,32 +148,32 @@ fakeScheduler executorRef (CreateTest tid cid) = Actor $ do
   q <- asyncIO (IOQuery "SELECT IFNULL(MAX(run_id), -1) + 1 FROM run_info WHERE test_id = :tid"
                 [":tid" := tid])
   on p (\(IOResultR (IORows rs)) -> case parseRows rs of
-           Nothing          -> clientResponse cid (InternalMessage "parse error")
+           Nothing          -> clientResponse cid (InternalMessage "parse error" Null)
            Just [AgendaList es] -> do
              modify $ \s ->
                s { agenda = Agenda.fromList (map (\e -> (at e, e)) es)
                  , testId = Just tid
                  }
-             clientResponse cid (InternalMessage (show es)))
+             clientResponse cid (InternalMessage (show es) Null))
   -- XXX: combine `on (p and q)` somehow? the current way we can respond to the
   -- client without having set the runId... Also this current way we can't
   -- really handle an error for the run id select?
   on q (\(IOResultR (IORows [[FInt rid]])) ->
            modify $ \s -> s { runId = Just rid })
-  return (InternalMessage "ok")
+  return (InternalMessage "ok" Null)
 fakeScheduler executorRef (ClientRequest' "LoadTest" [SInt tid, SInt rid] cid) = Actor $ do
   p <- asyncIO (IOQuery "SELECT agenda FROM test_info WHERE test_id = :tid" [":tid" := tid])
   on p (\(IOResultR (IORows rs)) -> case parseRows rs of
-           Nothing          -> clientResponse cid (InternalMessage "parse error")
+           Nothing          -> clientResponse cid (InternalMessage "parse error" Null)
            Just [AgendaList es] -> do
              modify $ \s ->
                s { agenda = Agenda.fromList (map (\e -> (at e, e)) es)
                  , testId = Just tid
                  }
-             clientResponse cid (InternalMessage (show es)))
+             clientResponse cid (InternalMessage (show es) Null))
   f <- asyncIO (IOQuery "SELECT faults FROM run_info WHERE test_id = :tid AND run_id = :rid" [":tid" := tid, ":rid" := rid])
   on f (\(IOResultR (IORows rs)) -> case parseRows rs of
-           Nothing          -> clientResponse cid (InternalMessage "parse error")
+           Nothing          -> clientResponse cid (InternalMessage "parse error" Null)
            Just [fs@Faults{}] -> do
              let (fState, fAgenda) = newFaultState fs
              modify $ \s ->
@@ -182,7 +182,7 @@ fakeScheduler executorRef (ClientRequest' "LoadTest" [SInt tid, SInt rid] cid) =
                  , agenda = agenda s <> fAgenda
                  })
              -- clientResponse cid (InternalMessage (show fs))) -- hmm should we just do one response?
-  return (InternalMessage "ok")
+  return (InternalMessage "ok" Null)
 fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
   let
     step :: Free (ActorF SchedulerState) ()
@@ -206,10 +206,10 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                                , steps       = succ (steps s)
                                }
               s <- get
-              p <- send executorRef (InternalMessage' (kind ev) (toJSON $ manipulateEvent ev (faultState s)))
+              p <- send executorRef (InternalMessage (kind ev) (toJSON $ manipulateEvent ev (faultState s)))
               -- currentLogicalTime <- Time.currentLogicalClock timeC
               -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
-              on p (\(InternalMessageR (InternalMessage' "Events" args)) -> do
+              on p (\(InternalMessageR (InternalMessage "Events" args)) -> do
                        -- XXX: we should generate an arrival time here using the seed.
                        -- XXX: with some probability duplicate the event?
                        let Success (ExecutorResponse evs _) = fromJSON args
@@ -279,7 +279,7 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                                                ",\"test_id\":" ++ show (testId s) ++
                                                ",\"run_id\":" ++ show (runId s) ++
                                                ",\"event_log\":" ++ show l ++
-                                               "}"))
+                                               "}") Null)
         TimeoutClient ae now -> do
           -- Time.advanceTime timeC now Time.BumpLogical  -- should this really bump logical?
           -- lnow <- Time.currentLogicalClock timeC
@@ -298,13 +298,13 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
   in
     Actor $ do
       firstStep step
-      return (InternalMessage "ok")
+      return (InternalMessage "ok" Null)
   where
     firstStep step = do
-      p <- send executorRef (InternalMessage' "init" (object []))
+      p <- send executorRef (InternalMessage "init" (object []))
       -- currentLogicalTime <- Time.currentLogicalClock timeC
       -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
-      let k (InternalMessageR (InternalMessage' "Events" args)) =
+      let k (InternalMessageR (InternalMessage "Events" args)) =
             let
               Success (ExecutorResponse evs _) = fromJSON args
               evs' = filter (\e -> kind e /= "ok") (concat $ map (toScheduled zeroTime) evs)
@@ -317,7 +317,7 @@ fakeScheduler _ msg = error (show msg)
 
 -- XXX: Avoid going to string, not sure if we should use bytestring or text though?
 entryToData :: Int -> Int -> UTCTime -> Bool -> Timestamped LogEntry -> String
-entryToData slt rlt rst d (Timestamped (LogSend _from _to (InternalMessage msg)) _logicalTimestamp _t)
+entryToData slt rlt rst d (Timestamped (LogSend _from _to (InternalMessage msg _args)) _logicalTimestamp _t)
   = addField "sent-logical-time" (show slt) -- XXX: we cannot use _logicalTimestamp
                                             -- here, because its when the event
                                             -- loop sent the message to the

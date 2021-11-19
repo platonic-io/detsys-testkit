@@ -662,7 +662,7 @@ makeEventLoopThreaded threaded threadpool clock seed tk atk codec dk name = do
 
 withEventLoop :: EventLoopName -> (EventLoop -> FakeClockHandle -> IO a) -> IO a
 withEventLoop name k =
-  withTransport (NamedPipe "/tmp") fakeCodec name $ \t -> do
+  withTransport (NamedPipe "/tmp") dummyCodec name $ \t -> do
     (time, h) <- fakeClockEpoch
     let seed = makeSeed 0
     disk <- fakeDisk

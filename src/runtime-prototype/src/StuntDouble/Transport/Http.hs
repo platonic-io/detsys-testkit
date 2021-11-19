@@ -24,6 +24,7 @@ import StuntDouble.Envelope
 import StuntDouble.Transport
 import StuntDouble.Reference
 import StuntDouble.Message
+import StuntDouble.Codec
 
 ------------------------------------------------------------------------
 
@@ -61,7 +62,7 @@ envelopeToRequest e = do
       url = address (envelopeReceiver e)
 
       body :: RequestBody
-      body = RequestBodyLBS (encode e)
+      body = RequestBodyLBS (encodeJSONEnvelope e)
 
   initialRequest <- parseRequest url
 
@@ -83,4 +84,4 @@ waiApp queue req respond = do
 waiRequestToEnvelope :: Wai.Request -> IO (Either String Envelope)
 waiRequestToEnvelope req = do
   body <- Wai.lazyRequestBody req
-  return (eitherDecode body)
+  return (decodeJSONEnvelope body)

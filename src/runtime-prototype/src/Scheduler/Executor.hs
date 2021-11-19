@@ -4,7 +4,10 @@
 
 module Scheduler.Executor where
 
-import Data.Aeson as Aeson
+import Control.Applicative ((<|>))
+import Data.Aeson
+import Data.Aeson.Types
+import Data.Aeson.Parser
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Char (toLower)
@@ -12,7 +15,7 @@ import Data.Ratio ((%))
 import GHC.Generics (Generic)
 
 import Scheduler.Event
-import StuntDouble
+import StuntDouble hiding (Value)
 
 ------------------------------------------------------------------------
 
@@ -26,18 +29,18 @@ instance FromJSON ExecutorResponse
 
 data UnscheduledEvent = UEMessage
   { ueEvent :: String
-  , ueArgs  :: Aeson.Value
+  , ueArgs  :: Value
   , ueTo    :: [String]
   , ueFrom  :: String
   } |
   UEOk
   { ueEvent :: String
-  , ueArgs  :: Aeson.Value
+  , ueArgs  :: Value
   , ueTo    :: [String]
   , ueFrom  :: String
   } |
   UETimer
-  { ueArgs :: Aeson.Value
+  { ueArgs :: Value
   , ueFrom :: String
   , ueDuration_ns :: Int
   }
@@ -69,14 +72,25 @@ toScheduled at (UETimer args from duration)
     duration' = fromRational $ fromIntegral duration % 1_000_000_000
 
 executorCodec :: Codec
-executorCodec = Codec encode decode
+executorCodec = Codec enc dec
   where
-    encode :: Envelope -> Encode
-    encode e = Encode (address (envelopeReceiver e))
-                      (getCorrelationId (envelopeCorrelationId e))
-                      (Aeson.encode e)
+    enc :: Message -> ByteString
+    enc (InternalMessage t v) = encode (object ["kind" .= t, "message" .= v])
+    enc msg                   = encode (genericToJSON defaultOptions msg)
 
-    decode :: ByteString -> Either String Envelope
-    decode bs = case eitherDecode bs of
-      Right x -> Right x
-      Left err -> error err
+    -- XXX: Ideally we want to use:
+    -- https://hackage.haskell.org/package/aeson-1.5.5.1/docs/Data-Aeson-Parser.html#v:eitherDecodeWith
+    -- which gives an either, but as far as I can see there's no way to create a
+    -- type `(Value -> IResult a)` without `iparse`
+    -- (https://hackage.haskell.org/package/aeson-1.5.5.1/docs/src/Data.Aeson.Types.Internal.html#iparse)
+    -- which is in a hidden module...
+    dec :: ByteString -> Either String Message
+
+    dec = maybe
+            (Left "executorCodec: failed to decode")
+            Right . decodeWith json (parse parseJSON')
+      where
+        parseJSON' obj = withObject "InternalMessage" (\v -> InternalMessage
+                           <$> v .: "kind"
+                           <*> v .: "message") obj
+                         <|> genericParseJSON defaultOptions obj
