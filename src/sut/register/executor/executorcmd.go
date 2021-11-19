@@ -8,7 +8,7 @@ import (
 	"github.com/symbiont-io/detsys-testkit/src/sut/register"
 )
 
-func constructor(name string) lib.Reactor {
+func constructor(name string, logbuffer *executorEL.LogWriter) lib.Reactor {
 	switch name {
 	case "frontend":
 		return sut.NewFrontEnd4()

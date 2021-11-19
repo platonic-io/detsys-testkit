@@ -3,12 +3,7 @@ package executorEL
 import (
 	"encoding/json"
 	"fmt"
-	// "io/ioutil"
-	// "strconv"
 	"time"
-
-	// "go.uber.org/zap"
-	// "go.uber.org/zap/zapcore"
 
 	"github.com/symbiont-io/detsys-testkit/src/lib"
 )
@@ -17,47 +12,67 @@ func jsonError(s string) string {
 	return fmt.Sprintf("{\"error\":\"%s\"}", s)
 }
 
-type StepInfo struct {
-	LogLines []string
+type ReactorStepInfo struct {
+	SimulatedTime time.Time
+	LogLines      []string
+	StateDiff     json.RawMessage
 }
 
-type ComponentUpdate = func(component string) StepInfo
+type ReactorsUpdateInfo = map[string]ReactorStepInfo
+type ReactorConstructor = func(name string, logBuffer *LogWriter) lib.Reactor
+type Buffers = map[string]*LogWriter
 
 type Executor struct {
 	Reactors     []string
+	Buffers      Buffers
 	Topology     lib.Topology
-	BuildReactor func(name string) lib.Reactor
+	BuildReactor ReactorConstructor
 	Marshaler    lib.Marshaler
-	//Update    ComponentUpdate
 }
 
-func buildTopology(constructor func(name string) lib.Reactor, reactors []string) lib.Topology {
+func buildTopology(constructor ReactorConstructor, reactors []string) (lib.Topology, Buffers) {
 	items := make([]lib.Item, 0, len(reactors))
+	buffers := make(Buffers)
 	for _, n := range reactors {
-		items = append(items, lib.Item{n, constructor(n)})
+		buffer := newLogWriter()
+		buffers[n] = buffer
+		items = append(items, lib.Item{n, constructor(n, buffer)})
 	}
-	return lib.NewTopology(items...)
+	return lib.NewTopology(items...), buffers
 }
 
-func NewExecutor(reactors []string, buildReactor func(name string) lib.Reactor, m lib.Marshaler) *Executor {
-	return &Executor{
+func NewExecutor(reactors []string, buildReactor ReactorConstructor, m lib.Marshaler) *Executor {
+	topo, buffers := buildTopology(buildReactor, reactors)
+	e := &Executor{
 		Reactors:     reactors,
-		Topology:     buildTopology(buildReactor, reactors),
+		Buffers:      buffers,
+		Topology:     topo,
 		BuildReactor: buildReactor,
 		Marshaler:    m,
-		//Update:    cu,
 	}
+	return e
+}
+
+func (ex Executor) DumpReactorLoglines(name string) []string {
+	buffer, ok := ex.Buffers[name]
+	if !ok {
+		panic(fmt.Sprintf("Couldn't find buffer for %s", name))
+	}
+	logs := buffer.dump()
+	return logs
 }
 
 func (ex Executor) Reset() {
-	ex.Topology = buildTopology(ex.BuildReactor, ex.Reactors)
+	ex.Topology, ex.Buffers = buildTopology(ex.BuildReactor, ex.Reactors)
+
 }
 
-func (el Executor) processEnvelope(env Envelope) Message {
+func (el Executor) processEnvelope(env Envelope) (Message, ReactorsUpdateInfo) {
 
 	msg := env.Message
 
 	var returnMessage json.RawMessage
+	rui := make(map[string]ReactorStepInfo)
 	switch msg.Kind {
 	case "message":
 		fallthrough
@@ -74,17 +89,33 @@ func (el Executor) processEnvelope(env Envelope) Message {
 		heapBefore := dumpHeapJson(reactor)
 		oevs := reactor.Receive(sev.At, sev.From, sev.Event)
 		heapAfter := dumpHeapJson(reactor)
-		/* heapDiff := */ jsonDiff(heapBefore, heapAfter)
-		// si := el.Update(reactorName)
+		heapDiff := jsonDiff(heapBefore, heapAfter)
+		logLines := el.DumpReactorLoglines(reactorName)
+
+		rui[reactorName] = ReactorStepInfo{
+			SimulatedTime: sev.At,
+			LogLines:      logLines,
+			StateDiff:     heapDiff,
+		}
 
 		returnMessage = lib.MarshalUnscheduledEvents(reactorName, int(env.CorrelationId), oevs)
 	case "init":
 		var inits = make([]lib.Event, 0)
 
 		reactors := el.Topology.Reactors()
-		for _, reactor := range reactors {
-			inits = append(inits,
-				lib.OutEventsToEvents(reactor, el.Topology.Reactor(reactor).Init())...)
+		for _, reactorName := range reactors {
+			reactor := el.Topology.Reactor(reactorName)
+			heapBefore := dumpHeapJson(reactor)
+			inits = append(inits, lib.OutEventsToEvents(reactorName, reactor.Init())...)
+			heapAfter := dumpHeapJson(reactor)
+			heapDiff := jsonDiff(heapBefore, heapAfter)
+			logLines := el.DumpReactorLoglines(reactorName)
+			rui[reactorName] = ReactorStepInfo{
+				SimulatedTime: time.Unix(0, 0).UTC(),
+				LogLines:      logLines,
+				StateDiff:     heapDiff,
+			}
+
 		}
 
 		bs, err := json.Marshal(struct {
@@ -106,9 +137,19 @@ func (el Executor) processEnvelope(env Envelope) Message {
 			panic(err)
 		}
 		reactor := el.Topology.Reactor(req.Reactor)
+		heapBefore := dumpHeapJson(reactor)
 		oevs := reactor.Timer(req.At)
+		heapAfter := dumpHeapJson(reactor)
+		heapDiff := jsonDiff(heapBefore, heapAfter)
+		logLines := el.DumpReactorLoglines(req.Reactor)
+		rui[req.Reactor] = ReactorStepInfo{
+			SimulatedTime: req.At,
+			LogLines:      logLines,
+			StateDiff:     heapDiff,
+		}
 		returnMessage = lib.MarshalUnscheduledEvents(req.Reactor, int(env.CorrelationId), oevs)
 	case "fault":
+		// unclear how to log this as a ReactorsStepInfo...
 		type FaultRequest struct {
 			Reactor string `json:"to"`
 			Event   string `json:"event"`
@@ -119,7 +160,8 @@ func (el Executor) processEnvelope(env Envelope) Message {
 		}
 		switch req.Event {
 		case "restart":
-			el.Topology.Insert(req.Reactor, el.BuildReactor(req.Reactor))
+			buffer := el.Buffers[req.Reactor]
+			el.Topology.Insert(req.Reactor, el.BuildReactor(req.Reactor, buffer))
 		default:
 			fmt.Printf("Unhandled fault type %s\n", req.Event)
 			panic("Unhandled fault type")
@@ -137,5 +179,5 @@ func (el Executor) processEnvelope(env Envelope) Message {
 		fmt.Printf("Unknown message type: %#v\n", msg.Kind)
 		panic("Unknown message type")
 	}
-	return Message{"Events", returnMessage}
+	return Message{"Events", returnMessage}, rui
 }

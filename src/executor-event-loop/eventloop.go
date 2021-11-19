@@ -108,7 +108,10 @@ func (el *EventLoop) Run() {
 			me := envelope.Receiver.ToLocal()
 			el.LogicalTime.Merge(envelope.LogicalTime)
 			el.AddToLog(LogResumeContinuation, me, envelope.Message)
-			outgoingMessage := el.Executor.processEnvelope(envelope)
+			outgoingMessage, _ /*rui*/ := el.Executor.processEnvelope(envelope)
+			// TODO we should add rui to the log
+			// el.LogicalTime.Incr()
+			// el.AddToLog()
 			el.LogicalTime.Incr()
 			outgoing := el.toSchedulerEnvelope(envelope.Receiver, outgoingMessage, envelope.CorrelationId)
 			el.AddToLog(LogSend, me, outgoingMessage)
