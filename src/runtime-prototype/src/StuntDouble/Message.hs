@@ -42,8 +42,7 @@ instance ToJSON SDatatype
 instance FromJSON SDatatype
 
 data Message
-  = InternalMessage String -- XXX: remove unprimed variants...
-  | InternalMessage' Tag Value
+  = InternalMessage Tag Value
   | ClientRequest Tag ClientRef
   | ClientRequest' Tag Args ClientRef
   | ClientRequest'' Tag Args
@@ -54,15 +53,13 @@ instance ToJSON Message
 instance FromJSON Message
 
 getMessage :: Message -> String
-getMessage (InternalMessage msg) = msg
-getMessage (InternalMessage' msg _args) = msg
+getMessage (InternalMessage msg _args) = msg
 getMessage (ClientRequest msg _cid) = msg
 getMessage (ClientRequest' msg _args _cid) = msg
 getMessage (ClientRequest'' msg _args) = msg
 
 getArgs :: Message -> Args
-getArgs InternalMessage {}               = []
-getArgs (InternalMessage' _msg args)     = [SValue args]
+getArgs (InternalMessage _msg args)      = [SValue args]
 getArgs ClientRequest {}                 = []
 getArgs (ClientRequest' _msg args _cref) = args
 getArgs (ClientRequest'' _msg args)      = args

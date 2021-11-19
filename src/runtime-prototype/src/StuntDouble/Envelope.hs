@@ -44,6 +44,9 @@ data Envelope' msg = Envelope
   }
   deriving (Eq, Show, Read, Generic)
 
+-- XXX: We probably want to remove this instance and have a separate envelope
+-- codec in the future, which should probably come with a companion message
+-- codec.
 instance FromJSON msg => FromJSON (Envelope' msg)
 
 replyEnvelope :: Envelope' msg -> Message -> Envelope

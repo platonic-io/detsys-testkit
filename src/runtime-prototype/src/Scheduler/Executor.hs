@@ -75,8 +75,8 @@ executorCodec :: Codec
 executorCodec = Codec enc dec
   where
     enc :: Message -> ByteString
-    enc (InternalMessage' t v) = encode (object ["kind" .= t, "message" .= v])
-    enc msg                    = encode (genericToJSON defaultOptions msg)
+    enc (InternalMessage t v) = encode (object ["kind" .= t, "message" .= v])
+    enc msg                   = encode (genericToJSON defaultOptions msg)
 
     -- XXX: Ideally we want to use:
     -- https://hackage.haskell.org/package/aeson-1.5.5.1/docs/Data-Aeson-Parser.html#v:eitherDecodeWith
@@ -90,7 +90,7 @@ executorCodec = Codec enc dec
             (Left "executorCodec: failed to decode")
             Right . decodeWith json (parse parseJSON')
       where
-        parseJSON' obj = withObject "InternalMessage'" (\v -> InternalMessage'
+        parseJSON' obj = withObject "InternalMessage" (\v -> InternalMessage
                            <$> v .: "kind"
                            <*> v .: "message") obj
                          <|> genericParseJSON defaultOptions obj
