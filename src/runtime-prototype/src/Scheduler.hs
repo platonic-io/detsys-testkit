@@ -1,24 +1,25 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Scheduler where
 
 import Data.Aeson
-import qualified Data.Text.Encoding as Text
 import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Data.Text.Encoding as Text
 import Data.Time (UTCTime)
+import qualified Data.Time.Clock as Time
 import Database.SQLite.Simple
 import GHC.Generics (Generic)
-import qualified Data.Time.Clock as Time -- XXX: remove
 
-import Scheduler.Event
-import Scheduler.Executor
-import Scheduler.Fault (newFaultState, shouldDrop, manipulateEvent)
-import Scheduler.Faults (Faults(Faults))
-import Scheduler.State
 import Scheduler.Agenda (Agenda)
 import qualified Scheduler.Agenda as Agenda
+import Scheduler.Event
+import Scheduler.Executor
+       (ExecutorResponse(ExecutorResponse), isOk, toScheduled)
+import Scheduler.Fault (manipulateEvent, newFaultState, shouldDrop)
+import Scheduler.Faults (Faults(Faults))
+import Scheduler.State
 import StuntDouble
 
 ------------------------------------------------------------------------
@@ -206,15 +207,20 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                                , steps       = succ (steps s)
                                }
               s <- get
-              p <- send executorRef (InternalMessage (kind ev) (toJSON $ manipulateEvent ev (faultState s)))
+              p <- send executorRef (InternalMessage (kind ev)
+                                     (toJSON (manipulateEvent ev (faultState s))))
               -- currentLogicalTime <- Time.currentLogicalClock timeC
               -- emitEvent traceC clientC testId runId dropped currentLogicalTime ae
               on p (\(InternalMessageR (InternalMessage "Events" args)) -> do
-                       -- XXX: we should generate an arrival time here using the seed.
                        -- XXX: with some probability duplicate the event?
                        let Success (ExecutorResponse evs _) = fromJSON args
-                           evs' = filter (\e -> kind e /= "ok") (concat $ map (toScheduled t) evs)
-                           agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
+                           evs' = filter isOk evs
+                           -- XXX: make it possible to change this value from failure spec:
+                           mean = 20
+                       ts <- map (addTime t . fromRational . toRational)
+                               <$> randomListOfExp (length evs') mean
+                       let evs'' = concat (zipWith toScheduled ts evs)
+                           agenda' = Agenda.fromList (map (\e -> (at e, e)) evs'')
                        modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
 
                        -- (cr, entries) <- partitionOutEvent clientC currentLogicalTime events
@@ -307,7 +313,8 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
       let k (InternalMessageR (InternalMessage "Events" args)) =
             let
               Success (ExecutorResponse evs _) = fromJSON args
-              evs' = filter (\e -> kind e /= "ok") (concat $ map (toScheduled zeroTime) evs)
+              evs' = filter (\e -> kind e /= "ok")
+                       (concatMap (toScheduled zeroTime) evs)
               agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
             in do
               modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
