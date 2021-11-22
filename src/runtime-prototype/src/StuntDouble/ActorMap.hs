@@ -274,7 +274,7 @@ logEvent l e lt t = atomically (modifyTVar l (appendLog e lt t))
 logDump :: EventLoop -> IO String
 logDump ls = do
   l <- readTVarIO (lsLog ls)
-  return (getLog l)
+  return (getLog (lsLogCodec ls) l)
 
 logReset :: EventLoop -> IO ()
 logReset ls = atomically (modifyTVar (lsLog ls) (const emptyLog))
@@ -489,13 +489,14 @@ data EventLoop = EventLoop
   , lsPids           :: TVar [Async ()]
   , lsNextPromise    :: TVar Promise
   , lsLog            :: TVar Log
+  , lsLogCodec       :: Codec
   , lsMetrics        :: Metrics
   , lsIOQueue        :: TBQueue (IOOp, Promise)
   }
 
 initLoopState :: EventLoopName -> Clock -> Seed -> Transport IO -> AdminTransport -> Disk IO
-              -> IO EventLoop
-initLoopState name clock seed transport adminTransport disk =
+              -> Codec -> IO EventLoop
+initLoopState name clock seed transport adminTransport disk logCodec =
   EventLoop
     <$> pure name
     <*> newTVarIO emptyActorMap
@@ -510,6 +511,7 @@ initLoopState name clock seed transport adminTransport disk =
     <*> newTVarIO []
     <*> newTVarIO (Promise 0)
     <*> newTVarIO emptyLog
+    <*> pure logCodec
     <*> newMetrics
     <*> newTBQueueIO 128 -- XXX: longer?
 
@@ -632,7 +634,7 @@ makeEventLoopThreaded threaded threadpool clock seed tk atk codec dk name = do
   d <- case dk of
          FakeDisk    -> fakeDisk
          RealDisk fp -> realDisk fp
-  ls <- initLoopState name clock seed t at d
+  ls <- initLoopState name clock seed t at d codec
   workerPids <- spawnIOWorkers threadpool ls
   pids <- case threaded of
             SingleThreaded ->
@@ -667,7 +669,7 @@ withEventLoop name k =
     let seed = makeSeed 0
     disk <- fakeDisk
     at <- namedPipeAdminTransport "/tmp" name
-    ls <- initLoopState name time seed t at disk
+    ls <- initLoopState name time seed t at disk dummyCodec
     a <- async (runHandlers seed
                  [ handleInbound1 ls
                  , handleAsyncIO1 ls

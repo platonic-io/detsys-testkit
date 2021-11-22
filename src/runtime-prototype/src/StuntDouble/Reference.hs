@@ -10,7 +10,10 @@ import Data.String
 ------------------------------------------------------------------------
 
 newtype LocalRef = LocalRef Int
-  deriving (Eq, Ord, Show, Read)
+  deriving (Eq, Ord, Show, Read, Generic)
+
+instance FromJSON LocalRef
+instance ToJSON LocalRef
 
 data RemoteRef = RemoteRef
   { address :: String
