@@ -60,6 +60,10 @@ instance FromJSON UnscheduledEvent where
     where
       kebabify = map (\x -> if x == '_' then '-' else x)
 
+isOk :: UnscheduledEvent -> Bool
+isOk UEOk {}    = True
+isOk _otherwise = False
+
 toScheduled :: Time -> UnscheduledEvent -> [SchedulerEvent]
 toScheduled at (UEMessage event args tos from)
   = [ SchedulerEvent "message" event args to from at Nothing | to <- tos]
