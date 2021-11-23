@@ -1,8 +1,8 @@
 package executorEL
 
 import (
+	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -65,12 +65,11 @@ func (el *EventLoop) processAdmin(cmd AdminCommand) bool {
 		return true
 	case AdminDumpLog:
 		fmt.Printf("dumping log\n")
-		log := make([]string, 0, len(el.Log))
-		for _, e := range el.Log {
-			log = append(log, e.Serialise())
+		toSend, err := json.Marshal(el.Log)
+		if err != nil {
+			panic(err)
 		}
-		toSend := "Log [" + strings.Join(log, ", ") + "]\n"
-		cmd.Response(toSend)
+		cmd.Response(string(toSend))
 		return false
 	case AdminResetLog:
 		fmt.Printf("resetting log\n")

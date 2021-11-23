@@ -23,6 +23,7 @@ import qualified Network.Socket.ByteString.Lazy as Socket
 
 import StuntDouble
 import qualified StuntDouble.Transport.UnixSocket as US
+import Scheduler.Executor (executorCodec)
 
 ------------------------------------------------------------------------
 
@@ -48,7 +49,9 @@ readLogFrom el = do
       s <- wait a
       putStrLn "Got the following log:"
       putStrLn s
-      return (Just (read s))
+      case parseLog (NodeName el) executorCodec (LBS.pack s) of
+         Left x -> putStrLn x >> pure Nothing
+         Right x -> pure $ Just x
 
 readLog :: IO (Maybe Log)
 readLog = readLogFrom "scheduler"
@@ -64,7 +67,9 @@ readLogExecutor = withSocketsDo $ do
       msg <- Socket.getContents c
       putStrLn "Got back from executor"
       putStrLn $ LBS.unpack msg
-      return . Just $ read (LBS.unpack msg)
+      case parseLog (NodeName "executor") executorCodec msg of
+         Left x -> putStrLn x >> pure Nothing
+         Right x -> pure $ Just x
     open = E.bracketOnError US.uSocket close $ \s -> do
       connect s (SockAddrUnix "/tmp/executor-admin.sock")
       return s
