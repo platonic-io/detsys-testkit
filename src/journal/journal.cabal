@@ -1,0 +1,76 @@
+cabal-version:      2.4
+name:               journal
+version:            0.0.0
+
+-- A short (one-line) description of the package.
+-- synopsis:
+
+-- A longer description of the package.
+-- description:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+
+license:
+license-file:       LICENSE
+author:             Stevan Andjelkovic, Daniel Gustafsson
+maintainer:         symbiont-stevan-andjelkovic@users.noreply.github.com
+copyright:          Copyright (c) 2021 Symbiont Inc
+category:           Concurrency, Data Structures
+tested-with:        GHC ==8.10.7
+extra-source-files:
+  CHANGELOG.md
+  LICENSE
+  README.md
+
+library
+  hs-source-dirs:   src/
+  -- XXX: separate boot deps from other deps
+  build-depends:
+    , async
+    , base        ^>=4.14.1.0
+    , bytestring
+    , stm
+    , mmap
+    , network
+
+  exposed-modules:
+    Journal
+    Journal.Internal
+    Journal.Types
+
+  ghc-options:      -O2
+  default-language: Haskell2010
+
+test-suite test
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test/
+  main-is:          Main.hs
+  other-modules:
+    JournalTest
+    TastyDiscover
+
+  build-depends:
+    , base
+    , bytestring
+    , HUnit
+    , journal
+    , QuickCheck
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
+  default-language: Haskell2010
+
+executable journal
+  main-is:          Main.hs
+
+  -- Modules included in this executable, other than Main.
+  -- other-modules:
+
+  -- LANGUAGE extensions used by modules in this package.
+  -- other-extensions:
+  build-depends:    base ^>=4.14.1.0
+  hs-source-dirs:   app
+  default-language: Haskell2010
