@@ -31,7 +31,10 @@ library
     , async
     , base        ^>=4.14.1.0
     , bytestring
+    , directory
+    , filepath
     , stm
+    , mmap
     , network
 
   exposed-modules:
@@ -74,7 +77,7 @@ executable journal
   build-depends:
     , base     ^>=4.14.1.0
     , bytestring
-    , mmap
+    , journal
     , network
 
   hs-source-dirs:   app

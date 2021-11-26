@@ -6,7 +6,7 @@ import Journal.Types
 
 ------------------------------------------------------------------------
 
-claim :: Int -> Journal -> IO Position
+claim :: Bytes -> Journal -> IO (Maybe Offset)
 claim bytes = undefined
   -- if bytes + offset <= jMaxSize then write to active file
   -- if bytes + offset > jMaxSize then
@@ -18,6 +18,10 @@ claim bytes = undefined
 
   --    continuing on the above example say we are trying to write 100 bytes we get offset 1200
   -- if bytes + offset > jMaxS
+
+writeHeader :: Journal -> Int -> IO ()
+writeHeader = undefined
+ -- version
 
 -- | "active" file becomes "dirty", and the "clean" file becomes the new
 -- "active" file.
