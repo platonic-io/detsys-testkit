@@ -3,33 +3,37 @@ module Main where
 import Control.Concurrent (forkFinally)
 import qualified Control.Exception as E
 import Control.Monad (unless, forever, void)
-import qualified Data.ByteString.Char8 as BS
+import Data.ByteString (ByteString)
+import Data.ByteString.Internal (w2c)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSChar8
 import Network.Socket
-import Network.Socket.ByteString (sendAll)
-import System.IO.MMap
+import Network.Socket.ByteString (sendAll, recv)
 import Data.Word
+import Data.Char (ord)
 import Foreign.Ptr
+import Data.Int (Int32)
+import Data.Bits (shiftL, (.|.))
+
+import Journal
 
 ------------------------------------------------------------------------
 
 main :: IO ()
 main = do
-  mmapWithFilePtr "/tmp/mmap.txt" ReadWrite Nothing $ \(ptr, len) -> do
-    putStrLn ("Memory mapped file length: " ++ show len)
-    -- XXX: advance ptr past all written data using headers (len above is merely
-    -- the size of the file not the contents).
-    putStrLn "Listening on localhost:3000"
-    runTCPServer Nothing "3000" (go (castPtr ptr))
+  jour <- startJournal "/tmp/journal" defaultOptions
+  putStrLn "Starting TCP server on port 3000"
+  runTCPServer Nothing "3000" (go jour)
   where
-    go :: Ptr Word8 -> Socket -> IO ()
-    go buf sock = do
-      putStrLn "Waiting for client..."
-      rx <- recvBuf sock buf 1024
-      if rx == 0
-      then putStrLn "Done"
+    go :: Journal -> Socket -> IO ()
+    go jour sock = do
+      putStrLn "A client connected..."
+      rxBytes <- appendRecv jour sock 4096
+      if rxBytes == 4096
+      then putStrLn "TODO: There's more to read"
       else do
-        sendAll sock (BS.pack ("Appended " ++ show rx ++ " bytes\n"))
-        go (buf `plusPtr` rx) sock
+        sendAll sock (BSChar8.pack ("Appended " ++ show rxBytes ++ " bytes\n"))
+        go jour sock
 
 ------------------------------------------------------------------------
 
