@@ -6,8 +6,14 @@ import Journal.Types
 
 ------------------------------------------------------------------------
 
-claim :: Bytes -> Journal -> IO (Maybe Offset)
-claim bytes = undefined
+-- | The size of the journal entry header in bytes.
+hEADER_SIZE :: Int
+hEADER_SIZE = 0 -- XXX
+
+claim :: Journal -> Int -> IO Int
+claim jour bytes = incrCounter (bytes + hEADER_SIZE) (jOffset jour)
+
+  -- XXX:
   -- if bytes + offset <= jMaxSize then write to active file
   -- if bytes + offset > jMaxSize then
   --    if offset - jMaxSize == bytes then rotate files

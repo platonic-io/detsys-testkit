@@ -28,12 +28,13 @@ main = do
     go :: Journal -> Socket -> IO ()
     go jour sock = do
       putStrLn "A client connected..."
-      rxBytes <- appendRecv jour sock 4096
-      if rxBytes == 4096
-      then putStrLn "TODO: There's more to read"
+      rxBs <- tee jour sock 5
+      putStrLn ("Received: `" ++ BSChar8.unpack rxBs ++ "'")
+      if BS.null rxBs
+      then return ()
       else do
-        sendAll sock (BSChar8.pack ("Appended " ++ show rxBytes ++ " bytes\n"))
-        go jour sock
+        sendAll sock (BSChar8.pack ("Appended " ++ show (BS.length rxBs) ++ " bytes\n"))
+        -- go jour sock
 
 ------------------------------------------------------------------------
 

@@ -14,17 +14,22 @@ newtype Bytes = Bytes Int
 newtype BytesRead = BytesRead Int
 newtype Offset = Offset Int
 
-newtype BytesCounter = BytesCounter (IORef Int)
+newtype AtomicCounter = AtomicCounter (IORef Int)
 
-newBytesCounter :: Int -> IO BytesCounter
-newBytesCounter offset = do
-  ref <- newIORef offset
-  return (BytesCounter ref)
+newCounter :: Int -> IO AtomicCounter
+newCounter i = AtomicCounter <$> newIORef i
+
+incrCounter :: Int -> AtomicCounter -> IO Int
+incrCounter i (AtomicCounter ref) = atomicModifyIORef' ref (\j -> (i + j, j))
+
+incrCounter_ :: Int -> AtomicCounter -> IO ()
+incrCounter_ i (AtomicCounter ref) = atomicModifyIORef' ref (\j -> (i + j, ()))
 
 data Journal = Journal
   { jPtr          :: !(TVar (Ptr Word8))
-  , jBytesWritten :: !BytesCounter
-  , jMaxByteSize  :: !Int
+  , jOffset       :: {-# UNPACK #-} !AtomicCounter
+  , jMaxByteSize  :: {-# UNPACK #-} !Int
+  , jFileCount    :: {-# UNPACK #-} !AtomicCounter
   -- , jFile     :: {-# UNPACK #-} !(TVar FilePath)
   -- , jOffset   :: {-# UNPACK #-} !(TVar Word64) -- Tail.
   -- , jSequence :: {-# UNPACK #-} !(TVar Word64)
@@ -38,11 +43,6 @@ newJournalPtrRef = newTVarIO
 
 getJournalPtr :: Journal -> IO (Ptr Word8)
 getJournalPtr = atomically . readTVar . jPtr
-
--- XXX: remove, can be (re)calculate dfrom jBytesWritten
-advanceJournalPtr :: Journal -> Int -> IO ()
-advanceJournalPtr jour bytes = atomically $
-  modifyTVar' (jPtr jour) (`plusPtr` bytes)
 
 data Metrics = Metrics
   { mAbortedConnections :: Word32

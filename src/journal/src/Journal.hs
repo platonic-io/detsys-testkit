@@ -23,6 +23,7 @@ import System.FilePath ((</>))
 import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
 import Journal.Types
+import Journal.Internal
 
 ------------------------------------------------------------------------
 
@@ -39,18 +40,21 @@ startJournal dir (Options maxByteSize) = do
   offset <- do
     activeExists <- doesFileExist (dir </> "active")
     if activeExists
-    then
-      -- XXX: What if the user writes a NUL? Safer to use takeWhileEnd and
-      -- subtract from maxByteSize?
-      BS.length . BS.takeWhile (/= (fromIntegral 0)) <$> BS.readFile (dir </> "active")
+    then do
+      nuls <- BS.length . BS.takeWhileEnd (== (fromIntegral 0)) <$>
+                BS.readFile (dir </> "active")
+      return (maxByteSize - nuls)
     else return 0
+
+  putStrLn ("Offset: " ++ show offset)
 
   (ptr, _rawSize, _offset, _size) <-
     mmapFilePtr (dir </> "active") ReadWriteEx (Just (fromIntegral offset, maxByteSize))
   -- XXX: assert max size
-  bytesWritten <- newBytesCounter offset
+  bytesWrittenCounter <- newCounter offset
   ptrRef <- newJournalPtrRef (ptr `plusPtr` offset)
-  return (Journal ptrRef bytesWritten maxByteSize)
+  fileCounter <- newCounter 0
+  return (Journal ptrRef bytesWrittenCounter maxByteSize fileCounter)
 
 ------------------------------------------------------------------------
 
@@ -61,19 +65,20 @@ appendBS = undefined
 
 tee :: Journal -> Socket -> Int -> IO ByteString
 tee jour sock len = do
-  offset <- return 0 -- XXX: use claim to get this
+  offset <- claim jour len
+  putStrLn ("tee: offset = " ++ show offset)
   buf <- getJournalPtr jour
-  receivedBytes <- recvBuf sock buf len
-  advanceJournalPtr jour receivedBytes
+  receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
+  -- XXX: write header
   fptr <- newForeignPtr_ buf
   return (BS.copy (fromForeignPtr fptr offset len))
 
 appendRecv :: Journal -> Socket -> Int -> IO Int
 appendRecv jour sock len = do
-  -- claim
+  offset <- claim jour len
   buf <- getJournalPtr jour
-  receivedBytes <- recvBuf sock buf len
-  advanceJournalPtr jour receivedBytes
+  receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
+  -- XXX: write header
   return receivedBytes
 
 ------------------------------------------------------------------------
