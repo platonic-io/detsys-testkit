@@ -3,7 +3,7 @@
 -- Module      :  StuntDouble.Histogram
 -- Copyright   :  (C) 2021, Symbiont Inc; (C) 2016, Tyler Neely; (C) 2014, The
 --                Cockroach Authors.
--- License     :  Apache-2.0 (see the file LICENSE)
+-- License     :  MIT and Apache-2.0 (see the file LICENSE)
 --
 -- Maintainer  :  Stevan Andjelkovic <stevan.andjelkovic@symbiont.io>
 -- Stability   :  provisional
