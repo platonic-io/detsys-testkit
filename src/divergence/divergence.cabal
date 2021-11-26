@@ -6,7 +6,7 @@ description:
   See README at <https://github.com/symbiont-io/detsys-testkit/tree/main/src/divergence#readme>
 
 bug-reports:        https://github.com/symbiont-io/detsys-testkit/issues
-license:            AllRightsReserved
+license:            MIT
 license-file:       LICENSE
 author:             Daniel Gustafsson
 maintainer:         symbiont-daniel-gustafsson@users.noreply.github.com
