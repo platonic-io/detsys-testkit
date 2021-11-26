@@ -32,7 +32,9 @@ cleanDirtyFile = undefined
 spawnCleaningThread :: IO (Async ())
 spawnCleaningThread = undefined
 
-data Inconsistency = Inconsistency
+data Inconsistency
+  = PartialReceived
+  | PartialRotation
 
 checkForInconsistencies :: Journal -> IO [Inconsistency]
 checkForInconsistencies = undefined

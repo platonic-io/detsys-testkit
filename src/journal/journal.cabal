@@ -25,13 +25,13 @@ extra-source-files:
 
 library
   hs-source-dirs:   src/
+
   -- XXX: separate boot deps from other deps
   build-depends:
     , async
     , base        ^>=4.14.1.0
     , bytestring
     , stm
-    , mmap
     , network
 
   exposed-modules:
@@ -71,6 +71,11 @@ executable journal
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
-  build-depends:    base ^>=4.14.1.0
+  build-depends:
+    , base     ^>=4.14.1.0
+    , bytestring
+    , mmap
+    , network
+
   hs-source-dirs:   app
   default-language: Haskell2010
