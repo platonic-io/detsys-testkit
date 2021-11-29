@@ -57,7 +57,7 @@ startJournal dir (Options maxByteSize) = do
   fileCounter <- newCounter 0
   bytesConsumedCounter <- newCounter 0
   return (Journal ptrRef bytesProducedCounter maxByteSize fileCounter,
-          JournalConsumer jcPtrRef bytesProducedCounter bytesConsumedCounter)
+          JournalConsumer jcPtrRef bytesConsumedCounter)
 
 ------------------------------------------------------------------------
 

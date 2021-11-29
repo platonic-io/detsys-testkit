@@ -58,7 +58,6 @@ data Options = Options
 
 data JournalConsumer = JournalConsumer
    { jcPtr           :: {-# UNPACK #-} !(IORef (Ptr Word8))
-   , jcBytesProduced :: {-# UNPACK #-} !AtomicCounter
    , jcBytesConsumed :: {-# UNPACK #-} !AtomicCounter
    }
 
