@@ -62,7 +62,7 @@ waitForHeader ptr offset = go
   where
     go = do
       len <- readHeader (ptr `plusPtr` offset)
-      -- TODO: This will break if we write a bytestring of length 0
+      -- TODO: This will break if we write a bytestring of length zero.
       if len == 0
       then go
       else return len
