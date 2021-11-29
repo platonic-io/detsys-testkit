@@ -1,6 +1,12 @@
 module Journal.Internal where
 
 import Control.Concurrent.Async
+import Data.Binary (encode, decode)
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as LBS
+import Data.Word (Word8, Word32)
+import Foreign.Ptr (Ptr, plusPtr)
+import Foreign.Storable (pokeByteOff, peekByteOff)
 
 import Journal.Types
 
@@ -8,7 +14,9 @@ import Journal.Types
 
 -- | The size of the journal entry header in bytes.
 hEADER_SIZE :: Int
-hEADER_SIZE = 0 -- XXX
+hEADER_SIZE = 4 -- sizeOf (0 :: Word32)
+  -- XXX: version?
+  -- XXX: CRC?
 
 claim :: Journal -> Int -> IO Int
 claim jour bytes = incrCounter (bytes + hEADER_SIZE) (jOffset jour)
@@ -25,9 +33,39 @@ claim jour bytes = incrCounter (bytes + hEADER_SIZE) (jOffset jour)
   --    continuing on the above example say we are trying to write 100 bytes we get offset 1200
   -- if bytes + offset > jMaxS
 
-writeHeader :: Journal -> Int -> IO ()
-writeHeader = undefined
- -- version
+-- XXX: Use Data.Primitive.ByteArray.copyMutableByteArrayToPtr instead?
+writeLBSToPtr :: ByteString -> Ptr Word8 -> IO ()
+writeLBSToPtr bs ptr | LBS.null bs = return ()
+                     | otherwise   = go (fromIntegral (LBS.length bs - 1))
+  where
+    go :: Int -> IO ()
+    go 0 = pokeByteOff ptr 0 (LBS.index bs 0)
+    go n = do
+      pokeByteOff ptr n (LBS.index bs (fromIntegral n))
+      go (n - 1)
+
+writeHeader :: Ptr Word8 -> Int -> IO ()
+writeHeader ptr len = do
+  let header = encode (fromIntegral len :: Word32)
+  writeLBSToPtr header ptr
+
+readHeader :: Ptr Word8 -> IO Int
+readHeader ptr = do
+  b0 <- peekByteOff ptr 0
+  b1 <- peekByteOff ptr 1
+  b2 <- peekByteOff ptr 2
+  b3 <- peekByteOff ptr 3
+  return (fromIntegral (decode (LBS.pack [b0, b1, b2, b3]) :: Word32))
+
+waitForHeader :: Ptr Word8 -> Int -> IO Int
+waitForHeader ptr offset = go
+  where
+    go = do
+      len <- readHeader (ptr `plusPtr` offset)
+      -- TODO: This will break if we write a bytestring of length 0
+      if len == 0
+      then go
+      else return len
 
 -- | "active" file becomes "dirty", and the "clean" file becomes the new
 -- "active" file.

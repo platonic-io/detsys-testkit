@@ -5,6 +5,7 @@ module Journal
   , appendBS
   , tee
   , appendRecv
+  , readJournal
   , truncateAfterSnapshot
   , replay
   , replay_
@@ -19,11 +20,12 @@ import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (plusPtr)
 import Network.Socket (Socket, recvBuf)
 import System.Directory
+       (createDirectoryIfMissing, doesDirectoryExist, doesFileExist)
 import System.FilePath ((</>))
 import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
-import Journal.Types
 import Journal.Internal
+import Journal.Types
 
 ------------------------------------------------------------------------
 
@@ -32,7 +34,7 @@ import Journal.Internal
 defaultOptions :: Options
 defaultOptions = Options 1024
 
-startJournal :: FilePath -> Options -> IO Journal
+startJournal :: FilePath -> Options -> IO (Journal, JournalConsumer)
 startJournal dir (Options maxByteSize) = do
   dirExists <- doesDirectoryExist dir
   unless dirExists (createDirectoryIfMissing True dir)
@@ -46,39 +48,42 @@ startJournal dir (Options maxByteSize) = do
       return (maxByteSize - nuls)
     else return 0
 
-  putStrLn ("Offset: " ++ show offset)
-
   (ptr, _rawSize, _offset, _size) <-
     mmapFilePtr (dir </> "active") ReadWriteEx (Just (fromIntegral offset, maxByteSize))
   -- XXX: assert max size
-  bytesWrittenCounter <- newCounter offset
+  bytesProducedCounter <- newCounter offset
   ptrRef <- newJournalPtrRef (ptr `plusPtr` offset)
+  jcPtrRef <- newJournalConsumerPtrRef ptr
   fileCounter <- newCounter 0
-  return (Journal ptrRef bytesWrittenCounter maxByteSize fileCounter)
+  bytesConsumedCounter <- newCounter 0
+  return (Journal ptrRef bytesProducedCounter maxByteSize fileCounter,
+          JournalConsumer jcPtrRef bytesProducedCounter bytesConsumedCounter)
 
 ------------------------------------------------------------------------
 
 -- * Production
 
+-- NOTE: pre-condition: `BS.length bs > 0`
 appendBS :: Journal -> ByteString -> IO ()
-appendBS = undefined
+appendBS jour bs = undefined
 
+-- NOTE: pre-condition: `len` > 0
 tee :: Journal -> Socket -> Int -> IO ByteString
 tee jour sock len = do
   offset <- claim jour len
-  putStrLn ("tee: offset = " ++ show offset)
   buf <- getJournalPtr jour
   receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
-  -- XXX: write header
+  writeHeader (buf `plusPtr` offset) len
   fptr <- newForeignPtr_ buf
-  return (BS.copy (fromForeignPtr fptr offset len))
+  return (BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len))
 
+-- NOTE: pre-condition: `len` > 0
 appendRecv :: Journal -> Socket -> Int -> IO Int
 appendRecv jour sock len = do
   offset <- claim jour len
   buf <- getJournalPtr jour
   receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
-  -- XXX: write header
+  writeHeader (buf `plusPtr` offset) len
   return receivedBytes
 
 ------------------------------------------------------------------------
@@ -86,14 +91,21 @@ appendRecv jour sock len = do
 -- * Consumption
 
 readJournal :: JournalConsumer -> IO ByteString
-readJournal = undefined
+readJournal jc = do
+  ptr <- getJournalConsumerPtr jc
+  offset <- incrCounter hEADER_SIZE (jcBytesConsumed jc)
+  len <- waitForHeader ptr offset
+  fptr <- newForeignPtr_ ptr
+  let bs = BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len)
+  incrCounter_ len (jcBytesConsumed jc)
+  return bs
 
 ------------------------------------------------------------------------
 
 -- * Snapshots and replay
 
-truncateAfterSnapshot :: Journal -> BytesRead -> IO ()
-truncateAfterSnapshot = undefined
+truncateAfterSnapshot :: Journal -> Int -> IO ()
+truncateAfterSnapshot jour bytesRead = undefined
 
 replay :: Journal -> (ByteString -> IO a) -> IO [a]
 replay = undefined
