@@ -26,14 +26,18 @@ extra-source-files:
 library
   hs-source-dirs:   src/
 
-  -- XXX: separate boot deps from other deps
+  -- GHC boot library dependencies:
+  -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
   build-depends:
-    , async
     , base        ^>=4.14.1.0
+    , binary
     , bytestring
     , directory
     , filepath
     , stm
+
+  build-depends:
+    , async
     , mmap
     , network
 
@@ -75,6 +79,7 @@ executable journal
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
   build-depends:
+    , async
     , base     ^>=4.14.1.0
     , bytestring
     , journal

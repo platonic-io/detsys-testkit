@@ -9,11 +9,6 @@ import Foreign.Ptr (Ptr, plusPtr)
 
 ------------------------------------------------------------------------
 
-newtype Bytes = Bytes Int
-
-newtype BytesRead = BytesRead Int
-newtype Offset = Offset Int
-
 newtype AtomicCounter = AtomicCounter (IORef Int)
 
 newCounter :: Int -> IO AtomicCounter
@@ -24,6 +19,9 @@ incrCounter i (AtomicCounter ref) = atomicModifyIORef' ref (\j -> (i + j, j))
 
 incrCounter_ :: Int -> AtomicCounter -> IO ()
 incrCounter_ i (AtomicCounter ref) = atomicModifyIORef' ref (\j -> (i + j, ()))
+
+readCounter :: AtomicCounter -> IO Int
+readCounter (AtomicCounter ref) = readIORef ref
 
 data Journal = Journal
   { jPtr          :: !(TVar (Ptr Word8))
@@ -59,5 +57,13 @@ data Options = Options
   -- max disk space in total? multiple of maxSize?
 
 data JournalConsumer = JournalConsumer
-   { jcBytesRead :: IORef BytesRead
+   { jcPtr           :: {-# UNPACK #-} !(IORef (Ptr Word8))
+   , jcBytesProduced :: {-# UNPACK #-} !AtomicCounter
+   , jcBytesConsumed :: {-# UNPACK #-} !AtomicCounter
    }
+
+newJournalConsumerPtrRef :: Ptr Word8 -> IO (IORef (Ptr Word8))
+newJournalConsumerPtrRef = newIORef
+
+getJournalConsumerPtr :: JournalConsumer -> IO (Ptr Word8)
+getJournalConsumerPtr = readIORef . jcPtr

@@ -1,5 +1,6 @@
 module Main where
 
+import Control.Concurrent.Async (withAsync)
 import Control.Concurrent (forkFinally)
 import qualified Control.Exception as E
 import Control.Monad (unless, forever, void)
@@ -10,10 +11,7 @@ import qualified Data.ByteString.Char8 as BSChar8
 import Network.Socket
 import Network.Socket.ByteString (sendAll, recv)
 import Data.Word
-import Data.Char (ord)
 import Foreign.Ptr
-import Data.Int (Int32)
-import Data.Bits (shiftL, (.|.))
 
 import Journal
 
@@ -21,9 +19,13 @@ import Journal
 
 main :: IO ()
 main = do
-  jour <- startJournal "/tmp/journal" defaultOptions
+  (jour, jc) <- startJournal "/tmp/journal" defaultOptions
   putStrLn "Starting TCP server on port 3000"
-  runTCPServer Nothing "3000" (go jour)
+  withAsync (runProducer jour) $ \_a ->
+    runConsumer jc
+
+runProducer :: Journal -> IO ()
+runProducer jour = runTCPServer Nothing "3000" (go jour)
   where
     go :: Journal -> Socket -> IO ()
     go jour sock = do
@@ -32,9 +34,17 @@ main = do
       putStrLn ("Received: `" ++ BSChar8.unpack rxBs ++ "'")
       if BS.null rxBs
       then return ()
-      else do
+      else
         sendAll sock (BSChar8.pack ("Appended " ++ show (BS.length rxBs) ++ " bytes\n"))
-        -- go jour sock
+
+runConsumer :: JournalConsumer -> IO ()
+runConsumer jc = go 10
+  where
+    go 0 = return ()
+    go n = do
+      bs <- readJournal jc
+      putStrLn ("Consumed: `" ++ BSChar8.unpack bs ++ "'")
+      go (n - BS.length bs)
 
 ------------------------------------------------------------------------
 
