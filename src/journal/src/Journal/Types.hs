@@ -1,27 +1,27 @@
-module Journal.Types where
+module Journal.Types
+  ( Journal(Journal)
+  , jMaxByteSize
+  , jOffset
+  , Options(Options)
+  , JournalConsumer(JournalConsumer)
+  , jcBytesConsumed
+  , getJournalPtr
+  , getJournalConsumerPtr
+  , newJournalPtrRef
+  , newJournalConsumerPtrRef
+  , module Journal.Types.AtomicCounter)
+  where
 
+import Control.Concurrent.STM
 import Control.Concurrent.STM (TVar)
 import Data.ByteString (ByteString)
-import Control.Concurrent.STM
-import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
-import Data.Word (Word8, Word32, Word64)
+import Data.IORef (IORef, newIORef, readIORef)
+import Data.Word (Word32, Word64, Word8)
 import Foreign.Ptr (Ptr, plusPtr)
 
+import Journal.Types.AtomicCounter
+
 ------------------------------------------------------------------------
-
-newtype AtomicCounter = AtomicCounter (IORef Int)
-
-newCounter :: Int -> IO AtomicCounter
-newCounter i = AtomicCounter <$> newIORef i
-
-incrCounter :: Int -> AtomicCounter -> IO Int
-incrCounter i (AtomicCounter ref) = atomicModifyIORef' ref (\j -> (i + j, j))
-
-incrCounter_ :: Int -> AtomicCounter -> IO ()
-incrCounter_ i (AtomicCounter ref) = atomicModifyIORef' ref (\j -> (i + j, ()))
-
-readCounter :: AtomicCounter -> IO Int
-readCounter (AtomicCounter ref) = readIORef ref
 
 data Journal = Journal
   { jPtr          :: !(TVar (Ptr Word8))
