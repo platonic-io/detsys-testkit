@@ -38,6 +38,7 @@ library
 
   build-depends:
     , async
+    , ghc-prim
     , mmap
     , network
 
@@ -45,6 +46,7 @@ library
     Journal
     Journal.Internal
     Journal.Types
+    Journal.Types.AtomicCounter
 
   ghc-options:      -O2
   default-language: Haskell2010

@@ -11,6 +11,7 @@ module Journal
   , replay_
   ) where
 
+import Control.Monad.IO.Class (MonadIO)
 import Control.Monad (unless)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -53,11 +54,9 @@ startJournal dir (Options maxByteSize) = do
   -- XXX: assert max size
   bytesProducedCounter <- newCounter offset
   ptrRef <- newJournalPtrRef (ptr `plusPtr` offset)
-  jcPtrRef <- newJournalConsumerPtrRef ptr
   fileCounter <- newCounter 0
-  bytesConsumedCounter <- newCounter 0
-  return (Journal ptrRef bytesProducedCounter maxByteSize fileCounter,
-          JournalConsumer jcPtrRef bytesConsumedCounter)
+  jc <- JournalConsumer <$> newJournalConsumerPtrRef ptr <*> newCounter 0
+  return (Journal ptrRef bytesProducedCounter maxByteSize fileCounter, jc)
 
 ------------------------------------------------------------------------
 
@@ -93,7 +92,7 @@ appendRecv jour sock len = do
 readJournal :: JournalConsumer -> IO ByteString
 readJournal jc = do
   ptr <- getJournalConsumerPtr jc
-  offset <- incrCounter hEADER_SIZE (jcBytesConsumed jc)
+  offset <- getAndIncrCounter hEADER_SIZE (jcBytesConsumed jc)
   len <- waitForHeader ptr offset
   fptr <- newForeignPtr_ ptr
   let bs = BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len)
@@ -107,7 +106,7 @@ readJournal jc = do
 truncateAfterSnapshot :: Journal -> Int -> IO ()
 truncateAfterSnapshot jour bytesRead = undefined
 
-replay :: Journal -> (ByteString -> IO a) -> IO [a]
+replay :: MonadIO m => Journal -> (ByteString -> m a) -> m [a]
 replay = undefined
 
 replay_ :: Journal -> (ByteString -> IO ()) -> IO ()

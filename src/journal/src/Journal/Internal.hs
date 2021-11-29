@@ -9,17 +9,35 @@ import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (pokeByteOff, peekByteOff)
 
 import Journal.Types
+import Journal.Types.AtomicCounter
 
 ------------------------------------------------------------------------
 
 -- | The size of the journal entry header in bytes.
 hEADER_SIZE :: Int
 hEADER_SIZE = 4 -- sizeOf (0 :: Word32)
+  -- XXX: Some special header start byte?
   -- XXX: version?
   -- XXX: CRC?
 
 claim :: Journal -> Int -> IO Int
-claim jour bytes = incrCounter (bytes + hEADER_SIZE) (jOffset jour)
+claim jour len = do
+  offset <- getAndIncrCounter (len + hEADER_SIZE) (jOffset jour)
+  -- XXX: mod/.&. maxByteSize?
+  if offset + len <= jMaxByteSize jour
+  then return offset -- Fits in current file.
+  else if offset < jMaxByteSize jour
+       then do
+         -- First writer that overflowed the file, the second one
+         -- would have got an offset higher than `maxBytes`.
+
+         -- rotate
+         undefined
+       else do
+         -- `offset >= maxBytes`, so we clearly can't write to the current file.
+         -- Wait for the first writer that overflowed to rotate the files then
+         -- write.
+         undefined
 
   -- XXX:
   -- if bytes + offset <= jMaxSize then write to active file
@@ -45,9 +63,10 @@ writeLBSToPtr bs ptr | LBS.null bs = return ()
       go (n - 1)
 
 writeHeader :: Ptr Word8 -> Int -> IO ()
-writeHeader ptr len = do
-  let header = encode (fromIntegral len :: Word32)
-  writeLBSToPtr header ptr
+writeHeader ptr len = writeLBSToPtr header ptr
+  where
+    header :: ByteString
+    header = encode (fromIntegral len :: Word32)
 
 readHeader :: Ptr Word8 -> IO Int
 readHeader ptr = do
