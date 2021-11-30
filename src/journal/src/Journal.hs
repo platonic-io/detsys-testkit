@@ -12,6 +12,7 @@ module Journal
   , replay
   ) where
 
+import Control.Exception (assert)
 import Control.Monad (unless)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -65,32 +66,32 @@ startJournal dir (Options maxByteSize) = do
 
 -- NOTE: pre-condition: `0 < BS.length bs <= maxByteSize`
 appendBS :: Journal -> ByteString -> IO ()
-appendBS jour bs = do
+appendBS jour bs = assert (0 < BS.length bs && BS.length bs <= jMaxByteSize jour) $ do
   let len = BS.length bs
   offset <- claim jour len
   buf <- getJournalPtr jour
   writeBSToPtr bs buf
-  writeHeader (buf `plusPtr` offset) len
+  writeHeader (buf `plusPtr` offset) (makeValidHeader len)
 
 -- NOTE: pre-condition: `0 < len <= maxByteSize`
 tee :: Journal -> Socket -> Int -> IO ByteString
-tee jour sock len = do
+tee jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
   offset <- claim jour len
   buf <- getJournalPtr jour
   receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
-  writeHeader (buf `plusPtr` offset) len
+  writeHeader (buf `plusPtr` offset) (makeValidHeader len)
   fptr <- newForeignPtr_ buf
   return (BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len))
 
 -- NOTE: pre-condition: `0 < len <= maxByteSize`
 appendRecv :: Journal -> Socket -> Int -> IO Int
-appendRecv jour sock len = do
+appendRecv jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
   offset <- claim jour len
   buf <- getJournalPtr jour
   receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
   -- XXX: if receivedBytes /= len or if sock isn't connected, or other failure
   -- modes of `recv(2)`?
-  writeHeader (buf `plusPtr` offset) len
+  writeHeader (buf `plusPtr` offset) (makeValidHeader len)
   return receivedBytes
 
 ------------------------------------------------------------------------
@@ -110,14 +111,13 @@ readJournal jc = do
 readJournalNonBlocking :: JournalConsumer -> IO (Maybe ByteString)
 readJournalNonBlocking jc = do
   ptr <- getJournalConsumerPtr jc
-  offset <- getAndIncrCounter hEADER_SIZE (jcBytesConsumed jc)
+  offset <- readCounter (jcBytesConsumed jc)
   b <- headerExists ptr offset
   if not b
-  then do
-    decrCounter_ hEADER_SIZE (jcBytesConsumed jc)
-    return Nothing
+  then return Nothing
   else do
-    len <- readHeader (ptr `plusPtr` offset)
+    incrCounter_ hEADER_SIZE (jcBytesConsumed jc)
+    len <- fromIntegral . jhLength <$> readHeader (ptr `plusPtr` offset)
     fptr <- newForeignPtr_ ptr
     let bs = BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len)
     incrCounter_ len (jcBytesConsumed jc)
