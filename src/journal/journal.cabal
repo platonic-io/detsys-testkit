@@ -37,7 +37,6 @@ library
     , stm
 
   build-depends:
-    , async
     , ghc-prim
     , mmap
     , network

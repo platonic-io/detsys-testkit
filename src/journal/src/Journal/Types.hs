@@ -2,9 +2,12 @@ module Journal.Types
   ( Journal(Journal)
   , jMaxByteSize
   , jOffset
+  , jDirectory
+  , jBytesConsumed
   , Options(Options)
   , JournalConsumer(JournalConsumer)
   , jcBytesConsumed
+  , jcDirectory
   , getJournalPtr
   , getJournalConsumerPtr
   , newJournalPtrRef
@@ -24,15 +27,11 @@ import Journal.Types.AtomicCounter
 ------------------------------------------------------------------------
 
 data Journal = Journal
-  { jPtr          :: !(TVar (Ptr Word8))
-  , jOffset       :: {-# UNPACK #-} !AtomicCounter
-  , jMaxByteSize  :: {-# UNPACK #-} !Int
-  , jFileCount    :: {-# UNPACK #-} !AtomicCounter
-  -- , jFile     :: {-# UNPACK #-} !(TVar FilePath)
-  -- , jOffset   :: {-# UNPACK #-} !(TVar Word64) -- Tail.
-  -- , jSequence :: {-# UNPACK #-} !(TVar Word64)
-  -- -- jPointerToActiveFile
-  -- -- jGatingBytes :: IORef Word64
+  { jPtr           :: !(TVar (Ptr Word8))
+  , jOffset        :: {-# UNPACK #-} !AtomicCounter
+  , jMaxByteSize   :: {-# UNPACK #-} !Int
+  , jDirectory     :: !FilePath
+  , jBytesConsumed :: {-# UNPACK #-} !AtomicCounter -- jGatingBytes?
   -- , jMetrics :: Metrics
   }
 
@@ -55,11 +54,14 @@ data Options = Options
   -- archive
   -- buffer and fsync every ms?
   -- max disk space in total? multiple of maxSize?
+  -- checksum? none, crc32 or sha256?
+  -- wait strategy?
 
 data JournalConsumer = JournalConsumer
-   { jcPtr           :: {-# UNPACK #-} !(IORef (Ptr Word8))
-   , jcBytesConsumed :: {-# UNPACK #-} !AtomicCounter
-   }
+  { jcPtr           :: {-# UNPACK #-} !(IORef (Ptr Word8))
+  , jcBytesConsumed :: {-# UNPACK #-} !AtomicCounter
+  , jcDirectory     :: !FilePath
+  }
 
 newJournalConsumerPtrRef :: Ptr Word8 -> IO (IORef (Ptr Word8))
 newJournalConsumerPtrRef = newIORef

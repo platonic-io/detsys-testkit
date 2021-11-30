@@ -20,9 +20,16 @@ import Journal
 main :: IO ()
 main = do
   (jour, jc) <- startJournal "/tmp/journal" defaultOptions
+  state <- maybe (BSChar8.pack "") id <$> loadSnapshot jour
+  if BSChar8.null state
+  then putStrLn "no snapshot"
+  else putStrLn ("loaded snapshot: `" ++ BSChar8.unpack state ++ "'")
+  (n, state') <- replay jc (<>) state
+  putStrLn ("replied: " ++ show n ++ " events, " ++
+             "restored state `" ++ BSChar8.unpack state' ++ "'")
   putStrLn "Starting TCP server on port 3000"
   withAsync (runProducer jour) $ \_a ->
-    runConsumer jc
+    runConsumer jc state'
 
 runProducer :: Journal -> IO ()
 runProducer jour = runTCPServer Nothing "3000" (go jour)
@@ -37,14 +44,22 @@ runProducer jour = runTCPServer Nothing "3000" (go jour)
       else
         sendAll sock (BSChar8.pack ("Appended " ++ show (BS.length rxBs) ++ " bytes\n"))
 
-runConsumer :: JournalConsumer -> IO ()
-runConsumer jc = go 10
+runConsumer :: JournalConsumer -> ByteString -> IO ()
+runConsumer jc state0 = go 2 state0 -- snapshot every two events.
   where
-    go 0 = return ()
-    go n = do
+    go :: Int -> ByteString -> IO ()
+    go 0 state = do
+      putStrLn ("making a snapshot of: `" ++ BSChar8.unpack state ++ "'")
+      consumed <- readCounter (jcBytesConsumed jc)
+      saveSnapshot jc state consumed
+      putStrLn ("truncating active file by: " ++ show consumed ++ " bytes")
+      truncateAfterSnapshot jc consumed
+      go 2 state
+    go n state = do
+      putStrLn ("Waiting to read from journal...")
       bs <- readJournal jc
       putStrLn ("Consumed: `" ++ BSChar8.unpack bs ++ "'")
-      go (n - BS.length bs)
+      go (n - 1) (state <> bs)
 
 ------------------------------------------------------------------------
 

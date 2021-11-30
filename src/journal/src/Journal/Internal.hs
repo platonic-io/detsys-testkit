@@ -1,12 +1,12 @@
 module Journal.Internal where
 
-import Control.Concurrent.Async
-import Data.Binary (encode, decode)
-import Data.ByteString.Lazy (ByteString)
+import Control.Concurrent (threadDelay)
+import Data.Binary (decode, encode)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import Data.Word (Word8, Word32)
+import Data.Word (Word32, Word8)
 import Foreign.Ptr (Ptr, plusPtr)
-import Foreign.Storable (pokeByteOff, peekByteOff)
+import Foreign.Storable (peekByteOff, pokeByteOff)
 
 import Journal.Types
 import Journal.Types.AtomicCounter
@@ -16,9 +16,15 @@ import Journal.Types.AtomicCounter
 -- | The size of the journal entry header in bytes.
 hEADER_SIZE :: Int
 hEADER_SIZE = 4 -- sizeOf (0 :: Word32)
-  -- XXX: Some special header start byte?
+  -- XXX: Some special header start byte? e.g. 'h' (header) and 'i' (ignore/trucated)
   -- XXX: version?
   -- XXX: CRC?
+
+activeFile :: FilePath
+activeFile = "active"
+
+snapshotFile :: FilePath
+snapshotFile = "snapshot"
 
 claim :: Journal -> Int -> IO Int
 claim jour len = do
@@ -37,22 +43,23 @@ claim jour len = do
          -- `offset >= maxBytes`, so we clearly can't write to the current file.
          -- Wait for the first writer that overflowed to rotate the files then
          -- write.
+
+         -- Check if header is written to offset (if that's the case the active
+         -- file hasn't been rotated yet)
          undefined
 
-  -- XXX:
-  -- if bytes + offset <= jMaxSize then write to active file
-  -- if bytes + offset > jMaxSize then
-  --    if offset - jMaxSize == bytes then rotate files
-  --    e.g. max size = 1000, we are trying to write 100 bytes and the offset we get is 1100
-
-  --    if offset - jMaxSize > bytes then somebody else is responsive for
-  --    rotating, we know that's done when jSequence is bumped?
-
-  --    continuing on the above example say we are trying to write 100 bytes we get offset 1200
-  -- if bytes + offset > jMaxS
+writeBSToPtr :: BS.ByteString -> Ptr Word8 -> IO ()
+writeBSToPtr bs ptr | BS.null bs = return ()
+                    | otherwise  = go (fromIntegral (BS.length bs - 1))
+  where
+    go :: Int -> IO ()
+    go 0 = pokeByteOff ptr 0 (BS.index bs 0)
+    go n = do
+      pokeByteOff ptr n (BS.index bs (fromIntegral n))
+      go (n - 1)
 
 -- XXX: Use Data.Primitive.ByteArray.copyMutableByteArrayToPtr instead?
-writeLBSToPtr :: ByteString -> Ptr Word8 -> IO ()
+writeLBSToPtr :: LBS.ByteString -> Ptr Word8 -> IO ()
 writeLBSToPtr bs ptr | LBS.null bs = return ()
                      | otherwise   = go (fromIntegral (LBS.length bs - 1))
   where
@@ -65,7 +72,7 @@ writeLBSToPtr bs ptr | LBS.null bs = return ()
 writeHeader :: Ptr Word8 -> Int -> IO ()
 writeHeader ptr len = writeLBSToPtr header ptr
   where
-    header :: ByteString
+    header :: LBS.ByteString
     header = encode (fromIntegral len :: Word32)
 
 readHeader :: Ptr Word8 -> IO Int
@@ -74,7 +81,14 @@ readHeader ptr = do
   b1 <- peekByteOff ptr 1
   b2 <- peekByteOff ptr 2
   b3 <- peekByteOff ptr 3
+  -- XXX: decodeOrFail?
   return (fromIntegral (decode (LBS.pack [b0, b1, b2, b3]) :: Word32))
+
+headerExists :: Ptr Word8 -> Int -> IO Bool
+headerExists ptr offset = do
+  len <- readHeader (ptr `plusPtr` offset)
+  -- TODO: This will break if we write a bytestring of length zero.
+  return (len /= 0)
 
 waitForHeader :: Ptr Word8 -> Int -> IO Int
 waitForHeader ptr offset = go
@@ -83,7 +97,7 @@ waitForHeader ptr offset = go
       len <- readHeader (ptr `plusPtr` offset)
       -- TODO: This will break if we write a bytestring of length zero.
       if len == 0
-      then go
+      then threadDelay 1000 >> go -- XXX: wait strategy via options?
       else return len
 
 -- | "active" file becomes "dirty", and the "clean" file becomes the new
@@ -95,9 +109,6 @@ rotateFiles = undefined
 -- up the active file to its max size.
 cleanDirtyFile :: Journal -> IO ()
 cleanDirtyFile = undefined
-
-spawnCleaningThread :: IO (Async ())
-spawnCleaningThread = undefined
 
 data Inconsistency
   = PartialReceived
