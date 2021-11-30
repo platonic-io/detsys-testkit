@@ -1,5 +1,9 @@
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Journal.Internal where
 
+import Control.Exception (assert)
 import Control.Concurrent (threadDelay)
 import Data.Binary (decode, encode)
 import qualified Data.ByteString as BS
@@ -15,9 +19,7 @@ import Journal.Types.AtomicCounter
 
 -- | The size of the journal entry header in bytes.
 hEADER_SIZE :: Int
-hEADER_SIZE = 4 -- sizeOf (0 :: Word32)
-  -- XXX: Some special header start byte? e.g. 'h' (header) and 'i' (ignore/trucated)
-  -- XXX: version?
+hEADER_SIZE = 1 + 1 + 4 -- sizeOf Word8 + sizeOf Word8 + sizeOf Word32
   -- XXX: CRC?
 
 activeFile :: FilePath
@@ -69,36 +71,66 @@ writeLBSToPtr bs ptr | LBS.null bs = return ()
       pokeByteOff ptr n (LBS.index bs (fromIntegral n))
       go (n - 1)
 
-writeHeader :: Ptr Word8 -> Int -> IO ()
-writeHeader ptr len = writeLBSToPtr header ptr
+data JournalHeaderV0 = JournalHeaderV0
+  { jhTag      :: !Word8
+  , jhVersion  :: !Word8
+  , jhLength   :: !Word32
+  -- , jhChecksum :: !Word32 -- V1
+  }
+
+pattern Empty   = 0 :: Word8
+pattern Valid   = 1 :: Word8
+pattern Invalid = 2 :: Word8
+
+cURRENT_VERSION :: Word8
+cURRENT_VERSION = 0
+
+makeValidHeader :: Int -> JournalHeaderV0
+makeValidHeader len = JournalHeaderV0 Valid cURRENT_VERSION (fromIntegral len)
+
+writeHeader :: Ptr Word8 -> JournalHeaderV0 -> IO ()
+writeHeader ptr hdr =
+  assert (LBS.length header == fromIntegral hEADER_SIZE) $
+    writeLBSToPtr header ptr
   where
     header :: LBS.ByteString
-    header = encode (fromIntegral len :: Word32)
+    header = mconcat [ encode (jhTag hdr)
+                     , encode (jhVersion hdr)
+                     , encode (jhLength hdr)
+                     ]
 
-readHeader :: Ptr Word8 -> IO Int
+setInvalidTag :: Ptr Word8 -> IO ()
+setInvalidTag ptr = writeBSToPtr (BS.pack [Invalid]) ptr
+
+readHeader :: Ptr Word8 -> IO JournalHeaderV0
 readHeader ptr = do
-  b0 <- peekByteOff ptr 0
-  b1 <- peekByteOff ptr 1
-  b2 <- peekByteOff ptr 2
+  b0 <- peekByteOff ptr 0 -- tag     (1 byte)
+  b1 <- peekByteOff ptr 1 -- version (1 byte)
+  b2 <- peekByteOff ptr 2 -- length  (4 bytes)
   b3 <- peekByteOff ptr 3
+  b4 <- peekByteOff ptr 4
+  b5 <- peekByteOff ptr 5
   -- XXX: decodeOrFail?
-  return (fromIntegral (decode (LBS.pack [b0, b1, b2, b3]) :: Word32))
+  -- NOTE: Data.Binary always uses network order (big-endian).
+  return JournalHeaderV0
+    { jhTag     = decode (LBS.pack [b0])
+    , jhVersion = decode (LBS.pack [b1])
+    , jhLength  = decode (LBS.pack [b2, b3, b4, b5])
+    }
 
 headerExists :: Ptr Word8 -> Int -> IO Bool
 headerExists ptr offset = do
-  len <- readHeader (ptr `plusPtr` offset)
-  -- TODO: This will break if we write a bytestring of length zero.
-  return (len /= 0)
+  hdr <- readHeader (ptr `plusPtr` offset)
+  return (jhTag hdr /= Empty)
 
 waitForHeader :: Ptr Word8 -> Int -> IO Int
 waitForHeader ptr offset = go
   where
     go = do
-      len <- readHeader (ptr `plusPtr` offset)
-      -- TODO: This will break if we write a bytestring of length zero.
-      if len == 0
+      hdr <- readHeader (ptr `plusPtr` offset)
+      if jhTag hdr == Empty
       then threadDelay 1000 >> go -- XXX: wait strategy via options?
-      else return len
+      else return (fromIntegral (jhLength hdr))
 
 -- | "active" file becomes "dirty", and the "clean" file becomes the new
 -- "active" file.
