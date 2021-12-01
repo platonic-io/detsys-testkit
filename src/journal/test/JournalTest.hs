@@ -9,30 +9,6 @@ import Journal
 
 ------------------------------------------------------------------------
 
--- scenarios:
---  1. start new journal
---   1a. Use `mmapFilePtr :: FilePath -> Mode -> Maybe (Int64, Int) -> IO (Ptr a, Int, Int, Int)`
---       to memory map the active journal file to a pointer.
---  2. journal a bunch of entries
---    2a. The application listen on socket and calls `recvBuf :: Socket -> Ptr Word8 -> Int -> IO Int`;
---    2b. First it recevies a header into some buffer (the pointer) telling us
---        how long the message is;
---    2c. Next we call recvBuf again this time using the memory mapped pointer
---        and length we got from the header, to read the message straigt into
---        the journal.
---    2d. Finally write the header to the journal.
-
---  3. take a snapshot of application state at some position of the journal
---  4. truncate journal until above position
---  5. journal some more entries
---  6. crash/restart happens
---  7. restore journal (fix inconsistencies and restore journal datatype from filesystem)
---  8. load snapshot and position of snapshot
---  9. replay from position to restore application state
--- 10. journaling can resume at this point (we can't journal while replaying)
-
-------------------------------------------------------------------------
-
 newtype FakeJournal = FakeJournal [ByteString]
 
 newtype FakeIndex = FakeIndex Int
@@ -81,9 +57,8 @@ genCommand = undefined
 genCommands :: Model -> Gen [Command]
 genCommands = undefined
 
-{-
-rop_journal :: Property
-rop_journal =
+prop_journal :: Property
+prop_journal =
   forAllShrink (genCommands newFakeJournal) (shrinkList (const [])) $ \cmds -> monadicIO $ do
     let m = newFakeJournal
     (j, _jc) <- run (startJournal "/tmp/journal-test" defaultOptions)
@@ -106,5 +81,3 @@ rop_journal =
       -- classify' (EnqueueList {}, Bool b) = classify b "enqueueList successful"
       -- classify' (Move {},        Bool b) = classify b "move successful"
       -- classify' (_, _)                   = id
-
--}

@@ -10,7 +10,7 @@ import Test.QuickCheck.Monadic (run, monadicIO, assert)
 import Foreign.C.String (CString)
 import Foreign.C.Types (CUInt(CUInt), CULong(CULong))
 
-import Journal.CRC32
+import Journal.CRC32 (crc32)
 
 ------------------------------------------------------------------------
 

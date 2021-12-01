@@ -25,19 +25,22 @@ main = do
   then putStrLn "no snapshot"
   else putStrLn ("loaded snapshot: `" ++ BSChar8.unpack state ++ "'")
   (n, state') <- replay jc (<>) state
-  putStrLn ("replied: " ++ show n ++ " events, " ++
+  putStrLn ("replayed: " ++ show n ++ " events, " ++
              "restored state `" ++ BSChar8.unpack state' ++ "'")
   putStrLn "Starting TCP server on port 3000"
   withAsync (runProducer jour) $ \_a ->
     runConsumer jc state'
 
 runProducer :: Journal -> IO ()
-runProducer jour = runTCPServer Nothing "3000" (go jour)
+runProducer jour = do
+  produced <- readCounter (jOffset jour)
+  putStrLn ("Starting producer, bytes produced: " ++ show produced)
+  runTCPServer Nothing "3000" (go jour)
   where
     go :: Journal -> Socket -> IO ()
     go jour sock = do
       putStrLn "A client connected..."
-      rxBs <- tee jour sock 5
+      rxBs <- tee jour sock 4
       putStrLn ("Received: `" ++ BSChar8.unpack rxBs ++ "'")
       if BS.null rxBs
       then return ()
@@ -45,7 +48,11 @@ runProducer jour = runTCPServer Nothing "3000" (go jour)
         sendAll sock (BSChar8.pack ("Appended " ++ show (BS.length rxBs) ++ " bytes\n"))
 
 runConsumer :: JournalConsumer -> ByteString -> IO ()
-runConsumer jc state0 = go 2 state0 -- snapshot every two events.
+runConsumer jc state0 = do
+  consumed <- readCounter (jcBytesConsumed jc)
+  putStrLn ("Starting consumer, bytes consumed: " ++ show consumed)
+  -- Make a snapshot every two events.
+  go 2 state0
   where
     go :: Int -> ByteString -> IO ()
     go 0 state = do
