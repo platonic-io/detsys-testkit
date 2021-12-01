@@ -108,21 +108,6 @@ readJournal jc = do
   incrCounter_ len (jcBytesConsumed jc)
   return bs
 
-readJournalNonBlocking :: JournalConsumer -> IO (Maybe ByteString)
-readJournalNonBlocking jc = do
-  ptr <- getJournalConsumerPtr jc
-  offset <- readCounter (jcBytesConsumed jc)
-  b <- headerExists ptr offset
-  if not b
-  then return Nothing
-  else do
-    incrCounter_ hEADER_SIZE (jcBytesConsumed jc)
-    len <- fromIntegral . jhLength <$> readHeader (ptr `plusPtr` offset)
-    fptr <- newForeignPtr_ ptr
-    let bs = BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len)
-    incrCounter_ len (jcBytesConsumed jc)
-    return (Just bs)
-
 ------------------------------------------------------------------------
 
 -- * Snapshots and replay
@@ -138,10 +123,9 @@ saveSnapshot jc state bytesConsumed = do
 
 truncateAfterSnapshot :: JournalConsumer -> Int -> IO ()
 truncateAfterSnapshot jc bytesConsumed = do
-  -- XXX: use `ptr` instead to make entries as "truncated" instead of deleting stuff..
-  bs <- BS.readFile (jcDirectory jc </> activeFile)
-  BS.writeFile (jcDirectory jc </> activeFile) (BS.drop bytesConsumed bs <>
-                                                BS.replicate bytesConsumed (fromIntegral 0))
+  -- XXX: needs to get the "oldest" ptr...
+  ptr <- getJournalConsumerPtr jc
+  mapHeadersUntil Valid (\hdr -> hdr { jhTag = Invalid}) ptr bytesConsumed
 
 loadSnapshot :: Journal -> IO (Maybe ByteString)
 loadSnapshot jour = do
@@ -154,10 +138,8 @@ loadSnapshot jour = do
   else return Nothing
 
 replay :: JournalConsumer -> (a -> ByteString -> a) -> a -> IO (Int, a)
-replay jc f = go 0
+replay jc f x = do
+  ptr <- getJournalConsumerPtr jc
+  iterJournal ptr (jcBytesConsumed jc) go (0, x)
   where
-    go n acc = do
-      mBs <- readJournalNonBlocking jc
-      case mBs of
-        Nothing -> return (n, acc)
-        Just bs -> go (n + 1) (f acc bs)
+    go (n, acc) bs = (n + 1, f acc bs)
