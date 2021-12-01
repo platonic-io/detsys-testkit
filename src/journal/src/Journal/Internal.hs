@@ -123,6 +123,14 @@ headerExists ptr offset = do
   hdr <- readHeader (ptr `plusPtr` offset)
   return (jhTag hdr /= Empty)
 
+nextHeader :: JournalConsumer -> Ptr Word8 -> IO (Maybe JournalHeaderV0)
+nextHeader jc ptr = do
+  hdr <- readHeader ptr
+  case jhTag hdr of
+    Valid   -> return (Just hdr)
+    Invalid -> nextHeader jc (ptr `plusPtr` (hEADER_SIZE + fromIntegral (jhLength hdr)))
+    Empty   -> return Nothing
+
 waitForHeader :: Ptr Word8 -> Int -> IO Int
 waitForHeader ptr offset = go
   where

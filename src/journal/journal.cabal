@@ -38,12 +38,14 @@ library
 
   build-depends:
     , ghc-prim
+    , vector
     , mmap
     , network
 
   exposed-modules:
     Journal
     Journal.Internal
+    Journal.CRC32
     Journal.Types
     Journal.Types.AtomicCounter
 
@@ -63,7 +65,9 @@ test-suite test
     , bytestring
     , HUnit
     , journal
+    , zlib
     , QuickCheck
+    , quickcheck-instances
     , tasty
     , tasty-hunit
     , tasty-quickcheck
