@@ -15,22 +15,30 @@ import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (peekByteOff, pokeByteOff)
+import System.FilePath ((</>))
 
 import Journal.Types
 import Journal.Types.AtomicCounter
 
 ------------------------------------------------------------------------
 
+-- * Constants
+
 -- | The size of the journal entry header in bytes.
 hEADER_SIZE :: Int
 hEADER_SIZE = 1 + 1 + 4 -- sizeOf Word8 + sizeOf Word8 + sizeOf Word32
   -- XXX: CRC?
+
+cURRENT_VERSION :: Word8
+cURRENT_VERSION = 0
 
 activeFile :: FilePath
 activeFile = "active"
 
 snapshotFile :: FilePath
 snapshotFile = "snapshot"
+
+------------------------------------------------------------------------
 
 claim :: Journal -> Int -> IO Int
 claim jour len = do
@@ -88,9 +96,6 @@ pattern Empty   = 0 :: Word8
 pattern Valid   = 1 :: Word8
 pattern Invalid = 2 :: Word8
 
-cURRENT_VERSION :: Word8
-cURRENT_VERSION = 0
-
 newHeader :: Word8 -> Word8 -> Word32 -> JournalHeader
 newHeader = JournalHeaderV0
 
@@ -146,7 +151,7 @@ waitForHeader :: Ptr Word8 -> Int -> IO Int
 waitForHeader ptr offset = go
   where
     go = do
-      putStrLn ("waitForHeader: looking for header at offset: " ++ show offset)
+      -- putStrLn ("waitForHeader: looking for header at offset: " ++ show offset)
       hdr <- readHeader (ptr `plusPtr` offset)
       if jhTag hdr == Empty
       then threadDelay 1000000 >> go -- XXX: wait strategy via options?
@@ -179,17 +184,21 @@ cleanDirtyFile = undefined
 ------------------------------------------------------------------------
 
 data Inconsistency
-  = PartialReceived
+  = ActiveFileSizeMismatch Int Int
+  | PartialReceived
   | PartialRotation
 
 checkForInconsistencies :: Journal -> IO [Inconsistency]
-checkForInconsistencies = undefined
+checkForInconsistencies jour = do
+  bs <- BS.readFile (jDirectory jour </> activeFile)
+  if BS.length bs /= jMaxByteSize jour
+  then return [ActiveFileSizeMismatch (jMaxByteSize jour) (BS.length bs)]
+  else return []
 
 fixInconsistency :: Inconsistency -> Journal -> IO ()
 fixInconsistency = undefined
 
-
 ------------------------------------------------------------------------
 
 assertM :: Monad m => Bool -> m ()
-assertM b = assert b (return ())
+assertM b = assert b () `seq` return ()
