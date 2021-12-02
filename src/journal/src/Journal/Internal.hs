@@ -146,9 +146,10 @@ waitForHeader :: Ptr Word8 -> Int -> IO Int
 waitForHeader ptr offset = go
   where
     go = do
+      putStrLn ("waitForHeader: looking for header at offset: " ++ show offset)
       hdr <- readHeader (ptr `plusPtr` offset)
       if jhTag hdr == Empty
-      then threadDelay 1000 >> go -- XXX: wait strategy via options?
+      then threadDelay 1000000 >> go -- XXX: wait strategy via options?
       else return (fromIntegral (jhLength hdr))
 
 mapHeadersUntil :: Word8 -> (JournalHeader -> JournalHeader) -> Ptr Word8 -> Int -> IO ()
