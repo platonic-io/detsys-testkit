@@ -123,19 +123,6 @@ readHeader ptr = do
            (decode (LBS.pack [b1]))
            (decode (LBS.pack [b2, b3, b4, b5])))
 
-headerExists :: Ptr Word8 -> Int -> IO Bool
-headerExists ptr offset = do
-  hdr <- readHeader (ptr `plusPtr` offset)
-  return (jhTag hdr /= Empty)
-
-nextHeader :: JournalConsumer -> Ptr Word8 -> IO (Maybe JournalHeader)
-nextHeader jc ptr = do
-  hdr <- readHeader ptr
-  case jhTag hdr of
-    Valid   -> return (Just hdr)
-    Invalid -> nextHeader jc (ptr `plusPtr` (hEADER_SIZE + fromIntegral (jhLength hdr)))
-    Empty   -> return Nothing
-
 iterJournal :: Ptr Word8 -> AtomicCounter -> (a -> BS.ByteString -> a) -> a -> IO a
 iterJournal ptr consumed f x = do
   offset <- readCounter consumed

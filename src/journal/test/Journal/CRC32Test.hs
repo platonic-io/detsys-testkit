@@ -14,7 +14,7 @@ import Journal.CRC32 (crc32)
 
 ------------------------------------------------------------------------
 
-foreign import ccall "zlib.h crc32"
+foreign import ccall unsafe "zlib.h crc32"
   zlib_crc32 :: CULong -> CString -> CUInt -> CULong
 
 zlibCrc32 :: ByteString -> IO Word32
