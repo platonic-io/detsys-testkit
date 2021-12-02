@@ -51,10 +51,10 @@ startJournal dir (Options maxByteSize) = do
     else return 0
 
   (ptr, _rawSize, _offset, _size) <-
-    mmapFilePtr (dir </> activeFile) ReadWriteEx (Just (fromIntegral offset, maxByteSize))
+    mmapFilePtr (dir </> activeFile) ReadWriteEx (Just (0, maxByteSize))
   -- XXX: assert max size
   bytesProducedCounter <- newCounter offset
-  ptrRef <- newJournalPtrRef (ptr `plusPtr` offset)
+  ptrRef <- newJournalPtrRef ptr
   bytesConsumedCounter <- newCounter 0
   jc <- JournalConsumer <$> newJournalConsumerPtrRef ptr <*> pure bytesConsumedCounter
                         <*> pure dir
@@ -77,6 +77,7 @@ appendBS jour bs = assert (0 < BS.length bs && BS.length bs <= jMaxByteSize jour
 tee :: Journal -> Socket -> Int -> IO ByteString
 tee jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
   offset <- claim jour len
+  putStrLn ("tee: writing to offset: " ++ show offset)
   buf <- getJournalPtr jour
   receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
