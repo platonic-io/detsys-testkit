@@ -10,6 +10,7 @@ module Journal
   , truncateAfterSnapshot
   , loadSnapshot
   , replay
+  , dumpJournal
   ) where
 
 import Control.Exception (assert)
@@ -50,9 +51,9 @@ startJournal dir (Options maxByteSize) = do
       return (maxByteSize - nuls)
     else return 0
 
-  (ptr, _rawSize, _offset, _size) <-
+  (ptr, _rawSize, _offset, size) <-
     mmapFilePtr (dir </> activeFile) ReadWriteEx (Just (0, maxByteSize))
-  -- XXX: assert max size
+  assertM (size == maxByteSize)
   bytesProducedCounter <- newCounter offset
   ptrRef <- newJournalPtrRef ptr
   bytesConsumedCounter <- newCounter 0
@@ -70,7 +71,7 @@ appendBS jour bs = assert (0 < BS.length bs && BS.length bs <= jMaxByteSize jour
   let len = BS.length bs
   offset <- claim jour len
   buf <- getJournalPtr jour
-  writeBSToPtr bs buf
+  writeBSToPtr bs (buf `plusPtr` (offset + hEADER_SIZE))
   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
 
 -- NOTE: pre-condition: `0 < len <= maxByteSize`
@@ -144,3 +145,12 @@ replay jc f x = do
   iterJournal ptr (jcBytesConsumed jc) go (0, x)
   where
     go (n, acc) bs = (n + 1, f acc bs)
+
+------------------------------------------------------------------------
+
+-- * Debugging
+
+dumpJournal :: Journal -> IO ()
+dumpJournal jour = do
+  active <- BS.readFile (jDirectory jour </> activeFile)
+  print active
