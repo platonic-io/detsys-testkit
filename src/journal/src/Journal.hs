@@ -14,7 +14,6 @@ module Journal
   ) where
 
 import Control.Exception (assert)
-import Control.Monad (unless)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (fromForeignPtr)
@@ -22,10 +21,8 @@ import Data.IORef (newIORef)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (plusPtr)
 import Network.Socket (Socket, recvBuf)
-import System.Directory
-       (createDirectoryIfMissing, doesDirectoryExist, doesFileExist)
+import System.Directory (doesFileExist)
 import System.FilePath ((</>))
-import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
 import Journal.Internal
 import Journal.Types
@@ -39,23 +36,9 @@ defaultOptions = Options 1024
 
 startJournal :: FilePath -> Options -> IO (Journal, JournalConsumer)
 startJournal dir (Options maxByteSize) = do
-  dirExists <- doesDirectoryExist dir
-  unless dirExists (createDirectoryIfMissing True dir)
-
-  offset <- do
-    activeExists <- doesFileExist (dir </> activeFile)
-    if activeExists
-    then do
-      nuls <- BS.length . BS.takeWhileEnd (== (fromIntegral 0)) <$>
-                BS.readFile (dir </> activeFile)
-      return (maxByteSize - nuls)
-    else return 0
-
-  (ptr, _rawSize, _offset, size) <-
-    mmapFilePtr (dir </> activeFile) ReadWriteEx (Just (0, maxByteSize))
-  assertM (size == maxByteSize)
-  bytesProducedCounter <- newCounter offset
+  (offset, ptr) <- mkActiveFile dir maxByteSize
   ptrRef <- newJournalPtrRef ptr
+  bytesProducedCounter <- newCounter offset
   bytesConsumedCounter <- newCounter 0
   jc <- JournalConsumer <$> newJournalConsumerPtrRef ptr <*> pure bytesConsumedCounter
                         <*> pure dir

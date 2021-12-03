@@ -5,7 +5,7 @@ module Journal.Internal where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (assert)
-import Control.Monad (when)
+import Control.Monad (when, unless)
 import Data.Binary (decode, encode)
 import Data.Bits ((.&.))
 import qualified Data.ByteString as BS
@@ -15,7 +15,11 @@ import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (peekByteOff, pokeByteOff)
+import GHC.Stack (HasCallStack)
 import System.FilePath ((</>))
+import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
+import System.Directory
+       (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, renameFile)
 
 import Journal.Types
 import Journal.Types.AtomicCounter
@@ -39,6 +43,24 @@ snapshotFile :: FilePath
 snapshotFile = "snapshot"
 
 ------------------------------------------------------------------------
+
+mkActiveFile :: FilePath -> Int -> IO (Int, Ptr Word8)
+mkActiveFile dir maxByteSize = do
+  dirExists <- doesDirectoryExist dir
+  unless dirExists (createDirectoryIfMissing True dir)
+  offset <- do
+    activeExists <- doesFileExist (dir </> activeFile)
+    if activeExists
+    then do
+      nuls <- BS.length . BS.takeWhileEnd (== (fromIntegral 0)) <$>
+                BS.readFile (dir </> activeFile)
+      return (maxByteSize - nuls)
+    else return 0
+
+  (ptr, _rawSize, _offset, size) <-
+    mmapFilePtr (dir </> activeFile) ReadWriteEx (Just (0, maxByteSize))
+  assertM (size == maxByteSize)
+  return (offset, ptr)
 
 claim :: Journal -> Int -> IO Int
 claim jour len = do
