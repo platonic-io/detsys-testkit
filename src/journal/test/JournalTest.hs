@@ -46,9 +46,18 @@ data Command
   -- Replay
   deriving Show
 
+valid :: Command -> Bool
+valid ReadJournal = True
+valid (AppendBS bs) = not $ BS.null bs
+
 prettyCommand :: Command -> String
 prettyCommand AppendBS    {} = "AppendBS"
 prettyCommand ReadJournal {} = "ReadJournal"
+
+shrinkCommand :: Command -> [Command]
+shrinkCommand ReadJournal = []
+shrinkCommand (AppendBS bs) = filter valid
+  [ AppendBS bs' | bs' <- shrink bs]
 
 data Response
   = Unit ()
@@ -91,10 +100,19 @@ genCommands m = sized go
       cmds <- go (n - 1)
       return (cmd : cmds)
 
+prop_genCommandsValid :: Property
+prop_genCommandsValid = forAllShrink (genCommands m) (const []) $ all valid
+  where m = startJournalFake
+
+prop_genCommandsShrinkValid :: Property
+prop_genCommandsShrinkValid = forAllShrink (genCommands m) (const []) $ \ cmds ->
+  all valid cmds ==> all (all valid . shrinkCommand) cmds
+  where m = startJournalFake
+
 prop_journal :: Property
 prop_journal =
   let m = startJournalFake in
-  forAllShrink (genCommands m) (shrinkList (const [])) $ \cmds -> monadicIO $ do
+  forAllShrink (genCommands m) (shrinkList shrinkCommand) $ \cmds -> monadicIO $ do
     run (putStrLn ("Generated commands: " ++ show cmds))
     run (removePathForcibly "/tmp/journal-test")
     jjc <- run (startJournal "/tmp/journal-test" defaultOptions)
