@@ -4,6 +4,7 @@ module Journal.Types
   , jOffset
   , jDirectory
   , jBytesConsumed
+  , jPtr -- do we need a TypesInternal and have this just export almost everything from that?
   , Options(Options)
   , JournalConsumer(JournalConsumer)
   , jcBytesConsumed

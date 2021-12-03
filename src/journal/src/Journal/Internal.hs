@@ -4,6 +4,7 @@
 module Journal.Internal where
 
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.STM (TVar, atomically, writeTVar)
 import Control.Exception (assert)
 import Control.Monad (when, unless)
 import Data.Binary (decode, encode)
@@ -39,6 +40,9 @@ cURRENT_VERSION = 0
 activeFile :: FilePath
 activeFile = "active"
 
+dirtyFile :: FilePath
+dirtyFile = "dirty"
+
 snapshotFile :: FilePath
 snapshotFile = "snapshot"
 
@@ -62,19 +66,24 @@ mkActiveFile dir maxByteSize = do
   assertM (size == maxByteSize)
   return (offset, ptr)
 
+-- TODO this doesn't care about consumer
 claim :: Journal -> Int -> IO Int
 claim jour len = do
-  offset <- getAndIncrCounter (len + hEADER_SIZE) (jOffset jour)
+  let realLen = len + hEADER_SIZE
+  assertM $ realLen < jMaxByteSize jour
+  offset <- getAndIncrCounter realLen (jOffset jour)
   -- XXX: mod/.&. maxByteSize?
-  if offset + len <= jMaxByteSize jour
+  if offset + realLen <= jMaxByteSize jour
   then return offset -- Fits in current file.
-  else if offset < jMaxByteSize jour
+  else if offset <= jMaxByteSize jour
        then do
          -- First writer that overflowed the file, the second one
          -- would have got an offset higher than `maxBytes`.
 
-         -- rotate
-         undefined
+         offset' <- rotateFiles jour
+         c <- casCounter (jOffset jour) (offset + realLen) offset' -- TODO wrong
+         assertM c
+         return offset' -- TODO wrong
        else do
          -- `offset >= maxBytes`, so we clearly can't write to the current file.
          -- Wait for the first writer that overflowed to rotate the files then
@@ -195,8 +204,22 @@ mapHeadersUntil mask f ptr limit = go 0
 
 -- | "active" file becomes "dirty", and the "clean" file becomes the new
 -- "active" file.
-rotateFiles :: Journal -> IO ()
-rotateFiles = undefined
+-- TODO doesn't take consumer into account
+-- TODO we currentuy don't archive
+rotateFiles :: Journal -> IO Int
+rotateFiles jour = do
+  renameFile (dir </> activeFile) (dir </> dirtyFile)
+  (offset, ptr) <- mkActiveFile dir maxB
+  atomically $ do
+    writeTVar (jPtr jour) ptr
+  return offset
+  {-
+  rename clean active
+  make clean
+  -}
+  where
+    dir = jDirectory jour
+    maxB = jMaxByteSize jour
 
 -- Assumption: cleaning the dirty file takes shorter amount of time than filling
 -- up the active file to its max size.
@@ -222,5 +245,5 @@ fixInconsistency = undefined
 
 ------------------------------------------------------------------------
 
-assertM :: Monad m => Bool -> m ()
-assertM b = assert b () `seq` return ()
+assertM :: (HasCallStack, Monad m) => Bool -> m ()
+assertM b = assert b (return ()) --  `seq` return ()
