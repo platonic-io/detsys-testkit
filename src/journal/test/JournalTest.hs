@@ -112,7 +112,8 @@ prop_genCommandsShrinkValid = forAllShrink (genCommands m) (const []) $ \ cmds -
 prop_journal :: Property
 prop_journal =
   let m = startJournalFake in
-  forAllShrink (genCommands m) (shrinkList shrinkCommand) $ \cmds -> monadicIO $ do
+  forAllShrink (genCommands m) (shrinkList shrinkCommand) $ \cmds ->
+   collect ("rotations: " <> show (nrRotations cmds defaultOptions)) $ monadicIO $ do
     run (putStrLn ("Generated commands: " ++ show cmds))
     run (removePathForcibly "/tmp/journal-test")
     jjc <- run (startJournal "/tmp/journal-test" defaultOptions)
@@ -128,6 +129,11 @@ prop_journal =
         assertWithFail (resp == resp') $
           show resp ++ " /= " ++ show resp'
         go cmds m' jjc (resp : hist)
+
+      nrRotations xs (Options maxB)= sum [ howMuchAppend c | c <- xs] `div` maxB
+        where
+          howMuchAppend ReadJournal = 0
+          howMuchAppend (AppendBS bs) = BS.length bs
 
       classify' :: (Command, Response) -> Property -> Property
       classify' (_, _) = id
