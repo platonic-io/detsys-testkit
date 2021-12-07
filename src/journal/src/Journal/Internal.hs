@@ -4,6 +4,7 @@
 module Journal.Internal where
 
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.STM (atomically, writeTVar)
 import Control.Exception (assert)
 import Control.Monad (when)
 import Data.Binary (decode, encode)
@@ -15,7 +16,9 @@ import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (peekByteOff, pokeByteOff)
+import System.Directory (renameFile)
 import System.FilePath ((</>))
+import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
 import Journal.Types
 import Journal.Types.AtomicCounter
@@ -32,11 +35,17 @@ hEADER_SIZE = 1 + 1 + 4 -- sizeOf Word8 + sizeOf Word8 + sizeOf Word32
 cURRENT_VERSION :: Word8
 cURRENT_VERSION = 0
 
-activeFile :: FilePath
-activeFile = "active"
+aCTIVE_FILE :: FilePath
+aCTIVE_FILE = "active"
 
-snapshotFile :: FilePath
-snapshotFile = "snapshot"
+dIRTY_FILE :: FilePath
+dIRTY_FILE = "dirty"
+
+cLEAN_FILE :: FilePath
+cLEAN_FILE = "clean"
+
+sNAPSHOT_FILE :: FilePath
+sNAPSHOT_FILE = "snapshot"
 
 ------------------------------------------------------------------------
 
@@ -51,8 +60,8 @@ claim jour len = do
          -- First writer that overflowed the file, the second one
          -- would have got an offset higher than `maxBytes`.
 
-         -- rotate
-         undefined
+         rotateFiles jour
+         return offset
        else do
          -- `offset >= maxBytes`, so we clearly can't write to the current file.
          -- Wait for the first writer that overflowed to rotate the files then
@@ -61,6 +70,32 @@ claim jour len = do
          -- Check if header is written to offset (if that's the case the active
          -- file hasn't been rotated yet)
          undefined
+
+mmapFile :: FilePath -> Int -> IO (Ptr Word8, Int)
+mmapFile fp maxByteSize = do
+  (ptr, rawSize, _offset, size) <-
+    mmapFilePtr fp ReadWriteEx (Just (0, maxByteSize))
+  assertM (size == maxByteSize)
+  return (ptr, rawSize)
+
+munmapFile :: Ptr Word8 -> Int -> IO ()
+munmapFile = munmapFilePtr
+
+-- | "active" file becomes "dirty", and the "clean" file becomes the new
+-- "active" file.
+rotateFiles :: Journal -> IO ()
+rotateFiles jour = do
+  renameFile (jDirectory jour </> aCTIVE_FILE) (jDirectory jour </> dIRTY_FILE)
+  renameFile (jDirectory jour </> cLEAN_FILE)  (jDirectory jour </> aCTIVE_FILE)
+  -- XXX: do we need to unmap the old active file ptr? Need raw size for that...
+  (ptr, _rawSize) <- mmapFile (jDirectory jour </> aCTIVE_FILE) (jMaxByteSize jour)
+  atomically (writeTVar (jPtr jour) ptr)
+  cleanDirtyFile jour -- XXX: can be done async?
+
+-- Assumption: cleaning the dirty file takes shorter amount of time than filling
+-- up the active file to its max size.
+cleanDirtyFile :: Journal -> IO ()
+cleanDirtyFile _jour = return ()
 
 writeBSToPtr :: BS.ByteString -> Ptr Word8 -> IO ()
 writeBSToPtr bs ptr | BS.null bs = return ()
@@ -171,16 +206,6 @@ mapHeadersUntil mask f ptr limit = go 0
             writeHeader (ptr `plusPtr` offset) (f hdr)
           go (offset + hEADER_SIZE + fromIntegral (jhLength hdr))
 
--- | "active" file becomes "dirty", and the "clean" file becomes the new
--- "active" file.
-rotateFiles :: Journal -> IO ()
-rotateFiles = undefined
-
--- Assumption: cleaning the dirty file takes shorter amount of time than filling
--- up the active file to its max size.
-cleanDirtyFile :: Journal -> IO ()
-cleanDirtyFile = undefined
-
 ------------------------------------------------------------------------
 
 data Inconsistency
@@ -190,7 +215,7 @@ data Inconsistency
 
 checkForInconsistencies :: Journal -> IO [Inconsistency]
 checkForInconsistencies jour = do
-  bs <- BS.readFile (jDirectory jour </> activeFile)
+  bs <- BS.readFile (jDirectory jour </> aCTIVE_FILE)
   if BS.length bs /= jMaxByteSize jour
   then return [ActiveFileSizeMismatch (jMaxByteSize jour) (BS.length bs)]
   else return []
