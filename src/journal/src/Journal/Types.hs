@@ -1,5 +1,6 @@
 module Journal.Types
   ( Journal(Journal)
+  , jPtr
   , jMaxByteSize
   , jOffset
   , jDirectory

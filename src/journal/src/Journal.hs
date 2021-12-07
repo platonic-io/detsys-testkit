@@ -25,7 +25,6 @@ import Network.Socket (Socket, recvBuf)
 import System.Directory
        (createDirectoryIfMissing, doesDirectoryExist, doesFileExist)
 import System.FilePath ((</>))
-import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
 import Journal.Internal
 import Journal.Types
@@ -43,17 +42,25 @@ startJournal dir (Options maxByteSize) = do
   unless dirExists (createDirectoryIfMissing True dir)
 
   offset <- do
-    activeExists <- doesFileExist (dir </> activeFile)
+    activeExists <- doesFileExist (dir </> aCTIVE_FILE)
     if activeExists
     then do
       nuls <- BS.length . BS.takeWhileEnd (== (fromIntegral 0)) <$>
-                BS.readFile (dir </> activeFile)
+                BS.readFile (dir </> aCTIVE_FILE)
       return (maxByteSize - nuls)
     else return 0
 
-  (ptr, _rawSize, _offset, size) <-
-    mmapFilePtr (dir </> activeFile) ReadWriteEx (Just (0, maxByteSize))
-  assertM (size == maxByteSize)
+  (ptr, _rawSize) <- mmapFile (dir </> aCTIVE_FILE) maxByteSize
+
+  cleanExists <- doesFileExist (dir </> cLEAN_FILE)
+  if cleanExists
+  then do
+    -- XXX: check that it actually is clean
+    return ()
+  else do
+    (ptr, rawSize) <- mmapFile (dir </> cLEAN_FILE) maxByteSize
+    munmapFile ptr rawSize
+
   bytesProducedCounter <- newCounter offset
   ptrRef <- newJournalPtrRef ptr
   bytesConsumedCounter <- newCounter 0
@@ -103,11 +110,11 @@ appendRecv jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
 readJournal :: JournalConsumer -> IO ByteString
 readJournal jc = do
   ptr <- getJournalConsumerPtr jc
-  offset <- getAndIncrCounter hEADER_SIZE (jcBytesConsumed jc)
+  offset <- readCounter (jcBytesConsumed jc)
   len <- waitForHeader ptr offset
   fptr <- newForeignPtr_ ptr
   let bs = BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len)
-  incrCounter_ len (jcBytesConsumed jc)
+  incrCounter_ (hEADER_SIZE + len) (jcBytesConsumed jc)
   return bs
 
 ------------------------------------------------------------------------
@@ -121,7 +128,7 @@ saveSnapshot :: JournalConsumer -> ByteString -> Int -> IO ()
 saveSnapshot jc state bytesConsumed = do
   -- b <- doesFileExist (jDirectory jour </> snapshotFile)
   -- XXX: snapshot header
-  BS.writeFile (jcDirectory jc </> snapshotFile) state
+  BS.writeFile (jcDirectory jc </> sNAPSHOT_FILE) state
 
 truncateAfterSnapshot :: JournalConsumer -> Int -> IO ()
 truncateAfterSnapshot jc bytesConsumed = do
@@ -132,10 +139,10 @@ truncateAfterSnapshot jc bytesConsumed = do
 loadSnapshot :: Journal -> IO (Maybe ByteString)
 loadSnapshot jour = do
   -- XXX: load snapshot header
-  b <- doesFileExist (jDirectory jour </> snapshotFile)
+  b <- doesFileExist (jDirectory jour </> sNAPSHOT_FILE)
   if b
   then do
-    bs <- BS.readFile (jDirectory jour </> snapshotFile)
+    bs <- BS.readFile (jDirectory jour </> sNAPSHOT_FILE)
     return (Just bs)
   else return Nothing
 
@@ -152,5 +159,5 @@ replay jc f x = do
 
 dumpJournal :: Journal -> IO ()
 dumpJournal jour = do
-  active <- BS.readFile (jDirectory jour </> activeFile)
+  active <- BS.readFile (jDirectory jour </> aCTIVE_FILE)
   print active
