@@ -6,6 +6,7 @@ module Journal.Types
   , jDirectory
   , jBytesConsumed
   , Options(Options)
+  , oMaxByteSize
   , JournalConsumer(JournalConsumer)
   , jcBytesConsumed
   , jcDirectory

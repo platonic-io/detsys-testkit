@@ -1,12 +1,23 @@
 module Main
   ( module X
   , quickCheck
+  , quickCheckWith
   , verboseCheck
+  , verboseCheckWith
+  , stdArgs
+  , maxSuccess
   , main
   ) where
 
 import qualified TastyDiscover
-import Test.QuickCheck (quickCheck, verboseCheck)
+import Test.QuickCheck
+       ( maxSuccess
+       , quickCheck
+       , quickCheckWith
+       , stdArgs
+       , verboseCheck
+       , verboseCheckWith
+       )
 import Test.Tasty
 
 import JournalTest as X

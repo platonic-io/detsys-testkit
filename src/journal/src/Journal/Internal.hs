@@ -16,6 +16,7 @@ import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (peekByteOff, pokeByteOff)
+import GHC.Stack (HasCallStack)
 import System.Directory (renameFile)
 import System.FilePath ((</>))
 import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
@@ -50,18 +51,18 @@ sNAPSHOT_FILE = "snapshot"
 ------------------------------------------------------------------------
 
 claim :: Journal -> Int -> IO Int
-claim jour len = do
-  offset <- getAndIncrCounter (len + hEADER_SIZE) (jOffset jour)
+claim jour len = assert (hEADER_SIZE + len < jMaxByteSize jour) $ do
+  offset <- getAndIncrCounter (hEADER_SIZE + len) (jOffset jour)
   -- XXX: mod/.&. maxByteSize?
-  if offset + len <= jMaxByteSize jour
+  if offset + hEADER_SIZE + len <= jMaxByteSize jour
   then return offset -- Fits in current file.
-  else if offset < jMaxByteSize jour
+  else if offset <= jMaxByteSize jour
        then do
          -- First writer that overflowed the file, the second one
          -- would have got an offset higher than `maxBytes`.
 
          rotateFiles jour
-         return offset
+         return offset -- mod maxByteSize?
        else do
          -- `offset >= maxBytes`, so we clearly can't write to the current file.
          -- Wait for the first writer that overflowed to rotate the files then
@@ -225,5 +226,5 @@ fixInconsistency = undefined
 
 ------------------------------------------------------------------------
 
-assertM :: Monad m => Bool -> m ()
-assertM b = assert b () `seq` return ()
+assertM :: (HasCallStack, Monad m) => Bool -> m ()
+assertM b = assert b (return ())
