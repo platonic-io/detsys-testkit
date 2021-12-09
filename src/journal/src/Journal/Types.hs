@@ -1,6 +1,5 @@
 module Journal.Types
   ( Journal(Journal)
-  , jPtr
   , jMaxByteSize
   , jOffset
   , jDirectory
@@ -10,17 +9,23 @@ module Journal.Types
   , JournalConsumer(JournalConsumer)
   , jcBytesConsumed
   , jcDirectory
-  , getJournalPtr
-  , getJournalConsumerPtr
+  , jcMaxByteSize
   , newJournalPtrRef
+  , readJournalPtr
+  , updateJournalPtr
   , newJournalConsumerPtrRef
+  , readJournalConsumerPtr
+  , updateJournalConsumerPtr
+  , getMaxByteSize
+  , readFileCount
+  , bumpFileCount
   , module Journal.Types.AtomicCounter)
   where
 
 import Control.Concurrent.STM
 import Control.Concurrent.STM (TVar)
 import Data.ByteString (ByteString)
-import Data.IORef (IORef, newIORef, readIORef)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32, Word64, Word8)
 import Foreign.Ptr (Ptr, plusPtr)
 
@@ -29,19 +34,32 @@ import Journal.Types.AtomicCounter
 ------------------------------------------------------------------------
 
 data Journal = Journal
-  { jPtr           :: !(TVar (Ptr Word8))
+  { jPtr           :: {-# UNPACK #-} !(TVar (Ptr Word8))
   , jOffset        :: {-# UNPACK #-} !AtomicCounter
   , jMaxByteSize   :: {-# UNPACK #-} !Int
-  , jDirectory     :: !FilePath
+  , jDirectory     ::                !FilePath
   , jBytesConsumed :: {-# UNPACK #-} !AtomicCounter -- jGatingBytes?
+  , jFileCount     :: {-# UNPACK #-} !AtomicCounter
   -- , jMetrics :: Metrics
   }
 
 newJournalPtrRef :: Ptr Word8 -> IO (TVar (Ptr Word8))
 newJournalPtrRef = newTVarIO
 
-getJournalPtr :: Journal -> IO (Ptr Word8)
-getJournalPtr = atomically . readTVar . jPtr
+readJournalPtr :: Journal -> IO (Ptr Word8)
+readJournalPtr = atomically . readTVar . jPtr
+
+updateJournalPtr :: Journal -> Ptr Word8 -> IO ()
+updateJournalPtr jour ptr = atomically (writeTVar (jPtr jour) ptr)
+
+getMaxByteSize :: Journal -> Int
+getMaxByteSize = jMaxByteSize
+
+readFileCount :: Journal -> IO Int
+readFileCount = readCounter . jFileCount
+
+bumpFileCount :: Journal -> IO ()
+bumpFileCount = incrCounter_ 1 . jFileCount
 
 data Metrics = Metrics
   { mAbortedConnections :: Word32
@@ -62,11 +80,15 @@ data Options = Options
 data JournalConsumer = JournalConsumer
   { jcPtr           :: {-# UNPACK #-} !(IORef (Ptr Word8))
   , jcBytesConsumed :: {-# UNPACK #-} !AtomicCounter
-  , jcDirectory     :: !FilePath
+  , jcDirectory     ::                !FilePath
+  , jcMaxByteSize   :: {-# UNPACK #-} !Int
   }
 
 newJournalConsumerPtrRef :: Ptr Word8 -> IO (IORef (Ptr Word8))
 newJournalConsumerPtrRef = newIORef
 
-getJournalConsumerPtr :: JournalConsumer -> IO (Ptr Word8)
-getJournalConsumerPtr = readIORef . jcPtr
+readJournalConsumerPtr :: JournalConsumer -> IO (Ptr Word8)
+readJournalConsumerPtr = readIORef . jcPtr
+
+updateJournalConsumerPtr :: JournalConsumer -> Ptr Word8 -> IO ()
+updateJournalConsumerPtr jc ptr = writeIORef (jcPtr jc) ptr

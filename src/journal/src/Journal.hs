@@ -2,6 +2,7 @@ module Journal
   ( module Journal.Types
   , defaultOptions
   , startJournal
+  , stopJournal
   , appendBS
   , tee
   , appendRecv
@@ -15,10 +16,12 @@ module Journal
 
 import Control.Exception (assert)
 import Control.Monad (unless)
+import Data.Bits (popCount)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (fromForeignPtr)
 import Data.IORef (newIORef)
+import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (plusPtr)
 import Network.Socket (Socket, recvBuf)
@@ -31,13 +34,16 @@ import Journal.Types
 
 ------------------------------------------------------------------------
 
--- * Initialisation
+-- * Initialisation and shutdown
 
 defaultOptions :: Options
 defaultOptions = Options 1024
 
 startJournal :: FilePath -> Options -> IO (Journal, JournalConsumer)
 startJournal dir (Options maxByteSize) = do
+  unless (popCount maxByteSize == 1) $
+    -- NOTE: The use of bitwise and (`.&.`) in `claim` relies on this.
+    error "startJournal: oMaxByteSize must be a power of 2"
   dirExists <- doesDirectoryExist dir
   unless dirExists (createDirectoryIfMissing True dir)
 
@@ -65,8 +71,17 @@ startJournal dir (Options maxByteSize) = do
   ptrRef <- newJournalPtrRef ptr
   bytesConsumedCounter <- newCounter 0
   jc <- JournalConsumer <$> newJournalConsumerPtrRef ptr <*> pure bytesConsumedCounter
-                        <*> pure dir
-  return (Journal ptrRef bytesProducedCounter maxByteSize dir bytesConsumedCounter, jc)
+                        <*> pure dir <*> pure maxByteSize
+  fileCount <- newCounter 0 -- XXX: always start over from 0?
+  return (Journal ptrRef bytesProducedCounter maxByteSize dir bytesConsumedCounter fileCount,
+          jc)
+
+stopJournal :: Journal -> JournalConsumer -> IO ()
+stopJournal jour jc = do
+  jPtr <- readJournalPtr jour
+  munmapFile jPtr (jMaxByteSize jour)
+  jcPtr <- readJournalConsumerPtr jc
+  munmapFile jcPtr (jMaxByteSize jour)
 
 ------------------------------------------------------------------------
 
@@ -74,10 +89,11 @@ startJournal dir (Options maxByteSize) = do
 
 -- NOTE: pre-condition: `0 < BS.length bs <= maxByteSize`
 appendBS :: Journal -> ByteString -> IO ()
-appendBS jour bs = assert (0 < BS.length bs && BS.length bs <= jMaxByteSize jour) $ do
+appendBS jour bs = assert (0 < BS.length bs &&
+                           hEADER_SIZE + BS.length bs <= jMaxByteSize jour) $ do
   let len = BS.length bs
   offset <- claim jour len
-  buf <- getJournalPtr jour
+  buf <- readJournalPtr jour
   writeBSToPtr bs (buf `plusPtr` (offset + hEADER_SIZE))
   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
 
@@ -86,7 +102,7 @@ tee :: Journal -> Socket -> Int -> IO ByteString
 tee jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
   offset <- claim jour len
   putStrLn ("tee: writing to offset: " ++ show offset)
-  buf <- getJournalPtr jour
+  buf <- readJournalPtr jour
   receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
   fptr <- newForeignPtr_ buf
@@ -96,7 +112,7 @@ tee jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
 appendRecv :: Journal -> Socket -> Int -> IO Int
 appendRecv jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
   offset <- claim jour len
-  buf <- getJournalPtr jour
+  buf <- readJournalPtr jour
   receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
   -- XXX: if receivedBytes /= len or if sock isn't connected, or other failure
   -- modes of `recv(2)`?
@@ -109,13 +125,32 @@ appendRecv jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
 
 readJournal :: JournalConsumer -> IO ByteString
 readJournal jc = do
-  ptr <- getJournalConsumerPtr jc
+  ptr <- readJournalConsumerPtr jc
   offset <- readCounter (jcBytesConsumed jc)
   len <- waitForHeader ptr offset
+  putStrLn ("readJournal, offset: " ++ show offset)
+  putStrLn ("readJournal, len: " ++ show len)
   fptr <- newForeignPtr_ ptr
   let bs = BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len)
-  incrCounter_ (hEADER_SIZE + len) (jcBytesConsumed jc)
-  return bs
+  bytesRead <- incrCounter (hEADER_SIZE + len) (jcBytesConsumed jc)
+  putStrLn ("readJournal, bytesRead: " ++ show bytesRead)
+  if bytesRead == jcMaxByteSize jc
+  then do
+    putStrLn "readJournal, rotating..."
+    tag <- peekTag (ptr `plusPtr` offset)
+    if tag == Padding
+    then do
+      putStrLn "readJournal, skipping padding..."
+      ptr <- readJournalConsumerPtr jc
+      munmapFile ptr (jcMaxByteSize jc)
+      (ptr', _rawSize) <- mmapFile (jcDirectory jc </> aCTIVE_FILE) (jcMaxByteSize jc)
+      updateJournalConsumerPtr jc ptr'
+      writeCounter (jcBytesConsumed jc) 0
+      readJournal jc
+    else do
+      assertM (BS.head bs == Valid)
+      return bs
+  else return bs
 
 ------------------------------------------------------------------------
 
@@ -133,8 +168,8 @@ saveSnapshot jc state bytesConsumed = do
 truncateAfterSnapshot :: JournalConsumer -> Int -> IO ()
 truncateAfterSnapshot jc bytesConsumed = do
   -- XXX: needs to get the "oldest" ptr...
-  ptr <- getJournalConsumerPtr jc
-  mapHeadersUntil Valid (\hdr -> hdr { jhTag = Invalid}) ptr bytesConsumed
+  ptr <- readJournalConsumerPtr jc
+  mapHeadersUntil Valid (\hdr -> hdr { jhTag = Invalid }) ptr bytesConsumed
 
 loadSnapshot :: Journal -> IO (Maybe ByteString)
 loadSnapshot jour = do
@@ -148,7 +183,7 @@ loadSnapshot jour = do
 
 replay :: JournalConsumer -> (a -> ByteString -> a) -> a -> IO (Int, a)
 replay jc f x = do
-  ptr <- getJournalConsumerPtr jc
+  ptr <- readJournalConsumerPtr jc
   iterJournal ptr (jcBytesConsumed jc) go (0, x)
   where
     go (n, acc) bs = (n + 1, f acc bs)
@@ -159,5 +194,6 @@ replay jc f x = do
 
 dumpJournal :: Journal -> IO ()
 dumpJournal jour = do
-  active <- BS.readFile (jDirectory jour </> aCTIVE_FILE)
-  print active
+  dumpFile (jDirectory jour </> aCTIVE_FILE)
+  dumpFile (jDirectory jour </> dIRTY_FILE)
+  dumpFile (jDirectory jour </> cLEAN_FILE)

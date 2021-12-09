@@ -20,6 +20,8 @@ import Test.QuickCheck
        )
 import Test.Tasty
 
+import Journal as X
+import Journal.Internal as X
 import JournalTest as X
 
 ------------------------------------------------------------------------

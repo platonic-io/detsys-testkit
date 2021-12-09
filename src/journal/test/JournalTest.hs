@@ -2,6 +2,7 @@
 
 module JournalTest where
 
+import Control.Exception (SomeException, throwIO, catch)
 import Control.Monad (unless)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -16,6 +17,7 @@ import Test.QuickCheck.Monadic
 import Test.Tasty.HUnit (Assertion, assertBool)
 
 import Journal
+import Journal.Internal
 
 ------------------------------------------------------------------------
 
@@ -62,7 +64,8 @@ type Model = FakeJournal
 -- blocking) and don't append empty bytestrings.
 precondition :: Model -> Command -> Bool
 precondition m ReadJournal   = Vector.length (fjJournal m) /= fjIndex m
-precondition m (AppendBS bs) = not (BS.null bs)
+precondition m (AppendBS bs) =
+  not (BS.null bs) && BS.length bs + hEADER_SIZE <= oMaxByteSize testOptions
 
 step :: Command -> Model -> (Model, Response)
 step (AppendBS bs) m = Unit <$> appendBSFake bs m
@@ -72,9 +75,21 @@ exec :: Command -> (Journal, JournalConsumer) -> IO Response
 exec (AppendBS bs) (j, _jc) = Unit <$> appendBS j bs
 exec ReadJournal   (_j, jc) = ByteString <$> readJournal jc
 
+-- Generates ASCII bytestrings.
+genByteString :: Gen ByteString
+genByteString = oneof (map genBs [65..90])
+  where
+    genBs :: Int -> Gen ByteString
+    genBs i = frequency
+      [ (1, sized (\n -> return (BS.replicate n (fromIntegral i))))
+      , (1, return (BS.replicate (oMaxByteSize testOptions - hEADER_SIZE) (fromIntegral i)))
+      , (1, return (BS.replicate (oMaxByteSize testOptions - hEADER_SIZE - 1)
+                                 (fromIntegral i)))
+      ]
+
 genCommand :: Gen Command
 genCommand = frequency
-  [ (1, AppendBS <$> arbitrary)
+  [ (1, AppendBS <$> genByteString)
   , (1, pure ReadJournal)
   ]
 
@@ -90,7 +105,10 @@ genCommands m0 = sized (go m0)
 
 shrinkCommand :: Command -> [Command]
 shrinkCommand ReadJournal   = []
-shrinkCommand (AppendBS bs) = [ AppendBS bs' | bs' <- shrink bs, not (BS.null bs') ]
+shrinkCommand (AppendBS bs) =
+  [ AppendBS (BS.pack w8s)
+  | w8s <- shrinkList (const []) (BS.unpack bs)
+  , not (null w8s) ]
 
 shrinkCommands :: Model -> [Command] -> [[Command]]
 shrinkCommands m = filter (validProgram m) . shrinkList shrinkCommand
@@ -102,20 +120,24 @@ validProgram = go True
     go valid _m []          = valid
     go valid m (cmd : cmds) = go (precondition m cmd) (fst (step cmd m)) cmds
 
+tEST_DIRECTORY :: FilePath
+tEST_DIRECTORY = "/tmp/journal-test"
+
+testOptions :: Options
+testOptions = defaultOptions { oMaxByteSize = 128 }
+
 prop_journal :: Property
 prop_journal =
-  let
-    m    = startJournalFake
-    opts = defaultOptions
-  in
+  let m = startJournalFake in
   forAllShrink (genCommands m) (shrinkCommands m) $ \cmds -> monadicIO $ do
-    -- run (putStrLn ("Generated commands: " ++ show cmds))
-    run (removePathForcibly "/tmp/journal-test")
-    jjc <- run (startJournal "/tmp/journal-test" opts)
+    run (putStrLn ("Generated commands: " ++ show cmds))
+    run (removePathForcibly tEST_DIRECTORY)
+    jjc <- run (startJournal tEST_DIRECTORY testOptions)
     monitor (tabulate "Commands" (map prettyCommand cmds))
     (result, hist) <- go cmds m jjc []
+    run (uncurry stopJournal jjc)
     return result
-    monitor (stats opts (zip cmds hist))
+    monitorStats (stats (zip cmds hist))
     where
       go []          _m _jjc hist = return (True, reverse hist)
       go (cmd : cmds) m  jjc hist = do
@@ -131,26 +153,40 @@ prop_journal =
           monitor (counterexample ("Failed: " ++ msg))
         assert condition
 
-stats :: Options -> [(Command, Response)] -> Property -> Property
-stats opts hist =
-  collect ("Rotations: " <> show (totalAppended `div` oMaxByteSize opts))
+data Stats = Stats
+  { sBytesWritten :: Int
+  , sRotations    :: Int
+  }
+  deriving Show
+
+stats :: [(Command, Response)] -> Stats
+stats hist = Stats
+  { sBytesWritten = totalAppended
+  , sRotations    = totalAppended `div` oMaxByteSize testOptions
+  }
   where
     Sum totalAppended =
       foldMap (\(cmd, _resp) ->
                  case cmd of
-                   AppendBS bs -> Sum (BS.length bs)
+                   AppendBS bs -> Sum (hEADER_SIZE + BS.length bs)
                    _otherwise  -> mempty) hist
 
-runCmds :: [Command] -> IO Bool
-runCmds cmds = do
+monitorStats :: Monad m => Stats -> PropertyM m ()
+monitorStats stats
+  = monitor
+  $ collect ("Bytes written: " <> show (sBytesWritten stats))
+  . collect ("Rotations: "     <> show (sRotations stats))
+
+runCommands :: [Command] -> IO Bool
+runCommands cmds = do
   let m = startJournalFake
-  removePathForcibly "/tmp/journal-test"
-  jjc <- startJournal "/tmp/journal-test" defaultOptions
+  removePathForcibly tEST_DIRECTORY
+  jjc <- startJournal tEST_DIRECTORY testOptions
   putStrLn ""
-  go m jjc cmds
+  go m jjc cmds []
   where
-    go m jjc [] = return True
-    go m jjc (cmd : cmds) = do
+    go m jjc [] _hist = putStrLn "\nSuccess!" >> return True
+    go m jjc (cmd : cmds) hist = do
       let (m', resp) = step cmd m
       putStrLn (show m)
       putStrLn ""
@@ -159,20 +195,77 @@ runCmds cmds = do
       if null cmds
       then putStrLn (show m')
       else return ()
-      resp' <- exec cmd jjc
+      resp' <- exec cmd jjc `catch` handleException (fst jjc) hist
       if resp == resp'
-      then go m' jjc cmds
+      then go m' jjc cmds ((cmd, resp) : hist)
       else do
         putStrLn ""
         putStrLn ("Failed: " ++ show resp ++ " /= " ++ show resp')
         putStrLn ""
         putStrLn "Journal dump:"
         dumpJournal (fst jjc)
+        print (stats (reverse hist))
         return False
+
+    handleException :: Journal -> [(Command, Response)] -> SomeException -> IO a
+    handleException jour hist ex = do
+      putStrLn "Journal dump:"
+      dumpJournal jour
+      print (stats (reverse hist))
+      error ("Failed, threw exception: " ++ show ex)
 
 ------------------------------------------------------------------------
 
-assertBoolM :: String -> IO Bool -> Assertion
-assertBoolM msg io = do
-  b <- io
+unit_bug0 :: Assertion
+unit_bug0 = assertProgram "read after rotation"
+  [ AppendBS "AAAAAAAAAAAAAAAAA"
+  , AppendBS "BBBBBBBBBBBBBBBB"
+  , ReadJournal
+  , ReadJournal
+  , AppendBS "CCCCCCCCCCCCCCCCC"
+  , ReadJournal
+  , AppendBS "DDDDDDDDDDDDDDDD"
+  , ReadJournal
+  , AppendBS "EEEEEEEEEEEEEEEE"
+  , ReadJournal
+  , AppendBS "FFFFFFFFFFFFFFFF"
+  , ReadJournal
+  ]
+
+unit_bug1 :: Assertion
+unit_bug1 = assertProgram "two rotations"
+  [ AppendBS "XXXXXXXXXXXXXXXXXXXX"
+  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
+  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
+  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
+  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
+  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
+  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
+  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
+  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
+  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
+  ]
+
+unit_bug2 :: Assertion
+unit_bug2 = assertProgram "rotation without padding"
+  [ AppendBS "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII" -- 122 + 6 = 128 bytes
+  , AppendBS "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY" -- 121 + 6 = 127 bytes
+  , ReadJournal
+  ]
+
+unit_bug3 :: Assertion
+unit_bug3 = assertProgram "segfault"
+  [ AppendBS "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP" -- 121 + 6 = 127 bytes
+  , AppendBS "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" -- 122 + 6 = 128 bytes
+  , AppendBS "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD" -- 122 + 6 = 128 bytes
+  , AppendBS "EEEEEE"
+  , ReadJournal
+  , ReadJournal
+  ]
+
+------------------------------------------------------------------------
+
+assertProgram :: String -> [Command] -> Assertion
+assertProgram msg cmds = do
+  b <- runCommands cmds
   assertBool msg b
