@@ -18,24 +18,26 @@ module Journal.Types.AtomicCounter
     , decrCounter_
     , readCounter
     , casCounter
+    , writeCounter
     ) where
 
 import Data.Bits (finiteBitSize)
 import GHC.Exts
-       ( MutableByteArray#
+       ( MutVar#
+       , MutableByteArray#
        , RealWorld
+       , atomicWriteIntArray#
        , casIntArray#
        , fetchAddIntArray#
        , fetchSubIntArray#
        , newAlignedPinnedByteArray#
+       , newMutVar#
        , readIntArray#
+       , readMutVar#
        , writeIntArray#
        , (+#)
        , (-#)
        , (==#)
-       , MutVar#
-       , newMutVar#
-       , readMutVar#
        )
 import GHC.Types
 
@@ -105,3 +107,9 @@ casCounter (AtomicCounter arr) (I# old) (I# new) = IO $ \s ->
       1# -> (# s', True #)
       0# -> (# s', False #)
 {-# INLINE casCounter #-}
+
+writeCounter :: AtomicCounter -> Int -> IO ()
+writeCounter (AtomicCounter arr) (I# new) = IO $ \s ->
+  case atomicWriteIntArray# arr 0# new s of
+    s' -> (# s', () #)
+{-# INLINE writeCounter #-}

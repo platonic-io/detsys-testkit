@@ -6,18 +6,20 @@ module Journal.Internal where
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (atomically, writeTVar)
 import Control.Exception (assert)
-import Control.Monad (when)
+import Control.Monad (unless, when)
 import Data.Binary (decode, encode)
 import Data.Bits ((.&.))
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (fromForeignPtr)
 import qualified Data.ByteString.Lazy as LBS
+import Data.List (isPrefixOf)
 import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (peekByteOff, pokeByteOff)
 import GHC.Stack (HasCallStack)
-import System.Directory (renameFile)
+import System.Directory
+       (copyFile, doesFileExist, listDirectory, renameFile)
 import System.FilePath ((</>))
 import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
@@ -48,23 +50,30 @@ cLEAN_FILE = "clean"
 sNAPSHOT_FILE :: FilePath
 sNAPSHOT_FILE = "snapshot"
 
+aRCHIVE_FILE :: FilePath
+aRCHIVE_FILE = "archive"
+
 ------------------------------------------------------------------------
 
 claim :: Journal -> Int -> IO Int
-claim jour len = assert (hEADER_SIZE + len < jMaxByteSize jour) $ do
+claim jour len = assert (hEADER_SIZE + len <= getMaxByteSize jour) $ do
   offset <- getAndIncrCounter (hEADER_SIZE + len) (jOffset jour)
-  -- XXX: mod/.&. maxByteSize?
-  if offset + hEADER_SIZE + len <= jMaxByteSize jour
+  if offset + hEADER_SIZE + len <= getMaxByteSize jour
   then return offset -- Fits in current file.
-  else if offset <= jMaxByteSize jour
+  else if offset <= getMaxByteSize jour
        then do
-         -- First writer that overflowed the file, the second one
-         -- would have got an offset higher than `maxBytes`.
+         -- First writer that overflowed the file, the second one would have got
+         -- an `offset` grather than `getMaxByteSize jour`.
 
+         ptr <- readJournalPtr jour
+         unless (offset == getMaxByteSize jour) $
+           writePaddingFooter ptr offset (getMaxByteSize jour)
          rotateFiles jour
-         return offset -- mod maxByteSize?
+         writeCounter (jOffset jour) 0
+         return 0
        else do
-         -- `offset >= maxBytes`, so we clearly can't write to the current file.
+         assertM (offset > getMaxByteSize jour)
+         -- `offset > maxBytes`, so we clearly can't write to the current file.
          -- Wait for the first writer that overflowed to rotate the files then
          -- write.
 
@@ -77,6 +86,7 @@ mmapFile fp maxByteSize = do
   (ptr, rawSize, _offset, size) <-
     mmapFilePtr fp ReadWriteEx (Just (0, maxByteSize))
   assertM (size == maxByteSize)
+  assertM (rawSize == maxByteSize)
   return (ptr, rawSize)
 
 munmapFile :: Ptr Word8 -> Int -> IO ()
@@ -90,13 +100,19 @@ rotateFiles jour = do
   renameFile (jDirectory jour </> cLEAN_FILE)  (jDirectory jour </> aCTIVE_FILE)
   -- XXX: do we need to unmap the old active file ptr? Need raw size for that...
   (ptr, _rawSize) <- mmapFile (jDirectory jour </> aCTIVE_FILE) (jMaxByteSize jour)
-  atomically (writeTVar (jPtr jour) ptr)
+  updateJournalPtr jour ptr
   cleanDirtyFile jour -- XXX: can be done async?
 
--- Assumption: cleaning the dirty file takes shorter amount of time than filling
--- up the active file to its max size.
+-- Assumption: if cleaning is done asynchronously then its assumed that cleaning
+-- the dirty file takes shorter amount of time than filling up the active file
+-- to its max size.
 cleanDirtyFile :: Journal -> IO ()
-cleanDirtyFile _jour = return ()
+cleanDirtyFile jour = do
+  files <- listDirectory (jDirectory jour)
+  let n = length (filter (aRCHIVE_FILE `isPrefixOf`) files)
+  renameFile (jDirectory jour </> dIRTY_FILE) (jDirectory jour </> aRCHIVE_FILE ++ show n)
+  (ptr, rawSize) <- mmapFile (jDirectory jour </> cLEAN_FILE) (jMaxByteSize jour)
+  munmapFile ptr rawSize
 
 writeBSToPtr :: BS.ByteString -> Ptr Word8 -> IO ()
 writeBSToPtr bs ptr | BS.null bs = return ()
@@ -131,6 +147,14 @@ data JournalHeaderV0 = JournalHeaderV0
 pattern Empty   = 0 :: Word8
 pattern Valid   = 1 :: Word8
 pattern Invalid = 2 :: Word8
+pattern Padding = 4 :: Word8
+
+tagString :: Word8 -> String
+tagString Empty   = "Empty"
+tagString Valid   = "Valid"
+tagString Invalid = "Invalid"
+tagString Padding = "Padding"
+tagString other   = "Unknown: " ++ show other
 
 newHeader :: Word8 -> Word8 -> Word32 -> JournalHeader
 newHeader = JournalHeaderV0
@@ -149,6 +173,9 @@ writeHeader ptr hdr =
                      , encode (jhLength hdr)
                      ]
 
+peekTag :: Ptr Word8 -> IO Word8
+peekTag ptr = peekByteOff ptr 0
+
 readHeader :: Ptr Word8 -> IO JournalHeader
 readHeader ptr = do
   b0 <- peekByteOff ptr 0 -- tag     (1 byte)
@@ -163,6 +190,11 @@ readHeader ptr = do
            (decode (LBS.pack [b0]))
            (decode (LBS.pack [b1]))
            (decode (LBS.pack [b2, b3, b4, b5])))
+
+writePaddingFooter :: Ptr Word8 -> Int -> Int -> IO ()
+writePaddingFooter ptr offset maxByteSize = assert (offset < maxByteSize) $ do
+  let remLen = fromIntegral (maxByteSize - offset - hEADER_SIZE)
+  writeHeader (ptr `plusPtr` offset) (newHeader Padding cURRENT_VERSION remLen)
 
 iterJournal :: Ptr Word8 -> AtomicCounter -> (a -> BS.ByteString -> a) -> a -> IO a
 iterJournal ptr consumed f x = do
@@ -182,6 +214,7 @@ iterJournal ptr consumed f x = do
         Invalid -> do
           incrCounter_ (hEADER_SIZE + fromIntegral (jhLength hdr)) consumed
           go (offset + hEADER_SIZE + fromIntegral (jhLength hdr)) acc
+        Padding -> return acc -- XXX: Or continue with the "next" file?
 
 waitForHeader :: Ptr Word8 -> Int -> IO Int
 waitForHeader ptr offset = go
@@ -228,3 +261,65 @@ fixInconsistency = undefined
 
 assertM :: (HasCallStack, Monad m) => Bool -> m ()
 assertM b = assert b (return ())
+
+------------------------------------------------------------------------
+
+-- * Debugging
+
+dumpFile :: FilePath -> IO ()
+dumpFile fp = do
+  b <- doesFileExist fp
+  if not b
+  then putStrLn (fp ++ " doesn't exist")
+  else do
+    bs <- BS.readFile fp
+    putStrLn "===="
+    putStrLn (fp ++ " (" ++ show (BS.length bs) ++ " bytes)")
+    go 0 0 bs
+  where
+    go ix totBytes bs
+      | BS.null bs = do
+          putStrLn ""
+          putStrLn "===="
+          putStrLn ""
+          putStrLn ("Total bytes: " ++ show totBytes)
+      | otherwise  = do
+
+          let header :: BS.ByteString
+              header = BS.take hEADER_SIZE bs
+
+              bs' :: BS.ByteString
+              bs' = BS.drop hEADER_SIZE bs
+
+              tag :: Word8
+              tag = BS.head header
+
+              version :: Word8
+              version = BS.head (BS.tail header)
+
+              len :: Word32
+              len = decode (LBS.fromStrict (BS.take 4 (BS.drop 2 header)))
+
+              body :: BS.ByteString
+              body = BS.take (fromIntegral len) bs'
+
+          putStrLn "----"
+
+          if tag == Empty && BS.all (== fromIntegral 0) bs'
+          then do
+            putStrLn ("... (" ++ show (hEADER_SIZE + BS.length bs') ++ " bytes free)")
+            putStrLn ""
+            putStrLn "===="
+            putStrLn ""
+            putStrLn ("Total bytes: " ++ show (totBytes + hEADER_SIZE + BS.length bs'))
+          else do
+
+            putStrLn ("Index    " ++ show ix)
+            putStrLn ("Tag:     " ++ tagString tag)
+            putStrLn ("Version: " ++ show version)
+            putStrLn ("Length:  " ++ show len)
+            putStrLn ("Body:    " ++ show body)
+
+            go (ix + 1)
+               (totBytes + hEADER_SIZE + fromIntegral len)
+               (BS.drop (fromIntegral len) bs')
