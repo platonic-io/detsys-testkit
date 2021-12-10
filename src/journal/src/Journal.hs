@@ -148,9 +148,13 @@ readJournal jc = do
       writeCounter (jcBytesConsumed jc) 0
       readJournal jc
     else do
+      putStrLn ("readJournal, tag: " ++ tagString tag)
       assertM (BS.head bs == Valid)
       return bs
-  else return bs
+  else do
+    putStrLn ("readJournal, returning: " ++ show bs ++
+              " (" ++ show (BS.length bs) ++ " bytes)")
+    return bs
 
 ------------------------------------------------------------------------
 
@@ -196,4 +200,3 @@ dumpJournal :: Journal -> IO ()
 dumpJournal jour = do
   dumpFile (jDirectory jour </> aCTIVE_FILE)
   dumpFile (jDirectory jour </> dIRTY_FILE)
-  dumpFile (jDirectory jour </> cLEAN_FILE)

@@ -9,6 +9,7 @@ import Control.Exception (assert)
 import Control.Monad (unless, when)
 import Data.Binary (decode, encode)
 import Data.Bits ((.&.))
+import Data.Maybe (catMaybes)
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (fromForeignPtr)
 import qualified Data.ByteString.Lazy as LBS
@@ -25,6 +26,7 @@ import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
 import Journal.Types
 import Journal.Types.AtomicCounter
+import Journal.Internal.Parse
 
 ------------------------------------------------------------------------
 
@@ -34,6 +36,9 @@ import Journal.Types.AtomicCounter
 hEADER_SIZE :: Int
 hEADER_SIZE = 1 + 1 + 4 -- sizeOf Word8 + sizeOf Word8 + sizeOf Word32
   -- XXX: CRC?
+
+fOOTER_SIZE :: Int
+fOOTER_SIZE = hEADER_SIZE
 
 cURRENT_VERSION :: Word8
 cURRENT_VERSION = 0
@@ -58,16 +63,18 @@ aRCHIVE_FILE = "archive"
 claim :: Journal -> Int -> IO Int
 claim jour len = assert (hEADER_SIZE + len <= getMaxByteSize jour) $ do
   offset <- getAndIncrCounter (hEADER_SIZE + len) (jOffset jour)
-  if offset + hEADER_SIZE + len <= getMaxByteSize jour
-  then return offset -- Fits in current file.
+  if offset + hEADER_SIZE + len + fOOTER_SIZE <= getMaxByteSize jour
+  then do
+    putStrLn ("claim, fits in current file, len: " ++ show len)
+    return offset -- Fits in current file.
   else if offset <= getMaxByteSize jour
        then do
          -- First writer that overflowed the file, the second one would have got
          -- an `offset` grather than `getMaxByteSize jour`.
 
+         putStrLn ("claim, first writer to overflow, offset: " ++ show offset)
          ptr <- readJournalPtr jour
-         unless (offset == getMaxByteSize jour) $
-           writePaddingFooter ptr offset (getMaxByteSize jour)
+         writePaddingFooter ptr offset (getMaxByteSize jour)
          rotateFiles jour
          writeCounter (jOffset jour) 0
          return 0
@@ -220,11 +227,14 @@ waitForHeader :: Ptr Word8 -> Int -> IO Int
 waitForHeader ptr offset = go
   where
     go = do
-      -- putStrLn ("waitForHeader: looking for header at offset: " ++ show offset)
+      putStrLn ("waitForHeader: looking for header at offset: " ++ show offset)
       hdr <- readHeader (ptr `plusPtr` offset)
       if jhTag hdr == Empty
       then threadDelay 1000000 >> go -- XXX: wait strategy via options?
-      else return (fromIntegral (jhLength hdr))
+      else do
+        assertM ((jhTag hdr == Valid || jhTag hdr == Padding) &&
+                 0 < jhLength hdr) -- XXX: jhLength hdr <= maxByteSize)
+        return (fromIntegral (jhLength hdr))
 
 mapHeadersUntil :: Word8 -> (JournalHeader -> JournalHeader) -> Ptr Word8 -> Int -> IO ()
 mapHeadersUntil mask f ptr limit = go 0
@@ -244,15 +254,26 @@ mapHeadersUntil mask f ptr limit = go 0
 
 data Inconsistency
   = ActiveFileSizeMismatch Int Int
+  | ActiveFileParseError String
   | PartialReceived
   | PartialRotation
+  deriving Show
+
+inconsistencyString :: Inconsistency -> String
+inconsistencyString = show
+
+inconsistenciesString :: [Inconsistency] -> String
+inconsistenciesString = show . map inconsistencyString
 
 checkForInconsistencies :: Journal -> IO [Inconsistency]
-checkForInconsistencies jour = do
-  bs <- BS.readFile (jDirectory jour </> aCTIVE_FILE)
-  if BS.length bs /= jMaxByteSize jour
-  then return [ActiveFileSizeMismatch (jMaxByteSize jour) (BS.length bs)]
-  else return []
+checkForInconsistencies jour = catMaybes <$> sequence
+  [ do bs <- BS.readFile (jDirectory jour </> aCTIVE_FILE)
+       if BS.length bs /= jMaxByteSize jour
+       then return (Just (ActiveFileSizeMismatch (jMaxByteSize jour) (BS.length bs)))
+       else return Nothing
+  , do eFileAst <- parseFileAST (jDirectory jour </> aCTIVE_FILE)
+       return (either (Just . ActiveFileParseError . show) (const Nothing) eFileAst)
+  ]
 
 fixInconsistency :: Inconsistency -> Journal -> IO ()
 fixInconsistency = undefined
