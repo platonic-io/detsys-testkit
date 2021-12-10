@@ -1,14 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module JournalTest where
 
-import Control.Exception (SomeException, throwIO, catch)
-import Control.Monad (unless)
+import Control.Arrow ((&&&))
+import Control.Exception (IOException, catch, displayException)
+import Control.Monad (unless, when)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Data.ByteString.Internal (w2c)
 import Data.Monoid (Sum(Sum))
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
+import Data.Word (Word8)
 import System.Directory (removePathForcibly)
 import System.Timeout (timeout)
 import Test.QuickCheck
@@ -21,11 +25,16 @@ import Journal.Internal
 
 ------------------------------------------------------------------------
 
-data FakeJournal = FakeJournal
-  { fjJournal :: Vector ByteString
+data FakeJournal' a = FakeJournal
+  { fjJournal :: Vector a
   , fjIndex   :: Int
   }
-  deriving Show
+  deriving (Show, Functor)
+
+type FakeJournal = FakeJournal' ByteString
+
+prettyFakeJournal :: FakeJournal -> String
+prettyFakeJournal = show . fmap (prettyRunLenEnc . runLengthEncoding)
 
 startJournalFake :: FakeJournal
 startJournalFake = FakeJournal Vector.empty 0
@@ -49,14 +58,32 @@ data Command
   -- Replay
   deriving Show
 
+constructorString :: Command -> String
+constructorString AppendBS {} = "AppendBS"
+constructorString ReadJournal = "ReadJournal"
+
 prettyCommand :: Command -> String
-prettyCommand AppendBS    {} = "AppendBS"
-prettyCommand ReadJournal {} = "ReadJournal"
+prettyCommand (AppendBS bs) =
+  "AppendBS \"" ++ prettyRunLenEnc (runLengthEncoding bs) ++ "\""
+prettyCommand ReadJournal   = "ReadJournal"
+
+runLengthEncoding :: ByteString -> [(Int, Word8)]
+runLengthEncoding = map (BS.length &&& BS.head) . BS.group
+
+prettyRunLenEnc :: [(Int, Word8)] -> String
+prettyRunLenEnc [(n, w)] = show n ++ "x" ++ [ w2c w ]
 
 data Response
   = Unit ()
   | ByteString ByteString
-  deriving (Eq, Show)
+  | IOException IOException
+  deriving Eq
+
+prettyResponse :: Response -> String
+prettyResponse (Unit ())       = "Unit ()"
+prettyResponse (ByteString bs) =
+  "ByteString \"" ++ prettyRunLenEnc (runLengthEncoding bs) ++ "\""
+prettyResponse (IOException e) = "IOException " ++ displayException e
 
 type Model = FakeJournal
 
@@ -82,10 +109,10 @@ genByteString = oneof (map genBs [65..90])
     genBs :: Int -> Gen ByteString
     genBs i = frequency
       [ (1, sized (\n -> return (BS.replicate n (fromIntegral i))))
-      , (1, return (BS.replicate (oMaxByteSize testOptions - hEADER_SIZE) (fromIntegral i)))
-      , (1, return (BS.replicate (oMaxByteSize testOptions - hEADER_SIZE - 1)
-                                 (fromIntegral i)))
+      , (1, return (BS.replicate  maxLen      (fromIntegral i)))
+      , (1, return (BS.replicate (maxLen - 1) (fromIntegral i)))
       ]
+    maxLen = oMaxByteSize testOptions - hEADER_SIZE - fOOTER_SIZE
 
 genCommand :: Gen Command
 genCommand = frequency
@@ -133,18 +160,18 @@ prop_journal =
     run (putStrLn ("Generated commands: " ++ show cmds))
     run (removePathForcibly tEST_DIRECTORY)
     jjc <- run (startJournal tEST_DIRECTORY testOptions)
-    monitor (tabulate "Commands" (map prettyCommand cmds))
+    monitor (tabulate "Commands" (map constructorString cmds))
     (result, hist) <- go cmds m jjc []
     run (uncurry stopJournal jjc)
-    return result
     monitorStats (stats (zip cmds hist))
+    return result
     where
       go []          _m _jjc hist = return (True, reverse hist)
       go (cmd : cmds) m  jjc hist = do
         let (m', resp) = step cmd m
-        resp' <- run (exec cmd jjc)
+        resp' <- run (exec cmd jjc `catch` (return . IOException))
         assertWithFail (resp == resp') $
-          show resp ++ " /= " ++ show resp'
+          prettyResponse resp ++ " /= " ++ prettyResponse resp'
         go cmds m' jjc (resp : hist)
 
       assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
@@ -153,6 +180,7 @@ prop_journal =
           monitor (counterexample ("Failed: " ++ msg))
         assert condition
 
+-- XXX: Get this straight from the metrics of the journal instead?
 data Stats = Stats
   { sBytesWritten :: Int
   , sRotations    :: Int
@@ -188,33 +216,32 @@ runCommands cmds = do
     go m jjc [] _hist = putStrLn "\nSuccess!" >> return True
     go m jjc (cmd : cmds) hist = do
       let (m', resp) = step cmd m
-      putStrLn (show m)
+      putStrLn (prettyFakeJournal m)
       putStrLn ""
-      putStrLn ("    == " ++ show cmd ++ " ==> " ++ show resp)
+      putStrLn ("    == " ++ prettyCommand cmd ++ " ==> " ++ prettyResponse resp)
       putStrLn ""
       if null cmds
-      then putStrLn (show m')
+      then putStrLn (prettyFakeJournal m')
       else return ()
-      resp' <- exec cmd jjc `catch` handleException (fst jjc) hist
-      if resp == resp'
+      resp' <- exec cmd jjc `catch` (return . IOException)
+      is <- checkForInconsistencies (fst jjc)
+      if resp == resp' && null is
       then go m' jjc cmds ((cmd, resp) : hist)
       else do
         putStrLn ""
-        putStrLn ("Failed: " ++ show resp ++ " /= " ++ show resp')
+        when (resp /= resp') $
+          putStrLn ("Failed: " ++ prettyResponse resp ++ " /= " ++ prettyResponse resp')
+        when (not (null is)) $
+          putStrLn ("Inconsistencies: " ++ inconsistenciesString is)
         putStrLn ""
         putStrLn "Journal dump:"
         dumpJournal (fst jjc)
         print (stats (reverse hist))
         return False
 
-    handleException :: Journal -> [(Command, Response)] -> SomeException -> IO a
-    handleException jour hist ex = do
-      putStrLn "Journal dump:"
-      dumpJournal jour
-      print (stats (reverse hist))
-      error ("Failed, threw exception: " ++ show ex)
-
 ------------------------------------------------------------------------
+
+-- XXX: make sure all these unit tests are part of the coverage...
 
 unit_bug0 :: Assertion
 unit_bug0 = assertProgram "read after rotation"
@@ -247,19 +274,12 @@ unit_bug1 = assertProgram "two rotations"
   ]
 
 unit_bug2 :: Assertion
-unit_bug2 = assertProgram "rotation without padding"
-  [ AppendBS "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII" -- 122 + 6 = 128 bytes
-  , AppendBS "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY" -- 121 + 6 = 127 bytes
+unit_bug2 = assertProgram "stuck reading"
+  [ AppendBS "OOOOOOOOOOOOO"
   , ReadJournal
-  ]
-
-unit_bug3 :: Assertion
-unit_bug3 = assertProgram "segfault"
-  [ AppendBS "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP" -- 121 + 6 = 127 bytes
-  , AppendBS "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" -- 122 + 6 = 128 bytes
-  , AppendBS "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD" -- 122 + 6 = 128 bytes
-  , AppendBS "EEEEEE"
+  , AppendBS "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" -- 116 + 6 = 122 bytes
   , ReadJournal
+  , AppendBS "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU" -- 116 + 6 = 122 bytes
   , ReadJournal
   ]
 
