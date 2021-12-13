@@ -10,7 +10,7 @@ import (
 
 func UnmarshalScheduledEvent(m Marshaler, input []byte, output *ScheduledEvent) error {
 	var s struct {
-		At    time.Time       `json:"at"`
+		At    TimePico        `json:"at"`
 		From  string          `json:"from"`
 		To    string          `json:"to"`
 		Kind  string          `json:"kind"`
@@ -27,7 +27,7 @@ func UnmarshalScheduledEvent(m Marshaler, input []byte, output *ScheduledEvent) 
 	}
 
 	*output = ScheduledEvent{
-		At:    s.At,
+		At:    time.Time(s.At),
 		From:  s.From,
 		To:    s.To,
 		Event: iev,
