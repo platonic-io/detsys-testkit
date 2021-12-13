@@ -129,7 +129,7 @@ func (el Executor) processEnvelope(env Envelope) (Message, ReactorsUpdateInfo) {
 	case "timer":
 		type TimerRequest struct {
 			Reactor string       `json:"to"`
-			At      time.Time    `json:"at"`
+			At      lib.TimePico `json:"at"`
 			Meta    lib.MetaInfo `json:"meta"`
 		}
 		var req TimerRequest
@@ -138,12 +138,12 @@ func (el Executor) processEnvelope(env Envelope) (Message, ReactorsUpdateInfo) {
 		}
 		reactor := el.Topology.Reactor(req.Reactor)
 		heapBefore := dumpHeapJson(reactor)
-		oevs := reactor.Timer(req.At)
+		oevs := reactor.Timer(time.Time(req.At))
 		heapAfter := dumpHeapJson(reactor)
 		heapDiff := jsonDiff(heapBefore, heapAfter)
 		logLines := el.DumpReactorLoglines(req.Reactor)
 		rui[req.Reactor] = ReactorStepInfo{
-			SimulatedTime: req.At,
+			SimulatedTime: time.Time(req.At),
 			LogLines:      logLines,
 			StateDiff:     heapDiff,
 		}

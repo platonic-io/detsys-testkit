@@ -1,12 +1,14 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Scheduler where
 
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Data.Text.Encoding as Text
+import Data.Fixed (Nano)
 import Data.Time (UTCTime)
 import qualified Data.Time.Clock as Time
 import Database.SQLite.Simple
@@ -16,7 +18,7 @@ import Scheduler.Agenda (Agenda)
 import qualified Scheduler.Agenda as Agenda
 import Scheduler.Event
 import Scheduler.Executor
-       (ExecutorResponse(ExecutorResponse), isOk, toScheduled)
+       (ExecutorResponse(ExecutorResponse), isOk, toScheduled, UnscheduledEvent)
 import Scheduler.Fault (manipulateEvent, newFaultState, shouldDrop)
 import Scheduler.Faults (Faults(Faults))
 import Scheduler.State
@@ -125,19 +127,19 @@ resolveClientResponses _testId _runId _runInfo timeC _cr = do
   pure ()
 -}
 
-scheduleEvents :: [(SchedulerEvent, Maybe Time.NominalDiffTime)]
-               -> Free (ActorF SchedulerState) ()
-scheduleEvents aes = do
-  deltas <- map (fromRational . toRational) <$> randomListOfExp (length aes) 20
-  now <- time <$> get
-  let entries = zipWith (f now) aes deltas
-  modify $ \s -> s { agenda = Agenda.pushList entries (agenda s) }
-  where
-    f t (tevent, mdur) delta =
-      let time' = case mdur of
-            Nothing -> t
-            Just dt -> t `addTime` dt
-      in (time' `addTime` delta, tevent)
+data WithRandom = NoRandom | WithMean Double
+
+randomList :: WithRandom -> Int -> Free (ActorF s) [Double]
+randomList NoRandom len = return $ replicate len 0
+randomList (WithMean mean) len = randomListOfExp len mean
+
+scheduleAgenda :: Time -> WithRandom -> [UnscheduledEvent] -> Free (ActorF s) Agenda
+scheduleAgenda t wr evs = do
+  ts <- map (addTime t . fromRational . toRational . realToFrac @Double @Nano)
+        <$> randomList wr (length evs)
+  let evs' = concat (zipWith toScheduled ts evs)
+  return $ Agenda.fromList (map (\e -> (at e, e)) evs')
+
 
 -- echo "{\"tag\":\"ClientRequest''\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005 && echo "{\"tag\":\"ClientRequest''\",\"contents\":[\"Start\",[]]}" | http POST :3005
 
@@ -214,18 +216,14 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
               on p (\(InternalMessageR (InternalMessage "Events" args)) -> do
                        -- XXX: with some probability duplicate the event?
                        let Success (ExecutorResponse evs _) = fromJSON args
-                           evs' = filter isOk evs
+                           evs' = filter (not . isOk) evs
                            -- XXX: make it possible to change this value from failure spec:
-                           mean = 20
-                       ts <- map (addTime t . fromRational . toRational)
-                               <$> randomListOfExp (length evs') mean
-                       let evs'' = concat (zipWith toScheduled ts evs)
-                           agenda' = Agenda.fromList (map (\e -> (at e, e)) evs'')
+                           wr = WithMean 20
+                       agenda' <- scheduleAgenda t wr evs'
                        modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
 
                        -- (cr, entries) <- partitionOutEvent clientC currentLogicalTime events
                        -- resolveClientResponses testId runId runInfo timeC cr
-                       -- scheduleEvents randomC agendaC timeC entries
 
                        step
                    )
@@ -313,10 +311,8 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
       let k (InternalMessageR (InternalMessage "Events" args)) =
             let
               Success (ExecutorResponse evs _) = fromJSON args
-              evs' = filter (\e -> kind e /= "ok")
-                       (concatMap (toScheduled zeroTime) evs)
-              agenda' = Agenda.fromList (map (\e -> (at e, e)) evs')
             in do
+              agenda' <- scheduleAgenda zeroTime NoRandom (filter (not . isOk) evs)
               modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
               step
       on p k
