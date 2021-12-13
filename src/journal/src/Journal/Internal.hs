@@ -1,3 +1,5 @@
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -7,26 +9,40 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (atomically, writeTVar)
 import Control.Exception (assert)
 import Control.Monad (unless, when)
-import Data.Binary (decode, encode)
-import Data.Bits ((.&.))
-import Data.Maybe (catMaybes)
+import Data.Binary (Binary, decode, encode)
+import Data.Bits (Bits, (.&.))
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (fromForeignPtr)
 import qualified Data.ByteString.Lazy as LBS
 import Data.List (isPrefixOf)
+import Data.Maybe (catMaybes)
 import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (Ptr, plusPtr)
-import Foreign.Storable (peekByteOff, pokeByteOff)
+import Foreign.Storable (Storable, peekByteOff, pokeByteOff, sizeOf)
 import GHC.Stack (HasCallStack)
 import System.Directory
        (copyFile, doesFileExist, listDirectory, renameFile)
 import System.FilePath ((</>))
 import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
+import Journal.Internal.Parse
 import Journal.Types
 import Journal.Types.AtomicCounter
-import Journal.Internal.Parse
+
+------------------------------------------------------------------------
+
+newtype HeaderTag = HeaderTag Word8
+  deriving newtype (Eq, Binary, Bits, Show, Num, Storable)
+
+newtype HeaderVersion = HeaderVersion Word8
+  deriving newtype (Eq, Binary, Num, Storable)
+
+newtype HeaderLength = HeaderLength Word32
+  deriving newtype (Eq, Binary, Num, Storable)
+
+newtype HeaderIndex = HeaderIndex Word32
+  deriving newtype (Eq, Binary, Num, Storable)
 
 ------------------------------------------------------------------------
 
@@ -34,7 +50,11 @@ import Journal.Internal.Parse
 
 -- | The size of the journal entry header in bytes.
 hEADER_SIZE :: Int
-hEADER_SIZE = 1 + 1 + 4 -- sizeOf Word8 + sizeOf Word8 + sizeOf Word32
+hEADER_SIZE
+  = sizeOf (1 :: HeaderTag)
+  + sizeOf (1 :: HeaderVersion)
+  + sizeOf (4 :: HeaderLength)
+  -- + sizeOf (4 :: HeaderIndex)
   -- XXX: CRC?
 
 fOOTER_SIZE :: Int
@@ -145,25 +165,25 @@ writeLBSToPtr bs ptr | LBS.null bs = return ()
 type JournalHeader = JournalHeaderV0
 
 data JournalHeaderV0 = JournalHeaderV0
-  { jhTag      :: !Word8
+  { jhTag      :: !HeaderTag
   , jhVersion  :: !Word8
   , jhLength   :: !Word32
   -- , jhChecksum :: !Word32 -- V1
   }
 
-pattern Empty   = 0 :: Word8
-pattern Valid   = 1 :: Word8
-pattern Invalid = 2 :: Word8
-pattern Padding = 4 :: Word8
+pattern Empty   = 0 :: HeaderTag
+pattern Valid   = 1 :: HeaderTag
+pattern Invalid = 2 :: HeaderTag
+pattern Padding = 4 :: HeaderTag
 
-tagString :: Word8 -> String
+tagString :: HeaderTag -> String
 tagString Empty   = "Empty"
 tagString Valid   = "Valid"
 tagString Invalid = "Invalid"
 tagString Padding = "Padding"
 tagString other   = "Unknown: " ++ show other
 
-newHeader :: Word8 -> Word8 -> Word32 -> JournalHeader
+newHeader :: HeaderTag -> Word8 -> Word32 -> JournalHeader
 newHeader = JournalHeaderV0
 
 makeValidHeader :: Int -> JournalHeader
@@ -180,8 +200,8 @@ writeHeader ptr hdr =
                      , encode (jhLength hdr)
                      ]
 
-peekTag :: Ptr Word8 -> IO Word8
-peekTag ptr = peekByteOff ptr 0
+peekTag :: Ptr Word8 -> IO HeaderTag
+peekTag ptr = HeaderTag <$> peekByteOff ptr 0
 
 readHeader :: Ptr Word8 -> IO JournalHeader
 readHeader ptr = do
@@ -238,7 +258,7 @@ waitForHeader ptr offset = go
                  (jhTag hdr == Padding && 0 <= jhLength hdr))
         return (fromIntegral (jhLength hdr))
 
-mapHeadersUntil :: Word8 -> (JournalHeader -> JournalHeader) -> Ptr Word8 -> Int -> IO ()
+mapHeadersUntil :: HeaderTag -> (JournalHeader -> JournalHeader) -> Ptr Word8 -> Int -> IO ()
 mapHeadersUntil mask f ptr limit = go 0
   where
     go :: Int -> IO ()
@@ -314,8 +334,8 @@ dumpFile fp = do
               bs' :: BS.ByteString
               bs' = BS.drop hEADER_SIZE bs
 
-              tag :: Word8
-              tag = BS.head header
+              tag :: HeaderTag
+              tag = HeaderTag (BS.head header)
 
               version :: Word8
               version = BS.head (BS.tail header)

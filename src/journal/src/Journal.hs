@@ -149,7 +149,7 @@ readJournal jc = do
       readJournal jc
     else do
       putStrLn ("readJournal, tag: " ++ tagString tag)
-      assertM (BS.head bs == Valid)
+      assertM (HeaderTag (BS.head bs) == Valid)
       return bs
   else do
     putStrLn ("readJournal, returning: " ++ show bs ++
