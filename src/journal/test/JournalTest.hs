@@ -190,6 +190,7 @@ data Stats = Stats
 stats :: [(Command, Response)] -> Stats
 stats hist = Stats
   { sBytesWritten = totalAppended
+  -- XXX: doesn't account for footers...
   , sRotations    = totalAppended `div` oMaxByteSize testOptions
   }
   where
@@ -280,6 +281,15 @@ unit_bug2 = assertProgram "stuck reading"
   , AppendBS "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" -- 116 + 6 = 122 bytes
   , ReadJournal
   , AppendBS "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU" -- 116 + 6 = 122 bytes
+  , ReadJournal
+  ]
+
+unit_bug3 :: Assertion
+unit_bug3 = assertProgram "two rotations reading side"
+  [ AppendBS "M"
+  , AppendBS "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR" -- 110 + 6 = 116 bytes
+  , AppendBS "L"
+  , ReadJournal
   , ReadJournal
   ]
 
