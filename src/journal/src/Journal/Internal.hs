@@ -76,7 +76,7 @@ claim jour len = assert (hEADER_SIZE + len <= getMaxByteSize jour) $ do
          ptr <- readJournalPtr jour
          writePaddingFooter ptr offset (getMaxByteSize jour)
          rotateFiles jour
-         writeCounter (jOffset jour) 0
+         writeCounter (jOffset jour) (hEADER_SIZE + len)
          return 0
        else do
          assertM (offset > getMaxByteSize jour)
@@ -232,8 +232,10 @@ waitForHeader ptr offset = go
       if jhTag hdr == Empty
       then threadDelay 1000000 >> go -- XXX: wait strategy via options?
       else do
-        assertM ((jhTag hdr == Valid || jhTag hdr == Padding) &&
-                 0 < jhLength hdr) -- XXX: jhLength hdr <= maxByteSize)
+        -- XXX: Also assert that jhLength hdr <= maxByteSize)
+        assertM ((jhTag hdr == Valid   && 0 <  jhLength hdr) ||
+                 -- NOTE: Padding can be zero bytes.
+                 (jhTag hdr == Padding && 0 <= jhLength hdr))
         return (fromIntegral (jhLength hdr))
 
 mapHeadersUntil :: Word8 -> (JournalHeader -> JournalHeader) -> Ptr Word8 -> Int -> IO ()
