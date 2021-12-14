@@ -2,7 +2,6 @@ module StuntDouble.Random
   ( Seed
   , RandomInterval
   , makeSeed
-  , makeSeedIO
   , interval
   , exponential
   , add
@@ -24,9 +23,6 @@ instance RandomGen Seed where
 
 makeSeed :: Int -> Seed
 makeSeed = Seed . mkStdGen
-
-makeSeedIO :: IO Seed
-makeSeedIO = fmap makeSeed randomIO
 
 newtype RandomInterval = RandomInterval Double
   deriving Show

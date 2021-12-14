@@ -147,6 +147,8 @@ validProgram = go True
     go valid _m []          = valid
     go valid m (cmd : cmds) = go (precondition m cmd) (fst (step cmd m)) cmds
 
+-- XXX: This isn't enough to isolate tests from each other, so running multiple
+-- test concurrently will likely fail.
 tEST_DIRECTORY :: FilePath
 tEST_DIRECTORY = "/tmp/journal-test"
 

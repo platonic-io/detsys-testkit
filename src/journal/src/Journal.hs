@@ -87,19 +87,19 @@ stopJournal jour jc = do
 
 -- * Production
 
--- NOTE: pre-condition: `0 < BS.length bs <= maxByteSize`
 appendBS :: Journal -> ByteString -> IO ()
-appendBS jour bs = assert (0 < BS.length bs &&
-                           hEADER_SIZE + BS.length bs <= jMaxByteSize jour) $ do
+appendBS jour bs = do
+  assertM (0 < BS.length bs &&
+           hEADER_SIZE + BS.length bs + fOOTER_SIZE <= jMaxByteSize jour)
   let len = BS.length bs
   offset <- claim jour len
   buf <- readJournalPtr jour
   writeBSToPtr bs (buf `plusPtr` (offset + hEADER_SIZE))
   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
 
--- NOTE: pre-condition: `0 < len <= maxByteSize`
 tee :: Journal -> Socket -> Int -> IO ByteString
-tee jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
+tee jour sock len = do
+  assertM (0 < len && hEADER_SIZE + len + fOOTER_SIZE <= jMaxByteSize jour)
   offset <- claim jour len
   putStrLn ("tee: writing to offset: " ++ show offset)
   buf <- readJournalPtr jour
@@ -108,9 +108,9 @@ tee jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
   fptr <- newForeignPtr_ buf
   return (BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len))
 
--- NOTE: pre-condition: `0 < len <= maxByteSize`
 appendRecv :: Journal -> Socket -> Int -> IO Int
-appendRecv jour sock len = assert (0 < len && len <= jMaxByteSize jour) $ do
+appendRecv jour sock len = do
+  assertM (0 < len && hEADER_SIZE + len + fOOTER_SIZE <= jMaxByteSize jour)
   offset <- claim jour len
   buf <- readJournalPtr jour
   receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len

@@ -39,7 +39,7 @@ newtype HeaderVersion = HeaderVersion Word8
   deriving newtype (Eq, Binary, Num, Storable)
 
 newtype HeaderLength = HeaderLength Word32
-  deriving newtype (Eq, Binary, Num, Storable)
+  deriving newtype (Eq, Ord, Binary, Enum, Real, Integral, Num, Storable)
 
 newtype HeaderIndex = HeaderIndex Word32
   deriving newtype (Eq, Binary, Num, Storable)
@@ -60,7 +60,7 @@ hEADER_SIZE
 fOOTER_SIZE :: Int
 fOOTER_SIZE = hEADER_SIZE
 
-cURRENT_VERSION :: Word8
+cURRENT_VERSION :: HeaderVersion
 cURRENT_VERSION = 0
 
 aCTIVE_FILE :: FilePath
@@ -166,8 +166,8 @@ type JournalHeader = JournalHeaderV0
 
 data JournalHeaderV0 = JournalHeaderV0
   { jhTag      :: !HeaderTag
-  , jhVersion  :: !Word8
-  , jhLength   :: !Word32
+  , jhVersion  :: !HeaderVersion
+  , jhLength   :: !HeaderLength
   -- , jhChecksum :: !Word32 -- V1
   }
 
@@ -183,7 +183,7 @@ tagString Invalid = "Invalid"
 tagString Padding = "Padding"
 tagString other   = "Unknown: " ++ show other
 
-newHeader :: HeaderTag -> Word8 -> Word32 -> JournalHeader
+newHeader :: HeaderTag -> HeaderVersion -> HeaderLength -> JournalHeader
 newHeader = JournalHeaderV0
 
 makeValidHeader :: Int -> JournalHeader
