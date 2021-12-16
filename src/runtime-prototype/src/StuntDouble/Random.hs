@@ -5,9 +5,13 @@ module StuntDouble.Random
   , makeSeedIO
   , interval
   , exponential
+  , add
+  , detRandomInterval
+  , isLessThan
   )
   where
 
+import Data.Fixed (mod')
 import System.Random
 
 ------------------------------------------------------------------------
@@ -26,6 +30,15 @@ makeSeedIO = fmap makeSeed randomIO
 
 newtype RandomInterval = RandomInterval Double
   deriving Show
+
+detRandomInterval :: Double -> RandomInterval
+detRandomInterval d = RandomInterval $ mod' d 1
+
+add :: RandomInterval -> RandomInterval -> RandomInterval
+add (RandomInterval d) (RandomInterval d') = detRandomInterval $ d + d'
+
+isLessThan :: RandomInterval -> Double -> Bool
+isLessThan (RandomInterval d) d' = d < d'
 
 interval :: Seed -> (RandomInterval, Seed)
 interval seed =
