@@ -12,6 +12,7 @@ import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Char (toLower)
 import Data.Ratio ((%))
+import qualified Data.Time as Time
 import GHC.Generics (Generic)
 
 import Scheduler.Event
@@ -43,6 +44,10 @@ data UnscheduledEvent = UEMessage
   { ueArgs :: Value
   , ueFrom :: String
   , ueDuration_ns :: Int
+  } |
+  UEDelayed
+  { ueInner :: UnscheduledEvent
+  , ueDuration :: Time.NominalDiffTime
   }
   deriving (Generic, Eq, Ord, Show)
 
@@ -64,6 +69,10 @@ isOk :: UnscheduledEvent -> Bool
 isOk UEOk {}    = True
 isOk _otherwise = False
 
+fromUE :: UnscheduledEvent -> String
+fromUE (UEDelayed inner _) = fromUE inner
+fromUE ue = ueFrom ue
+
 toScheduled :: Time -> UnscheduledEvent -> [SchedulerEvent]
 toScheduled at (UEMessage event args tos from)
   = [ SchedulerEvent "message" event args to from at Nothing | to <- tos]
@@ -74,6 +83,9 @@ toScheduled at (UETimer args from duration)
   where
     at' = addTime at duration'
     duration' = fromRational $ fromIntegral duration % 1_000_000_000
+toScheduled at (UEDelayed inner duration) = toScheduled at' inner
+  where
+    at' = addTime at duration
 
 executorCodec :: Codec
 executorCodec = Codec enc dec
