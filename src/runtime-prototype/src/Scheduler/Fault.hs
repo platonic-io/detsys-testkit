@@ -15,6 +15,7 @@ import qualified Scheduler.Agenda as Agenda
 import Scheduler.Agenda (Agenda)
 import Scheduler.Event
 import qualified Scheduler.Faults as Faults
+import Scheduler.TimeInterval
 import StuntDouble.LogicalTime
 import StuntDouble.Time
 
@@ -153,27 +154,3 @@ manipulateEvent e (FaultState fsAll) = case Map.lookup (to e) fsAll of
         | contain t ti = applySkew t ti action
         | otherwise = t
 
-------------------------------------------------------------------------
--- does Time support inf?
-data TimeInterval = TimeInterval {tiFrom :: Time, tiTo :: Time}
-  deriving stock (Eq, Ord, Show)
-
-contain :: Time -> TimeInterval -> Bool
-contain t (TimeInterval a b) = afterTime t a && afterTime b t
-
--- I'm sure there is some clever data structure for this
-newtype TimeIntervals = TimeIntervals (Set TimeInterval)
-  deriving newtype (Semigroup, Monoid, Show)
-
-emptyIntervals :: TimeIntervals
-emptyIntervals = TimeIntervals Set.empty
-
-singleton :: TimeInterval -> TimeIntervals
-singleton = TimeIntervals . Set.singleton
-
-contains :: Time -> TimeIntervals -> Bool
-contains t (TimeIntervals s) =
-    not
-  . Set.null
-  . Set.filter (contain t)
-  $ s

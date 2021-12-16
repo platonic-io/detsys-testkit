@@ -29,6 +29,7 @@ library
     Scheduler.Faults
     Scheduler.Main
     Scheduler.State
+    Scheduler.TimeInterval
     StuntDouble
     StuntDouble.ActorMap
     StuntDouble.AdminTransport
