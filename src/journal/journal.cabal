@@ -48,6 +48,8 @@ library
     Journal.CRC32
     Journal.Internal
     Journal.Internal.Parse
+    Journal.Internal.Metrics
+    Journal.Internal.ByteBuffer
     Journal.Types
     Journal.Types.AtomicCounter
 
