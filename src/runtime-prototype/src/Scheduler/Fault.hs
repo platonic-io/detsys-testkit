@@ -123,6 +123,7 @@ newFaultState = foldMap mkFaultState . Faults.faults
     translate (Faults.ClockSkewBump n d f t) = n !-> mempty { fsClockSkew = ClockSkew [(TimeInterval f t, CSABump d)]}
     translate (Faults.ClockSkewStrobe n d p f t) = n !-> mempty { fsClockSkew = ClockSkew [(TimeInterval f t, CSAStrobe d p)]}
     translate Faults.RestartReactor{} = Nothing
+    translate (Faults.DuplicateMessage n f t d p r) =  n !-> mempty { fsDuplicationPotential = DuplicationPotential [(TimeInterval f t, DuplicationInfo (RandomVariable (detRandomInterval p) r) d)]}
 
     agendaItems :: Faults.Fault -> Agenda
     agendaItems Faults.Omission{} = mempty
@@ -134,6 +135,7 @@ newFaultState = foldMap mkFaultState . Faults.faults
     agendaItems (Faults.RestartReactor n t) = Agenda.push (t, ev) mempty
       where
         ev = SchedulerEvent {kind = "fault", event = "restart", args = Aeson.object [], from = "god", to = n, at = t, meta = Nothing}
+    agendaItems Faults.DuplicateMessage{} = mempty
 
 ------------------------------------------------------------------------
 afterLogicalTime :: LogicalTime -> LogicalTime -> Bool

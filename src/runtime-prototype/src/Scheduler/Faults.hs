@@ -54,6 +54,14 @@ data Fault
     { node :: String
     , fromTime :: Time
     }
+  | DuplicateMessage
+    { node :: String
+    , fromTime :: Time
+    , toTime :: Time
+    , bumpDuration :: Time.NominalDiffTime
+    , randomPoint :: Double
+    , randomRange :: Double
+    }
   deriving (Generic, Show)
 
 customOptions :: Options
