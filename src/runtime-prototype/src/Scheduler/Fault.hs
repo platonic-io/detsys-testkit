@@ -15,8 +15,10 @@ import qualified Scheduler.Agenda as Agenda
 import Scheduler.Agenda (Agenda)
 import Scheduler.Event
 import qualified Scheduler.Faults as Faults
+import Scheduler.Executor (UnscheduledEvent(..), fromUE)
 import Scheduler.TimeInterval
 import StuntDouble.LogicalTime
+import StuntDouble.Random
 import StuntDouble.Time
 
 -- XXX unclear if we can use LogicalTime in the same sense we do for ldfi?
@@ -45,18 +47,44 @@ newtype ClockSkew = ClockSkew
   { csSkews :: [(TimeInterval, ClockSkewAction)]
   } deriving newtype (Semigroup, Monoid, Show)
 
+-- RandomVariable for a boolean in the [0,1] outcomespace
+-- both `rvPoint` and `rvRange` are in [0,1]
+-- `rvRange` is how often it should be true, and `rvPoint` is some deteriminstic randomness
+data RandomVariable
+  = RandomVariable
+    { rvPoint :: RandomInterval
+    , rvRange :: Double
+    }
+  deriving (Show)
+
+-- The semantic function of `RandomVariable`
+randomVariable :: RandomVariable -> RandomInterval -> Bool
+randomVariable rv d = (d `add` rvPoint rv) `isLessThan` rvRange rv
+
+data DuplicationInfo
+  = DuplicationInfo
+    { diRandomVariable :: RandomVariable -- [0,1]
+    , diDeltaNs :: Time.NominalDiffTime
+    }
+  deriving (Show)
+
+newtype DuplicationPotential = DuplicationPotential
+  {dpZones :: [(TimeInterval, DuplicationInfo)]
+  } deriving newtype (Semigroup, Monoid, Show)
+
 data FaultStateForActor = FaultStateForActor
   { fsOmissions :: Set LogicalTimeInt
   , fsPermanentCrash :: Maybe LogicalTime
   , fsPause :: TimeIntervals
   , fsPartition :: Map ActorName TimeIntervals
   , fsClockSkew :: ClockSkew
+  , fsDuplicationPotential :: DuplicationPotential
   }
   deriving stock Show
 
 instance Semigroup FaultStateForActor where
-  FaultStateForActor o c p pa cs <> FaultStateForActor o' c' p' pa' cs'
-    = FaultStateForActor (o <> o') (c `plusL` c') (p <> p') (Map.unionWith (<>) pa pa') (cs <> cs')
+  FaultStateForActor o c p pa cs dp <> FaultStateForActor o' c' p' pa' cs' dp'
+    = FaultStateForActor (o <> o') (c `plusL` c') (p <> p') (Map.unionWith (<>) pa pa') (cs <> cs') (dp <> dp')
     where
       -- this is almost (<>) for Maybe, except LogicalTime doesn't have Semigroup (we want it to be Min Int)
       plusL Nothing x = x
@@ -65,7 +93,7 @@ instance Semigroup FaultStateForActor where
 
 instance Monoid FaultStateForActor where
   -- once again no Semigroup for LogicalTime so need to use Nothing here
-  mempty = FaultStateForActor mempty Nothing mempty mempty mempty
+  mempty = FaultStateForActor mempty Nothing mempty mempty mempty mempty
 
 newtype FaultState = FaultState (Map ActorName FaultStateForActor)
   deriving newtype Show
@@ -154,3 +182,18 @@ manipulateEvent e (FaultState fsAll) = case Map.lookup (to e) fsAll of
         | contain t ti = applySkew t ti action
         | otherwise = t
 
+manipulateOutGoingEvent
+  :: UnscheduledEvent
+  -> FaultState
+  -> Time
+  -> RandomInterval
+  -> [UnscheduledEvent]
+manipulateOutGoingEvent ue (FaultState fsAll) at d = ue : dups (Map.lookup (fromUE ue) fsAll)
+  where
+    dups Nothing = []
+    dups (Just fs)
+      = [ UEDelayed ue (diDeltaNs di)
+        | (ti, di) <- dpZones (fsDuplicationPotential fs)
+        , contain at ti
+        , randomVariable (diRandomVariable di) d
+        ]
