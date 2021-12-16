@@ -5,6 +5,7 @@
 
 module Scheduler where
 
+import Control.Monad (forM)
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Data.Text.Encoding as Text
@@ -19,7 +20,7 @@ import qualified Scheduler.Agenda as Agenda
 import Scheduler.Event
 import Scheduler.Executor
        (ExecutorResponse(ExecutorResponse), isOk, toScheduled, UnscheduledEvent)
-import Scheduler.Fault (manipulateEvent, newFaultState, shouldDrop)
+import Scheduler.Fault (FaultState, manipulateEvent, manipulateOutGoingEvent, newFaultState, shouldDrop)
 import Scheduler.Faults (Faults(Faults))
 import Scheduler.State
 import StuntDouble
@@ -140,6 +141,13 @@ scheduleAgenda t wr evs = do
   let evs' = concat (zipWith toScheduled ts evs)
   return $ Agenda.fromList (map (\e -> (at e, e)) evs')
 
+manipulateOutgoing :: Time -> FaultState -> [UnscheduledEvent] -> Free (ActorF s) [UnscheduledEvent]
+manipulateOutgoing t fs ues = do
+  concat <$> forM ues act
+  where
+    act ue = do
+      r <- random
+      pure $ manipulateOutGoingEvent ue fs t r
 
 -- echo "{\"tag\":\"ClientRequest''\",\"contents\":[\"CreateTest\",[{\"tag\":\"SInt\",\"contents\":0}]]}" | http POST :3005 && echo "{\"tag\":\"ClientRequest''\",\"contents\":[\"Start\",[]]}" | http POST :3005
 
@@ -219,7 +227,7 @@ fakeScheduler executorRef (ClientRequest' "Start" [] cid) =
                            evs' = filter (not . isOk) evs
                            -- XXX: make it possible to change this value from failure spec:
                            wr = WithMean 20
-                       agenda' <- scheduleAgenda t wr evs'
+                       agenda' <- scheduleAgenda t wr =<< manipulateOutgoing t (faultState s) evs'
                        modify $ \s -> s { agenda = agenda s `Agenda.union` agenda' }
 
                        -- (cr, entries) <- partitionOutEvent clientC currentLogicalTime events
