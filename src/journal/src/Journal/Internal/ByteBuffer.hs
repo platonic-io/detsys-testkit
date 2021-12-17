@@ -18,6 +18,7 @@ data ByteBuffer = ByteBuffer
   { bbArray    :: {-# UNPACK #-} !(MutableByteArray# RealWorld)
   , bbCapacity :: {-# UNPACK #-} !Int
   , bbLimit    :: {-# UNPACK #-} !(IORef Int)
+  -- , bbMark     :: {-# UNPACK #-} !(IORef Int)
   , bbPosition :: {-# UNPACK #-} !(IORef Int)
   }
 
@@ -31,24 +32,31 @@ bbPtr (ByteBuffer mba# _ _ _) = Ptr (byteArrayContents# (unsafeCoerce# mba#))
 
 getCapacity :: ByteBuffer -> Int
 getCapacity = bbCapacity
+{-# INLINE getCapacity #-}
 
 readLimit :: ByteBuffer -> IO Int
 readLimit = readIORef . bbLimit
+{-# INLINE readLimit #-}
 
 readPosition :: ByteBuffer -> IO Int
 readPosition = readIORef . bbPosition
+{-# INLINE readPosition #-}
 
 writePosition :: ByteBuffer -> Int -> IO ()
 writePosition bb = writeIORef (bbPosition bb)
+{-# INLINE writePosition #-}
 
 incrPosition :: ByteBuffer -> Int -> IO ()
 incrPosition bb i = modifyIORef (bbPosition bb) (+ i)
+{-# INLINE incrPosition #-}
 
 ------------------------------------------------------------------------
 
 remaining :: ByteBuffer -> IO Int
-remaining bb = undefined
-
+remaining bb = do
+  lim <- readLimit bb
+  pos <- readPosition bb
+  return (lim - pos)
 
 ------------------------------------------------------------------------
 -- * Checks
@@ -65,28 +73,62 @@ boundCheck bb ix = do
 allocate :: Int -> IO ByteBuffer
 allocate capa@(I# capa#) = IO $ \s ->
   case newPinnedByteArray# capa# s of
-    (# s', mba# #) -> unIO (newByteBuffer mba# capa 0 0) s'
+    (# s', mba# #) -> unIO (newByteBuffer mba# capa capa 0) s'
 
 mmapped :: FilePath -> Int -> IO ByteBuffer
 mmapped = undefined
 
 wrap :: ByteBuffer -> IO ByteBuffer
-wrap = undefined
+wrap bb = newByteBuffer (bbArray bb) size size 0
+  where
+    mba# = bbArray bb
+    size = I# (sizeofMutableByteArray# mba#)
 
 wrapPart :: ByteBuffer -> Int -> Int -> IO ByteBuffer
-wrapPart bb offset len = undefined
+wrapPart bb offset len = newByteBuffer mba# size (offset + len) offset
+  where
+    mba# = bbArray bb
+    size = I# (sizeofMutableByteArray# mba#)
 
 slice :: ByteBuffer -> IO ByteBuffer
 slice bb@(ByteBuffer mba# _ _ _) = do
   pos <- readPosition bb
-  -- XXX:
-  newByteBuffer (unsafeCoerce# (bbPtr bb `plusPtr` pos)) undefined undefined 0
+  left <- remaining bb
+  putStrLn ("slice, pos: " ++ show pos ++ ", left: " ++ show left)
+  putStrLn ("bbPtr: " ++ show (bbPtr bb))
+  putStrLn ("bbPtr + pos: " ++ show (bbPtr bb `plusPtr` pos))
+  print (Ptr (byteArrayContents# (unsafeCoerce# (bbPtr bb `plusPtr` pos))))
+  newByteBuffer (unsafeCoerce# (bbPtr bb `plusPtr` pos)) left left 0
 
 duplicate :: ByteBuffer -> IO ByteBuffer
 duplicate bb@(ByteBuffer mba# _ _ _) = do
-  pos <- readPosition bb
   lim <- readLimit bb
-  newByteBuffer mba# (getCapacity bb) pos lim
+  pos <- readPosition bb
+  newByteBuffer mba# (getCapacity bb) lim pos
+
+------------------------------------------------------------------------
+
+compact :: ByteBuffer -> IO ByteBuffer
+compact = undefined
+
+-- | The limit is set to the current position and then the position is set to
+-- zero. If the mark is defined then it is discarded.
+flipBB :: ByteBuffer -> IO ByteBuffer
+flipBB = undefined
+
+-- | Rewinds this buffer. The position is set to zero and the mark is discarded.
+rewind :: ByteBuffer -> IO ByteBuffer
+rewind = undefined
+
+-- | Resets this buffer's position to the previously-marked position.
+-- Invoking this method neither changes nor discards the mark's value.
+reset :: ByteBuffer
+reset = undefined
+
+-- | The position is set to zero, the limit is set to the capacity, and the mark
+-- is discarded.
+clear :: ByteBuffer
+clear = undefined
 
 ------------------------------------------------------------------------
 -- * Single-byte relative and absolute operations
@@ -142,7 +184,27 @@ getStorableAt bb ix = do
   peekByteOff (bbPtr bb) ix
 
 ------------------------------------------------------------------------
+
+-- indexCharOffAddr#
+-- indexWideCharOffAddr#
+-- indexIntOffAddr#
+-- indexWordOffAddr#
+-- indexAddrOffAddr#
+-- indexFloatOffAddr#
+-- indexDoubleOffAddr#
+-- indexStablePtrOffAddr#
+-- indexInt8OffAddr#
+-- indexInt16OffAddr#
+-- indexInt32OffAddr#
+-- indexInt64OffAddr#
+-- indexWord8OffAddr#
+-- indexWord16OffAddr#
+-- indexWord32OffAddr#
+-- indexWord64OffAddr#
+
+------------------------------------------------------------------------
 -- * Mapped
 
-msync :: ByteBuffer -> IO ()
-msync = undefined
+-- | Calls `msync` which forces the data in memory to be synced to disk.
+force :: ByteBuffer -> IO ()
+force = undefined
