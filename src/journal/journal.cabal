@@ -50,6 +50,7 @@ library
     Journal.Internal.Parse
     Journal.Internal.Metrics
     Journal.Internal.ByteBuffer
+    Journal.Internal.Mmap
     Journal.Types
     Journal.Types.AtomicCounter
 
