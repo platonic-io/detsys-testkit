@@ -25,6 +25,9 @@ foreign import ccall unsafe "sys/mman.h msync"
 foreign import ccall unsafe "stdlib.h posix_memalign"
   c_posix_memalign :: Ptr (Ptr a) -> CSize -> CSize -> IO CInt
 
+foreign import ccall unsafe "unistd.h sysconf"
+  c_sysconf :: CInt -> IO CLong
+
 ------------------------------------------------------------------------
 
 mmap :: Maybe (Ptr a) -> Int -> MemoryProtection -> MemoryVisibility -> Maybe Fd
@@ -115,6 +118,9 @@ posixMemalign align size = do
   throwErrnoIfMinus1_ "posix_memalign"
     (c_posix_memalign memPtr (fromIntegral align) (fromIntegral size))
   peek memPtr
+
+sysconfPageSize :: IO Int
+sysconfPageSize = fromIntegral <$> c_sysconf 30
 
 ------------------------------------------------------------------------
 
