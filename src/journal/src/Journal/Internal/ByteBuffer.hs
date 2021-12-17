@@ -6,6 +6,7 @@ module Journal.Internal.ByteBuffer where
 import Control.Exception
 import Data.IORef
 import Foreign
+import GHC.ForeignPtr
 import GHC.Exts
 import System.Posix.IO (openFd, defaultFileFlags, OpenMode(ReadWrite))
 
@@ -99,10 +100,15 @@ allocate capa = do
   Ptr addr# <- mallocBytes capa
   newByteBuffer addr# capa capa 0
 
+allocateAligned :: Int -> Int -> IO ByteBuffer
+allocateAligned capa align = do
+  Ptr addr# <- posixMemalign capa align
+  newByteBuffer addr# capa capa 0
+
 mmapped :: FilePath -> Int -> IO ByteBuffer
 mmapped fp capa = do
   fd <- openFd fp ReadWrite Nothing defaultFileFlags
-  bb <- allocate capa
+  bb <- allocateAligned capa 4096
   ptr <- mmap (Just (bbPtr bb)) (fromIntegral capa)
            (PROT (READ :| WRITE)) MAP_SHARED (Just fd) 0
   assert (ptr == bbPtr bb) (return ())
@@ -234,3 +240,14 @@ getStorableAt bb ix = do
 -- | Calls `msync` which forces the data in memory to be synced to disk.
 force :: ByteBuffer -> IO ()
 force = undefined
+
+------------------------------------------------------------------------
+
+t :: IO ()
+t = do
+  bb <- mmapped "/tmp/mmap.txt" 4096
+  bb' <- duplicate bb
+  putStorable bb (0.1 :: Double)
+  putStorable bb 'A'
+  d <- getStorable bb'
+  print (d :: Double)

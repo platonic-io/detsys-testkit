@@ -27,11 +27,11 @@ foreign import ccall unsafe "stdlib.h posix_memalign"
 
 ------------------------------------------------------------------------
 
-mmap :: Maybe (Ptr a) -> CSize -> MemoryProtection -> MemoryVisibility -> Maybe Fd
+mmap :: Maybe (Ptr a) -> Int -> MemoryProtection -> MemoryVisibility -> Maybe Fd
      -> COff -> IO (Ptr a)
 mmap mAddr len prot visib mFd offset =
   throwErrnoIf (== mAP_FAILED) "mmap" $
-    c_mmap addr len (mpCInt prot) flags fd offset
+    c_mmap addr (fromIntegral len) (mpCInt prot) flags fd offset
   where
     mAP_FAILED = nullPtr `plusPtr` (-1)
 
@@ -96,10 +96,11 @@ mvCInt :: MemoryVisibility -> CInt
 mvCInt MAP_SHARED  = 1
 mvCInt MAP_PRIVATE = 2
 
-posixMemalign :: CSize -> CSize -> IO (ForeignPtr a)
-posixMemalign align size = do
+posixMemalignFPtr :: Int -> Int -> IO (ForeignPtr a)
+posixMemalignFPtr align size = do
   memPtr <- malloc
-  throwErrnoIfMinus1_ "posix_memalign" (c_posix_memalign memPtr align size)
+  throwErrnoIfMinus1_ "posix_memalign"
+    (c_posix_memalign memPtr (fromIntegral align) (fromIntegral size))
   ptr <- peek memPtr
   newForeignPtr ptr (finalizer memPtr ptr)
   where
@@ -108,8 +109,16 @@ posixMemalign align size = do
       free memPtr
       free ptr
 
+posixMemalign :: Int -> Int -> IO (Ptr a)
+posixMemalign align size = do
+  memPtr <- malloc
+  throwErrnoIfMinus1_ "posix_memalign"
+    (c_posix_memalign memPtr (fromIntegral align) (fromIntegral size))
+  peek memPtr
+
 ------------------------------------------------------------------------
 
+  {-
 main :: IO ()
 main = do
   fptr <- posixMemalign 4096 4096
@@ -120,3 +129,5 @@ main = do
     else do
       msync ptr 16 MS_SYNC False
       munmap ptr 16
+
+-}
