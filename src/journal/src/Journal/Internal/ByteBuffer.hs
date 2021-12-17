@@ -108,7 +108,8 @@ allocateAligned capa align = do
 mmapped :: FilePath -> Int -> IO ByteBuffer
 mmapped fp capa = do
   fd <- openFd fp ReadWrite Nothing defaultFileFlags
-  bb <- allocateAligned capa 4096
+  pageSize <- sysconfPageSize
+  bb <- allocateAligned capa pageSize
   ptr <- mmap (Just (bbPtr bb)) (fromIntegral capa)
            (PROT (READ :| WRITE)) MAP_SHARED (Just fd) 0
   assert (ptr == bbPtr bb) (return ())
