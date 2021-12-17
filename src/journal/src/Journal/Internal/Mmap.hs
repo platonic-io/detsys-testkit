@@ -18,6 +18,8 @@ foreign import ccall unsafe "sys/mman.h munmap"
 foreign import ccall unsafe "sys/mman.h msync"
   c_msync :: Ptr a -> CSize -> CInt -> IO CInt
 
+------------------------------------------------------------------------
+
 mmap :: Maybe (Ptr a) -> CSize -> MemoryProtection -> MemoryVisibility -> Maybe Fd
      -> COff -> IO (Ptr a)
 mmap mAddr len prot visib mFd offset =
@@ -55,9 +57,9 @@ msync
           --   that they can be updated with the fresh values just
           --   written).
   -> IO ()
-msync addr len flag invalidate = throwErrnoIfMinus1_ "msync" (c_msync addr len flags)
+msync addr len flag mS_INVALIDATE = throwErrnoIfMinus1_ "msync" (c_msync addr len flags)
   where
-    flags = msyncCInt flag .|. if invalidate then 2 else 0
+    flags = msyncCInt flag .|. if mS_INVALIDATE then 2 else 0
 
 data MSyncFlag
   = MS_ASYNC -- | Specifies that an update be scheduled, but the call
@@ -65,8 +67,8 @@ data MSyncFlag
   | MS_SYNC  -- | Requests an update and waits for it to complete.
 
 msyncCInt :: MSyncFlag -> CInt
-msyncCInt MS_ASYNC      = 1
-msyncCInt MS_SYNC       = 4
+msyncCInt MS_ASYNC = 1
+msyncCInt MS_SYNC  = 4
 
 data MemoryProtection = PROT_NONE | PROT PROT_SOME
 data PROT_SOME = READ | WRITE | EXEC | PROT_SOME :| PROT_SOME
