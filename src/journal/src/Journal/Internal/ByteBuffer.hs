@@ -5,29 +5,26 @@ module Journal.Internal.ByteBuffer where
 
 import Control.Exception
 import Data.IORef
-import GHC.Word
 import Foreign
 import GHC.Exts
-import GHC.Base (unIO)
-import GHC.Types
 
 ------------------------------------------------------------------------
 -- * Type
 
 data ByteBuffer = ByteBuffer
-  { bbArray    :: {-# UNPACK #-} !(MutableByteArray# RealWorld)
+  { bbAddr     :: {-# UNPACK #-} !Addr#
   , bbCapacity :: {-# UNPACK #-} !Int
   , bbLimit    :: {-# UNPACK #-} !(IORef Int)
   -- , bbMark     :: {-# UNPACK #-} !(IORef Int)
   , bbPosition :: {-# UNPACK #-} !(IORef Int)
   }
 
-newByteBuffer :: MutableByteArray# RealWorld -> Int -> Int -> Int -> IO ByteBuffer
-newByteBuffer mba# capa lim pos =
-  ByteBuffer mba# capa <$> newIORef lim <*> newIORef pos
+newByteBuffer :: Addr# -> Int -> Int -> Int -> IO ByteBuffer
+newByteBuffer addr# capa lim pos =
+  ByteBuffer addr# capa <$> newIORef lim <*> newIORef pos
 
 bbPtr :: ByteBuffer -> Ptr a
-bbPtr (ByteBuffer mba# _ _ _) = Ptr (byteArrayContents# (unsafeCoerce# mba#))
+bbPtr (ByteBuffer addr# _ _ _) = Ptr addr#
 {-# INLINE bbPtr #-}
 
 getCapacity :: ByteBuffer -> Int
@@ -71,34 +68,28 @@ boundCheck bb ix = do
 -- * Create
 
 allocate :: Int -> IO ByteBuffer
-allocate capa@(I# capa#) = IO $ \s ->
-  case newPinnedByteArray# capa# s of
-    (# s', mba# #) -> unIO (newByteBuffer mba# capa capa 0) s'
+allocate capa = do
+  Ptr addr# <- mallocBytes capa
+  newByteBuffer addr# capa capa 0
 
 mmapped :: FilePath -> Int -> IO ByteBuffer
 mmapped = undefined
 
 wrap :: ByteBuffer -> IO ByteBuffer
-wrap bb = newByteBuffer (bbArray bb) size size 0
+wrap bb = newByteBuffer (bbAddr bb) size size 0
   where
-    mba# = bbArray bb
-    size = I# (sizeofMutableByteArray# mba#)
+    size = bbCapacity bb
 
 wrapPart :: ByteBuffer -> Int -> Int -> IO ByteBuffer
-wrapPart bb offset len = newByteBuffer mba# size (offset + len) offset
+wrapPart bb offset len = newByteBuffer (bbAddr bb) size (offset + len) offset
   where
-    mba# = bbArray bb
-    size = I# (sizeofMutableByteArray# mba#)
+    size  = bbCapacity bb
 
 slice :: ByteBuffer -> IO ByteBuffer
-slice bb@(ByteBuffer mba# _ _ _) = do
-  pos <- readPosition bb
+slice bb = do
+  I# pos# <- readPosition bb
   left <- remaining bb
-  putStrLn ("slice, pos: " ++ show pos ++ ", left: " ++ show left)
-  putStrLn ("bbPtr: " ++ show (bbPtr bb))
-  putStrLn ("bbPtr + pos: " ++ show (bbPtr bb `plusPtr` pos))
-  print (Ptr (byteArrayContents# (unsafeCoerce# (bbPtr bb `plusPtr` pos))))
-  newByteBuffer (unsafeCoerce# (bbPtr bb `plusPtr` pos)) left left 0
+  newByteBuffer (bbAddr bb `plusAddr#` pos#) left left 0
 
 duplicate :: ByteBuffer -> IO ByteBuffer
 duplicate bb@(ByteBuffer mba# _ _ _) = do
