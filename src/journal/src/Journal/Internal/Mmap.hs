@@ -1,10 +1,14 @@
 module Journal.Internal.Mmap where
 
 import Data.Bits ((.|.))
+import Foreign.Concurrent (newForeignPtr)
 import Foreign.C.Error
 import Data.Maybe (fromMaybe)
 import Foreign.C.Types
 import Foreign.Ptr
+import Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
+import Foreign.Marshal.Alloc
+import Foreign.Storable
 import System.Posix.Types
 
 ------------------------------------------------------------------------
@@ -17,6 +21,9 @@ foreign import ccall unsafe "sys/mman.h munmap"
 
 foreign import ccall unsafe "sys/mman.h msync"
   c_msync :: Ptr a -> CSize -> CInt -> IO CInt
+
+foreign import ccall unsafe "stdlib.h posix_memalign"
+  c_posix_memalign :: Ptr (Ptr a) -> CSize -> CSize -> IO CInt
 
 ------------------------------------------------------------------------
 
@@ -89,10 +96,27 @@ mvCInt :: MemoryVisibility -> CInt
 mvCInt MAP_SHARED  = 1
 mvCInt MAP_PRIVATE = 2
 
+posixMemalign :: CSize -> CSize -> IO (ForeignPtr a)
+posixMemalign align size = do
+  memPtr <- malloc
+  throwErrnoIfMinus1_ "posix_memalign" (c_posix_memalign memPtr align size)
+  ptr <- peek memPtr
+  newForeignPtr ptr (finalizer memPtr ptr)
+  where
+    finalizer :: Ptr (Ptr a) -> Ptr a -> IO ()
+    finalizer memPtr ptr = do
+      free memPtr
+      free ptr
+
 ------------------------------------------------------------------------
 
 main :: IO ()
 main = do
-  ptr <- mmap Nothing 16 (PROT (READ :| WRITE)) MAP_SHARED Nothing 0
-  msync ptr 16 MS_SYNC False
-  munmap ptr 16
+  fptr <- posixMemalign 4096 4096
+  withForeignPtr fptr $ \ptr' -> do
+    ptr <- mmap (Just ptr') 16 (PROT (READ :| WRITE)) MAP_SHARED Nothing 0
+    if ptr /= ptr'
+    then error "not same ptr"
+    else do
+      msync ptr 16 MS_SYNC False
+      munmap ptr 16
