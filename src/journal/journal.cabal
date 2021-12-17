@@ -36,6 +36,7 @@ library
     , filepath
     , parsec
     , stm
+    , unix
 
   build-depends:
     , ghc-prim

@@ -7,6 +7,9 @@ import Control.Exception
 import Data.IORef
 import Foreign
 import GHC.Exts
+import System.Posix.IO (openFd, defaultFileFlags, OpenMode(ReadWrite))
+
+import Journal.Internal.Mmap
 
 ------------------------------------------------------------------------
 -- * Type
@@ -15,16 +18,16 @@ data ByteBuffer = ByteBuffer
   { bbAddr     :: {-# UNPACK #-} !Addr#
   , bbCapacity :: {-# UNPACK #-} !Int
   , bbLimit    :: {-# UNPACK #-} !(IORef Int)
-  -- , bbMark     :: {-# UNPACK #-} !(IORef Int)
   , bbPosition :: {-# UNPACK #-} !(IORef Int)
+  , bbMark     :: {-# UNPACK #-} !(IORef Int)
   }
 
 newByteBuffer :: Addr# -> Int -> Int -> Int -> IO ByteBuffer
 newByteBuffer addr# capa lim pos =
-  ByteBuffer addr# capa <$> newIORef lim <*> newIORef pos
+  ByteBuffer addr# capa <$> newIORef lim <*> newIORef pos <*> newIORef (-1)
 
 bbPtr :: ByteBuffer -> Ptr a
-bbPtr (ByteBuffer addr# _ _ _) = Ptr addr#
+bbPtr (ByteBuffer addr# _ _ _ _) = Ptr addr#
 {-# INLINE bbPtr #-}
 
 getCapacity :: ByteBuffer -> Int
@@ -34,6 +37,10 @@ getCapacity = bbCapacity
 readLimit :: ByteBuffer -> IO Int
 readLimit = readIORef . bbLimit
 {-# INLINE readLimit #-}
+
+writeLimit :: ByteBuffer -> Int -> IO ()
+writeLimit bb = writeIORef (bbLimit bb)
+{-# INLINE writeLimit #-}
 
 readPosition :: ByteBuffer -> IO Int
 readPosition = readIORef . bbPosition
@@ -46,6 +53,14 @@ writePosition bb = writeIORef (bbPosition bb)
 incrPosition :: ByteBuffer -> Int -> IO ()
 incrPosition bb i = modifyIORef (bbPosition bb) (+ i)
 {-# INLINE incrPosition #-}
+
+readMark :: ByteBuffer -> IO Int
+readMark = readIORef . bbMark
+{-# INLINE readMark #-}
+
+writeMark :: ByteBuffer -> Int -> IO ()
+writeMark bb = writeIORef (bbMark bb)
+{-# INLINE writeMark #-}
 
 ------------------------------------------------------------------------
 
@@ -64,6 +79,18 @@ boundCheck bb ix = do
   then return ()
   else throwIO (IndexOutOfBounds "XXX")
 
+invariant :: ByteBuffer -> IO ()
+invariant bb = do
+  mark <- readMark bb
+  pos  <- readPosition bb
+  lim  <- readLimit bb
+  let capa = getCapacity bb
+  assert ((mark == (-1) || 0 <= mark) &&
+          mark <= pos &&
+          pos <= lim &&
+          lim <= capa)
+    (return ())
+
 ------------------------------------------------------------------------
 -- * Create
 
@@ -73,7 +100,13 @@ allocate capa = do
   newByteBuffer addr# capa capa 0
 
 mmapped :: FilePath -> Int -> IO ByteBuffer
-mmapped = undefined
+mmapped fp capa = do
+  fd <- openFd fp ReadWrite Nothing defaultFileFlags
+  bb <- allocate capa
+  ptr <- mmap (Just (bbPtr bb)) (fromIntegral capa)
+           (PROT (READ :| WRITE)) MAP_SHARED (Just fd) 0
+  assert (ptr == bbPtr bb) (return ())
+  return bb
 
 wrap :: ByteBuffer -> IO ByteBuffer
 wrap bb = newByteBuffer (bbAddr bb) size size 0
@@ -92,15 +125,22 @@ slice bb = do
   newByteBuffer (bbAddr bb `plusAddr#` pos#) left left 0
 
 duplicate :: ByteBuffer -> IO ByteBuffer
-duplicate bb@(ByteBuffer mba# _ _ _) = do
+duplicate bb = do
   lim <- readLimit bb
   pos <- readPosition bb
-  newByteBuffer mba# (getCapacity bb) lim pos
+  newByteBuffer (bbAddr bb) (getCapacity bb) lim pos
 
 ------------------------------------------------------------------------
 
 compact :: ByteBuffer -> IO ByteBuffer
 compact = undefined
+
+------------------------------------------------------------------------
+
+-- | The position is set to zero, the limit is set to the capacity, and the mark
+-- is discarded.
+clear :: ByteBuffer
+clear = undefined
 
 -- | The limit is set to the current position and then the position is set to
 -- zero. If the mark is defined then it is discarded.
@@ -115,11 +155,6 @@ rewind = undefined
 -- Invoking this method neither changes nor discards the mark's value.
 reset :: ByteBuffer
 reset = undefined
-
--- | The position is set to zero, the limit is set to the capacity, and the mark
--- is discarded.
-clear :: ByteBuffer
-clear = undefined
 
 ------------------------------------------------------------------------
 -- * Single-byte relative and absolute operations
