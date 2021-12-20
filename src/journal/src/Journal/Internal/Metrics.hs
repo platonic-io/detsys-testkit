@@ -12,11 +12,13 @@ import GHC.ForeignPtr
 import GHC.Prim
 import GHC.Types
 
+import Journal.Internal.ByteBuffer
+
 ------------------------------------------------------------------------
 
 data Metrics a = Metrics
-  { mPtr     :: ForeignPtr Word8
-  , mOffsets :: Vector Int
+  { mMetadata :: ByteBuffer
+  , mBuffer   :: ByteBuffer
   }
 
 newtype MetricsSchema a = MetricsSchema
@@ -26,16 +28,13 @@ newtype MetricsSchema a = MetricsSchema
 data MetricsType = Counter | Histogram
 
 newMetrics :: (Enum a, Bounded a) => MetricsSchema a -> FilePath -> IO (Metrics a)
-newMetrics ms@(MetricsSchema xs) fp = IO $ \s ->
-  -- XXX: just use mallocForeignPtrBytes :: Int -> IO (ForeignPtr a)
-  -- XXX: Aligned to avoid possible false sharing?
-  case newPinnedByteArray# len s of
-    (# s', arr #) -> case byteArrayContents# (unsafeCoerce# arr) of
-      addr# -> (# s', Metrics (ForeignPtr addr# (PlainPtr arr)) (calculateOffsets ms) #)
-  -- ptr' <- mmap ptr ...
-  -- assertM (ptr' == ptr)
+newMetrics ms@(MetricsSchema xs) fp = do
+  bb <- mmapped fp (sizeOfOffsets + sizeOfMetrics ms)
+  meta <- wrapPart bb 0 sizeOfOffsets
+  buf  <- wrapPart bb (sizeOfOffsets + 1) (sizeOfOffsets + sizeOfMetrics ms)
+  return (Metrics meta buf)
   where
-    I# len = length xs
+    sizeOfOffsets = length xs * sizeOf (8 :: Int)
 
 -- XXX: how can we avoid `incrCounter` being called on a histogram?
 incrCounter :: (Enum a, Bounded a) => Metrics a -> a -> Int -> IO ()
@@ -54,7 +53,7 @@ validSchema :: (Enum a, Bounded a) => MetricsSchema a -> Either SchemaError ()
 validSchema = undefined -- map (fromEnum . fst) . unMetricsSchema
 
 lookupOffset :: (Enum a, Bounded a) => Metrics a -> a -> Int
-lookupOffset m x = mOffsets m Vector.! fromEnum x
+lookupOffset m x = undefined -- mOffsets m Vector.! fromEnum x
 
 calculateOffsets :: (Enum a, Bounded a) => MetricsSchema a -> Vector Int
 calculateOffsets (MetricsSchema xs)
@@ -62,13 +61,26 @@ calculateOffsets (MetricsSchema xs)
   . Vector.fromList
   . scanl (\ih (_, mty) -> intsOfSpaceNeeded mty + ih) 0
   $ xs
-  where
-    intsOfSpaceNeeded :: MetricsType -> Int
-    intsOfSpaceNeeded Counter = 1 -- count
-    intsOfSpaceNeeded Histogram
-      = 2 ^ 16 -- buckets
-      + 1      -- sum
-      + 1      -- count
+
+intsOfSpaceNeeded :: MetricsType -> Int
+intsOfSpaceNeeded Counter = 1 -- count
+intsOfSpaceNeeded Histogram
+  = 2 ^ 16 -- buckets
+  + 1      -- sum
+  + 1      -- count
+
+sizeOfMetrics :: MetricsSchema a -> Int
+sizeOfMetrics
+  = (* sizeOf (8 :: Int))
+  . sum
+  . map (intsOfSpaceNeeded . snd)
+  . unMetricsSchema
+
+addNewCounter :: ByteBuffer -> IO ()
+addNewCounter bb = undefined
+
+addNewHistogram :: ByteBuffer -> IO ()
+addNewHistogram = undefined
 
 ------------------------------------------------------------------------
 

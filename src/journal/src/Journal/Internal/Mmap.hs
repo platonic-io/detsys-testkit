@@ -120,14 +120,15 @@ posixMemalign align size = do
   peek memPtr
 
 sysconfPageSize :: IO Int
-sysconfPageSize = fromIntegral <$> c_sysconf 30
+sysconfPageSize = fromIntegral <$> c_sysconf _SC_PAGE_SIZE
+  where
+    _SC_PAGE_SIZE = 30
 
 ------------------------------------------------------------------------
 
-  {-
 main :: IO ()
 main = do
-  fptr <- posixMemalign 4096 4096
+  fptr <- posixMemalignFPtr 4096 4096
   withForeignPtr fptr $ \ptr' -> do
     ptr <- mmap (Just ptr') 16 (PROT (READ :| WRITE)) MAP_SHARED Nothing 0
     if ptr /= ptr'
@@ -135,5 +136,3 @@ main = do
     else do
       msync ptr 16 MS_SYNC False
       munmap ptr 16
-
--}
