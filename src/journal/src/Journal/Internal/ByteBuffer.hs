@@ -190,15 +190,32 @@ compact = undefined
 
 ------------------------------------------------------------------------
 
-clear :: ByteBuffer
-clear = undefined
+-- | Clears the byte buffer. The position is set to zero, the limit is set to
+-- the capacity, and the mark is discarded.
+clear :: ByteBuffer -> IO ()
+clear bb = do
+  writePosition bb 0
+  let Capacity capa = getCapacity bb
+  writeLimit bb (Limit capa)
+  writeMark bb (-1)
 
-flipBB :: ByteBuffer -> IO ByteBuffer
-flipBB = undefined
+-- | Flips the byte buffer. The limit is set to the current position and then
+-- the position is set to zero. If the mark is defined then it is discarded.
+flipBB :: ByteBuffer -> IO ()
+flipBB bb = do
+  Position pos <- readPosition bb
+  writeLimit bb (Limit pos)
+  writePosition bb 0
+  writeMark bb (-1)
 
-rewind :: ByteBuffer -> IO ByteBuffer
-rewind = undefined
+-- | Rewinds the byte buffer. The position is set to zero and the mark is
+-- discarded.
+rewind :: ByteBuffer -> IO ()
+rewind bb = do
+  writePosition bb 0
+  writeMark bb (-1)
 
+-- | Resets the byte buffer's position to the previously marked position.
 reset :: ByteBuffer -> IO ()
 reset bb = do
   mrk <- readMark bb
@@ -222,11 +239,17 @@ getByteAt = undefined
 ------------------------------------------------------------------------
 -- * Multi-byte operations
 
-putBytes :: ByteBuffer -> [Word8] -> IO ()
-putBytes = undefined
+putBytes :: ByteBuffer -> ByteBuffer -> IO ()
+putBytes src dest = do
+  Position (I# destPos#) <- readPosition dest
+  let Capacity (I# srcCapa#) = getCapacity src
+  -- XXX: bounds check
+  IO $ \s ->
+    case copyMutableByteArray# (bbData src) 0# (bbData dest) destPos# srcCapa# s of
+      s' -> (# s', () #)
 
-getBytes :: ByteBuffer -> IO [Word8]
-getBytes = undefined
+getBytes :: ByteBuffer -> Int -> Int -> IO [Word8]
+getBytes bb offset len = undefined
 
 ------------------------------------------------------------------------
 -- * Relative operations on `Storable` elements
@@ -318,6 +341,9 @@ writeInt64OffArrayIx bb (I# ix#) value = IO $ \s ->
 -- writeWord16OffArray#
 -- writeWord32OffArray#
 -- writeWord64OffArray#
+
+-- atomicReadIntArray#
+-- atomicWriteIntArray#
 
 -- | Given a bytebuffer, an offset in machine words, the expected old value, and
 -- the new value, perform an atomic compare and swap i.e. write the new value if
