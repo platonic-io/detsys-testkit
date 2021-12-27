@@ -261,7 +261,10 @@ getStorableAt bb ix = do
 
 -- readCharOffArray#
 -- readWideCharOffArray#
--- readIntOffArray#
+readIntOffArrayIx :: ByteBuffer -> Int -> IO Int
+readIntOffArrayIx bb (I# ix#) = IO $ \s ->
+  case readIntArray# (bbData bb) ix# s of
+    (# s', i #) -> (# s', I# i #)
 -- readWordOffArray#
 -- readArrayOffAddr#
 -- readFloatOffArray#
@@ -285,7 +288,10 @@ readInt64OffArrayIx bb (I# ix#) = IO $ \s ->
 
 -- writeCharOffArray#
 -- writeWideCharOffArray#
--- writeIntOffArray#
+writeIntOffArrayIx :: ByteBuffer -> Int -> Int -> IO ()
+writeIntOffArrayIx bb (I# ix#) (I# value#) = IO $ \s ->
+  case writeIntArray# (bbData bb) ix# value# s of
+    s' -> (# s', () #)
 -- writeWordOffArray#
 -- writeArrayOffAddr#
 -- writeFloatOffArray#
