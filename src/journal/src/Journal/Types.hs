@@ -25,6 +25,7 @@ module Journal.Types
   , packTail
   , termId
   , termOffset
+  , align
   )
   where
 
@@ -32,7 +33,6 @@ import Control.Concurrent.STM
 import Control.Concurrent.STM (TVar)
 import Data.ByteString (ByteString)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Data.Int
 import Data.Bits
 import Data.Vector (Vector)
 import Data.Word (Word32, Word64, Word8)
@@ -44,13 +44,23 @@ import Journal.Types.AtomicCounter
 
 ------------------------------------------------------------------------
 
+-- XXX: `casIntArray` only works on `Int`, so we can't use `Int32` and `Int64`
+-- yet. According to
+-- https://gitlab.haskell.org/ghc/ghc/-/blob/master/libraries/ghc-prim/changelog.md#080-edit-as-necessary
+-- casInt{32,64}Array should be part of ghc-prim 0.8.0, but the uploaded hackage
+-- package's changelog says it isn't part of that release, nor do the haddocks
+-- include it... Once this has been fixed we can remove the following type
+-- aliases:
+type Int64 = Int
+type Int32 = Int
+
 pARTITION_COUNT :: Int
 pARTITION_COUNT = 3
 
 data Journal' = Journal'
   { jTermBuffers   :: {-# UNPACK #-} !(Vector ByteBuffer)
   , jMetadata      :: {-# UNPACK #-} !ByteBuffer
-  , jPositionLimit :: {-# UNPACK #-} !(IORef Int) -- ???
+  , jPositionLimit :: {-# UNPACK #-} !AtomicCounter -- ???
   }
 
 data JMetadata = JMetadata
@@ -94,7 +104,7 @@ lOG_META_DATA_LENGTH = lOG_PAGE_SIZE_OFFSET
 
 rawTail :: ByteBuffer -> Int -> IO Int64
 rawTail meta partitionIndex =
-  readInt64OffArrayIx meta
+  readIntOffArrayIx meta
     (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
 
 termId :: Int64 -> Int32
@@ -110,7 +120,7 @@ packTail termId0 termOffset0 =
 
 setRawTail :: ByteBuffer -> Int32 -> Int32 -> Int -> IO ()
 setRawTail meta termId0 termOffset0 partitionIndex =
-  writeInt64OffArrayIx meta
+  writeIntOffArrayIx meta
     (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
     (packTail termId0 termOffset0)
 
@@ -125,35 +135,31 @@ initialiseTailWithTermId meta partitionIndex termId0 =
   setRawTail meta termId0 0 partitionIndex
 
 activeTermCount :: ByteBuffer -> IO Int32
-activeTermCount meta = readInt32OffArrayIx meta lOG_ACTIVE_TERM_COUNT_OFFSET
+activeTermCount meta = readIntOffArrayIx meta lOG_ACTIVE_TERM_COUNT_OFFSET
 
 setActiveTermCount :: ByteBuffer -> Int32 -> IO ()
-setActiveTermCount meta = writeInt32OffArrayIx meta lOG_ACTIVE_TERM_COUNT_OFFSET
+setActiveTermCount meta = writeIntOffArrayIx meta lOG_ACTIVE_TERM_COUNT_OFFSET
 
 casActiveTermCount :: ByteBuffer -> Int32 -> Int32 -> IO Bool
 casActiveTermCount meta expectedTermCount newTermCount =
-  undefined
-  -- casIntArray only works on `Int`, does it mean we need to change all `Int32`
-  -- to `Int`? Or can we keep `Int32` and use casIntArray + fromIntegral?
-
-  -- casIntArray meta lOG_ACTIVE_TERM_COUNT_OFFSET expectedTermCount newTermCount
+  casIntArray meta lOG_ACTIVE_TERM_COUNT_OFFSET expectedTermCount newTermCount
 
 initialTermId :: ByteBuffer -> IO Int32
-initialTermId meta = readInt32OffArrayIx meta lOG_INITIAL_TERM_ID_OFFSET
+initialTermId meta = readIntOffArrayIx meta lOG_INITIAL_TERM_ID_OFFSET
 
 -- should never be changed?
 -- setInitialTermId :: ByteBuffer -> Int32 -> IO ()
 -- setInitialTermId meta = writeInt32OffArrayIx meta lOG_INITIAL_TERM_ID_OFFSET
 
 termLength :: ByteBuffer -> IO Int32
-termLength meta = readInt32OffArrayIx meta lOG_TERM_LENGTH_OFFSET
+termLength meta = readIntOffArrayIx meta lOG_TERM_LENGTH_OFFSET
 
 -- should never be changed?
 -- setTermLength :: ByteBuffer -> Int32 -> IO ()
 -- setTermLength meta = writeInt32OffArrayIx meta lOG_TERM_LENGTH_OFFSET
 
 pageSize :: ByteBuffer -> IO Int32
-pageSize meta = readInt32OffArrayIx meta lOG_PAGE_SIZE_OFFSET
+pageSize meta = readIntOffArrayIx meta lOG_PAGE_SIZE_OFFSET
 
 -- | The number of bits to shift when multiplying or dividing by the term buffer
 -- length.
@@ -202,7 +208,14 @@ indexByPosition pos posBitsToShift = fromIntegral $
   (pos `shiftR` posBitsToShift) `mod` fromIntegral pARTITION_COUNT
 
 -- | Compute the current position in absolute number of bytes.
-computePosition = undefined
+computePosition :: Int32 -> Int32 -> Int -> Int32 -> Int64
+computePosition activeTermId termOffset posBitsToShift initTermId =
+  let
+    termCount :: Int64
+    -- Copes with negative `activeTermId` on rollover.
+    termCount = fromIntegral (activeTermId - initTermId)
+  in
+    (termCount `shiftL` posBitsToShift) + fromIntegral termOffset
 
 -- | Compute the current position in absolute number of bytes for the beginning
 -- of a term.
@@ -216,10 +229,27 @@ computeTermBeginPosition activeTermId posBitsToShift initTermId =
     termCount `shiftL` fromIntegral posBitsToShift
 
 -- | Compute the term id from a position.
-computeTermIdFromPosition = undefined
+computeTermIdFromPosition :: Int64 -> Int -> Int32 -> Int32
+computeTermIdFromPosition pos posBitsToShift initTermId = fromIntegral $
+  (pos `shiftR` posBitsToShift) + fromIntegral initTermId
 
 -- | Compute the total length of a log file given the term length.
-computeLogLength = undefined
+computeLogLength :: Int -> Int -> Int64
+computeLogLength termLen filePageSize
+  | termLen < (1024 * 1024 * 1024) = fromIntegral $
+      align ((termLen * pARTITION_COUNT) + lOG_META_DATA_LENGTH) filePageSize
+  | otherwise = fromIntegral $
+      (pARTITION_COUNT * termLen) + align lOG_META_DATA_LENGTH filePageSize
+
+-- | Align a value to the next multiple up of alignment.
+--
+-- If the value equals an alignment multiple then it is returned unchanged.
+--
+-- This method executes without branching. This code is designed to be use in
+-- the fast path and should not be used with negative numbers. Negative numbers
+-- will result in undefined behaviour.
+align :: Int -> Int -> Int
+align value alignment = (value + (alignment - 1)) .&. (- alignment)
 
 -- | Rotate the log and update the tail counter for the new term. This function
 -- is thread safe.
