@@ -16,6 +16,7 @@ import Data.ByteString.Internal (fromForeignPtr)
 import qualified Data.ByteString.Lazy as LBS
 import Data.List (isPrefixOf)
 import Data.Maybe (catMaybes)
+import qualified Data.Vector as Vector
 import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (Ptr, plusPtr)
@@ -80,6 +81,48 @@ aRCHIVE_FILE = "archive"
 
 ------------------------------------------------------------------------
 
+offer :: Ptr Word8 -> Int -> Int -> IO Int
+offer buf offset len = undefined
+
+tryClaim :: Journal' -> Int -> IO (Maybe Int64)
+tryClaim jour len = do
+  -- checkPayloadLength len
+  termCount <- activeTermCount (jMetadata jour)
+  let index                = indexByTermCount termCount
+      activePartitionIndex = index
+  rt <- rawTail (jMetadata jour) index
+  initTermId <- initialTermId (jMetadata jour)
+  termLen <- termLength (jMetadata jour)
+
+  let tId               = termId rt
+      tOffset           = termOffset rt termLen
+      termBeginPosition = computeTermBeginPosition tId (positionBitsToShift termLen) initTermId
+
+  limit <- calculatePositionLimit jour
+  let termAppender = jTermBuffers jour Vector.! activePartitionIndex
+      position     = termBeginPosition + tOffset
+  if position < limit
+  then do
+    result <- undefined
+      -- termAppenderClaim termAppender termId termOffset headerWriter bufferClaim
+    return (newPosition result)
+  else
+    return (backPressureStatus position len)
+
+calculatePositionLimit = undefined
+
+newPosition = undefined
+
+backPressureStatus = undefined
+
+termAppenderClaim = undefined
+commit = undefined
+
+abort = undefined
+
+
+------------------------------------------------------------------------
+
 claim :: Journal -> Int -> IO Int
 claim jour len = assert (hEADER_SIZE + len <= getMaxByteSize jour) $ do
   offset <- getAndIncrCounter (hEADER_SIZE + len) (jOffset jour)
@@ -107,7 +150,6 @@ claim jour len = assert (hEADER_SIZE + len <= getMaxByteSize jour) $ do
          -- Check if header is written to offset (if that's the case the active
          -- file hasn't been rotated yet)
          undefined
-
 mmapFile :: FilePath -> Int -> IO (Ptr Word8, Int)
 mmapFile fp maxByteSize = do
   (ptr, rawSize, _offset, size) <-

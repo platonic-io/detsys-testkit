@@ -21,26 +21,60 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (fromForeignPtr)
 import Data.IORef (newIORef)
+import qualified Data.Vector as Vector
 import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (plusPtr)
 import Network.Socket (Socket, recvBuf)
 import System.Directory
        (createDirectoryIfMissing, doesDirectoryExist, doesFileExist)
-import System.FilePath ((</>))
+import System.FilePath (takeDirectory, (</>))
 
 import Journal.Internal
+import Journal.Internal.ByteBuffer
 import Journal.Types
+import Journal.Types.AtomicCounter
 
 ------------------------------------------------------------------------
 
 -- * Initialisation and shutdown
 
 defaultOptions :: Options
-defaultOptions = Options 1024
+defaultOptions = Options 1024 (64 * 1024)
+
+allocateJournal :: FilePath -> Options -> IO ()
+allocateJournal = undefined
+
+startJournal' :: FilePath -> Options -> IO Journal'
+startJournal' fp (Options _ termLength) = do
+  unless (popCount termLength == 1) $
+    -- NOTE: The use of bitwise and (`.&.`) in `claim` relies on this.
+    -- XXX: check bounds
+    error "startJournal: oTermBufferLength must be a power of 2"
+
+  let dir = takeDirectory fp
+  dirExists <- doesDirectoryExist dir
+  unless dirExists (createDirectoryIfMissing True dir)
+
+  let logLength = termLength * pARTITION_COUNT + lOG_META_DATA_LENGTH
+  bb <- mmapped fp logLength
+  meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
+
+  termBuffers <-
+    Vector.generateM pARTITION_COUNT $ \i ->
+      let
+        offset = i * termLength
+      in do
+        writePosition bb (Position offset)
+        writeLimit bb (Limit (offset + termLength))
+        slice bb
+  -- XXX: This counter needs to be persisted somehow (mmapped?) in order to be
+  -- able to recover from restarts.
+  bytesConsumedCounter <- newCounter 0
+  return (Journal' termBuffers meta bytesConsumedCounter)
 
 startJournal :: FilePath -> Options -> IO (Journal, JournalConsumer)
-startJournal dir (Options maxByteSize) = do
+startJournal dir (Options maxByteSize _) = do
   unless (popCount maxByteSize == 1) $
     -- NOTE: The use of bitwise and (`.&.`) in `claim` relies on this.
     error "startJournal: oMaxByteSize must be a power of 2"
