@@ -28,6 +28,9 @@ foreign import ccall unsafe "stdlib.h posix_memalign"
 foreign import ccall unsafe "unistd.h sysconf"
   c_sysconf :: CInt -> IO CLong
 
+#include <unistd.h>
+_SC_PAGE_SIZE = #const _SC_PAGE_SIZE
+
 ------------------------------------------------------------------------
 
 mmap :: Maybe (Ptr a) -> Int -> MemoryProtection -> MemoryVisibility -> Maybe Fd
@@ -121,8 +124,6 @@ posixMemalign align size = do
 
 sysconfPageSize :: IO Int
 sysconfPageSize = fromIntegral <$> c_sysconf _SC_PAGE_SIZE
-  where
-    _SC_PAGE_SIZE = 30
 
 ------------------------------------------------------------------------
 
