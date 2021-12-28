@@ -1,32 +1,34 @@
 {-# LANGUAGE NumericUnderscores #-}
 
 module Journal.Types
-  ( Journal(Journal)
-  , jMaxByteSize
-  , jOffset
-  , jDirectory
-  , jBytesConsumed
-  , Options(Options)
-  , oMaxByteSize
-  , JournalConsumer(JournalConsumer)
-  , jcBytesConsumed
-  , jcDirectory
-  , jcMaxByteSize
-  , newJournalPtrRef
-  , readJournalPtr
-  , updateJournalPtr
-  , newJournalConsumerPtrRef
-  , readJournalConsumerPtr
-  , updateJournalConsumerPtr
-  , getMaxByteSize
-  , readFileCount
-  , bumpFileCount
-  , module Journal.Types.AtomicCounter
-  , packTail
-  , termId
-  , termOffset
-  , align
-  )
+--  ( Journal'(Journal')
+--  , Journal(Journal)
+--  , jMaxByteSize
+--  , jOffset
+--  , jDirectory
+--  , jBytesConsumed
+--  , Options(Options)
+--  , oMaxByteSize
+--  , oTermBufferLength
+--  , JournalConsumer(JournalConsumer)
+--  , jcBytesConsumed
+--  , jcDirectory
+--  , jcMaxByteSize
+--  , newJournalPtrRef
+--  , readJournalPtr
+--  , updateJournalPtr
+--  , newJournalConsumerPtrRef
+--  , readJournalConsumerPtr
+--  , updateJournalConsumerPtr
+--  , getMaxByteSize
+--  , readFileCount
+--  , bumpFileCount
+--  , module Journal.Types.AtomicCounter
+--  , packTail
+--  , termId
+--  , termOffset
+--  , align
+--  )
   where
 
 import Control.Concurrent.STM
@@ -60,7 +62,7 @@ pARTITION_COUNT = 3
 data Journal' = Journal'
   { jTermBuffers   :: {-# UNPACK #-} !(Vector ByteBuffer)
   , jMetadata      :: {-# UNPACK #-} !ByteBuffer
-  , jPositionLimit :: {-# UNPACK #-} !AtomicCounter -- ???
+  , jBytesConsumed :: {-# UNPACK #-} !AtomicCounter -- ???
   }
 
 data JMetadata = JMetadata
@@ -273,7 +275,7 @@ data Journal = Journal
   , jOffset        :: {-# UNPACK #-} !AtomicCounter
   , jMaxByteSize   :: {-# UNPACK #-} !Int
   , jDirectory     ::                !FilePath
-  , jBytesConsumed :: {-# UNPACK #-} !AtomicCounter -- jGatingBytes?
+  , jBytesConsumed' :: {-# UNPACK #-} !AtomicCounter -- jGatingBytes?
   , jFileCount     :: {-# UNPACK #-} !AtomicCounter
   -- , jMetrics :: Metrics
   }
@@ -305,7 +307,9 @@ emptyMetrics :: Metrics
 emptyMetrics = Metrics 0 0
 
 data Options = Options
-  { oMaxByteSize :: !Int }
+  { oMaxByteSize :: !Int
+  , oTermBufferLength :: !Int
+  }
   -- archive
   -- buffer and fsync every ms?
   -- max disk space in total? multiple of maxSize?

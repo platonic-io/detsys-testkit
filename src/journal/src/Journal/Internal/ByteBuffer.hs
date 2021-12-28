@@ -28,6 +28,7 @@ data ByteBuffer = ByteBuffer
   , bbPosition :: {-# UNPACK #-} !(IORef Position)
   , bbMark     :: {-# UNPACK #-} !(IORef Position)
   , bbSlice    :: {-# UNPACK #-} !(IORef Slice)
+  -- XXX: ByteOrder / Endianess?
   }
 
 newtype Capacity = Capacity { unCapacity :: Int }
