@@ -209,6 +209,13 @@ clear bb = do
   writeLimit bb (Limit capa)
   writeMark bb (-1)
 
+clean :: ByteBuffer -> IO ()
+clean bb = do
+  Position (I# from#) <- readPosition bb
+  Limit (I# to#) <- readLimit bb
+  IO $ \s -> case setByteArray# (bbData bb) from# (to# -# from#) 0# s of
+    s' -> (# s', () #)
+
 -- | Flips the byte buffer. The limit is set to the current position and then
 -- the position is set to zero. If the mark is defined then it is discarded.
 flipBB :: ByteBuffer -> IO ()
