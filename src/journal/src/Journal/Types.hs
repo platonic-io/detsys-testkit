@@ -210,12 +210,7 @@ indexByPosition pos posBitsToShift = fromIntegral $
 -- | Compute the current position in absolute number of bytes.
 computePosition :: Int32 -> Int32 -> Int -> Int32 -> Int64
 computePosition activeTermId termOffset posBitsToShift initTermId =
-  let
-    termCount :: Int64
-    -- Copes with negative `activeTermId` on rollover.
-    termCount = fromIntegral (activeTermId - initTermId)
-  in
-    (termCount `shiftL` posBitsToShift) + fromIntegral termOffset
+  computeTermBeginPosition activeTermId posBitsToShift initTermId + fromIntegral termOffset
 
 -- | Compute the current position in absolute number of bytes for the beginning
 -- of a term.
