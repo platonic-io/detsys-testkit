@@ -12,6 +12,7 @@ import GHC.Exts
 import GHC.Types
 import GHC.IO
 import System.Posix.IO (openFd, defaultFileFlags, OpenMode(ReadWrite))
+import GHC.Stack
 
 import Journal.Internal.Mmap
 
@@ -105,15 +106,17 @@ remaining bb = do
 ------------------------------------------------------------------------
 -- * Checks
 
-boundCheck :: ByteBuffer -> String -> Int -> IO ()
-boundCheck bb ctx ix = do
+boundCheck :: HasCallStack => ByteBuffer -> Int -> IO ()
+boundCheck bb ix = do
   -- XXX: parametrise on build flag and only do these checks if enabled?
   if ix < fromIntegral (getCapacity bb)
   then return ()
-  else throwIO (IndexOutOfBounds errMsg)
+  else do
+    putStrLn (prettyCallStack callStack)
+    throwIO (IndexOutOfBounds errMsg)
   where
     errMsg = concat
-      [ ctx, ": index out of bounds "
+      [ "boundCheck: index out of bounds "
       , "(", show ix, ",", show (unCapacity (getCapacity bb)), ")"
       ]
 
@@ -273,12 +276,12 @@ getStorable bb = do
 
 putStorableAt :: Storable a => ByteBuffer -> Int -> a -> IO ()
 putStorableAt bb ix x = do
-  boundCheck bb "putStorableAt" ix
+  boundCheck bb ix
   pokeByteOff (bbPtr bb) ix x
 
 getStorableAt :: Storable a => ByteBuffer -> Int -> IO a
 getStorableAt bb ix = do
-  boundCheck bb "getStorableAt" ix
+  boundCheck bb ix
   peekByteOff (bbPtr bb) ix
 
 ------------------------------------------------------------------------
@@ -286,9 +289,11 @@ getStorableAt bb ix = do
 -- readCharOffArray#
 -- readWideCharOffArray#
 readIntOffArrayIx :: ByteBuffer -> Int -> IO Int
-readIntOffArrayIx bb (I# ix#) = IO $ \s ->
-  case readIntArray# (bbData bb) ix# s of
-    (# s', i #) -> (# s', I# i #)
+readIntOffArrayIx bb ix@(I# ix#) = do
+  boundCheck bb ix
+  IO $ \s ->
+    case readIntArray# (bbData bb) ix# s of
+      (# s', i #) -> (# s', I# i #)
 -- readWordOffArray#
 -- readArrayOffAddr#
 -- readFloatOffArray#
@@ -297,14 +302,18 @@ readIntOffArrayIx bb (I# ix#) = IO $ \s ->
 -- readInt8OffArray#
 -- readInt16OffArray#
 readInt32OffArrayIx :: ByteBuffer -> Int -> IO Int32
-readInt32OffArrayIx bb (I# ix#) = IO $ \s ->
-  case readInt32Array# (bbData bb) ix# s of
-    (# s', i #) -> (# s', fromIntegral (I# i) #)
+readInt32OffArrayIx bb ix@(I# ix#) = do
+  boundCheck bb ix
+  IO $ \s ->
+    case readInt32Array# (bbData bb) ix# s of
+      (# s', i #) -> (# s', fromIntegral (I# i) #)
 
 readInt64OffArrayIx :: ByteBuffer -> Int -> IO Int64
-readInt64OffArrayIx bb (I# ix#) = IO $ \s ->
-  case readInt64Array# (bbData bb) ix# s of
-    (# s', i #) -> (# s', fromIntegral (I# i) #)
+readInt64OffArrayIx bb ix@(I# ix#) = do
+  boundCheck bb ix
+  IO $ \s ->
+    case readInt64Array# (bbData bb) ix# s of
+      (# s', i #) -> (# s', fromIntegral (I# i) #)
 -- readWord8OffArray#
 -- readWord16OffArray#
 -- readWord32OffArray#
@@ -313,9 +322,11 @@ readInt64OffArrayIx bb (I# ix#) = IO $ \s ->
 -- writeCharOffArray#
 -- writeWideCharOffArray#
 writeIntOffArrayIx :: ByteBuffer -> Int -> Int -> IO ()
-writeIntOffArrayIx bb (I# ix#) (I# value#) = IO $ \s ->
-  case writeIntArray# (bbData bb) ix# value# s of
-    s' -> (# s', () #)
+writeIntOffArrayIx bb ix@(I# ix#) (I# value#) = do
+  boundCheck bb ix
+  IO $ \s ->
+    case writeIntArray# (bbData bb) ix# value# s of
+      s' -> (# s', () #)
 -- writeWordOffArray#
 -- writeArrayOffAddr#
 -- writeFloatOffArray#
@@ -325,16 +336,20 @@ writeIntOffArrayIx bb (I# ix#) (I# value#) = IO $ \s ->
 -- writeInt16OffArray#
 
 writeInt32OffArrayIx :: ByteBuffer -> Int -> Int32 -> IO ()
-writeInt32OffArrayIx bb (I# ix#) value = IO $ \s ->
-  case writeInt32Array# (bbData bb) ix# value# s of
-    s' -> (# s', () #)
+writeInt32OffArrayIx bb ix@(I# ix#) value = do
+  boundCheck bb ix
+  IO $ \s ->
+    case writeInt32Array# (bbData bb) ix# value# s of
+      s' -> (# s', () #)
   where
     I# value# = fromIntegral value
 
 writeInt64OffArrayIx :: ByteBuffer -> Int -> Int64 -> IO ()
-writeInt64OffArrayIx bb (I# ix#) value = IO $ \s ->
-  case writeInt64Array# (bbData bb) ix# value# s of
-    s' -> (# s', () #)
+writeInt64OffArrayIx bb ix@(I# ix#) value = do
+  boundCheck bb ix
+  IO $ \s ->
+    case writeInt64Array# (bbData bb) ix# value# s of
+      s' -> (# s', () #)
   where
     I# value# = fromIntegral value
 
@@ -352,34 +367,42 @@ writeInt64OffArrayIx bb (I# ix#) value = IO $ \s ->
 -- indicating whether the compare and swap succeded or not. Implies a full
 -- memory barrier.
 casIntArray :: ByteBuffer -> Int -> Int -> Int -> IO Bool
-casIntArray bb (I# offset#) (I# old#) (I# new#) = IO $ \s ->
-  case casIntArray# (bbData bb) offset# old# new# s of
-    (# s', before# #) -> case before# ==# old# of
-      1# -> (# s', True #)
-      0# -> (# s', False #)
+casIntArray bb offset@(I# offset#) (I# old#) (I# new#) = do
+  boundCheck bb offset
+  IO $ \s ->
+    case casIntArray# (bbData bb) offset# old# new# s of
+      (# s', before# #) -> case before# ==# old# of
+        1# -> (# s', True #)
+        0# -> (# s', False #)
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Returns the value of the element
 -- before the operation. Implies a full memory barrier.
 fetchAddIntArray :: ByteBuffer -> Int -> Int -> IO Int
-fetchAddIntArray bb (I# offset#) (I# incr#) = IO $ \s ->
-  case fetchAddIntArray# (bbData bb) offset# incr# s of
-    (# s', before# #) -> (# s', I# before# #)
+fetchAddIntArray bb offset@(I# offset#) (I# incr#) = do
+  boundCheck bb offset
+  IO $ \s ->
+    case fetchAddIntArray# (bbData bb) offset# incr# s of
+      (# s', before# #) -> (# s', I# before# #)
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Implies a full memory barrier.
 fetchAddIntArray_ :: ByteBuffer -> Int -> Int -> IO ()
-fetchAddIntArray_ bb (I# offset#) (I# incr#) = IO $ \s ->
-  case fetchAddIntArray# (bbData bb) offset# incr# s of
-    (# s', _before# #) -> (# s', () #)
+fetchAddIntArray_ bb offset@(I# offset#) (I# incr#) = do
+  boundCheck bb offset
+  IO $ \s ->
+    case fetchAddIntArray# (bbData bb) offset# incr# s of
+      (# s', _before# #) -> (# s', () #)
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Returns the value of the element
 -- after the operation. Implies a full memory barrier.
 fetchAddIntArray' :: ByteBuffer -> Int -> Int -> IO Int
-fetchAddIntArray' bb (I# offset#) (I# incr#) = IO $ \s ->
-  case fetchAddIntArray# (bbData bb) offset# incr# s of
-    (# s', before# #) -> (# s', I# (before# +# incr#) #)
+fetchAddIntArray' bb offset@(I# offset#) (I# incr#) = do
+  boundCheck bb offset
+  IO $ \s ->
+    case fetchAddIntArray# (bbData bb) offset# incr# s of
+      (# s', before# #) -> (# s', I# (before# +# incr#) #)
 
 ------------------------------------------------------------------------
 -- * Mapped
