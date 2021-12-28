@@ -242,11 +242,12 @@ getByteAt = undefined
 putBytes :: ByteBuffer -> ByteBuffer -> IO ()
 putBytes src dest = do
   Position (I# destPos#) <- readPosition dest
-  let Capacity (I# srcCapa#) = getCapacity src
+  let Capacity srcCapa@(I# srcCapa#) = getCapacity src
   -- XXX: bounds check
   IO $ \s ->
     case copyMutableByteArray# (bbData src) 0# (bbData dest) destPos# srcCapa# s of
       s' -> (# s', () #)
+  incrPosition dest srcCapa
 
 getBytes :: ByteBuffer -> Int -> Int -> IO [Word8]
 getBytes bb offset len = undefined
