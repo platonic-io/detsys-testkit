@@ -28,6 +28,7 @@ import System.FilePath ((</>))
 import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
 import Journal.Internal.Parse
+import Journal.Internal.ByteBuffer
 import Journal.Types
 import Journal.Types.AtomicCounter
 
@@ -49,17 +50,17 @@ newtype HeaderIndex = HeaderIndex Word32
 
 -- * Constants
 
--- | The size of the journal entry header in bytes.
-hEADER_SIZE :: Int
-hEADER_SIZE
+-- | The length of the journal entry header in bytes.
+hEADER_LENGTH :: Int
+hEADER_LENGTH
   = sizeOf (1 :: HeaderTag)
   + sizeOf (1 :: HeaderVersion)
   + sizeOf (4 :: HeaderLength)
   -- + sizeOf (4 :: HeaderIndex)
   -- XXX: CRC?
 
-fOOTER_SIZE :: Int
-fOOTER_SIZE = hEADER_SIZE
+fOOTER_LENGTH :: Int
+fOOTER_LENGTH = hEADER_LENGTH
 
 cURRENT_VERSION :: HeaderVersion
 cURRENT_VERSION = 0
@@ -92,8 +93,9 @@ tryClaim jour len = do
       activePartitionIndex = index
   rt <- readRawTail (jMetadata jour) index
   initTermId <- initialTermId (jMetadata jour)
-  termLen <- termLength (jMetadata jour)
+  termLen <- readTermLength (jMetadata jour)
 
+  -- XXX: cache and read these from there?
   let termId            = rawTailTermId rt
       termOffset        = rawTailTermOffset rt termLen
       termBeginPosition =
@@ -104,8 +106,7 @@ tryClaim jour len = do
       position     = termBeginPosition + fromIntegral termOffset
   if position < limit
   then do
-    result <- undefined
-      -- termAppenderClaim termAppender termId termOffset headerWriter bufferClaim
+    result <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len
     return (newPosition result)
   else
     return (backPressureStatus position len)
@@ -116,7 +117,47 @@ newPosition = undefined
 
 backPressureStatus = undefined
 
-termAppenderClaim = undefined
+fRAME_ALIGNMENT :: Int
+fRAME_ALIGNMENT = 32
+
+termAppenderClaim :: Metadata -> ByteBuffer -> TermId -> TermOffset -> Int
+                  -> IO (Maybe TermOffset)
+termAppenderClaim meta termBuffer termId termOffset len = do
+  let
+    frameLength     = len + hEADER_LENGTH
+    alignedLength   = align frameLength fRAME_ALIGNMENT
+    resultingOffset = termOffset + fromIntegral alignedLength
+    termLength      = getCapacity termBuffer
+  termCount <- activeTermCount meta
+  let activePartitionIndex = indexByTermCount termCount
+  writeRawTail meta termId resultingOffset activePartitionIndex
+  if resultingOffset > fromIntegral termLength
+  then do
+    handleEndOfLogCondition termBuffer termOffset termLength termId
+    return Nothing
+  else do
+    headerWrite termBuffer termOffset frameLength termId
+    -- claimBuffer <- wrapPart termBuffer termOffset frameLength
+    return (Just resultingOffset)
+
+handleEndOfLogCondition :: ByteBuffer -> TermOffset -> Capacity -> TermId -> IO ()
+handleEndOfLogCondition termBuffer termOffset (Capacity termLen) termId = do
+  when (termOffset < fromIntegral termLen) $ do
+
+    let offset :: Int32
+        offset = fromIntegral termOffset
+
+        paddingLength :: Int32
+        paddingLength = termLen - offset
+
+    headerWrite termBuffer offset paddingLength termId
+    writeFrameType termBuffer offset Padding
+    writeFrameLength termBuffer offset paddingLength
+
+headerWrite = undefined
+
+writeFrameType = undefined
+writeFrameLength = undefined
 
 rotateTerm :: Journal' -> IO ()
 rotateTerm jour = do
@@ -146,9 +187,9 @@ abort = undefined
 ------------------------------------------------------------------------
 
 claim :: Journal -> Int -> IO Int
-claim jour len = assert (hEADER_SIZE + len <= getMaxByteSize jour) $ do
-  offset <- getAndIncrCounter (hEADER_SIZE + len) (jOffset jour)
-  if offset + hEADER_SIZE + len + fOOTER_SIZE <= getMaxByteSize jour
+claim jour len = assert (hEADER_LENGTH + len <= getMaxByteSize jour) $ do
+  offset <- getAndIncrCounter (hEADER_LENGTH + len) (jOffset jour)
+  if offset + hEADER_LENGTH + len + fOOTER_LENGTH <= getMaxByteSize jour
   then do
     putStrLn ("claim, fits in current file, len: " ++ show len)
     return offset -- Fits in current file.
@@ -161,7 +202,7 @@ claim jour len = assert (hEADER_SIZE + len <= getMaxByteSize jour) $ do
          ptr <- readJournalPtr jour
          writePaddingFooter ptr offset (getMaxByteSize jour)
          rotateFiles jour
-         writeCounter (jOffset jour) (hEADER_SIZE + len)
+         writeCounter (jOffset jour) (hEADER_LENGTH + len)
          return 0
        else do
          assertM (offset > getMaxByteSize jour)
@@ -256,7 +297,7 @@ makeValidHeader len = newHeader Valid cURRENT_VERSION (fromIntegral len)
 
 writeHeader :: Ptr Word8 -> JournalHeader -> IO ()
 writeHeader ptr hdr =
-  assert (LBS.length header == fromIntegral hEADER_SIZE) $
+  assert (LBS.length header == fromIntegral hEADER_LENGTH) $
     writeLBSToPtr header ptr
   where
     header :: LBS.ByteString
@@ -285,7 +326,7 @@ readHeader ptr = do
 
 writePaddingFooter :: Ptr Word8 -> Int -> Int -> IO ()
 writePaddingFooter ptr offset maxByteSize = assert (offset < maxByteSize) $ do
-  let remLen = fromIntegral (maxByteSize - offset - hEADER_SIZE)
+  let remLen = fromIntegral (maxByteSize - offset - hEADER_LENGTH)
   writeHeader (ptr `plusPtr` offset) (newHeader Padding cURRENT_VERSION remLen)
 
 iterJournal :: Ptr Word8 -> AtomicCounter -> (a -> BS.ByteString -> a) -> a -> IO a
@@ -300,12 +341,12 @@ iterJournal ptr consumed f x = do
         Valid   -> do
           fptr <- newForeignPtr_ ptr
           let len = fromIntegral (jhLength hdr)
-          incrCounter_ (hEADER_SIZE + len) consumed
-          go (offset + hEADER_SIZE + len)
-             (f acc (BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len)))
+          incrCounter_ (hEADER_LENGTH + len) consumed
+          go (offset + hEADER_LENGTH + len)
+             (f acc (BS.copy (fromForeignPtr fptr (offset + hEADER_LENGTH) len)))
         Invalid -> do
-          incrCounter_ (hEADER_SIZE + fromIntegral (jhLength hdr)) consumed
-          go (offset + hEADER_SIZE + fromIntegral (jhLength hdr)) acc
+          incrCounter_ (hEADER_LENGTH + fromIntegral (jhLength hdr)) consumed
+          go (offset + hEADER_LENGTH + fromIntegral (jhLength hdr)) acc
         Padding -> return acc -- XXX: Or continue with the "next" file?
 
 waitForHeader :: Ptr Word8 -> Int -> IO Int
@@ -335,7 +376,7 @@ mapHeadersUntil mask f ptr limit = go 0
           -- Only apply @f@ if the tag is in @mask@ (`= tag0 .|. ... .|. tagN`).
           when (jhTag hdr .&. mask /= 0) $
             writeHeader (ptr `plusPtr` offset) (f hdr)
-          go (offset + hEADER_SIZE + fromIntegral (jhLength hdr))
+          go (offset + hEADER_LENGTH + fromIntegral (jhLength hdr))
 
 ------------------------------------------------------------------------
 
@@ -394,10 +435,10 @@ dumpFile fp = do
       | otherwise  = do
 
           let header :: BS.ByteString
-              header = BS.take hEADER_SIZE bs
+              header = BS.take hEADER_LENGTH bs
 
               bs' :: BS.ByteString
-              bs' = BS.drop hEADER_SIZE bs
+              bs' = BS.drop hEADER_LENGTH bs
 
               tag :: HeaderTag
               tag = HeaderTag (BS.head header)
@@ -415,11 +456,11 @@ dumpFile fp = do
 
           if tag == Empty && BS.all (== fromIntegral 0) bs'
           then do
-            putStrLn ("... (" ++ show (hEADER_SIZE + BS.length bs') ++ " bytes free)")
+            putStrLn ("... (" ++ show (hEADER_LENGTH + BS.length bs') ++ " bytes free)")
             putStrLn ""
             putStrLn "===="
             putStrLn ""
-            putStrLn ("Total bytes: " ++ show (totBytes + hEADER_SIZE + BS.length bs'))
+            putStrLn ("Total bytes: " ++ show (totBytes + hEADER_LENGTH + BS.length bs'))
           else do
 
             putStrLn ("Index    " ++ show ix)
@@ -429,5 +470,5 @@ dumpFile fp = do
             putStrLn ("Body:    " ++ show body)
 
             go (ix + 1)
-               (totBytes + hEADER_SIZE + fromIntegral len)
+               (totBytes + hEADER_LENGTH + fromIntegral len)
                (BS.drop (fromIntegral len) bs')

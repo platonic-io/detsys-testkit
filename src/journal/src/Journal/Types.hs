@@ -61,9 +61,11 @@ type Int32 = Int
 pARTITION_COUNT :: Int
 pARTITION_COUNT = 3
 
+newtype Metadata = Metadata ByteBuffer
+
 data Journal' = Journal'
   { jTermBuffers   :: {-# UNPACK #-} !(Vector ByteBuffer)
-  , jMetadata      :: {-# UNPACK #-} !ByteBuffer
+  , jMetadata      :: {-# UNPACK #-} !Metadata
   , jBytesConsumed :: {-# UNPACK #-} !AtomicCounter -- ???
   }
 
@@ -121,10 +123,11 @@ newtype TermOffset = TermOffset { unTermOffset :: Int32 }
 newtype TermCount = TermCount { unTermCount :: Int32 }
   deriving newtype (Integral, Real, Num, Enum, Ord, Eq)
 
-readRawTail :: ByteBuffer -> PartitionIndex -> IO RawTail
-readRawTail meta (PartitionIndex partitionIndex) = RawTail <$>
-  readIntOffArrayIx meta
-    (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
+readRawTail :: Metadata -> PartitionIndex -> IO RawTail
+readRawTail (Metadata meta) (PartitionIndex partitionIndex) =
+  RawTail <$>
+    readIntOffArrayIx meta
+      (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
 
 rawTailTermId :: RawTail -> TermId
 rawTailTermId = fromIntegral . (`shiftR` 32) . unRawTail
@@ -137,42 +140,44 @@ packTail :: TermId -> TermOffset -> RawTail
 packTail termId0 termOffset0 =
   (fromIntegral termId0 `shiftL` 32) .|. (fromIntegral termOffset0 .&. 0xFFFF_FFFF);
 
-writeRawTail :: ByteBuffer -> TermId -> TermOffset -> PartitionIndex -> IO ()
-writeRawTail meta termId0 termOffset0 (PartitionIndex partitionIndex) =
+writeRawTail :: Metadata -> TermId -> TermOffset -> PartitionIndex -> IO ()
+writeRawTail (Metadata meta) termId termOffset (PartitionIndex partitionIndex) =
   writeIntOffArrayIx meta
     (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
-    (unRawTail (packTail termId0 termOffset0))
+    (unRawTail (packTail termId termOffset))
 
-casRawTail :: ByteBuffer -> PartitionIndex -> RawTail -> RawTail -> IO Bool
-casRawTail meta (PartitionIndex partitionIndex) expectedRawTail newRawTail =
+casRawTail :: Metadata -> PartitionIndex -> RawTail -> RawTail -> IO Bool
+casRawTail (Metadata meta) (PartitionIndex partitionIndex) expected new =
   casIntArray meta
     (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
-    (fromIntegral expectedRawTail) (fromIntegral newRawTail) -- XXX: 32-bit systems?
+    (fromIntegral expected) (fromIntegral new) -- XXX: 32-bit systems?
 
-initialiseTailWithTermId :: ByteBuffer -> PartitionIndex -> TermId -> IO ()
-initialiseTailWithTermId meta partitionIndex termId0 =
-  writeRawTail meta termId0 0 partitionIndex
+initialiseTailWithTermId :: Metadata -> PartitionIndex -> TermId -> IO ()
+initialiseTailWithTermId meta partitionIndex termId =
+  writeRawTail meta termId 0 partitionIndex
 
-activeTermCount :: ByteBuffer -> IO TermCount
-activeTermCount meta = TermCount <$> readIntOffArrayIx meta lOG_ACTIVE_TERM_COUNT_OFFSET
+activeTermCount :: Metadata -> IO TermCount
+activeTermCount (Metadata meta) =
+  TermCount <$> readIntOffArrayIx meta lOG_ACTIVE_TERM_COUNT_OFFSET
 
-writeActiveTermCount :: ByteBuffer -> TermCount -> IO ()
-writeActiveTermCount meta =
+writeActiveTermCount :: Metadata -> TermCount -> IO ()
+writeActiveTermCount (Metadata meta) =
   writeIntOffArrayIx meta lOG_ACTIVE_TERM_COUNT_OFFSET . fromIntegral
 
-casActiveTermCount :: ByteBuffer -> TermCount -> TermCount -> IO Bool
-casActiveTermCount meta (TermCount expected) (TermCount new) =
+casActiveTermCount :: Metadata -> TermCount -> TermCount -> IO Bool
+casActiveTermCount (Metadata meta) (TermCount expected) (TermCount new) =
   casIntArray meta lOG_ACTIVE_TERM_COUNT_OFFSET expected new
 
-initialTermId :: ByteBuffer -> IO TermId
-initialTermId meta = TermId <$> readIntOffArrayIx meta lOG_INITIAL_TERM_ID_OFFSET
+initialTermId :: Metadata -> IO TermId
+initialTermId (Metadata meta) =
+  TermId <$> readIntOffArrayIx meta lOG_INITIAL_TERM_ID_OFFSET
 
 -- should never be changed?
 -- setInitialTermId :: ByteBuffer -> Int32 -> IO ()
 -- setInitialTermId meta = writeInt32OffArrayIx meta lOG_INITIAL_TERM_ID_OFFSET
 
-termLength :: ByteBuffer -> IO Int32
-termLength meta = readIntOffArrayIx meta lOG_TERM_LENGTH_OFFSET
+readTermLength :: Metadata -> IO Int32
+readTermLength (Metadata meta) = readIntOffArrayIx meta lOG_TERM_LENGTH_OFFSET
 
 -- should never be changed?
 -- setTermLength :: ByteBuffer -> Int32 -> IO ()
@@ -269,12 +274,12 @@ align value alignment = (value + (alignment - 1)) .&. (- alignment)
 
 -- | Rotate the log and update the tail counter for the new term. This function
 -- is thread safe.
-rotateLog :: ByteBuffer -> TermCount -> TermId -> IO Bool
-rotateLog meta termCount termId0 = do
+rotateLog :: Metadata -> TermCount -> TermId -> IO Bool
+rotateLog meta termCount termId = do
   go
   casActiveTermCount meta termCount nextTermCount
   where
-    nextTermId     = termId0   + 1
+    nextTermId     = termId    + 1
     nextTermCount  = termCount + 1
     nextIndex      = indexByTermCount nextTermCount
     expectedTermId = nextTermId - fromIntegral pARTITION_COUNT
