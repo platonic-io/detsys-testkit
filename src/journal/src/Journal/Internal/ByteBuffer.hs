@@ -1,18 +1,23 @@
-{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE UnboxedTuples #-}
 
 module Journal.Internal.ByteBuffer where
 
 import Control.Exception
+import Control.Monad
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Internal as BS
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Lazy.Internal as LBS
 import Data.IORef
 import Foreign
-import GHC.ForeignPtr
 import GHC.Exts
-import GHC.Types
+import GHC.ForeignPtr
 import GHC.IO
-import System.Posix.IO (openFd, defaultFileFlags, OpenMode(ReadWrite))
 import GHC.Stack
+import GHC.Types
+import System.Posix.IO (OpenMode(ReadWrite), defaultFileFlags, openFd)
 
 import Journal.Internal.Mmap
 
@@ -37,7 +42,7 @@ newtype Capacity = Capacity { unCapacity :: Int }
 newtype Limit = Limit Int
   deriving (Num, Integral, Real, Ord, Eq, Enum)
 
-newtype Position = Position Int
+newtype Position = Position { unPosition :: Int }
   deriving (Num, Integral, Real, Ord, Eq, Enum)
 
 newtype Slice = Slice Int
@@ -233,7 +238,11 @@ putByte :: ByteBuffer -> Word8 -> IO ()
 putByte = undefined
 
 getByte :: ByteBuffer -> IO Word8
-getByte = undefined
+getByte bb = do
+  pos <- readPosition bb
+  w8 <- readWord8OffArrayIx bb (unPosition pos)
+  writePosition bb (pos + 1)
+  return w8
 
 putByteAt :: ByteBuffer -> Int -> Word8 -> IO ()
 putByteAt = undefined
@@ -242,7 +251,7 @@ getByteAt :: ByteBuffer -> Int -> IO Word8
 getByteAt = undefined
 
 ------------------------------------------------------------------------
--- * Multi-byte operations
+-- * Multi-byte relative and absolute operations
 
 putBytes :: ByteBuffer -> ByteBuffer -> IO ()
 putBytes src dest = do
@@ -256,6 +265,36 @@ putBytes src dest = do
 
 getBytes :: ByteBuffer -> Int -> Int -> IO [Word8]
 getBytes bb offset len = undefined
+
+putByteString :: ByteBuffer -> BS.ByteString -> IO ()
+putByteString bb bs = do
+  let (fptr, I# offset#, I# len#) = BS.toForeignPtr bs
+  boundCheck bb (I# (len# -# 1#))
+  withForeignPtr fptr $ \(Ptr addr#) -> IO $ \s ->
+    case copyAddrToByteArray# addr# (bbData bb) offset# len# s of
+      s' -> (# s', () #)
+
+putLazyByteString :: ByteBuffer -> LBS.ByteString -> IO ()
+putLazyByteString bb lbs = do
+  let (fptr, I# offset#, I# len#) = BS.toForeignPtr (LBS.toStrict lbs)
+  boundCheck bb (I# (len# -# 1#))
+  withForeignPtr fptr $ \(Ptr addr#) -> IO $ \s ->
+    case copyAddrToByteArray# addr# (bbData bb) offset# len# s of
+      s' -> (# s', () #)
+
+getByteString :: ByteBuffer -> Int -> IO BS.ByteString
+getByteString bb len = do
+  bytes <- replicateM len (getByte bb)
+  return (BS.packBytes bytes)
+
+getLazyByteString :: ByteBuffer -> Int -> IO LBS.ByteString
+getLazyByteString bb len = do
+  bytes <- replicateM len (getByte bb)
+  return (LBS.packBytes bytes)
+
+getByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
+getByteStringAt bb offset len = do
+  undefined
 
 ------------------------------------------------------------------------
 -- * Relative operations on `Storable` elements
@@ -316,7 +355,14 @@ readInt64OffArrayIx bb ix@(I# ix#) = do
   IO $ \s ->
     case readInt64Array# (bbData bb) ix# s of
       (# s', i #) -> (# s', fromIntegral (I# i) #)
--- readWord8OffArray#
+
+readWord8OffArrayIx :: ByteBuffer -> Int -> IO Word8
+readWord8OffArrayIx bb offset@(I# offset#) = do
+  boundCheck bb offset
+  IO $ \s ->
+    case readWord8Array# (bbData bb) offset# s of
+      (# s', w8# #) -> (# s', fromIntegral (W# w8#) #)
+
 -- readWord16OffArray#
 -- readWord32OffArray#
 -- readWord64OffArray#
@@ -357,7 +403,14 @@ writeInt64OffArrayIx bb ix@(I# ix#) value = do
 
 -- writeWord8OffArray#
 -- writeWord16OffArray#
--- writeWord32OffArray#
+writeWord32OffArrayIx :: ByteBuffer -> Int -> Word32 -> IO ()
+writeWord32OffArrayIx bb offset@(I# offset#) value = do
+  boundCheck bb offset
+  IO $ \s ->
+    case writeWord32Array# (bbData bb) offset# value# s of
+      s' -> (# s', () #)
+  where
+    W# value# = fromIntegral value
 -- writeWord64OffArray#
 
 -- atomicReadIntArray#

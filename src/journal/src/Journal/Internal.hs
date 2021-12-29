@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -10,7 +11,7 @@ import Control.Concurrent.STM (atomically, writeTVar)
 import Control.Exception (assert)
 import Control.Monad (unless, when)
 import Data.Binary (Binary, decode, encode)
-import Data.Bits (Bits, (.&.))
+import Data.Bits (Bits, (.&.), (.|.), shiftL)
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (fromForeignPtr)
 import qualified Data.ByteString.Lazy as LBS
@@ -34,11 +35,11 @@ import Journal.Types.AtomicCounter
 
 ------------------------------------------------------------------------
 
-newtype HeaderTag = HeaderTag Word8
+newtype HeaderTag = HeaderTag { unHeaderTag :: Word8 }
   deriving newtype (Eq, Binary, Bits, Show, Num, Storable)
 
 newtype HeaderVersion = HeaderVersion Word8
-  deriving newtype (Eq, Binary, Num, Storable)
+  deriving newtype (Eq, Binary, Num, Storable, Integral, Real, Ord, Enum)
 
 newtype HeaderLength = HeaderLength Word32
   deriving newtype (Eq, Ord, Binary, Enum, Real, Integral, Num, Storable)
@@ -107,13 +108,36 @@ tryClaim jour len = do
   if position < limit
   then do
     result <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len
-    return (newPosition result)
+    newPosition (jMetadata jour) result
   else
     return (backPressureStatus position len)
 
 calculatePositionLimit = undefined
 
-newPosition = undefined
+newPosition :: Metadata -> Maybe TermOffset -> IO (Maybe Int64)
+newPosition meta mResultingOffset =
+  case mResultingOffset of
+    Just resultingOffset -> do
+      -- XXX: cache
+      -- termOffset := resultingOffset
+      termCount <- activeTermCount meta
+      let index = indexByTermCount termCount
+      rt <- readRawTail meta index
+      initTermId <- initialTermId meta
+      termLen <- readTermLength meta
+
+      let termId            = rawTailTermId rt
+          termOffset        = rawTailTermOffset rt termLen
+          termBeginPosition =
+            computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
+      return (Just (termBeginPosition + fromIntegral resultingOffset))
+    Nothing -> do
+      -- XXX:
+      -- if termBeginPosition + termBufferLength >= maxPossiblePosition
+      -- then return Nothing -- return MAX_POSSILBE_POSITION_EXCEEDED ?
+      -- else do
+      rotateTerm meta
+      return Nothing -- ADMIN_ACTION
 
 backPressureStatus = undefined
 
@@ -136,7 +160,7 @@ termAppenderClaim meta termBuffer termId termOffset len = do
     handleEndOfLogCondition termBuffer termOffset termLength termId
     return Nothing
   else do
-    headerWrite termBuffer termOffset frameLength termId
+    headerWrite termBuffer termOffset (fromIntegral frameLength) termId
     -- claimBuffer <- wrapPart termBuffer termOffset frameLength
     return (Just resultingOffset)
 
@@ -144,28 +168,44 @@ handleEndOfLogCondition :: ByteBuffer -> TermOffset -> Capacity -> TermId -> IO 
 handleEndOfLogCondition termBuffer termOffset (Capacity termLen) termId = do
   when (termOffset < fromIntegral termLen) $ do
 
-    let offset :: Int32
-        offset = fromIntegral termOffset
+    let paddingLength :: HeaderLength
+        paddingLength = fromIntegral (termLen - fromIntegral termOffset)
 
-        paddingLength :: Int32
-        paddingLength = termLen - offset
+    headerWrite termBuffer termOffset paddingLength termId
+    writeFrameType termBuffer termOffset Padding
+    writeFrameLength termBuffer termOffset paddingLength
 
-    headerWrite termBuffer offset paddingLength termId
-    writeFrameType termBuffer offset Padding
-    writeFrameLength termBuffer offset paddingLength
+fRAME_LENGTH_FIELD_OFFSET :: Int
+fRAME_LENGTH_FIELD_OFFSET = 0
 
-headerWrite = undefined
+tAG_FIELD_OFFSET :: Int
+tAG_FIELD_OFFSET = 6
 
-writeFrameType = undefined
-writeFrameLength = undefined
+headerWrite :: ByteBuffer -> TermOffset -> HeaderLength -> TermId -> IO ()
+headerWrite termBuffer termOffset len _termId = do
+  let versionFlagsType :: Int64
+      versionFlagsType = fromIntegral cURRENT_VERSION `shiftL` 32
+  -- XXX: Atomic write?
+  writeIntOffArrayIx termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
+    (versionFlagsType .|. ((- fromIntegral len) .&. 0xFFFF_FFFF))
+  -- XXX: store termId and offset (only need for replication?)
 
-rotateTerm :: Journal' -> IO ()
-rotateTerm jour = do
-  termCount <- activeTermCount (jMetadata jour)
+writeFrameType :: ByteBuffer -> TermOffset -> HeaderTag -> IO ()
+writeFrameType termBuffer termOffset (HeaderTag tag) = do
+  putByteAt termBuffer (fromIntegral termOffset + tAG_FIELD_OFFSET) tag
+
+writeFrameLength :: ByteBuffer -> TermOffset -> HeaderLength -> IO ()
+writeFrameLength termBuffer termOffset (HeaderLength len) = do
+  writeWord32OffArrayIx termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
+    len
+
+rotateTerm :: Metadata -> IO ()
+rotateTerm meta = do
+  termCount <- activeTermCount meta
   let activePartitionIndex = indexByTermCount termCount
       nextIndex = nextPartitionIndex activePartitionIndex
-  rawTail <- readRawTail (jMetadata jour) activePartitionIndex
-  initTermId <- initialTermId (jMetadata jour)
+  rawTail <- readRawTail meta activePartitionIndex
+  initTermId <- initialTermId meta
   let termId = rawTailTermId rawTail
       nextTermId = termId + 1
       termCount = fromIntegral (nextTermId - initTermId)
@@ -176,8 +216,8 @@ rotateTerm jour = do
   -- termId := nextTermId
   -- termBeginPosition += termBufferLength
 
-  initialiseTailWithTermId (jMetadata jour) nextIndex nextTermId
-  writeActiveTermCount (jMetadata jour) termCount
+  initialiseTailWithTermId meta nextIndex nextTermId
+  writeActiveTermCount meta termCount
 
 commit = undefined
 
