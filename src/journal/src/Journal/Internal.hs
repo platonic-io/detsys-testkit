@@ -90,17 +90,18 @@ tryClaim jour len = do
   termCount <- activeTermCount (jMetadata jour)
   let index                = indexByTermCount termCount
       activePartitionIndex = index
-  rt <- rawTail (jMetadata jour) index
+  rt <- readRawTail (jMetadata jour) index
   initTermId <- initialTermId (jMetadata jour)
   termLen <- termLength (jMetadata jour)
 
-  let tId               = termId rt
-      tOffset           = termOffset rt termLen
-      termBeginPosition = computeTermBeginPosition tId (positionBitsToShift termLen) initTermId
+  let termId            = rawTailTermId rt
+      termOffset        = rawTailTermOffset rt termLen
+      termBeginPosition =
+        computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
 
   limit <- calculatePositionLimit jour
-  let termAppender = jTermBuffers jour Vector.! activePartitionIndex
-      position     = termBeginPosition + tOffset
+  let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
+      position     = termBeginPosition + fromIntegral termOffset
   if position < limit
   then do
     result <- undefined
@@ -116,6 +117,27 @@ newPosition = undefined
 backPressureStatus = undefined
 
 termAppenderClaim = undefined
+
+rotateTerm :: Journal' -> IO ()
+rotateTerm jour = do
+  termCount <- activeTermCount (jMetadata jour)
+  let activePartitionIndex = indexByTermCount termCount
+      nextIndex = nextPartitionIndex activePartitionIndex
+  rawTail <- readRawTail (jMetadata jour) activePartitionIndex
+  initTermId <- initialTermId (jMetadata jour)
+  let termId = rawTailTermId rawTail
+      nextTermId = termId + 1
+      termCount = fromIntegral (nextTermId - initTermId)
+
+  -- XXX: cache this? where exactly?
+  -- activePartionIndex := nextIndex
+  -- termOffset := 0
+  -- termId := nextTermId
+  -- termBeginPosition += termBufferLength
+
+  initialiseTailWithTermId (jMetadata jour) nextIndex nextTermId
+  writeActiveTermCount (jMetadata jour) termCount
+
 commit = undefined
 
 abort = undefined
@@ -150,6 +172,7 @@ claim jour len = assert (hEADER_SIZE + len <= getMaxByteSize jour) $ do
          -- Check if header is written to offset (if that's the case the active
          -- file hasn't been rotated yet)
          undefined
+
 mmapFile :: FilePath -> Int -> IO (Ptr Word8, Int)
 mmapFile fp maxByteSize = do
   (ptr, rawSize, _offset, size) <-
