@@ -109,6 +109,7 @@ remaining bb = do
 
 boundCheck :: HasCallStack => ByteBuffer -> Int -> IO ()
 boundCheck bb ix = do
+  -- XXX: ix + slice?
   -- XXX: parametrise on build flag and only do these checks if enabled?
   if ix < fromIntegral (getCapacity bb)
   then return ()

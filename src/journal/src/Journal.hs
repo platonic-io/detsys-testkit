@@ -71,7 +71,7 @@ startJournal' fp (Options _ termLength) = do
   -- XXX: This counter needs to be persisted somehow (mmapped?) in order to be
   -- able to recover from restarts.
   bytesConsumedCounter <- newCounter 0
-  return (Journal' termBuffers meta bytesConsumedCounter)
+  return (Journal' termBuffers (Metadata meta) bytesConsumedCounter)
 
 startJournal :: FilePath -> Options -> IO (Journal, JournalConsumer)
 startJournal dir (Options maxByteSize _) = do
@@ -124,30 +124,30 @@ stopJournal jour jc = do
 appendBS :: Journal -> ByteString -> IO ()
 appendBS jour bs = do
   assertM (0 < BS.length bs &&
-           hEADER_SIZE + BS.length bs + fOOTER_SIZE <= jMaxByteSize jour)
+           hEADER_LENGTH + BS.length bs + fOOTER_LENGTH <= jMaxByteSize jour)
   let len = BS.length bs
   offset <- claim jour len
   buf <- readJournalPtr jour
-  writeBSToPtr bs (buf `plusPtr` (offset + hEADER_SIZE))
+  writeBSToPtr bs (buf `plusPtr` (offset + hEADER_LENGTH))
   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
 
 tee :: Journal -> Socket -> Int -> IO ByteString
 tee jour sock len = do
-  assertM (0 < len && hEADER_SIZE + len + fOOTER_SIZE <= jMaxByteSize jour)
+  assertM (0 < len && hEADER_LENGTH + len + fOOTER_LENGTH <= jMaxByteSize jour)
   offset <- claim jour len
   putStrLn ("tee: writing to offset: " ++ show offset)
   buf <- readJournalPtr jour
-  receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
+  receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_LENGTH)) len
   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
   fptr <- newForeignPtr_ buf
-  return (BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len))
+  return (BS.copy (fromForeignPtr fptr (offset + hEADER_LENGTH) len))
 
 appendRecv :: Journal -> Socket -> Int -> IO Int
 appendRecv jour sock len = do
-  assertM (0 < len && hEADER_SIZE + len + fOOTER_SIZE <= jMaxByteSize jour)
+  assertM (0 < len && hEADER_LENGTH + len + fOOTER_LENGTH <= jMaxByteSize jour)
   offset <- claim jour len
   buf <- readJournalPtr jour
-  receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_SIZE)) len
+  receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_LENGTH)) len
   -- XXX: if receivedBytes /= len or if sock isn't connected, or other failure
   -- modes of `recv(2)`?
   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
@@ -165,8 +165,8 @@ readJournal jc = do
   putStrLn ("readJournal, offset: " ++ show offset)
   putStrLn ("readJournal, len: " ++ show len)
   fptr <- newForeignPtr_ ptr
-  let bs = BS.copy (fromForeignPtr fptr (offset + hEADER_SIZE) len)
-  bytesRead <- incrCounter (hEADER_SIZE + len) (jcBytesConsumed jc)
+  let bs = BS.copy (fromForeignPtr fptr (offset + hEADER_LENGTH) len)
+  bytesRead <- incrCounter (hEADER_LENGTH + len) (jcBytesConsumed jc)
   putStrLn ("readJournal, bytesRead: " ++ show bytesRead)
   if bytesRead == jcMaxByteSize jc
   then do
