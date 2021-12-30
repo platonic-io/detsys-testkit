@@ -47,6 +47,11 @@ cleanMetrics (Metrics cbuf hbuf) = do
   clean cbuf
   clean hbuf
 
+freeMetrics :: Metrics c h -> IO ()
+freeMetrics (Metrics cbuf hbuf) = do
+  free cbuf
+  free hbuf
+
 incrCounter :: (Enum c) => Metrics c h -> c -> Int -> IO ()
 incrCounter (Metrics cbuf _) label value = do
   void $ fetchAddIntArray cbuf offset value
@@ -165,7 +170,7 @@ main = do
   checkPercentile metrics 99.99 50
   checkPercentile metrics 100 100
 
-  return ()
+  freeMetrics metrics
   where
     addMeasure metrics num q = do
       putStrLn $ "Adding " <> show num <> " measures of " <> show q <> " as Latency"
