@@ -289,8 +289,8 @@ getByteString bb len = do
 
 getLazyByteString :: ByteBuffer -> Int -> IO LBS.ByteString
 getLazyByteString bb len = do
-  bytes <- replicateM len (getByte bb)
-  return (LBS.packBytes bytes)
+  bs <- getByteString bb len
+  return (LBS.fromStrict bs)
 
 getByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
 getByteStringAt bb offset len = do
