@@ -1,8 +1,6 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module Journal.Internal where
 
@@ -32,61 +30,14 @@ import Journal.Internal.Parse
 import Journal.Internal.ByteBuffer
 import Journal.Types
 import Journal.Types.AtomicCounter
-
-------------------------------------------------------------------------
-
-newtype HeaderTag = HeaderTag { unHeaderTag :: Word8 }
-  deriving newtype (Eq, Binary, Bits, Show, Num, Storable)
-
-newtype HeaderVersion = HeaderVersion Word8
-  deriving newtype (Eq, Binary, Num, Storable, Integral, Real, Ord, Enum)
-
-newtype HeaderLength = HeaderLength Word32
-  deriving newtype (Eq, Ord, Binary, Enum, Real, Integral, Num, Storable)
-
-newtype HeaderIndex = HeaderIndex Word32
-  deriving newtype (Eq, Binary, Num, Storable)
-
-------------------------------------------------------------------------
-
--- * Constants
-
--- | The length of the journal entry header in bytes.
-hEADER_LENGTH :: Int
-hEADER_LENGTH
-  = sizeOf (1 :: HeaderTag)
-  + sizeOf (1 :: HeaderVersion)
-  + sizeOf (4 :: HeaderLength)
-  -- + sizeOf (4 :: HeaderIndex)
-  -- XXX: CRC?
-
-fOOTER_LENGTH :: Int
-fOOTER_LENGTH = hEADER_LENGTH
-
-cURRENT_VERSION :: HeaderVersion
-cURRENT_VERSION = 0
-
-aCTIVE_FILE :: FilePath
-aCTIVE_FILE = "active"
-
-dIRTY_FILE :: FilePath
-dIRTY_FILE = "dirty"
-
-cLEAN_FILE :: FilePath
-cLEAN_FILE = "clean"
-
-sNAPSHOT_FILE :: FilePath
-sNAPSHOT_FILE = "snapshot"
-
-aRCHIVE_FILE :: FilePath
-aRCHIVE_FILE = "archive"
+import Journal.Internal.BufferClaim
 
 ------------------------------------------------------------------------
 
 offer :: Ptr Word8 -> Int -> Int -> IO Int
 offer buf offset len = undefined
 
-tryClaim :: Journal' -> Int -> IO (Maybe Int64)
+tryClaim :: Journal' -> Int -> IO (Maybe (Int64, BufferClaim))
 tryClaim jour len = do
   -- checkPayloadLength len
   termCount <- activeTermCount (jMetadata jour)
@@ -107,18 +58,18 @@ tryClaim jour len = do
       position     = termBeginPosition + fromIntegral termOffset
   if position < limit
   then do
-    result <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len
-    newPosition (jMetadata jour) result
+    mResult <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len
+    newPosition (jMetadata jour) mResult
   else
     return (backPressureStatus position len)
 
 calculatePositionLimit = undefined
 backPressureStatus = undefined
 
-newPosition :: Metadata -> Maybe TermOffset -> IO (Maybe Int64)
-newPosition meta mResultingOffset =
-  case mResultingOffset of
-    Just resultingOffset -> do
+newPosition :: Metadata -> Maybe (TermOffset, BufferClaim) -> IO (Maybe (Int64, BufferClaim))
+newPosition meta mResult =
+  case mResult of
+    Just (resultingOffset, bufClaim) -> do
       -- XXX: cache
       -- termOffset := resultingOffset
       termCount <- activeTermCount meta
@@ -131,7 +82,7 @@ newPosition meta mResultingOffset =
           termOffset        = rawTailTermOffset rt termLen
           termBeginPosition =
             computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
-      return (Just (termBeginPosition + fromIntegral resultingOffset))
+      return (Just (termBeginPosition + fromIntegral resultingOffset, bufClaim))
     Nothing -> do
       -- XXX:
       -- if termBeginPosition + termBufferLength >= maxPossiblePosition
@@ -144,7 +95,7 @@ fRAME_ALIGNMENT :: Int
 fRAME_ALIGNMENT = 32
 
 termAppenderClaim :: Metadata -> ByteBuffer -> TermId -> TermOffset -> Int
-                  -> IO (Maybe TermOffset)
+                  -> IO (Maybe (TermOffset, BufferClaim))
 termAppenderClaim meta termBuffer termId termOffset len = do
   let
     frameLength     = len + hEADER_LENGTH
@@ -160,8 +111,8 @@ termAppenderClaim meta termBuffer termId termOffset len = do
     return Nothing
   else do
     headerWrite termBuffer termOffset (fromIntegral frameLength) termId
-    -- claimBuffer <- wrapPart termBuffer termOffset frameLength
-    return (Just resultingOffset)
+    bufClaim <- newBufferClaim termBuffer termOffset frameLength
+    return (Just (resultingOffset, bufClaim))
 
 handleEndOfLogCondition :: ByteBuffer -> TermOffset -> Capacity -> TermId -> IO ()
 handleEndOfLogCondition termBuffer termOffset (Capacity termLen) termId = do
@@ -174,12 +125,6 @@ handleEndOfLogCondition termBuffer termOffset (Capacity termLen) termId = do
     writeFrameType termBuffer termOffset Padding
     writeFrameLength termBuffer termOffset paddingLength
 
-fRAME_LENGTH_FIELD_OFFSET :: Int
-fRAME_LENGTH_FIELD_OFFSET = 0
-
-tAG_FIELD_OFFSET :: Int
-tAG_FIELD_OFFSET = 6
-
 headerWrite :: ByteBuffer -> TermOffset -> HeaderLength -> TermId -> IO ()
 headerWrite termBuffer termOffset len _termId = do
   let versionFlagsType :: Int64
@@ -188,15 +133,6 @@ headerWrite termBuffer termOffset len _termId = do
   writeIntOffArrayIx termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
     (versionFlagsType .|. ((- fromIntegral len) .&. 0xFFFF_FFFF))
   -- XXX: store termId and offset (only need for replication?)
-
-writeFrameType :: ByteBuffer -> TermOffset -> HeaderTag -> IO ()
-writeFrameType termBuffer termOffset (HeaderTag tag) = do
-  putByteAt termBuffer (fromIntegral termOffset + tAG_FIELD_OFFSET) tag
-
-writeFrameLength :: ByteBuffer -> TermOffset -> HeaderLength -> IO ()
-writeFrameLength termBuffer termOffset (HeaderLength len) = do
-  writeWord32OffArrayIx termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
-    len
 
 rotateTerm :: Metadata -> IO ()
 rotateTerm meta = do
@@ -314,18 +250,6 @@ data JournalHeaderV0 = JournalHeaderV0
   , jhLength   :: !HeaderLength
   -- , jhChecksum :: !Word32 -- V1
   }
-
-pattern Empty   = 0 :: HeaderTag
-pattern Valid   = 1 :: HeaderTag
-pattern Invalid = 2 :: HeaderTag
-pattern Padding = 4 :: HeaderTag
-
-tagString :: HeaderTag -> String
-tagString Empty   = "Empty"
-tagString Valid   = "Valid"
-tagString Invalid = "Invalid"
-tagString Padding = "Padding"
-tagString other   = "Unknown: " ++ show other
 
 newHeader :: HeaderTag -> HeaderVersion -> HeaderLength -> JournalHeader
 newHeader = JournalHeaderV0

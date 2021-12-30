@@ -32,6 +32,7 @@ import System.FilePath (takeDirectory, (</>))
 
 import Journal.Internal
 import Journal.Internal.ByteBuffer
+import Journal.Internal.BufferClaim
 import Journal.Types
 import Journal.Types.AtomicCounter
 
@@ -142,6 +143,9 @@ tee jour sock len = do
   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
   fptr <- newForeignPtr_ buf
   return (BS.copy (fromForeignPtr fptr (offset + hEADER_LENGTH) len))
+
+recvBytes :: BufferClaim -> Socket -> Int -> IO Int
+recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock ptr len
 
 appendRecv :: Journal -> Socket -> Int -> IO Int
 appendRecv jour sock len = do
