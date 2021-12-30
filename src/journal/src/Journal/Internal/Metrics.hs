@@ -33,8 +33,8 @@ data MetricsSchema c h = MetricsSchema
 -- TODO have a header in the file and check that schema is the same as existing in file?
 newMetrics :: forall c h. (Enum c, Bounded c, Enum h, Bounded h) => MetricsSchema c h -> FilePath -> IO (Metrics c h)
 newMetrics _ fp = do
-  -- bb <- mmapped fp (sizeOfCounters + sizeOfHistograms) -- mmap seems problematic
-  bb <- allocate (sizeOfCounters + sizeOfHistograms)
+  bb <- mmapped fp (sizeOfCounters + sizeOfHistograms) -- mmap seems problematic
+  -- bb <- allocate (sizeOfCounters + sizeOfHistograms)
   cbuf <- wrapPart bb 0 sizeOfCounters
   hbuf <- wrapPart bb sizeOfCounters sizeOfHistograms
   return (Metrics cbuf hbuf)

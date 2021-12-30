@@ -31,13 +31,29 @@ foreign import ccall unsafe "unistd.h sysconf"
 #include <unistd.h>
 _SC_PAGE_SIZE = #const _SC_PAGE_SIZE
 
+#include <sys/mman.h>
+mAP_ANONYMOUS = #const MAP_ANONYMOUS
+mAP_FIXED     = #const MAP_FIXED
+
+mAP_SHARED    = #const MAP_SHARED
+mAP_PRIVATE   = #const MAP_PRIVATE
+
+pROT_READ     = #const PROT_READ
+pROT_WRITE    = #const PROT_WRITE
+pROT_EXEC     = #const PROT_EXEC
+pROT_NONE     = #const PROT_NONE
+
+mS_ASYNC      = #const MS_ASYNC
+mS_SYNC       = #const MS_SYNC
+mS_INVALIDATE = #const MS_INVALIDATE
+
 ------------------------------------------------------------------------
 
-mmap :: Maybe (Ptr a) -> Int -> MemoryProtection -> MemoryVisibility -> Maybe Fd
+mmap :: Maybe (Ptr a) -> Int -> CInt -> CInt -> Maybe Fd
      -> COff -> IO (Ptr a)
 mmap mAddr len prot visib mFd offset =
   throwErrnoIf (== mAP_FAILED) "mmap" $
-    c_mmap addr (fromIntegral len) (mpCInt prot) flags fd offset
+    c_mmap addr (fromIntegral len) prot flags fd offset
   where
     mAP_FAILED = nullPtr `plusPtr` (-1)
 
@@ -51,13 +67,7 @@ mmap mAddr len prot visib mFd offset =
     flags :: CInt
     flags =  maybe mAP_ANONYMOUS (const 0) mFd
          .|. maybe 0 (const mAP_FIXED) mAddr
-         .|. mvCInt visib
-
-    mAP_ANONYMOUS :: CInt
-    mAP_ANONYMOUS = 32
-
-    mAP_FIXED :: CInt
-    mAP_FIXED = 16
+         .|. visib
 
 munmap :: Ptr a -> CSize -> IO ()
 munmap addr len = throwErrnoIfMinus1_ "munmap" (c_munmap addr len)
@@ -65,42 +75,14 @@ munmap addr len = throwErrnoIfMinus1_ "munmap" (c_munmap addr len)
 msync
   :: Ptr a
   -> CSize
-  -> MSyncFlag
+  -> CInt
   -> Bool -- ^ Asks to invalidate other mappings of the same file (so
           --   that they can be updated with the fresh values just
           --   written).
   -> IO ()
-msync addr len flag mS_INVALIDATE = throwErrnoIfMinus1_ "msync" (c_msync addr len flags)
+msync addr len syncFlag invalidate = throwErrnoIfMinus1_ "msync" (c_msync addr len flags)
   where
-    flags = msyncCInt flag .|. if mS_INVALIDATE then 2 else 0
-
-data MSyncFlag
-  = MS_ASYNC -- | Specifies that an update be scheduled, but the call
-             --   returns immediately.
-  | MS_SYNC  -- | Requests an update and waits for it to complete.
-
-msyncCInt :: MSyncFlag -> CInt
-msyncCInt MS_ASYNC = 1
-msyncCInt MS_SYNC  = 4
-
-data MemoryProtection = PROT_NONE | PROT PROT_SOME
-data PROT_SOME = READ | WRITE | EXEC | PROT_SOME :| PROT_SOME
-
-mpCInt :: MemoryProtection -> CInt
-mpCInt PROT_NONE   = 0
-mpCInt (PROT some) = go some
-  where
-    go :: PROT_SOME -> CInt
-    go READ     = 1
-    go WRITE    = 2
-    go EXEC     = 4
-    go (l :| r) = go l .|. go r
-
-data MemoryVisibility = MAP_SHARED | MAP_PRIVATE
-
-mvCInt :: MemoryVisibility -> CInt
-mvCInt MAP_SHARED  = 1
-mvCInt MAP_PRIVATE = 2
+    flags = syncFlag .|. if invalidate then mS_INVALIDATE else 0
 
 posixMemalignFPtr :: Int -> Int -> IO (ForeignPtr a)
 posixMemalignFPtr align size = do
@@ -131,9 +113,9 @@ main :: IO ()
 main = do
   fptr <- posixMemalignFPtr 4096 4096
   withForeignPtr fptr $ \ptr' -> do
-    ptr <- mmap (Just ptr') 16 (PROT (READ :| WRITE)) MAP_SHARED Nothing 0
+    ptr <- mmap (Just ptr') 16 (pROT_READ .|. pROT_WRITE) mAP_SHARED Nothing 0
     if ptr /= ptr'
     then error "not same ptr"
     else do
-      msync ptr 16 MS_SYNC False
+      msync ptr 16 mS_SYNC False
       munmap ptr 16

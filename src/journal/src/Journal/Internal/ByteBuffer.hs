@@ -158,7 +158,7 @@ mmapped fp capa = do
   pageSize <- sysconfPageSize
   bb <- allocateAligned capa pageSize
   ptr <- mmap (Just (bbPtr bb)) (fromIntegral capa)
-           (PROT (READ :| WRITE)) MAP_SHARED (Just fd) 0
+           (pROT_READ .|. pROT_WRITE) mAP_SHARED (Just fd) 0
   assert (ptr == bbPtr bb) (return ())
   return bb
 
@@ -478,7 +478,7 @@ fetchAddIntArray' bb offset@(I# offset#) (I# incr#) = do
 
 -- | Calls `msync` which forces the data in memory to be synced to disk.
 force :: ByteBuffer -> IO ()
-force bb = msync (bbPtr bb) (fromIntegral (bbCapacity bb)) MS_SYNC False
+force bb = msync (bbPtr bb) (fromIntegral (bbCapacity bb)) mS_SYNC False
 
 ------------------------------------------------------------------------
 
