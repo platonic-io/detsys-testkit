@@ -113,6 +113,7 @@ tryClaim jour len = do
     return (backPressureStatus position len)
 
 calculatePositionLimit = undefined
+backPressureStatus = undefined
 
 newPosition :: Metadata -> Maybe TermOffset -> IO (Maybe Int64)
 newPosition meta mResultingOffset =
@@ -138,8 +139,6 @@ newPosition meta mResultingOffset =
       -- else do
       rotateTerm meta
       return Nothing -- ADMIN_ACTION
-
-backPressureStatus = undefined
 
 fRAME_ALIGNMENT :: Int
 fRAME_ALIGNMENT = 32
@@ -222,7 +221,6 @@ rotateTerm meta = do
 commit = undefined
 
 abort = undefined
-
 
 ------------------------------------------------------------------------
 

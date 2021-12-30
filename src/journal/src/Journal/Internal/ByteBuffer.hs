@@ -283,9 +283,14 @@ putLazyByteString bb lbs = do
       s' -> (# s', () #)
 
 getByteString :: ByteBuffer -> Int -> IO BS.ByteString
-getByteString bb len = do
-  bytes <- replicateM len (getByte bb)
-  return (BS.packBytes bytes)
+getByteString bb len@(I# len#) = do
+  boundCheck bb (len - 1)
+  Position (I# offset#) <- readPosition bb
+  bs <- BS.create len $ \(Ptr addr#) -> IO $ \s ->
+    case copyMutableByteArrayToAddr# (bbData bb) offset# addr# len# s of
+      s' -> (# s', () #)
+  incrPosition bb len
+  return bs
 
 getLazyByteString :: ByteBuffer -> Int -> IO LBS.ByteString
 getLazyByteString bb len = do

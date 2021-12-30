@@ -44,6 +44,7 @@ defaultOptions = Options 1024 (64 * 1024)
 
 allocateJournal :: FilePath -> Options -> IO ()
 allocateJournal = undefined
+  -- System.Posix.Fcntl.fileAllocate
 
 startJournal' :: FilePath -> Options -> IO Journal'
 startJournal' fp (Options _ termLength) = do
