@@ -11,7 +11,11 @@ import qualified Data.ByteString.Internal as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Internal as LBS
 import Data.IORef
-import Foreign
+import Data.Word
+import Data.Int
+import Foreign.Storable
+import Foreign (withForeignPtr)
+import Data.Bits
 import GHC.Exts
 import GHC.ForeignPtr
 import GHC.IO
@@ -480,6 +484,12 @@ fetchAddIntArray' bb offset@(I# offset#) (I# incr#) = do
 force :: ByteBuffer -> IO ()
 force bb = msync (bbPtr bb) (fromIntegral (bbCapacity bb)) mS_SYNC False
 
+free :: ByteBuffer -> IO ()
+free bb = do
+  size <- IO $ \s -> case sizeofMutableByteArray# (bbData bb) of
+                       size# -> (# s, I# size# #)
+  munmap (bbPtr bb) (fromIntegral size)
+
 ------------------------------------------------------------------------
 
 t :: IO ()
@@ -489,4 +499,5 @@ t = do
   putStorable bb (0.1 :: Double)
   putStorable bb 'A'
   d <- getStorable bb'
+  free bb
   print (d :: Double)
