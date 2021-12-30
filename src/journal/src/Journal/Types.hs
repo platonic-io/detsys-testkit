@@ -1,6 +1,8 @@
-{-# LANGUAGE NumericUnderscores #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Journal.Types
 --  ( Journal'(Journal')
@@ -35,13 +37,14 @@ module Journal.Types
 
 import Control.Concurrent.STM
 import Control.Concurrent.STM (TVar)
+import Data.Binary (Binary)
+import Data.Bits
 import Data.ByteString (ByteString)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Data.Bits
 import Data.Vector (Vector)
 import Data.Word (Word32, Word64, Word8)
 import Foreign.Ptr (Ptr, plusPtr)
-import Foreign.Storable (sizeOf)
+import Foreign.Storable (Storable, sizeOf)
 
 import Journal.Internal.ByteBuffer
 import Journal.Types.AtomicCounter
@@ -291,6 +294,83 @@ rotateLog meta termCount termId = do
       else do
         b <- casRawTail meta nextIndex rawTail (packTail nextTermId 0)
         if b then return () else go
+
+------------------------------------------------------------------------
+
+writeFrameType :: ByteBuffer -> TermOffset -> HeaderTag -> IO ()
+writeFrameType termBuffer termOffset (HeaderTag tag) =
+  putByteAt termBuffer (fromIntegral termOffset + tAG_FIELD_OFFSET) tag
+
+writeFrameLength :: ByteBuffer -> TermOffset -> HeaderLength -> IO ()
+writeFrameLength termBuffer termOffset (HeaderLength len) =
+  writeWord32OffArrayIx termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
+    len
+
+------------------------------------------------------------------------
+
+newtype HeaderTag = HeaderTag { unHeaderTag :: Word8 }
+  deriving newtype (Eq, Binary, Bits, Show, Num, Storable)
+
+pattern Empty   = 0 :: HeaderTag
+pattern Valid   = 1 :: HeaderTag
+pattern Invalid = 2 :: HeaderTag
+pattern Padding = 4 :: HeaderTag
+
+tagString :: HeaderTag -> String
+tagString Empty   = "Empty"
+tagString Valid   = "Valid"
+tagString Invalid = "Invalid"
+tagString Padding = "Padding"
+tagString other   = "Unknown: " ++ show other
+
+newtype HeaderVersion = HeaderVersion Word8
+  deriving newtype (Eq, Binary, Num, Storable, Integral, Real, Ord, Enum)
+
+newtype HeaderLength = HeaderLength Word32
+  deriving newtype (Eq, Ord, Binary, Enum, Real, Integral, Num, Storable)
+
+newtype HeaderIndex = HeaderIndex Word32
+  deriving newtype (Eq, Binary, Num, Storable)
+
+------------------------------------------------------------------------
+
+-- * Constants
+
+-- | The length of the journal entry header in bytes.
+hEADER_LENGTH :: Int
+hEADER_LENGTH
+  = sizeOf (1 :: HeaderTag)
+  + sizeOf (1 :: HeaderVersion)
+  + sizeOf (4 :: HeaderLength)
+  -- + sizeOf (4 :: HeaderIndex)
+  -- XXX: CRC?
+
+fOOTER_LENGTH :: Int
+fOOTER_LENGTH = hEADER_LENGTH
+
+cURRENT_VERSION :: HeaderVersion
+cURRENT_VERSION = 0
+
+aCTIVE_FILE :: FilePath
+aCTIVE_FILE = "active"
+
+dIRTY_FILE :: FilePath
+dIRTY_FILE = "dirty"
+
+cLEAN_FILE :: FilePath
+cLEAN_FILE = "clean"
+
+sNAPSHOT_FILE :: FilePath
+sNAPSHOT_FILE = "snapshot"
+
+aRCHIVE_FILE :: FilePath
+aRCHIVE_FILE = "archive"
+
+fRAME_LENGTH_FIELD_OFFSET :: Int
+fRAME_LENGTH_FIELD_OFFSET = 0
+
+tAG_FIELD_OFFSET :: Int
+tAG_FIELD_OFFSET = 6
 
 ------------------------------------------------------------------------
 

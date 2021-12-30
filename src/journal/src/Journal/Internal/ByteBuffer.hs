@@ -171,7 +171,7 @@ wrap bb = newByteBuffer (bbData bb) capa lim (Position 0) (Just (bbSlice bb))
 wrapPart :: ByteBuffer -> Int -> Int -> IO ByteBuffer
 wrapPart bb offset len = newByteBuffer (bbData bb) capa lim pos (Just (bbSlice bb))
   where
-    capa = bbCapacity bb
+    capa = Capacity len
     lim  = Limit (fromIntegral offset + fromIntegral len)
     pos  = Position (fromIntegral offset)
 
@@ -374,6 +374,8 @@ readWord8OffArrayIx bb offset@(I# offset#) = do
 
 -- writeCharOffArray#
 -- writeWideCharOffArray#
+writeInt = writeIntOffArrayIx
+
 writeIntOffArrayIx :: ByteBuffer -> Int -> Int -> IO ()
 writeIntOffArrayIx bb ix@(I# ix#) (I# value#) = do
   boundCheck bb ix
