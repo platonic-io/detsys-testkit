@@ -29,7 +29,7 @@ library
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
   build-depends:
-    , base        ^>=4.14.1.0
+    , base        ^>=4.14.3.0
     , binary
     , bytestring
     , directory
@@ -95,7 +95,7 @@ executable journal
   -- other-extensions:
   build-depends:
     , async
-    , base        ^>=4.14.1.0
+    , base        ^>=4.14.3.0
     , bytestring
     , journal
     , network

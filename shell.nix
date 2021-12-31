@@ -1,5 +1,13 @@
 { sources ? import ./nix/sources.nix
-, pkgs ? import sources.nixpkgs {} }:
+, pkgs ? import sources.nixpkgs {
+  overlays = [
+    (import "${builtins.fetchTarball {
+      url =  https://github.com/tweag/gomod2nix/archive/67f22dd738d092c6ba88e420350ada0ed4992ae8.tar.gz;
+      sha256 = "0a9rhw6djgcrky5nzly3srsl8095q42f2nyzxyisp9fh9fg70nih";
+    }}/overlay.nix")
+  ];
+}
+}:
 with pkgs;
 
 let
@@ -20,9 +28,10 @@ pkgs.mkShell {
     bazel_4
     buildifier # Bazel BUILD file formatter
     go
+    pkgs.gomod2nix
     clojure
     fake-lsb-release
-    haskell.compiler.ghc8104
+    haskell.compiler.ghc8107
     haskellPackages.cabal-install
     haskellPackages.tasty-discover
     haskellPackages.cabal-fmt # For formatting .cabal files, example

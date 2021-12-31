@@ -62,7 +62,6 @@ in stdenv.mkDerivation rec {
       -J-Dfile.encoding=UTF-8 \
       -J-Djava.awt.headless=true \
       -J-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory \
-      --initialize-at-build-time \
       --initialize-at-build-time=org.sqlite.JDBC \
       --initialize-at-build-time=org.sqlite.core.DB$ProgressObserver \
       --initialize-at-build-time=org.sqlite.core.DB \
@@ -89,6 +88,8 @@ in stdenv.mkDerivation rec {
       --initialize-at-run-time=sun.awt.X11.WindowPropertyGetter \
       --initialize-at-run-time=sun.awt.X11InputMethodBase \
       --initialize-at-run-time=sun.awt.X11.XWindow \
+      --initialize-at-run-time=sun.awt.X11.XDataTransferer \
+      --initialize-at-run-time=sun.awt.X11.XToolkitThreadBlockedHandler \
       ''} \
       --report-unsupported-elements-at-runtime \
       --allow-incomplete-classpath \

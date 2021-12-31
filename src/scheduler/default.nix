@@ -53,14 +53,12 @@ in stdenv.mkDerivation rec {
       ${lib.optionalString stdenv.isDarwin ''-H:-CheckToolchain''} \
       -H:+ReportExceptionStackTraces \
       -H:EnableURLProtocols=http,https \
-      --enable-all-security-services \
       -H:ResourceConfigurationFiles=${src}/native-image/resource-config.json \
       -H:JNIConfigurationFiles=${src}/native-image/jni-config.json \
       -H:ReflectionConfigurationFiles=${src}/native-image/reflection-config.json \
       -J-Dclojure.spec.skip-macros=true \
       -J-Dclojure.compiler.direct-linking=true \
       -J-Dfile.encoding=UTF-8 \
-      --initialize-at-build-time \
       --initialize-at-build-time=org.sqlite.JDBC \
       --initialize-at-build-time=org.sqlite.core.DB$ProgressObserver \
       --initialize-at-build-time=org.sqlite.core.DB \

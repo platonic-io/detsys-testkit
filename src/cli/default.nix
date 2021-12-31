@@ -17,12 +17,12 @@ buildGoModule rec {
   src = gitignoreSource ./.;
   buildInputs = [ detsysLib ];
 
-  vendorSha256 = "10mg22kx3n5z8ai4gdxljzdjb3cbshx8pj342ys4fl4ckav8z4rl";
+  vendorSha256 = "00mg22kx3n5z8ai4gdxljzdjb3cbshx8pj342ys4fl4ckav8z4rl";
 
-  buildFlagsArray =
+  ldflags =
     # This is a dummy git hash to avoid breaking the nix cache, it will be
     # patched in the `postInstall` phase of the top-level `default.nix`.
-    [ "-ldflags=-X main.version=0000000000000000000000000000000000000000-nix" ];
+    [ "-X main.version=0000000000000000000000000000000000000000-nix" ];
 
   preBuild = ''
     # We need to put the source of the library in `../lib`, because

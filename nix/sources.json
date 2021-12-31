@@ -11,6 +11,18 @@
         "url": "https://github.com/hercules-ci/gitignore/archive/c4662e662462e7bf3c2a968483478a665d00e717.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
+    "gomod2nix": {
+        "branch": "master",
+        "description": "Convert applications using Go modules to Nix expressions",
+        "homepage": null,
+        "owner": "tweag",
+        "repo": "gomod2nix",
+        "rev": "596d01fd55ed8521853807df1f4e9d858cf75d7e",
+        "sha256": "040xh14gh1x9p80adwfzs21h1hq1di1qkw7jpzyhsm13wv5z2ja2",
+        "type": "tarball",
+        "url": "https://github.com/tweag/gomod2nix/archive/596d01fd55ed8521853807df1f4e9d858cf75d7e.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
     "niv": {
         "branch": "master",
         "description": "Easy dependency management for Nix projects",
@@ -29,10 +41,10 @@
         "homepage": "",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "842f900e73c7ce985218cc4f455e34d1d56475c1",
-        "sha256": "0ygg3zkvcxy7yhl00d5l07sfpnbld4321qpcw8z68mkc3ncyv3ws",
+        "rev": "5c37ad87222cfc1ec36d6cd1364514a9efc2f7f2",
+        "sha256": "1r74afnalgcbpv7b9sbdfbnx1kfj0kp1yfa60bbbv27n36vqdhbb",
         "type": "tarball",
-        "url": "https://github.com/NixOS/nixpkgs/archive/842f900e73c7ce985218cc4f455e34d1d56475c1.tar.gz",
+        "url": "https://github.com/NixOS/nixpkgs/archive/5c37ad87222cfc1ec36d6cd1364514a9efc2f7f2.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }

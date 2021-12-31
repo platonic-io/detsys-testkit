@@ -1,5 +1,11 @@
 { sources ? import ./../../nix/sources.nix
-, pkgs ? import sources.nixpkgs {} }:
+, pkgs ? import sources.nixpkgs {
+  overlays = [
+      (self: super: {
+        buildGoApplication = super.callPackage ./builder { };
+      })
+    ];
+} }:
 with pkgs;
 
 assert lib.versionAtLeast go.version "1.15";
@@ -9,11 +15,12 @@ let
   detsysLib = callPackage ../lib/default.nix {};
 in
 
-buildGoModule rec {
+pkgs.buildGoApplication {
   pname = "debugger";
   version = "latest";
 
   src = gitignoreSource ./.;
+  modules = ./gomod2nix.toml;
   buildInputs = [ detsysLib ];
 
   vendorSha256 = "19rv6v2aj9qzl07zmrfwr7wkhvvawy3p69ipl58mnbbr6ry8999g";
