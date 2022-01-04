@@ -63,7 +63,11 @@ tryClaim jour len = do
   else
     return (backPressureStatus position len)
 
-calculatePositionLimit = undefined
+calculatePositionLimit :: Journal' -> IO Int64
+calculatePositionLimit jour = do
+  minSubscriberPos <- readCounter (jBytesConsumed jour)
+  undefined
+
 backPressureStatus = undefined
 
 newPosition :: Metadata -> Maybe (TermOffset, BufferClaim) -> IO (Maybe (Int64, BufferClaim))
@@ -153,10 +157,6 @@ rotateTerm meta = do
 
   initialiseTailWithTermId meta nextIndex nextTermId
   writeActiveTermCount meta termCount
-
-commit = undefined
-
-abort = undefined
 
 ------------------------------------------------------------------------
 
