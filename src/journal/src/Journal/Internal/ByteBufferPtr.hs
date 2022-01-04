@@ -19,7 +19,6 @@ import Foreign.Concurrent
 import Foreign.Storable
 import GHC.Exts
 import GHC.ForeignPtr
-import GHC.IO
 import GHC.Stack
 import GHC.Types
 import System.Posix.IO
@@ -157,14 +156,13 @@ allocateAligned size align = do
   newByteBuffer fptr (Capacity size) (Limit size) 0 Nothing
 
 mmapped :: FilePath -> Int -> IO ByteBuffer
-mmapped fp capa = do
-  fd <- openFd fp ReadWrite Nothing defaultFileFlags
-  pageSize <- sysconfPageSize
-  ptr <- mmap Nothing (fromIntegral capa)
-           (pROT_READ .|. pROT_WRITE) mAP_SHARED (Just fd) 0
-  closeFd fd
-  fptr <- newForeignPtr ptr (finalizer ptr pageSize)
-  newByteBuffer fptr (Capacity pageSize) (Limit pageSize) 0 Nothing
+mmapped fp capa =
+  bracket (openFd fp ReadWrite Nothing defaultFileFlags) closeFd $ \fd -> do
+    pageSize <- sysconfPageSize
+    ptr <- mmap Nothing (fromIntegral capa)
+             (pROT_READ .|. pROT_WRITE) mAP_SHARED (Just fd) 0
+    fptr <- newForeignPtr ptr (finalizer ptr pageSize)
+    newByteBuffer fptr (Capacity pageSize) (Limit pageSize) 0 Nothing
   where
     finalizer :: Ptr a -> Int -> IO ()
     finalizer ptr size = munmap ptr (fromIntegral size)
