@@ -92,7 +92,7 @@ type Model = FakeJournal
 precondition :: Model -> Command -> Bool
 precondition m ReadJournal   = Vector.length (fjJournal m) /= fjIndex m
 precondition m (AppendBS bs) =
-  not (BS.null bs) && BS.length bs + hEADER_SIZE <= oMaxByteSize testOptions
+  not (BS.null bs) && BS.length bs + hEADER_LENGTH <= oMaxByteSize testOptions
 
 step :: Command -> Model -> (Model, Response)
 step (AppendBS bs) m = Unit <$> appendBSFake bs m
@@ -112,7 +112,7 @@ genByteString = oneof (map genBs [65..90])
       , (1, return (BS.replicate  maxLen      (fromIntegral i)))
       , (1, return (BS.replicate (maxLen - 1) (fromIntegral i)))
       ]
-    maxLen = oMaxByteSize testOptions - hEADER_SIZE - fOOTER_SIZE
+    maxLen = oMaxByteSize testOptions - hEADER_LENGTH - fOOTER_LENGTH
 
 genCommand :: Gen Command
 genCommand = frequency
@@ -199,7 +199,7 @@ stats hist = Stats
     Sum totalAppended =
       foldMap (\(cmd, _resp) ->
                  case cmd of
-                   AppendBS bs -> Sum (hEADER_SIZE + BS.length bs)
+                   AppendBS bs -> Sum (hEADER_LENGTH + BS.length bs)
                    _otherwise  -> mempty) hist
 
 monitorStats :: Monad m => Stats -> PropertyM m ()
