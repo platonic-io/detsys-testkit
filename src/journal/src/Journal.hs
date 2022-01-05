@@ -38,7 +38,7 @@ import System.Posix.Fcntl (fileAllocate)
 
 import Journal.Internal
 import Journal.Internal.BufferClaim
-import Journal.Internal.ByteBuffer
+import Journal.Internal.ByteBufferPtr
 import Journal.Types
 import Journal.Types.AtomicCounter
 

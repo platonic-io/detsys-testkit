@@ -14,12 +14,13 @@ import qualified Data.ByteString.Lazy.Internal as LBS
 import Data.IORef
 import Data.Int
 import Data.Word
-import Foreign (fillBytes, plusPtr, withForeignPtr)
+import Foreign (fillBytes, plusPtr, withForeignPtr, copyBytes)
 import Foreign.Concurrent
 import Foreign.Storable
 import GHC.Exts
 import GHC.ForeignPtr
 import GHC.Stack
+import GHC.IO (IO(IO))
 import System.Posix.IO
        (OpenMode(ReadWrite), closeFd, defaultFileFlags, openFd)
 
@@ -277,15 +278,16 @@ putBytes src dest = do
 
 getBytes :: ByteBuffer -> Int -> Int -> IO [Word8]
 getBytes bb offset len = undefined
+-}
 
 putByteString :: ByteBuffer -> BS.ByteString -> IO ()
 putByteString bb bs = do
-  let (fptr, I# offset#, I# len#) = BS.toForeignPtr bs
-  boundCheck bb (I# (len# -# 1#))
-  withForeignPtr fptr $ \(Ptr addr#) -> IO $ \s ->
-    case copyAddrToByteArray# addr# (bbData bb) offset# len# s of
-      s' -> (# s', () #)
-
+  let (fptr, offset, len) = BS.toForeignPtr bs
+  boundCheck bb (len - 1)
+  withForeignPtr fptr $ \sptr ->
+    withForeignPtr (bbData bb) $ \dptr ->
+      copyBytes (sptr `plusPtr` offset) dptr len
+{-
 putLazyByteString :: ByteBuffer -> LBS.ByteString -> IO ()
 putLazyByteString bb lbs = do
   let (fptr, I# offset#, I# len#) = BS.toForeignPtr (LBS.toStrict lbs)
@@ -391,14 +393,17 @@ indexWord8OffAddr bb offset@(I# offset#) = do
 
 -- writeCharOffArray#
 -- writeWideCharOffArray#
-writeInt = writeIntOffArrayIx
+-}
+writeInt = writeIntOffAddr
 
-writeIntOffArrayIx :: ByteBuffer -> Int -> Int -> IO ()
-writeIntOffArrayIx bb ix@(I# ix#) (I# value#) = do
+writeIntOffAddr :: ByteBuffer -> Int -> Int -> IO ()
+writeIntOffAddr bb ix@(I# ix#) (I# value#) = do
   boundCheck bb ix
-  IO $ \s ->
-    case writeIntArray# (bbData bb) ix# value# s of
-      s' -> (# s', () #)
+  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case writeIntOffAddr# addr# ix# value# s of
+        s' -> (# s', () #)
+  {-
 -- writeWordOffArray#
 -- writeArrayOffAddr#
 -- writeFloatOffArray#
@@ -427,33 +432,39 @@ writeInt64OffArrayIx bb ix@(I# ix#) value = do
 
 -- writeWord8OffArray#
 -- writeWord16OffArray#
-writeWord32OffArrayIx :: ByteBuffer -> Int -> Word32 -> IO ()
-writeWord32OffArrayIx bb offset@(I# offset#) value = do
+-}
+writeWord32OffAddr :: ByteBuffer -> Int -> Word32 -> IO ()
+writeWord32OffAddr bb offset@(I# offset#) value = do
   boundCheck bb offset
-  IO $ \s ->
-    case writeWord32Array# (bbData bb) offset# value# s of
-      s' -> (# s', () #)
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case writeWord32OffAddr# addr# offset# value# s of
+        s' -> (# s', () #)
   where
     W# value# = fromIntegral value
+  {-
 -- writeWord64OffArray#
 
 -- atomicReadIntArray#
 -- atomicWriteIntArray#
+-}
 
 -- | Given a bytebuffer, an offset in machine words, the expected old value, and
 -- the new value, perform an atomic compare and swap i.e. write the new value if
 -- the current value matches the provided old value. Returns a boolean
 -- indicating whether the compare and swap succeded or not. Implies a full
 -- memory barrier.
-casIntArray :: ByteBuffer -> Int -> Int -> Int -> IO Bool
-casIntArray bb offset@(I# offset#) (I# old#) (I# new#) = do
+casIntAddr :: ByteBuffer -> Int -> Int -> Int -> IO Bool
+casIntAddr bb offset@(I# offset#) (I# old#) (I# new#) = do
   boundCheck bb offset
-  IO $ \s ->
-    case casIntArray# (bbData bb) offset# old# new# s of
-      (# s', before# #) -> case before# ==# old# of
-        1# -> (# s', True #)
-        0# -> (# s', False #)
--}
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case casIntAddr# addr# offset# old# new# s of
+        (# s', before# #) -> case before# ==# old# of
+          1# -> (# s', True #)
+          0# -> (# s', False #)
+
+casIntAddr# = undefined
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Returns the value of the element

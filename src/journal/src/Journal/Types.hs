@@ -46,7 +46,7 @@ import Data.Word (Word32, Word64, Word8)
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (Storable, sizeOf)
 
-import Journal.Internal.ByteBuffer
+import Journal.Internal.ByteBufferPtr
 import Journal.Types.AtomicCounter
 
 ------------------------------------------------------------------------
@@ -145,13 +145,13 @@ packTail termId0 termOffset0 =
 
 writeRawTail :: Metadata -> TermId -> TermOffset -> PartitionIndex -> IO ()
 writeRawTail (Metadata meta) termId termOffset (PartitionIndex partitionIndex) =
-  writeIntOffArrayIx meta
+  writeIntOffAddr meta
     (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
     (unRawTail (packTail termId termOffset))
 
 casRawTail :: Metadata -> PartitionIndex -> RawTail -> RawTail -> IO Bool
 casRawTail (Metadata meta) (PartitionIndex partitionIndex) expected new =
-  casIntArray meta
+  casIntAddr meta
     (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
     (fromIntegral expected) (fromIntegral new) -- XXX: 32-bit systems?
 
@@ -164,12 +164,12 @@ activeTermCount (Metadata meta) =
   TermCount <$> readIntOffArrayIx meta lOG_ACTIVE_TERM_COUNT_OFFSET
 
 writeActiveTermCount :: Metadata -> TermCount -> IO ()
-writeActiveTermCount (Metadata meta) =
-  writeIntOffArrayIx meta lOG_ACTIVE_TERM_COUNT_OFFSET . fromIntegral
+writeActiveTermCount (Metadata meta) = do
+  writeIntOffAddr meta lOG_ACTIVE_TERM_COUNT_OFFSET . fromIntegral
 
 casActiveTermCount :: Metadata -> TermCount -> TermCount -> IO Bool
 casActiveTermCount (Metadata meta) (TermCount expected) (TermCount new) =
-  casIntArray meta lOG_ACTIVE_TERM_COUNT_OFFSET expected new
+  casIntAddr meta lOG_ACTIVE_TERM_COUNT_OFFSET expected new
 
 initialTermId :: Metadata -> IO TermId
 initialTermId (Metadata meta) =
@@ -303,7 +303,7 @@ writeFrameType termBuffer termOffset (HeaderTag tag) =
 
 writeFrameLength :: ByteBuffer -> TermOffset -> HeaderLength -> IO ()
 writeFrameLength termBuffer termOffset (HeaderLength len) =
-  writeWord32OffArrayIx termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
+  writeWord32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
     len
 
 ------------------------------------------------------------------------
