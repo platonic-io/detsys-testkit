@@ -15,10 +15,11 @@ module Journal
   ) where
 
 import Control.Exception (assert)
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Data.Bits (popCount)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSChar8
 import Data.ByteString.Internal (fromForeignPtr)
 import Data.IORef (newIORef)
 import qualified Data.Vector as Vector
@@ -27,12 +28,17 @@ import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (plusPtr)
 import Network.Socket (Socket, recvBuf)
 import System.Directory
-       (createDirectoryIfMissing, doesDirectoryExist, doesFileExist)
+       ( createDirectoryIfMissing
+       , doesDirectoryExist
+       , doesFileExist
+       , getFileSize
+       )
 import System.FilePath (takeDirectory, (</>))
+import System.Posix.Fcntl (fileAllocate)
 
 import Journal.Internal
-import Journal.Internal.ByteBuffer
 import Journal.Internal.BufferClaim
+import Journal.Internal.ByteBuffer
 import Journal.Types
 import Journal.Types.AtomicCounter
 
@@ -44,21 +50,25 @@ defaultOptions :: Options
 defaultOptions = Options 1024 (64 * 1024)
 
 allocateJournal :: FilePath -> Options -> IO ()
-allocateJournal = undefined
-  -- System.Posix.Fcntl.fileAllocate
+allocateJournal fp (Options _ termBufferLen) = do
+  unless (popCount termBufferLen == 1) $
+    -- XXX: check bounds
+    error "allocateJournal: oTermBufferLength must be a power of 2"
+  b <- doesFileExist fp
+  when (not b) $ do
+
+    let dir = takeDirectory fp
+    dirExists <- doesDirectoryExist dir
+    unless dirExists (createDirectoryIfMissing True dir)
+
+    withRWFd fp $ \fd -> do
+      fileAllocate fd 0
+        (fromIntegral (termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH))
 
 startJournal' :: FilePath -> Options -> IO Journal'
 startJournal' fp (Options _ termLength) = do
-  unless (popCount termLength == 1) $
-    -- NOTE: The use of bitwise and (`.&.`) in `claim` relies on this.
-    -- XXX: check bounds
-    error "startJournal: oTermBufferLength must be a power of 2"
 
-  let dir = takeDirectory fp
-  dirExists <- doesDirectoryExist dir
-  unless dirExists (createDirectoryIfMissing True dir)
-
-  let logLength = termLength * pARTITION_COUNT + lOG_META_DATA_LENGTH
+  logLength <- fromIntegral <$> getFileSize fp
   bb <- mmapped fp logLength
   meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
 
@@ -239,3 +249,16 @@ dumpJournal :: Journal -> IO ()
 dumpJournal jour = do
   dumpFile (jDirectory jour </> aCTIVE_FILE)
   dumpFile (jDirectory jour </> dIRTY_FILE)
+
+------------------------------------------------------------------------
+
+tj :: IO ()
+tj = do
+  let fp   = "/tmp/journal.txt"
+      opts = defaultOptions
+  allocateJournal fp opts
+  jour <- startJournal' fp opts
+  Just (_five, claimBuf) <- tryClaim jour 5
+  -- putBS claimBuf (BSChar8.pack "hello")
+  --commit claimBuf
+  return ()

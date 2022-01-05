@@ -1,15 +1,15 @@
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE NumericUnderscores #-}
 
 module Journal.Internal where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (atomically, writeTVar)
-import Control.Exception (assert)
+import Control.Exception (assert, bracket)
 import Control.Monad (unless, when)
 import Data.Binary (Binary, decode, encode)
-import Data.Bits (Bits, (.&.), (.|.), shiftL)
+import Data.Bits (Bits, shiftL, shiftR, (.&.), (.|.))
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (fromForeignPtr)
 import qualified Data.ByteString.Lazy as LBS
@@ -25,12 +25,18 @@ import System.Directory
        (copyFile, doesFileExist, listDirectory, renameFile)
 import System.FilePath ((</>))
 import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
+import System.Posix.Types (Fd)
+import System.Posix.Fcntl (fileAllocate)
+import System.Posix.IO
+       (OpenMode(ReadWrite), defaultFileFlags, openFd, closeFd)
+import System.Posix.Files (ownerWriteMode, ownerReadMode)
 
-import Journal.Internal.Parse
+
+import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBuffer
+import Journal.Internal.Parse
 import Journal.Types
 import Journal.Types.AtomicCounter
-import Journal.Internal.BufferClaim
 
 ------------------------------------------------------------------------
 
@@ -63,10 +69,25 @@ tryClaim jour len = do
   else
     return (backPressureStatus position len)
 
+-- XXX: Save the result in `producerLimit :: AtomicCounter` and update it in a
+-- separate process?
 calculatePositionLimit :: Journal' -> IO Int64
 calculatePositionLimit jour = do
-  minSubscriberPos <- readCounter (jBytesConsumed jour)
-  undefined
+  minSubscriberPos <- readCounter (jBytesConsumed jour) -- XXX: only one subscriber so far.
+  maxSubscriberPos <- readCounter (jBytesConsumed jour)
+  termWindowLen    <- termWindowLength (jMetadata jour)
+  let _consumerPos  = maxSubscriberPos
+      proposedLimit = minSubscriberPos + termWindowLen
+  cleanBufferTo jour minSubscriberPos
+  return proposedLimit
+  where
+    termWindowLength :: Metadata -> IO Int
+    termWindowLength meta = do
+      termLen <- readTermLength meta
+      return (termLen `shiftR` 1) -- / 2
+
+cleanBufferTo :: Journal' -> Int64 -> IO ()
+cleanBufferTo _ _ = return ()
 
 backPressureStatus = undefined
 
@@ -372,6 +393,13 @@ fixInconsistency = undefined
 
 assertM :: (HasCallStack, Monad m) => Bool -> m ()
 assertM b = assert b (return ())
+
+withRWFd :: FilePath -> (Fd -> IO a) -> IO a
+withRWFd fp k =
+  bracket
+    (openFd fp ReadWrite (Just (ownerReadMode .|. ownerWriteMode)) defaultFileFlags)
+    closeFd
+    k
 
 ------------------------------------------------------------------------
 
