@@ -39,7 +39,6 @@ library
     , unix
 
   build-depends:
-    , ghc-prim
     , mmap
     , network
     , vector
