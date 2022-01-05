@@ -14,7 +14,7 @@ import qualified Data.ByteString.Lazy.Internal as LBS
 import Data.IORef
 import Data.Int
 import Data.Word
-import Foreign (withForeignPtr)
+import Foreign (fillBytes, plusPtr, withForeignPtr)
 import Foreign.Concurrent
 import Foreign.Storable
 import GHC.Exts
@@ -23,6 +23,7 @@ import GHC.Stack
 import System.Posix.IO
        (OpenMode(ReadWrite), closeFd, defaultFileFlags, openFd)
 
+import Journal.Internal.Atomics
 import Journal.Internal.Mmap
 
 ------------------------------------------------------------------------
@@ -213,14 +214,11 @@ clear bb = do
   writeLimit bb (Limit capa)
   writeMark bb (-1)
 
-  {-
 clean :: ByteBuffer -> IO ()
 clean bb = do
-  Position (I# from#) <- readPosition bb
-  Limit (I# to#) <- readLimit bb
-  IO $ \s -> case setByteArray# (bbData bb) from# (to# -# from#) 0# s of
-    s' -> (# s', () #)
--}
+  Position from <- readPosition bb
+  Limit to <- readLimit bb
+  fillBytes (unsafeForeignPtrToPtr (bbData bb) `plusPtr` from) 0 (to - from)
 
 -- | Flips the byte buffer. The limit is set to the current position and then
 -- the position is set to zero. If the mark is defined then it is discarded.
@@ -349,16 +347,15 @@ getStorableAt bb ix = do
 
 ------------------------------------------------------------------------
 
-{-
 
 -- readCharOffArray#
 -- readWideCharOffArray#
 readIntOffArrayIx :: ByteBuffer -> Int -> IO Int
-readIntOffArrayIx bb ix@(I# ix#) = do
+readIntOffArrayIx bb ix = do
   boundCheck bb ix
-  IO $ \s ->
-    case readIntArray# (bbData bb) ix# s of
-      (# s', i #) -> (# s', I# i #)
+  withForeignPtr (bbData bb) $ \ptr -> peekByteOff ptr ix
+
+{-
 -- readWordOffArray#
 -- readArrayOffAddr#
 -- readFloatOffArray#
@@ -456,26 +453,26 @@ casIntArray bb offset@(I# offset#) (I# old#) (I# new#) = do
       (# s', before# #) -> case before# ==# old# of
         1# -> (# s', True #)
         0# -> (# s', False #)
+-}
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Returns the value of the element
 -- before the operation. Implies a full memory barrier.
 fetchAddIntArray :: ByteBuffer -> Int -> Int -> IO Int
-fetchAddIntArray bb offset@(I# offset#) (I# incr#) = do
+fetchAddIntArray bb offset incr = do
   boundCheck bb offset
-  IO $ \s ->
-    case fetchAddIntArray# (bbData bb) offset# incr# s of
-      (# s', before# #) -> (# s', I# before# #)
+  withForeignPtr (bbData bb) $ \ptr ->
+    fromIntegral <$> fetchAddWord64Ptr (ptr `plusPtr` offset) (fromIntegral incr)
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Implies a full memory barrier.
 fetchAddIntArray_ :: ByteBuffer -> Int -> Int -> IO ()
-fetchAddIntArray_ bb offset@(I# offset#) (I# incr#) = do
+fetchAddIntArray_ bb offset incr = do
   boundCheck bb offset
-  IO $ \s ->
-    case fetchAddIntArray# (bbData bb) offset# incr# s of
-      (# s', _before# #) -> (# s', () #)
+  withForeignPtr (bbData bb) $ \ptr ->
+    void $ fetchAddWord64Ptr (ptr `plusPtr` offset) (fromIntegral incr)
 
+{-
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Returns the value of the element
 -- after the operation. Implies a full memory barrier.
