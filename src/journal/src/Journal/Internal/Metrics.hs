@@ -14,7 +14,7 @@ import GHC.Exts
 import GHC.Float (int2Double)
 import GHC.ForeignPtr
 
-import Journal.Internal.ByteBuffer
+import Journal.Internal.ByteBufferPtr
 
 ------------------------------------------------------------------------
 
@@ -45,14 +45,9 @@ cleanMetrics (Metrics cbuf hbuf) = do
   clean cbuf
   clean hbuf
 
-freeMetrics :: Metrics c h -> IO ()
-freeMetrics (Metrics cbuf hbuf) = do
-  free cbuf
-  free hbuf
-
 incrCounter :: (Enum c) => Metrics c h -> c -> Int -> IO ()
 incrCounter (Metrics cbuf _) label value = do
-  void $ fetchAddIntArray cbuf offset value
+  fetchAddIntArray_ cbuf offset value
   where
     offset = sizeOfACounter * fromEnum label
 
@@ -167,8 +162,6 @@ main = do
   checkPercentile metrics 99.91 50
   checkPercentile metrics 99.99 50
   checkPercentile metrics 100 100
-
-  freeMetrics metrics
   where
     addMeasure metrics num q = do
       putStrLn $ "Adding " <> show num <> " measures of " <> show q <> " as Latency"
