@@ -2,9 +2,10 @@ module Journal.Internal.BufferClaim where
 
 import Data.ByteString (ByteString)
 import Data.Word (Word8)
-import Foreign.Ptr (Ptr, plusPtr)
+import Foreign.ForeignPtr (ForeignPtr, plusForeignPtr, withForeignPtr)
+import Foreign.Ptr (Ptr)
 
-import Journal.Internal.ByteBuffer
+import Journal.Internal.ByteBufferPtr
 import Journal.Types
 
 ------------------------------------------------------------------------
@@ -18,12 +19,10 @@ newBufferClaim src offset len = BufferClaim <$>
 putBS :: BufferClaim -> ByteString -> IO ()
 putBS (BufferClaim bb) bs = putByteString bb bs
 
--- NOTE: The underlying @ByteBuffer@ must have been pinned, otherwise we cannot
--- guarantee to get a pointer to it that isn't moved around.
 withPtr :: BufferClaim -> (Ptr Word8 -> IO a) -> IO a
 withPtr (BufferClaim bb) k = do
   Position offset <- readPosition bb
-  k (bbPtr bb `plusPtr` offset)
+  withForeignPtr (bbPtr bb `plusForeignPtr` offset) k
 
 commit :: BufferClaim -> IO ()
 commit (BufferClaim bb) = do

@@ -33,7 +33,7 @@ import System.Posix.Files (ownerWriteMode, ownerReadMode)
 
 
 import Journal.Internal.BufferClaim
-import Journal.Internal.ByteBuffer
+import Journal.Internal.ByteBufferPtr
 import Journal.Internal.Parse
 import Journal.Types
 import Journal.Types.AtomicCounter
@@ -155,7 +155,7 @@ headerWrite termBuffer termOffset len _termId = do
   let versionFlagsType :: Int64
       versionFlagsType = fromIntegral cURRENT_VERSION `shiftL` 32
   -- XXX: Atomic write?
-  writeIntOffArrayIx termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
+  writeIntOffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
     (versionFlagsType .|. ((- fromIntegral len) .&. 0xFFFF_FFFF))
   -- XXX: store termId and offset (only need for replication?)
 
