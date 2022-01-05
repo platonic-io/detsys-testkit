@@ -29,13 +29,3 @@ fetchAddWord32Ptr = c_atomic_fetch_add_4
 
 fetchAddWord64Ptr :: Ptr Word64 -> Word64 -> IO Word64
 fetchAddWord64Ptr = c_atomic_fetch_add_8
-
-------------------------------------------------------------------------
-
-t3 :: IO ()
-t3 = do
-  ptr <- callocBytes 1
-  zero <- fetchAddWord8Ptr ptr 2
-  print zero
-  two <- peekByteOff ptr 0 :: IO Word
-  print two

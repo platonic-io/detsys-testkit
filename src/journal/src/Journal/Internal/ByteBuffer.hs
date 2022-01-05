@@ -30,7 +30,7 @@ import Journal.Internal.Mmap
 type MBArray = MutableByteArray# RealWorld
 
 data ByteBuffer = ByteBuffer
-  { bbData     :: {-# UNPACK #-} !MBArray
+  { bbData     ::                !MBArray
   , bbCapacity :: {-# UNPACK #-} !Capacity
   , bbLimit    :: {-# UNPACK #-} !(IORef Limit)
   , bbPosition :: {-# UNPACK #-} !(IORef Position)

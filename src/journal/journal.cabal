@@ -68,10 +68,12 @@ test-suite test
   main-is:          Main.hs
   other-modules:
     Journal.CRC32Test
+    Journal.Internal.AtomicsTest
     JournalTest
     TastyDiscover
 
   build-depends:
+    , async
     , base
     , bytestring
     , directory
