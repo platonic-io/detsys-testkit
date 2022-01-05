@@ -13,8 +13,6 @@ import Foreign (sizeOf)
 import GHC.Exts
 import GHC.Float (int2Double)
 import GHC.ForeignPtr
-import GHC.Prim
-import GHC.Types
 
 import Journal.Internal.ByteBuffer
 

@@ -23,7 +23,8 @@ module Journal.Types.AtomicCounter
 
 import Data.Bits (finiteBitSize)
 import GHC.Exts
-       ( MutVar#
+       ( Int(I#)
+       , MutVar#
        , MutableByteArray#
        , RealWorld
        , atomicWriteIntArray#
@@ -39,7 +40,7 @@ import GHC.Exts
        , (-#)
        , (==#)
        )
-import GHC.Types
+import GHC.IO (IO(IO))
 
 ------------------------------------------------------------------------
 

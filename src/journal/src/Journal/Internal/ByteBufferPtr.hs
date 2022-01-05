@@ -20,7 +20,6 @@ import Foreign.Storable
 import GHC.Exts
 import GHC.ForeignPtr
 import GHC.Stack
-import GHC.Types
 import System.Posix.IO
        (OpenMode(ReadWrite), closeFd, defaultFileFlags, openFd)
 

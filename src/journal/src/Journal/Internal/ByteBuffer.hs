@@ -20,7 +20,6 @@ import GHC.Exts
 import GHC.ForeignPtr
 import GHC.IO
 import GHC.Stack
-import GHC.Types
 import System.Posix.IO (OpenMode(ReadWrite), defaultFileFlags, openFd)
 
 import Journal.Internal.Mmap
