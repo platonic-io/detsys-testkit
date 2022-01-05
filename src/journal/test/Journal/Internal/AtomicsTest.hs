@@ -2,8 +2,9 @@ module Journal.Internal.AtomicsTest where
 
 import Foreign
 import Data.Word
+import Control.Concurrent
 import Control.Concurrent.Async
-import Test.Tasty.HUnit (Assertion, assertEqual)
+import Test.Tasty.HUnit (Assertion, assertEqual, assertBool)
 
 import Journal.Internal.Atomics
 
@@ -11,6 +12,8 @@ import Journal.Internal.Atomics
 
 unit_atomic :: Assertion
 unit_atomic = do
+  capa <- getNumCapabilities
+  assertBool "unit_atomic: -threaded needs to be passed" (capa > 1)
   let n = 10000
       c = 6
   alloca $ \ptr -> do

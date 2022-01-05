@@ -15,8 +15,8 @@ newBufferClaim :: ByteBuffer -> TermOffset -> Int -> IO BufferClaim
 newBufferClaim src offset len = BufferClaim <$>
   wrapPart src (fromIntegral offset) len
 
-putBytes :: BufferClaim -> ByteString -> IO ()
-putBytes (BufferClaim bb) bs = putByteString bb bs
+putBS :: BufferClaim -> ByteString -> IO ()
+putBS (BufferClaim bb) bs = putByteString bb bs
 
 -- NOTE: The underlying @ByteBuffer@ must have been pinned, otherwise we cannot
 -- guarantee to get a pointer to it that isn't moved around.
