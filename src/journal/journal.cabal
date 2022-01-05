@@ -15,7 +15,7 @@ license:
 license-file:       LICENSE
 author:             Stevan Andjelkovic, Daniel Gustafsson
 maintainer:         symbiont-stevan-andjelkovic@users.noreply.github.com
-copyright:          Copyright (c) 2021 Symbiont Inc
+copyright:          Copyright (c) 2021-2022 Symbiont Inc
 category:           Concurrency, Data Structures
 tested-with:        GHC ==8.10.7
 extra-source-files:
@@ -48,13 +48,13 @@ library
     Journal
     Journal.CRC32
     Journal.Internal
+    Journal.Internal.Atomics
     Journal.Internal.Parse
     Journal.Internal.Metrics
     Journal.Internal.ByteBuffer
     Journal.Internal.ByteBufferPtr
     Journal.Internal.BufferClaim
     Journal.Internal.Mmap
-    Journal.Internal.PrimOps
     Journal.Types
     Journal.Types.AtomicCounter
 
