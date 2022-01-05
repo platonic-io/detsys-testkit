@@ -26,3 +26,6 @@ dist-newstyle/
 cabal.project.local*
 bench-*
 bench.*
+# C
+a.out
+core

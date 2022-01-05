@@ -455,16 +455,10 @@ writeWord32OffAddr bb offset@(I# offset#) value = do
 -- indicating whether the compare and swap succeded or not. Implies a full
 -- memory barrier.
 casIntAddr :: ByteBuffer -> Int -> Int -> Int -> IO Bool
-casIntAddr bb offset@(I# offset#) (I# old#) (I# new#) = do
+casIntAddr bb offset expected desired = do
   boundCheck bb offset
-  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
-    IO $ \s ->
-      case casIntAddr# addr# offset# old# new# s of
-        (# s', before# #) -> case before# ==# old# of
-          1# -> (# s', True #)
-          0# -> (# s', False #)
-
-casIntAddr# = undefined
+  withForeignPtr (bbData bb) $ \ptr ->
+    casIntPtr (ptr `plusPtr` offset) expected desired
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Returns the value of the element
