@@ -3,6 +3,7 @@
 module Journal.Internal.Atomics where
 
 import Foreign
+import Foreign.C.Types
 
 ------------------------------------------------------------------------
 
@@ -55,3 +56,17 @@ fetchAddInt32Ptr = c_atomic_fetch_add_int_4
 
 fetchAddInt64Ptr :: Ptr Int64 -> Int64 -> IO Int64
 fetchAddInt64Ptr = c_atomic_fetch_add_int_8
+
+------------------------------------------------------------------------
+
+foreign import ccall unsafe "c_atomic_compare_exchange_strong"
+  c_atomic_compare_exchange_strong :: Ptr Int -> Int -> Int -> IO CBool
+
+casIntPtr :: Ptr Int -> Int -> Int -> IO Bool
+casIntPtr ptr expected desired = do
+  result <- c_atomic_compare_exchange_strong ptr expected desired
+  case result of
+    0 -> return False
+    1 -> return True
+    _ ->
+      error "casIntAddr: impossible, c_atomic_compare_exchange_strong should return a _Bool"
