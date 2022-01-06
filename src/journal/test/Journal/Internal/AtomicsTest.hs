@@ -1,10 +1,12 @@
 module Journal.Internal.AtomicsTest where
 
-import Foreign
-import Data.Word
 import Control.Concurrent
 import Control.Concurrent.Async
-import Test.Tasty.HUnit (Assertion, assertEqual, assertBool)
+import Data.IORef
+import Data.List (sort)
+import Data.Word
+import Foreign
+import Test.Tasty.HUnit (Assertion, assertBool, assertEqual)
 
 import Journal.Internal.Atomics
 import Journal.Types.AtomicCounter
@@ -48,10 +50,8 @@ unit_atomicCASSequential =
     result <- peek ptr
     assertEqual "" 2 result
 
--- NOTE: This doesn't test possible races on writes, not sure if we can do that
--- without introducing linearisability.
-unit_atomicCAS :: Assertion
-unit_atomicCAS = do
+unit_atomicCASConcurrent :: Assertion
+unit_atomicCASConcurrent = do
   assertMultiThreaded
 
   let n = 10000
@@ -61,18 +61,23 @@ unit_atomicCAS = do
 
   alloca $ \ptr -> do
     poke ptr 0
-    replicateConcurrently_ c (worker ptr counter n)
+    histRef <- newIORef []
+    replicateConcurrently_ c (worker ptr counter histRef n)
+    hist <- readIORef histRef
     result <- peek ptr
-    assertEqual "" n result
+    assertEqual "" [0..n] (sort (result : hist))
   where
-    worker :: Ptr Int -> AtomicCounter -> Int -> IO ()
-    worker ptr counter n = do
-      old <- getAndIncrCounter 1 counter
-      if old < n
-      then go old >> worker ptr counter n
+    worker :: Ptr Int -> AtomicCounter -> IORef [Int] -> Int -> IO ()
+    worker ptr counter hist n = do
+      ticket <- incrCounter 1 counter
+      if ticket <= n
+      then go ticket >> worker ptr counter hist n
       else return ()
       where
-        go old = do
-            let new = old + 1
-            b <- casIntPtr ptr old new
-            if b then return () else go old
+        go :: Int -> IO ()
+        go ticket = do
+          current <- peek ptr
+          b <- casIntPtr ptr current ticket
+          if b
+          then atomicModifyIORef' hist (\hist -> ((current : hist), ()))
+          else go ticket
