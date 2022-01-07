@@ -13,6 +13,7 @@ import Data.Bits (Bits, shiftL, shiftR, (.&.), (.|.))
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (fromForeignPtr)
 import qualified Data.ByteString.Lazy as LBS
+import Data.Int (Int32, Int64)
 import Data.List (isPrefixOf)
 import Data.Maybe (catMaybes)
 import qualified Data.Vector as Vector
@@ -25,11 +26,11 @@ import System.Directory
        (copyFile, doesFileExist, listDirectory, renameFile)
 import System.FilePath ((</>))
 import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
-import System.Posix.Types (Fd)
 import System.Posix.Fcntl (fileAllocate)
+import System.Posix.Files (ownerReadMode, ownerWriteMode)
 import System.Posix.IO
-       (OpenMode(ReadWrite), defaultFileFlags, openFd, closeFd)
-import System.Posix.Files (ownerWriteMode, ownerReadMode)
+       (OpenMode(ReadWrite), closeFd, defaultFileFlags, openFd)
+import System.Posix.Types (Fd)
 
 
 import Journal.Internal.BufferClaim
@@ -62,7 +63,8 @@ tryClaim jour len = do
   limit <- calculatePositionLimit jour
   let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
       position     = termBeginPosition + fromIntegral termOffset
-  if position < limit
+
+  if position < fromIntegral limit
   then do
     mResult <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len
     newPosition (jMetadata jour) mResult
@@ -71,22 +73,22 @@ tryClaim jour len = do
 
 -- XXX: Save the result in `producerLimit :: AtomicCounter` and update it in a
 -- separate process?
-calculatePositionLimit :: Journal' -> IO Int64
+calculatePositionLimit :: Journal' -> IO Int
 calculatePositionLimit jour = do
   minSubscriberPos <- readCounter (jBytesConsumed jour) -- XXX: only one subscriber so far.
   maxSubscriberPos <- readCounter (jBytesConsumed jour)
   termWindowLen    <- termWindowLength (jMetadata jour)
   let _consumerPos  = maxSubscriberPos
-      proposedLimit = minSubscriberPos + termWindowLen
+      proposedLimit = minSubscriberPos + fromIntegral termWindowLen
   cleanBufferTo jour minSubscriberPos
   return proposedLimit
   where
-    termWindowLength :: Metadata -> IO Int
+    termWindowLength :: Metadata -> IO Int32
     termWindowLength meta = do
       termLen <- readTermLength meta
       return (termLen `shiftR` 1) -- / 2
 
-cleanBufferTo :: Journal' -> Int64 -> IO ()
+cleanBufferTo :: Journal' -> Int -> IO ()
 cleanBufferTo _ _ = return ()
 
 backPressureStatus = undefined
@@ -155,7 +157,7 @@ headerWrite termBuffer termOffset len _termId = do
   let versionFlagsType :: Int64
       versionFlagsType = fromIntegral cURRENT_VERSION `shiftL` 32
   -- XXX: Atomic write?
-  writeIntOffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
+  writeInt64OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
     (versionFlagsType .|. ((- fromIntegral len) .&. 0xFFFF_FFFF))
   -- XXX: store termId and offset (only need for replication?)
 
