@@ -14,7 +14,7 @@ module Journal
   , dumpJournal
   ) where
 
-import Control.Exception (assert)
+import Control.Exception (assert, bracket)
 import Control.Monad (unless, when)
 import Data.Bits (popCount)
 import Data.ByteString (ByteString)
@@ -24,6 +24,7 @@ import Data.ByteString.Internal (fromForeignPtr)
 import Data.IORef (newIORef)
 import qualified Data.Vector as Vector
 import Data.Word (Word32, Word8)
+import Foreign.Marshal.Alloc (callocBytes, free)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (plusPtr)
 import Network.Socket (Socket, recvBuf)
@@ -35,6 +36,7 @@ import System.Directory
        )
 import System.FilePath (takeDirectory, (</>))
 import System.Posix.Fcntl (fileAllocate)
+import System.Posix.IO (fdWriteBuf)
 
 import Journal.Internal
 import Journal.Internal.BufferClaim
@@ -61,9 +63,21 @@ allocateJournal fp (Options _ termBufferLen) = do
     dirExists <- doesDirectoryExist dir
     unless dirExists (createDirectoryIfMissing True dir)
 
+    let logLength = termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH
+
     withRWFd fp $ \fd -> do
-      fileAllocate fd 0
-        (fromIntegral (termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH))
+      fileAllocate fd 0 (fromIntegral logLength)
+      -- NOTE: `fileAllocate` only allocates the space it doesn't zero it,
+      -- unlike `fallocate(1)`, so we do that next.
+      bracket (callocBytes logLength) free $ \zeroesPtr -> do
+        bytesWritten <- fdWriteBuf fd zeroesPtr (fromIntegral logLength)
+        assertM (bytesWritten == fromIntegral logLength)
+
+    bb <- mmapped fp logLength
+    meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
+
+    writeTermLength meta (fromIntegral termBufferLen)
+    writeInitialTermId meta 0
 
 startJournal' :: FilePath -> Options -> IO Journal'
 startJournal' fp (Options _ termLength) = do
@@ -259,6 +273,6 @@ tj = do
   allocateJournal fp opts
   jour <- startJournal' fp opts
   Just (_five, claimBuf) <- tryClaim jour 5
-  -- putBS claimBuf (BSChar8.pack "hello")
-  --commit claimBuf
+  putBS claimBuf (BSChar8.pack "hello")
+  commit claimBuf
   return ()

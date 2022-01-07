@@ -353,11 +353,11 @@ getStorableAt bb ix = do
 -- readCharOffArray#
 -- readWideCharOffArray#
 readIntOffArrayIx :: ByteBuffer -> Int -> IO Int
-readIntOffArrayIx bb ix = do
-  boundCheck bb ix
-  withForeignPtr (bbData bb) $ \ptr -> peekByteOff ptr ix
+readIntOffArrayIx bb offset@(I# offset#) = do
+  boundCheck bb offset
+  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+    return (fromIntegral (I# (indexIntOffAddr# addr# offset#)))
 
-{-
 -- readWordOffArray#
 -- readArrayOffAddr#
 -- readFloatOffArray#
@@ -365,20 +365,22 @@ readIntOffArrayIx bb ix = do
 -- readStablePtrOffArray#
 -- readInt8OffArray#
 -- readInt16OffArray#
-readInt32OffArrayIx :: ByteBuffer -> Int -> IO Int32
-readInt32OffArrayIx bb ix@(I# ix#) = do
-  boundCheck bb ix
-  IO $ \s ->
-    case readInt32Array# (bbData bb) ix# s of
-      (# s', i #) -> (# s', fromIntegral (I# i) #)
 
-readInt64OffArrayIx :: ByteBuffer -> Int -> IO Int64
-readInt64OffArrayIx bb ix@(I# ix#) = do
-  boundCheck bb ix
-  IO $ \s ->
-    case readInt64Array# (bbData bb) ix# s of
-      (# s', i #) -> (# s', fromIntegral (I# i) #)
--}
+readInt32OffAddr :: ByteBuffer -> Int -> IO Int32
+readInt32OffAddr bb offset@(I# offset#) = do
+  boundCheck bb offset
+  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case readInt32OffAddr# addr# offset# s of
+        (# s', i #) -> (# s', fromIntegral (I# i) #)
+
+readInt64OffAddr :: ByteBuffer -> Int -> IO Int64
+readInt64OffAddr bb offset@(I# offset#) = do
+  boundCheck bb offset
+  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case readInt64OffAddr# addr# offset# s of
+        (# s', i #) -> (# s', fromIntegral (I# i) #)
 
 indexWord8OffAddr :: ByteBuffer -> Int -> IO Word8
 indexWord8OffAddr bb offset@(I# offset#) = do
@@ -403,7 +405,6 @@ writeIntOffAddr bb ix@(I# ix#) (I# value#) = do
     IO $ \s ->
       case writeIntOffAddr# addr# ix# value# s of
         s' -> (# s', () #)
-  {-
 -- writeWordOffArray#
 -- writeArrayOffAddr#
 -- writeFloatOffArray#
@@ -412,27 +413,29 @@ writeIntOffAddr bb ix@(I# ix#) (I# value#) = do
 -- writeInt8OffArray#
 -- writeInt16OffArray#
 
-writeInt32OffArrayIx :: ByteBuffer -> Int -> Int32 -> IO ()
-writeInt32OffArrayIx bb ix@(I# ix#) value = do
-  boundCheck bb ix
-  IO $ \s ->
-    case writeInt32Array# (bbData bb) ix# value# s of
-      s' -> (# s', () #)
+writeInt32OffAddr :: ByteBuffer -> Int -> Int32 -> IO ()
+writeInt32OffAddr bb offset@(I# offset#) value = do
+  boundCheck bb offset
+  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case writeInt32OffAddr# addr# offset# value# s of
+        s' -> (# s', () #)
   where
     I# value# = fromIntegral value
 
-writeInt64OffArrayIx :: ByteBuffer -> Int -> Int64 -> IO ()
-writeInt64OffArrayIx bb ix@(I# ix#) value = do
-  boundCheck bb ix
-  IO $ \s ->
-    case writeInt64Array# (bbData bb) ix# value# s of
-      s' -> (# s', () #)
+writeInt64OffAddr :: ByteBuffer -> Int -> Int64 -> IO ()
+writeInt64OffAddr bb offset@(I# offset#) value = do
+  boundCheck bb offset
+  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case writeInt64OffAddr# addr# offset# value# s of
+        s' -> (# s', () #)
   where
     I# value# = fromIntegral value
 
 -- writeWord8OffArray#
 -- writeWord16OffArray#
--}
+
 writeWord32OffAddr :: ByteBuffer -> Int -> Word32 -> IO ()
 writeWord32OffAddr bb offset@(I# offset#) value = do
   boundCheck bb offset
@@ -454,11 +457,17 @@ writeWord32OffAddr bb offset@(I# offset#) value = do
 -- the current value matches the provided old value. Returns a boolean
 -- indicating whether the compare and swap succeded or not. Implies a full
 -- memory barrier.
-casIntAddr :: ByteBuffer -> Int -> Int -> Int -> IO Bool
-casIntAddr bb offset expected desired = do
+casInt32Addr :: ByteBuffer -> Int -> Int32 -> Int32 -> IO Bool
+casInt32Addr bb offset expected desired = do
   boundCheck bb offset
   withForeignPtr (bbData bb) $ \ptr ->
-    casIntPtr (ptr `plusPtr` offset) expected desired
+    casInt32Ptr (ptr `plusPtr` offset) expected desired
+
+casInt64Addr :: ByteBuffer -> Int -> Int64 -> Int64 -> IO Bool
+casInt64Addr bb offset expected desired = do
+  boundCheck bb offset
+  withForeignPtr (bbData bb) $ \ptr ->
+    casInt64Ptr (ptr `plusPtr` offset) expected desired
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Returns the value of the element
