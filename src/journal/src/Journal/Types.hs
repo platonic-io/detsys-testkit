@@ -35,13 +35,14 @@ module Journal.Types
 --  )
   where
 
-import Control.Concurrent.STM
-import Control.Concurrent.STM (TVar)
+import Data.Coerce (coerce)
+import Control.Concurrent.STM (TVar, atomically, writeTVar, readTVar, newTVarIO)
 import Data.Binary (Binary)
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Vector (Vector)
+import Data.Int (Int32, Int64)
 import Data.Word (Word32, Word64, Word8)
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (Storable, sizeOf)
@@ -50,16 +51,6 @@ import Journal.Internal.ByteBufferPtr
 import Journal.Types.AtomicCounter
 
 ------------------------------------------------------------------------
-
--- XXX: `casIntArray` only works on `Int`, so we can't use `Int32` and `Int64`
--- yet. According to
--- https://gitlab.haskell.org/ghc/ghc/-/blob/master/libraries/ghc-prim/changelog.md#080-edit-as-necessary
--- casInt{32,64}Array should be part of ghc-prim 0.8.0, but the uploaded hackage
--- package's changelog says it isn't part of that release, nor do the haddocks
--- include it... Once this has been fixed we can remove the following type
--- aliases:
-type Int64 = Int
-type Int32 = Int
 
 pARTITION_COUNT :: Int
 pARTITION_COUNT = 3
@@ -129,15 +120,15 @@ newtype TermCount = TermCount { unTermCount :: Int32 }
 readRawTail :: Metadata -> PartitionIndex -> IO RawTail
 readRawTail (Metadata meta) (PartitionIndex partitionIndex) =
   RawTail <$>
-    readIntOffArrayIx meta
+    readInt64OffAddr meta
       (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
 
 rawTailTermId :: RawTail -> TermId
 rawTailTermId = fromIntegral . (`shiftR` 32) . unRawTail
 
-rawTailTermOffset :: RawTail -> Int64 -> TermOffset
+rawTailTermOffset :: RawTail -> Int32 -> TermOffset
 rawTailTermOffset (RawTail rt) termLen =
-  fromIntegral (min (rt .&. 0xFFFF_FFFF) termLen)
+  fromIntegral (min (rt .&. 0xFFFF_FFFF) (fromIntegral termLen))
 
 packTail :: TermId -> TermOffset -> RawTail
 packTail termId0 termOffset0 =
@@ -145,15 +136,15 @@ packTail termId0 termOffset0 =
 
 writeRawTail :: Metadata -> TermId -> TermOffset -> PartitionIndex -> IO ()
 writeRawTail (Metadata meta) termId termOffset (PartitionIndex partitionIndex) =
-  writeIntOffAddr meta
+  writeInt64OffAddr meta
     (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
     (unRawTail (packTail termId termOffset))
 
 casRawTail :: Metadata -> PartitionIndex -> RawTail -> RawTail -> IO Bool
 casRawTail (Metadata meta) (PartitionIndex partitionIndex) expected new =
-  casIntAddr meta
+  casInt64Addr meta
     (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
-    (fromIntegral expected) (fromIntegral new) -- XXX: 32-bit systems?
+    (coerce expected) (coerce new)
 
 initialiseTailWithTermId :: Metadata -> PartitionIndex -> TermId -> IO ()
 initialiseTailWithTermId meta partitionIndex termId =
@@ -161,7 +152,7 @@ initialiseTailWithTermId meta partitionIndex termId =
 
 activeTermCount :: Metadata -> IO TermCount
 activeTermCount (Metadata meta) =
-  TermCount <$> readIntOffArrayIx meta lOG_ACTIVE_TERM_COUNT_OFFSET
+  TermCount <$> readInt32OffAddr meta lOG_ACTIVE_TERM_COUNT_OFFSET
 
 writeActiveTermCount :: Metadata -> TermCount -> IO ()
 writeActiveTermCount (Metadata meta) = do
@@ -169,25 +160,24 @@ writeActiveTermCount (Metadata meta) = do
 
 casActiveTermCount :: Metadata -> TermCount -> TermCount -> IO Bool
 casActiveTermCount (Metadata meta) (TermCount expected) (TermCount new) =
-  casIntAddr meta lOG_ACTIVE_TERM_COUNT_OFFSET expected new
+  casInt32Addr meta lOG_ACTIVE_TERM_COUNT_OFFSET expected new
 
 initialTermId :: Metadata -> IO TermId
 initialTermId (Metadata meta) =
-  TermId <$> readIntOffArrayIx meta lOG_INITIAL_TERM_ID_OFFSET
+  TermId <$> readInt32OffAddr meta lOG_INITIAL_TERM_ID_OFFSET
 
--- should never be changed?
--- setInitialTermId :: ByteBuffer -> Int32 -> IO ()
--- setInitialTermId meta = writeInt32OffArrayIx meta lOG_INITIAL_TERM_ID_OFFSET
+writeInitialTermId :: ByteBuffer -> TermId -> IO ()
+writeInitialTermId meta (TermId termId) =
+  writeInt32OffAddr meta lOG_INITIAL_TERM_ID_OFFSET termId
 
 readTermLength :: Metadata -> IO Int32
-readTermLength (Metadata meta) = readIntOffArrayIx meta lOG_TERM_LENGTH_OFFSET
+readTermLength (Metadata meta) = readInt32OffAddr meta lOG_TERM_LENGTH_OFFSET
 
--- should never be changed?
--- setTermLength :: ByteBuffer -> Int32 -> IO ()
--- setTermLength meta = writeInt32OffArrayIx meta lOG_TERM_LENGTH_OFFSET
+writeTermLength :: ByteBuffer -> Int32 -> IO ()
+writeTermLength meta = writeInt32OffAddr meta lOG_TERM_LENGTH_OFFSET
 
 pageSize :: ByteBuffer -> IO Int32
-pageSize meta = readIntOffArrayIx meta lOG_PAGE_SIZE_OFFSET
+pageSize meta = readInt32OffAddr meta lOG_PAGE_SIZE_OFFSET
 
 -- | The number of bits to shift when multiplying or dividing by the term buffer
 -- length.
@@ -243,7 +233,7 @@ computePosition activeTermId termOffset posBitsToShift initTermId =
 
 -- | Compute the current position in absolute number of bytes for the beginning
 -- of a term.
-computeTermBeginPosition :: TermId -> Int32 -> TermId -> Int64
+computeTermBeginPosition :: TermId -> Int -> TermId -> Int64
 computeTermBeginPosition activeTermId posBitsToShift initTermId =
   let
     termCount :: Int64
