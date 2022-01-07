@@ -55,6 +55,7 @@ library
     Journal.Internal.ByteBufferPtr
     Journal.Internal.BufferClaim
     Journal.Internal.Mmap
+    Journal.Internal.Utils
     Journal.Types
     Journal.Types.AtomicCounter
 
