@@ -21,21 +21,17 @@ import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (Storable, peekByteOff, pokeByteOff, sizeOf)
-import GHC.Stack (HasCallStack)
 import System.Directory
        (copyFile, doesFileExist, listDirectory, renameFile)
 import System.FilePath ((</>))
 import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 import System.Posix.Fcntl (fileAllocate)
-import System.Posix.Files (ownerReadMode, ownerWriteMode)
-import System.Posix.IO
-       (OpenMode(ReadWrite), closeFd, defaultFileFlags, openFd)
-import System.Posix.Types (Fd)
 
 
 import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBufferPtr
 import Journal.Internal.Parse
+import Journal.Internal.Utils
 import Journal.Types
 import Journal.Types.AtomicCounter
 
@@ -69,7 +65,7 @@ tryClaim jour len = do
     mResult <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len
     newPosition (jMetadata jour) mResult
   else
-    return (backPressureStatus position len)
+    backPressureStatus position len
 
 -- XXX: Save the result in `producerLimit :: AtomicCounter` and update it in a
 -- separate process?
@@ -91,7 +87,7 @@ calculatePositionLimit jour = do
 cleanBufferTo :: Journal' -> Int -> IO ()
 cleanBufferTo _ _ = return ()
 
-backPressureStatus = undefined
+backPressureStatus _ _ = return Nothing
 
 newPosition :: Metadata -> Maybe (TermOffset, BufferClaim) -> IO (Maybe (Int64, BufferClaim))
 newPosition meta mResult =
@@ -393,18 +389,6 @@ fixInconsistency = undefined
 
 ------------------------------------------------------------------------
 
-assertM :: (HasCallStack, Monad m) => Bool -> m ()
-assertM b = assert b (return ())
-
-withRWFd :: FilePath -> (Fd -> IO a) -> IO a
-withRWFd fp k =
-  bracket
-    (openFd fp ReadWrite (Just (ownerReadMode .|. ownerWriteMode)) defaultFileFlags)
-    closeFd
-    k
-
-------------------------------------------------------------------------
-
 -- * Debugging
 
 dumpFile :: FilePath -> IO ()
@@ -464,3 +448,43 @@ dumpFile fp = do
             go (ix + 1)
                (totBytes + hEADER_LENGTH + fromIntegral len)
                (BS.drop (fromIntegral len) bs')
+
+dumpMetadata :: Metadata -> IO ()
+dumpMetadata meta = do
+  termCount <- activeTermCount meta
+  putStrLn ("termCount: " ++ show (unTermCount termCount))
+
+  let index                = indexByTermCount termCount
+      activePartitionIndex = index
+  putStrLn ("activePartitionIndex: " ++ show (unPartitionIndex activePartitionIndex))
+
+  rawTail <- readRawTail meta index
+  initTermId <- initialTermId meta
+  putStrLn ("initialTermId: " ++ show (unTermId initTermId))
+
+  termLen <- readTermLength meta
+  putStrLn ("termBufferLength: " ++ show termLen)
+
+  let termId            = rawTailTermId rawTail
+      termOffset        = rawTailTermOffset rawTail termLen
+      termBeginPosition =
+        computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
+
+  putStrLn ("termId: " ++ show (unTermId termId))
+  putStrLn ("termOffset: " ++ show (unTermOffset termOffset))
+  putStrLn ("termBeginPosition: " ++ show termBeginPosition)
+  pageSize <- readPageSize meta
+  putStrLn ("pageSize: " ++ show pageSize)
+
+dumpJournal' :: Journal' -> IO ()
+dumpJournal' jour = do
+  undefined
+  {-
+  limit <- calculatePositionLimit jour
+  let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
+      position     = termBeginPosition + fromIntegral termOffset
+
+  putStrLn $ "limit: " ++ show limit
+  putStrLn $ "termBeginPosition = " ++ show termBeginPosition
+  putStrLn $ "termOffset = " ++ show (unTermOffset termOffset)
+-}

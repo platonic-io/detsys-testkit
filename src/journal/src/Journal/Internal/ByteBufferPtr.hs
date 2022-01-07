@@ -14,18 +14,19 @@ import qualified Data.ByteString.Lazy.Internal as LBS
 import Data.IORef
 import Data.Int
 import Data.Word
-import Foreign (fillBytes, plusPtr, withForeignPtr, copyBytes)
+import Foreign (copyBytes, fillBytes, plusPtr, withForeignPtr)
 import Foreign.Concurrent
 import Foreign.Storable
 import GHC.Exts
 import GHC.ForeignPtr
-import GHC.Stack
 import GHC.IO (IO(IO))
+import GHC.Stack
 import System.Posix.IO
        (OpenMode(ReadWrite), closeFd, defaultFileFlags, openFd)
 
 import Journal.Internal.Atomics
 import Journal.Internal.Mmap
+import Journal.Internal.Utils
 
 ------------------------------------------------------------------------
 -- * Types
@@ -349,14 +350,27 @@ getStorableAt bb ix = do
 
 ------------------------------------------------------------------------
 
+primitiveInt :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
+             -> ByteBuffer -> Int ->  IO Int
+primitiveInt f bb offset@(I# offset#) = do
+  boundCheck bb offset
+  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case f addr# offset# s of
+        (# s', i #) -> (# s', I# i #)
+
+primitiveInt32 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
+               -> ByteBuffer -> Int ->  IO Int32
+primitiveInt32 f bb offset = int2Int32 <$> primitiveInt f bb offset
+
+primitiveInt64 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
+               -> ByteBuffer -> Int ->  IO Int64
+primitiveInt64 f bb offset = int2Int64 <$> primitiveInt f bb offset
 
 -- readCharOffArray#
 -- readWideCharOffArray#
 readIntOffArrayIx :: ByteBuffer -> Int -> IO Int
-readIntOffArrayIx bb offset@(I# offset#) = do
-  boundCheck bb offset
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
-    return (fromIntegral (I# (indexIntOffAddr# addr# offset#)))
+readIntOffArrayIx = primitiveInt readIntOffAddr#
 
 -- readWordOffArray#
 -- readArrayOffAddr#
@@ -367,20 +381,10 @@ readIntOffArrayIx bb offset@(I# offset#) = do
 -- readInt16OffArray#
 
 readInt32OffAddr :: ByteBuffer -> Int -> IO Int32
-readInt32OffAddr bb offset@(I# offset#) = do
-  boundCheck bb offset
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
-    IO $ \s ->
-      case readInt32OffAddr# addr# offset# s of
-        (# s', i #) -> (# s', fromIntegral (I# i) #)
+readInt32OffAddr = primitiveInt32 readInt32OffAddr#
 
 readInt64OffAddr :: ByteBuffer -> Int -> IO Int64
-readInt64OffAddr bb offset@(I# offset#) = do
-  boundCheck bb offset
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
-    IO $ \s ->
-      case readInt64OffAddr# addr# offset# s of
-        (# s', i #) -> (# s', fromIntegral (I# i) #)
+readInt64OffAddr = primitiveInt64 readInt64OffAddr#
 
 indexWord8OffAddr :: ByteBuffer -> Int -> IO Word8
 indexWord8OffAddr bb offset@(I# offset#) = do

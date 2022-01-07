@@ -55,7 +55,7 @@ import Journal.Types.AtomicCounter
 pARTITION_COUNT :: Int
 pARTITION_COUNT = 3
 
-newtype Metadata = Metadata ByteBuffer
+newtype Metadata = Metadata { unMetadata :: ByteBuffer }
 
 data Journal' = Journal'
   { jTermBuffers   :: {-# UNPACK #-} !(Vector ByteBuffer)
@@ -176,8 +176,11 @@ readTermLength (Metadata meta) = readInt32OffAddr meta lOG_TERM_LENGTH_OFFSET
 writeTermLength :: ByteBuffer -> Int32 -> IO ()
 writeTermLength meta = writeInt32OffAddr meta lOG_TERM_LENGTH_OFFSET
 
-pageSize :: ByteBuffer -> IO Int32
-pageSize meta = readInt32OffAddr meta lOG_PAGE_SIZE_OFFSET
+readPageSize :: Metadata -> IO Int32
+readPageSize (Metadata meta) = readInt32OffAddr meta lOG_PAGE_SIZE_OFFSET
+
+writePageSize :: Metadata -> Int32 -> IO ()
+writePageSize (Metadata meta) = writeInt32OffAddr meta lOG_PAGE_SIZE_OFFSET
 
 -- | The number of bits to shift when multiplying or dividing by the term buffer
 -- length.

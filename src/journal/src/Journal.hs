@@ -24,8 +24,8 @@ import Data.ByteString.Internal (fromForeignPtr)
 import Data.IORef (newIORef)
 import qualified Data.Vector as Vector
 import Data.Word (Word32, Word8)
-import Foreign.Marshal.Alloc (callocBytes, free)
 import Foreign.ForeignPtr (newForeignPtr_)
+import Foreign.Marshal.Alloc (callocBytes, free)
 import Foreign.Ptr (plusPtr)
 import Network.Socket (Socket, recvBuf)
 import System.Directory
@@ -41,8 +41,10 @@ import System.Posix.IO (fdWriteBuf)
 import Journal.Internal
 import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBufferPtr
+import Journal.Internal.Mmap (sysconfPageSize)
 import Journal.Types
 import Journal.Types.AtomicCounter
+import Journal.Internal.Utils
 
 ------------------------------------------------------------------------
 
@@ -78,6 +80,8 @@ allocateJournal fp (Options _ termBufferLen) = do
 
     writeTermLength meta (fromIntegral termBufferLen)
     writeInitialTermId meta 0
+    pageSize <- sysconfPageSize
+    writePageSize (Metadata meta) (int2Int32 pageSize)
 
 startJournal' :: FilePath -> Options -> IO Journal'
 startJournal' fp (Options _ termLength) = do
@@ -272,7 +276,8 @@ tj = do
       opts = defaultOptions
   allocateJournal fp opts
   jour <- startJournal' fp opts
-  Just (_five, claimBuf) <- tryClaim jour 5
-  putBS claimBuf (BSChar8.pack "hello")
-  commit claimBuf
+  -- Just (_five, claimBuf) <- tryClaim jour 5
+  -- putBS claimBuf (BSChar8.pack "hello")
+  -- commit claimBuf
+  dumpMetadata (jMetadata jour)
   return ()
