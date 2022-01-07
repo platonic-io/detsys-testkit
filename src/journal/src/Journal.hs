@@ -79,7 +79,7 @@ allocateJournal fp (Options _ termBufferLen) = do
     meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
 
     writeTermLength meta (fromIntegral termBufferLen)
-    writeInitialTermId meta 0
+    writeInitialTermId meta 0 -- XXX: should be random rather than 0.
     pageSize <- sysconfPageSize
     writePageSize (Metadata meta) (int2Int32 pageSize)
 

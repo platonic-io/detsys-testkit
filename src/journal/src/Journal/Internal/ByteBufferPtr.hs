@@ -38,7 +38,7 @@ data ByteBuffer = ByteBuffer
   , bbPosition :: {-# UNPACK #-} !(IORef Position)
   , bbMark     :: {-# UNPACK #-} !(IORef Position)
   , bbSlice    :: {-# UNPACK #-} !(IORef Slice)
-  -- XXX: ByteOrder / Endianess?
+  -- XXX: ByteOrder / Endianess? Use `Data.Bits.compliment` to reverse bits?
   }
 
 newtype Capacity = Capacity { unCapacity :: Int }
@@ -119,9 +119,9 @@ remaining bb = do
 
 boundCheck :: HasCallStack => ByteBuffer -> Int -> IO ()
 boundCheck bb ix = do
-  -- XXX: ix + slice?
   -- XXX: parametrise on build flag and only do these checks if enabled?
-  if ix < fromIntegral (getCapacity bb)
+  Slice slice <- readIORef (bbSlice bb)
+  if ix - slice < fromIntegral (getCapacity bb)
   then return ()
   else do
     putStrLn (prettyCallStack callStack)
@@ -176,7 +176,9 @@ wrap bb = newByteBuffer (bbData bb) capa lim (Position 0) (Just (bbSlice bb))
     lim  = Limit (fromIntegral capa)
 
 wrapPart :: ByteBuffer -> Int -> Int -> IO ByteBuffer
-wrapPart bb offset len = newByteBuffer (bbData bb) capa lim pos (Just (bbSlice bb))
+wrapPart bb offset len = do
+  slice <- newIORef (Slice offset)
+  newByteBuffer (bbData bb) capa lim pos (Just slice)
   where
     capa = Capacity len
     lim  = Limit (fromIntegral offset + fromIntegral len)
