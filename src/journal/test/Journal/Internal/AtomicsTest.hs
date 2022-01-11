@@ -41,11 +41,11 @@ unit_atomicCASSequential :: Assertion
 unit_atomicCASSequential =
   alloca $ \ptr -> do
     poke ptr 0
-    b <- casIntPtr ptr 0 1
+    b <- casInt32Ptr ptr 0 1
     assertBool "casIntPtr 0 1" b
-    b' <- casIntPtr ptr 2 3
+    b' <- casInt32Ptr ptr 2 3
     assertBool "casIntPtr 2 3" (not b')
-    b'' <- casIntPtr ptr 1 2
+    b'' <- casInt32Ptr ptr 1 2
     assertBool "casIntPtr 1 2" b''
     result <- peek ptr
     assertEqual "" 2 result
