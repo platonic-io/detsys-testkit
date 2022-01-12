@@ -53,6 +53,8 @@ prettyRunLenEnc ((n, w) : nws) =
 data Command
   = ReadInt32 Int
   | WriteInt32 Int Int32
+  | ReadInt64 Int
+  | WriteInt64 Int Int64
   deriving Show
 
 newFakeByteBuffer :: Int -> FakeByteBuffer
@@ -88,11 +90,35 @@ writeInt32Fake fbb offset value =
   in
     (fbb { fbbVector = fbbVector fbb Vector.// indexValues }, ())
 
+readInt64Fake :: FakeByteBuffer -> Int -> (FakeByteBuffer, Int64)
+readInt64Fake fbb offset =
+  let
+    bytes :: [Word8]
+    bytes = fixEndianess
+          $ Vector.toList
+          $ Vector.take (sizeOf (8 :: Int64))
+          $ Vector.drop offset (fbbVector fbb)
+  in
+    (fbb, decode (LBS.pack bytes))
+
+writeInt64Fake :: FakeByteBuffer -> Int -> Int64 -> (FakeByteBuffer, ())
+writeInt64Fake fbb offset value =
+  let
+    bytes :: [Word8]
+    bytes = fixEndianess (LBS.unpack (encode value))
+
+    indexValues :: [(Int, Word8)]
+    indexValues = zip [offset .. offset + length bytes - 1] bytes
+  in
+    (fbb { fbbVector = fbbVector fbb Vector.// indexValues }, ())
+
 ------------------------------------------------------------------------
 
 constructorString :: Command -> String
 constructorString ReadInt32  {} = "ReadInt32"
 constructorString WriteInt32 {} = "WriteInt32"
+constructorString ReadInt64  {} = "ReadInt64"
+constructorString WriteInt64 {} = "WriteInt64"
 
 prettyCommand :: Command -> String
 prettyCommand = show
@@ -100,12 +126,14 @@ prettyCommand = show
 data Response
   = Unit ()
   | Int32 Int32
+  | Int64 Int64
   | IOException IOException
   deriving Eq
 
 prettyResponse :: Response -> String
 prettyResponse (Unit ())       = "Unit ()"
 prettyResponse (Int32 i)       = "Int32 " ++ show i
+prettyResponse (Int64 i)       = "Int64 " ++ show i
 prettyResponse (IOException e) = "IOException " ++ displayException e
 
 type Model = FakeByteBuffer
@@ -116,15 +144,21 @@ precondition _m _cmd = True
 step :: Command -> Model -> (Model, Response)
 step (ReadInt32 offset)        m = Int32 <$> readInt32Fake  m offset
 step (WriteInt32 offset value) m = Unit  <$> writeInt32Fake m offset value
+step (ReadInt64 offset)        m = Int64 <$> readInt64Fake  m offset
+step (WriteInt64 offset value) m = Unit  <$> writeInt64Fake m offset value
 
 exec :: Command -> ByteBuffer -> IO Response
 exec (ReadInt32  offset)       bb = Int32 <$> readInt32OffAddr bb offset
 exec (WriteInt32 offset value) bb = Unit <$> writeInt32OffAddr bb offset value
+exec (ReadInt64  offset)       bb = Int64 <$> readInt64OffAddr bb offset
+exec (WriteInt64 offset value) bb = Unit <$> writeInt64OffAddr bb offset value
 
 genCommand :: Model -> Gen Command
 genCommand m = frequency
   [ (1, ReadInt32  <$> genOffset (sizeOf (4 :: Int32)) (fbbSize m))
   , (1, WriteInt32 <$> genOffset (sizeOf (4 :: Int32)) (fbbSize m) <*> arbitrary)
+  , (1, ReadInt64  <$> genOffset (sizeOf (8 :: Int64)) (fbbSize m))
+  , (1, WriteInt64 <$> genOffset (sizeOf (8 :: Int64)) (fbbSize m) <*> arbitrary)
   ]
 
 genOffset :: Int -> Int -> Gen Int
@@ -145,6 +179,11 @@ shrinkCommand :: Command -> [Command]
 shrinkCommand ReadInt32 {} = []
 shrinkCommand (WriteInt32 offset value) =
   [ WriteInt32 offset value'
+  | value' <- shrink value
+  ]
+shrinkCommand ReadInt64 {} = []
+shrinkCommand (WriteInt64 offset value) =
+  [ WriteInt64 offset value'
   | value' <- shrink value
   ]
 
@@ -223,54 +262,6 @@ runCommands cmds = do
         -- dumpByteBuffer bb
         -- print (stats (reverse hist))
         return False
-
-------------------------------------------------------------------------
-
-unit_bbBug0 :: Assertion
-unit_bbBug0 = assertProgram ""
-  -- [WriteInt32 57 1,ReadInt32 58]
-  [ReadInt32 524]
-
--- XXX: Make MmapTest pass first.
-  {-
-nit_byteBufferMmapped :: Assertion
-nit_byteBufferMmapped = do
-  pageSize <- sysconfPageSize
-  withTempFile tmp "" $ \fp _handle -> do
-    fallocate fp pageSize
-    bb <- mmapped fp pageSize
-    -- bb <- allocateAligned pageSize pageSize
-
-    let ix = 1344
-
-    let i32 :: Int32
-        i32 = minBound
-
-    writeInt32OffAddr bb ix i32
-    j32 <- readInt32OffAddr bb ix
-    assertEqual "" i32 j32
-
-    let i32' :: Int32
-        i32' = maxBound
-
-    writeInt32OffAddr bb ix i32'
-    j32' <- readInt32OffAddr bb ix
-    assertEqual "" i32' j32'
-
-    let i64 :: Int64
-        i64 = minBound
-
-    writeInt64OffAddr bb ix i64
-    j64 <- readInt64OffAddr bb ix
-    assertEqual "" i64 j64
-
-    let i64' :: Int64
-        i64' = maxBound
-
-    writeInt64OffAddr bb ix i64'
-    j64' <- readInt64OffAddr bb ix
-    assertEqual "" i64' j64'
--}
 
 ------------------------------------------------------------------------
 
