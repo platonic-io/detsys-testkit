@@ -359,7 +359,7 @@ primitiveInt f c bb offset@(I# offset#) = do
   boundCheck bb offset
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case f addr# offset# s of
+      case f (addr# `plusAddr#` offset#) 0# s of
         (# s', i #) -> (# s', c i #)
 
 primitiveInt32 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
@@ -425,7 +425,7 @@ writeInt32OffAddr bb offset@(I# offset#) (I32# value#) = do
   boundCheck bb offset
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case writeInt32OffAddr# addr# offset# value# s of
+      case writeInt32OffAddr# (addr# `plusAddr#` offset#) 0# value# s of
         s' -> (# s', () #)
 
 writeInt64OffAddr :: ByteBuffer -> Int -> Int64 -> IO ()
