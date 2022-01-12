@@ -1,5 +1,7 @@
 ## detsys-testkit
 
+*This is an alpha release, please don't share it widely just yet, thanks!*
+
 System tests are usually slow, non-deterministic and should therefor be used
 sparsely -- this project tries to turn this idea on its head.
 
