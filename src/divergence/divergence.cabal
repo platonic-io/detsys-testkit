@@ -10,7 +10,7 @@ license:            MIT
 license-file:       LICENSE
 author:             Daniel Gustafsson
 maintainer:         symbiont-daniel-gustafsson@users.noreply.github.com
-copyright:          Copyright (c) 2021 Symbiont Inc
+copyright:          Copyright (c) 2021-2022 Symbiont Inc
 category:           Testing, Distributed Systems
 build-type:         Simple
 extra-source-files: CHANGELOG.md
