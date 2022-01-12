@@ -13,7 +13,9 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Data.Word (Word8)
 import Foreign (sizeOf)
-import System.Directory (removePathForcibly, canonicalizePath, getTemporaryDirectory)
+import GHC.ByteOrder (targetByteOrder, ByteOrder(LittleEndian, BigEndian))
+import System.Directory
+       (canonicalizePath, getTemporaryDirectory, removePathForcibly)
 import System.IO (hClose, openTempFile)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
@@ -59,11 +61,16 @@ newFakeByteBuffer size = FakeByteBuffer
   , fbbSize   = size
   }
 
+fixEndianess :: [a] -> [a]
+fixEndianess = case targetByteOrder of
+  LittleEndian -> reverse
+  BigEndian    -> id -- Data.Binary always uses big endian.
+
 readInt32Fake :: FakeByteBuffer -> Int -> (FakeByteBuffer, Int32)
 readInt32Fake fbb offset =
   let
     bytes :: [Word8]
-    bytes = reverse -- Data.Binary always uses big endian.
+    bytes = fixEndianess
           $ Vector.toList
           $ Vector.take (sizeOf (4 :: Int32))
           $ Vector.drop offset (fbbVector fbb)
@@ -74,7 +81,7 @@ writeInt32Fake :: FakeByteBuffer -> Int -> Int32 -> (FakeByteBuffer, ())
 writeInt32Fake fbb offset value =
   let
     bytes :: [Word8]
-    bytes = reverse (LBS.unpack (encode value))
+    bytes = fixEndianess (LBS.unpack (encode value))
 
     indexValues :: [(Int, Word8)]
     indexValues = zip [offset .. offset + length bytes - 1] bytes
