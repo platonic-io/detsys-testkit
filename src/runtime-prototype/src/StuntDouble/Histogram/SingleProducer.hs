@@ -1,7 +1,7 @@
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  StuntDouble.Histogram.SingleProducer
--- Copyright   :  (C) 2021, Symbiont Inc; (C) 2016, Tyler Neely; (C) 2014, The
+-- Copyright   :  (C) 2021-2022, Symbiont Inc; (C) 2016, Tyler Neely; (C) 2014, The
 --                Cockroach Authors.
 -- License     :  MIT and Apache-2.0 (see the file LICENSE)
 --
