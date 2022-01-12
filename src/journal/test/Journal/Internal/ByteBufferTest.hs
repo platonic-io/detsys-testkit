@@ -63,7 +63,8 @@ readInt32Fake :: FakeByteBuffer -> Int -> (FakeByteBuffer, Int32)
 readInt32Fake fbb offset =
   let
     bytes :: [Word8]
-    bytes = Vector.toList
+    bytes = reverse -- Data.Binary always uses big endian.
+          $ Vector.toList
           $ Vector.take (sizeOf (4 :: Int32))
           $ Vector.drop offset (fbbVector fbb)
   in
@@ -73,7 +74,7 @@ writeInt32Fake :: FakeByteBuffer -> Int -> Int32 -> (FakeByteBuffer, ())
 writeInt32Fake fbb offset value =
   let
     bytes :: [Word8]
-    bytes = LBS.unpack (encode value)
+    bytes = reverse (LBS.unpack (encode value))
 
     indexValues :: [(Int, Word8)]
     indexValues = zip [offset .. offset + length bytes - 1] bytes
@@ -110,13 +111,8 @@ step (ReadInt32 offset)        m = Int32 <$> readInt32Fake  m offset
 step (WriteInt32 offset value) m = Unit  <$> writeInt32Fake m offset value
 
 exec :: Command -> ByteBuffer -> IO Response
-exec (ReadInt32  offset)       bb =
-  Int32 <$> readInt32OffAddr bb (roundupBytesToSizeOfElem offset (sizeOf (4 :: Int32)))
-exec (WriteInt32 offset value) bb =
-  Unit <$> writeInt32OffAddr bb (roundupBytesToSizeOfElem offset (sizeOf (4 :: Int32))) value
-
-roundupBytesToSizeOfElem :: Int -> Int -> Int
-roundupBytesToSizeOfElem n size = ((n + size) - 1) `div` size
+exec (ReadInt32  offset)       bb = Int32 <$> readInt32OffAddr bb offset
+exec (WriteInt32 offset value) bb = Unit <$> writeInt32OffAddr bb offset value
 
 genCommand :: Model -> Gen Command
 genCommand m = frequency
