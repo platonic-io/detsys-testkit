@@ -10,7 +10,6 @@ import GHC.Int (Int(I#), Int32(I32#), Int64(I64#))
 import GHC.Stack (HasCallStack)
 import System.Directory (canonicalizePath, getTemporaryDirectory)
 import System.IO (Handle, hClose, openTempFile)
-import System.Posix.Fcntl (fileAllocate)
 import System.Posix.Files (ownerReadMode, ownerWriteMode)
 import System.Posix.IO
        ( OpenMode(ReadWrite)
@@ -20,6 +19,8 @@ import System.Posix.IO
        , openFd
        )
 import System.Posix.Types (Fd)
+
+import Journal.Internal.FileAllocate
 
 ------------------------------------------------------------------------
 
