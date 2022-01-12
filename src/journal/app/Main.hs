@@ -14,6 +14,7 @@ import Data.Word
 import Foreign.Ptr
 
 import Journal
+import Journal.Types.AtomicCounter
 
 ------------------------------------------------------------------------
 

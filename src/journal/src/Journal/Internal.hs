@@ -47,7 +47,7 @@ tryClaim jour len = do
   let index                = indexByTermCount termCount
       activePartitionIndex = index
   rt <- readRawTail (jMetadata jour) index
-  initTermId <- initialTermId (jMetadata jour)
+  initTermId <- readInitialTermId (jMetadata jour)
   termLen <- readTermLength (jMetadata jour)
 
   -- XXX: cache and read these from there?
@@ -98,7 +98,7 @@ newPosition meta mResult =
       termCount <- activeTermCount meta
       let index = indexByTermCount termCount
       rt <- readRawTail meta index
-      initTermId <- initialTermId meta
+      initTermId <- readInitialTermId meta
       termLen <- readTermLength meta
 
       let termId            = rawTailTermId rt
@@ -163,7 +163,7 @@ rotateTerm meta = do
   let activePartitionIndex = indexByTermCount termCount
       nextIndex = nextPartitionIndex activePartitionIndex
   rawTail <- readRawTail meta activePartitionIndex
-  initTermId <- initialTermId meta
+  initTermId <- readInitialTermId meta
   let termId = rawTailTermId rawTail
       nextTermId = termId + 1
       termCount = fromIntegral (nextTermId - initTermId)
@@ -451,20 +451,29 @@ dumpFile fp = do
 
 dumpMetadata :: Metadata -> IO ()
 dumpMetadata meta = do
+  putStrLn "Metadata"
+  putStrLn "========"
+  flip mapM_ [0 .. pARTITION_COUNT - 1] $ \i -> do
+    RawTail rawTail <- readRawTail meta (PartitionIndex i)
+    putStrLn ("rawTail" ++ show i ++ ": " ++ show rawTail)
+
   termCount <- activeTermCount meta
-  putStrLn ("termCount: " ++ show (unTermCount termCount))
+  putStrLn ("activeTermCount: " ++ show (unTermCount termCount))
 
-  let index                = indexByTermCount termCount
-      activePartitionIndex = index
-  putStrLn ("activePartitionIndex: " ++ show (unPartitionIndex activePartitionIndex))
-
-  rawTail <- readRawTail meta index
-  initTermId <- initialTermId meta
+  initTermId <- readInitialTermId meta
   putStrLn ("initialTermId: " ++ show (unTermId initTermId))
 
   termLen <- readTermLength meta
   putStrLn ("termBufferLength: " ++ show termLen)
 
+  pageSize <- readPageSize meta
+  putStrLn ("pageSize: " ++ show pageSize)
+
+  putStrLn "--------"
+
+  let index                = indexByTermCount termCount
+      activePartitionIndex = index
+  rawTail <- readRawTail meta index
   let termId            = rawTailTermId rawTail
       termOffset        = rawTailTermOffset rawTail termLen
       termBeginPosition =
@@ -473,8 +482,8 @@ dumpMetadata meta = do
   putStrLn ("termId: " ++ show (unTermId termId))
   putStrLn ("termOffset: " ++ show (unTermOffset termOffset))
   putStrLn ("termBeginPosition: " ++ show termBeginPosition)
-  pageSize <- readPageSize meta
-  putStrLn ("pageSize: " ++ show pageSize)
+  putStrLn ("activePartitionIndex: " ++ show (unPartitionIndex activePartitionIndex))
+
 
 dumpJournal' :: Journal' -> IO ()
 dumpJournal' jour = do

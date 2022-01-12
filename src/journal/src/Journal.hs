@@ -23,9 +23,7 @@ import qualified Data.ByteString.Char8 as BSChar8
 import Data.ByteString.Internal (fromForeignPtr)
 import Data.IORef (newIORef)
 import qualified Data.Vector as Vector
-import Data.Word (Word32, Word8)
 import Foreign.ForeignPtr (newForeignPtr_)
-import Foreign.Marshal.Alloc (callocBytes, free)
 import Foreign.Ptr (plusPtr)
 import Network.Socket (Socket, recvBuf)
 import System.Directory
@@ -33,9 +31,9 @@ import System.Directory
        , doesDirectoryExist
        , doesFileExist
        , getFileSize
+       , removeFile
        )
 import System.FilePath (takeDirectory, (</>))
-import System.Posix.IO (fdWriteBuf)
 
 import Journal.Internal
 import Journal.Internal.BufferClaim
@@ -58,28 +56,25 @@ allocateJournal fp (Options _ termBufferLen) = do
   unless (popCount termBufferLen == 1) $
     -- XXX: check bounds
     error "allocateJournal: oTermBufferLength must be a power of 2"
+  -- XXX: only for debugging:
+  putStrLn ("removing " ++ fp)
+  removeFile fp
   b <- doesFileExist fp
   when (not b) $ do
 
+    putStrLn ("allocateJournal, creating new journal: " ++ fp)
     let dir = takeDirectory fp
     dirExists <- doesDirectoryExist dir
     unless dirExists (createDirectoryIfMissing True dir)
 
     let logLength = termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH
 
-    withRWFd fp $ \fd -> do
-      fileAllocate fd 0 (fromIntegral logLength)
-      -- NOTE: `fileAllocate` only allocates the space it doesn't zero it,
-      -- unlike `fallocate(1)`, so we do that next.
-      bracket (callocBytes logLength) free $ \zeroesPtr -> do
-        bytesWritten <- fdWriteBuf fd zeroesPtr (fromIntegral logLength)
-        assertM (bytesWritten == fromIntegral logLength)
-
+    fallocate fp (fromIntegral logLength)
     bb <- mmapped fp logLength
     meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
 
     writeTermLength meta (fromIntegral termBufferLen)
-    writeInitialTermId meta 0 -- XXX: should be random rather than 0.
+    writeInitialTermId meta 4 -- XXX: should be random rather than 4.
     pageSize <- sysconfPageSize
     writePageSize (Metadata meta) (int2Int32 pageSize)
 
@@ -276,7 +271,8 @@ tj = do
       opts = defaultOptions
   allocateJournal fp opts
   jour <- startJournal' fp opts
-  -- Just (_five, claimBuf) <- tryClaim jour 5
+  -- Just (five, claimBuf) <- tryClaim jour 5
+  -- print five
   -- putBS claimBuf (BSChar8.pack "hello")
   -- commit claimBuf
   dumpMetadata (jMetadata jour)

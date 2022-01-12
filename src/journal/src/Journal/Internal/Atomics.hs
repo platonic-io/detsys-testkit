@@ -5,6 +5,8 @@ module Journal.Internal.Atomics where
 import Foreign
 import Foreign.C.Types
 
+import Journal.Internal.Utils (int2Int64)
+
 ------------------------------------------------------------------------
 
 foreign import ccall unsafe "stdatomic.h __atomic_fetch_add_1"
@@ -82,3 +84,7 @@ casInt64Ptr ptr expected desired = do
     1 -> return True
     _ ->
       error "casInt64Addr: impossible, c_atomic_compare_exchange_strong should return a _Bool"
+
+casIntPtr :: Ptr Int -> Int -> Int -> IO Bool
+casIntPtr ptr expected desired =
+  casInt64Ptr (castPtr ptr) (int2Int64 expected) (int2Int64 desired)

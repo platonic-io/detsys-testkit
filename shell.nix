@@ -17,6 +17,7 @@ pkgs.mkShell {
   name = "dev-shell";
 
   buildInputs = [
+    gdb
     bazel_4
     buildifier # Bazel BUILD file formatter
     go
@@ -49,4 +50,13 @@ pkgs.mkShell {
     [ darwin.apple_sdk.frameworks.Foundation
       darwin.apple_sdk.frameworks.CoreFoundation
     ];
+
+  # The following is needed for gdb to work, otherwise we get an error saying:
+  # `ModuleNotFoundError: No module named '_sysconfigdata__linux_x86_64-linux-gnu'`.
+  # (Source: https://github.com/NixOS/nixpkgs/issues/88711).
+  shellHook = ''
+    unset _PYTHON_HOST_PLATFORM
+    unset _PYTHON_SYSCONFIGDATA_NAME
+  '';
+
 }

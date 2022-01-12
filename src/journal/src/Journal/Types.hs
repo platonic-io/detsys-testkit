@@ -162,8 +162,8 @@ casActiveTermCount :: Metadata -> TermCount -> TermCount -> IO Bool
 casActiveTermCount (Metadata meta) (TermCount expected) (TermCount new) =
   casInt32Addr meta lOG_ACTIVE_TERM_COUNT_OFFSET expected new
 
-initialTermId :: Metadata -> IO TermId
-initialTermId (Metadata meta) =
+readInitialTermId :: Metadata -> IO TermId
+readInitialTermId (Metadata meta) =
   TermId <$> readInt32OffAddr meta lOG_INITIAL_TERM_ID_OFFSET
 
 writeInitialTermId :: ByteBuffer -> TermId -> IO ()

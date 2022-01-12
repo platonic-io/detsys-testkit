@@ -20,6 +20,7 @@ import Foreign.Storable
 import GHC.Exts
 import GHC.ForeignPtr
 import GHC.IO (IO(IO))
+import GHC.Int (Int32(I32#), Int64(I64#))
 import GHC.Stack
 import System.Posix.IO
        (OpenMode(ReadWrite), closeFd, defaultFileFlags, openFd)
@@ -353,26 +354,26 @@ getStorableAt bb ix = do
 ------------------------------------------------------------------------
 
 primitiveInt :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
-             -> ByteBuffer -> Int ->  IO Int
-primitiveInt f bb offset@(I# offset#) = do
+             -> (Int# -> i) -> ByteBuffer -> Int -> IO i
+primitiveInt f c bb offset@(I# offset#) = do
   boundCheck bb offset
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case f addr# offset# s of
-        (# s', i #) -> (# s', I# i #)
+      case f (addr# `plusAddr#` offset#) 0# s of
+        (# s', i #) -> (# s', c i #)
 
 primitiveInt32 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
                -> ByteBuffer -> Int ->  IO Int32
-primitiveInt32 f bb offset = int2Int32 <$> primitiveInt f bb offset
+primitiveInt32 f bb offset = primitiveInt f I32# bb offset
 
 primitiveInt64 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
                -> ByteBuffer -> Int ->  IO Int64
-primitiveInt64 f bb offset = int2Int64 <$> primitiveInt f bb offset
+primitiveInt64 f bb offset = primitiveInt f I64# bb offset
 
 -- readCharOffArray#
 -- readWideCharOffArray#
 readIntOffArrayIx :: ByteBuffer -> Int -> IO Int
-readIntOffArrayIx = primitiveInt readIntOffAddr#
+readIntOffArrayIx = primitiveInt readIntOffAddr# I#
 
 -- readWordOffArray#
 -- readArrayOffAddr#
@@ -405,12 +406,13 @@ indexWord8OffAddr bb offset@(I# offset#) = do
 writeInt = writeIntOffAddr
 
 writeIntOffAddr :: ByteBuffer -> Int -> Int -> IO ()
-writeIntOffAddr bb ix@(I# ix#) (I# value#) = do
-  boundCheck bb ix
+writeIntOffAddr bb offset@(I# offset#) (I# value#) = do
+  boundCheck bb offset
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case writeIntOffAddr# addr# ix# value# s of
+      case writeIntOffAddr# (addr# `plusAddr#` offset#) 0# value# s of
         s' -> (# s', () #)
+
 -- writeWordOffArray#
 -- writeArrayOffAddr#
 -- writeFloatOffArray#
@@ -420,24 +422,20 @@ writeIntOffAddr bb ix@(I# ix#) (I# value#) = do
 -- writeInt16OffArray#
 
 writeInt32OffAddr :: ByteBuffer -> Int -> Int32 -> IO ()
-writeInt32OffAddr bb offset@(I# offset#) value = do
+writeInt32OffAddr bb offset@(I# offset#) (I32# value#) = do
   boundCheck bb offset
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case writeInt32OffAddr# addr# offset# value# s of
+      case writeInt32OffAddr# (addr# `plusAddr#` offset#) 0# value# s of
         s' -> (# s', () #)
-  where
-    I# value# = fromIntegral value
 
 writeInt64OffAddr :: ByteBuffer -> Int -> Int64 -> IO ()
-writeInt64OffAddr bb offset@(I# offset#) value = do
+writeInt64OffAddr bb offset@(I# offset#) (I64# value#) = do
   boundCheck bb offset
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case writeInt64OffAddr# addr# offset# value# s of
+      case writeInt64OffAddr# (addr# `plusAddr#` offset#) 0# value# s of
         s' -> (# s', () #)
-  where
-    I# value# = fromIntegral value
 
 -- writeWord8OffArray#
 -- writeWord16OffArray#
