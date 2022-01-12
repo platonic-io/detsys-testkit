@@ -406,12 +406,13 @@ indexWord8OffAddr bb offset@(I# offset#) = do
 writeInt = writeIntOffAddr
 
 writeIntOffAddr :: ByteBuffer -> Int -> Int -> IO ()
-writeIntOffAddr bb ix@(I# ix#) (I# value#) = do
-  boundCheck bb ix
+writeIntOffAddr bb offset@(I# offset#) (I# value#) = do
+  boundCheck bb offset
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case writeIntOffAddr# addr# ix# value# s of
+      case writeIntOffAddr# (addr# `plusAddr#` offset#) 0# value# s of
         s' -> (# s', () #)
+
 -- writeWordOffArray#
 -- writeArrayOffAddr#
 -- writeFloatOffArray#
@@ -429,14 +430,12 @@ writeInt32OffAddr bb offset@(I# offset#) (I32# value#) = do
         s' -> (# s', () #)
 
 writeInt64OffAddr :: ByteBuffer -> Int -> Int64 -> IO ()
-writeInt64OffAddr bb offset@(I# offset#) value = do
+writeInt64OffAddr bb offset@(I# offset#) (I64# value#) = do
   boundCheck bb offset
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case writeInt64OffAddr# addr# offset# value# s of
+      case writeInt64OffAddr# (addr# `plusAddr#` offset#) 0# value# s of
         s' -> (# s', () #)
-  where
-    I# value# = fromIntegral value
 
 -- writeWord8OffArray#
 -- writeWord16OffArray#
