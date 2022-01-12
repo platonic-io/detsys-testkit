@@ -4,7 +4,6 @@
 package main
 
 import (
-	"os"
 	"syscall"
 	"unsafe"
 )
@@ -18,10 +17,10 @@ func fallocate(fd int, _mode uint32, offset int64, length int64) error {
 		Length:     offset + length,
 		Bytesalloc: 0,
 	}
-	_, _, err := syscall.Syscall(syscall.SYS_FCNTL, fd, syscall.F_PREALLOCATE, uintptr(unsafe.Pointer(&store)))
+	_, _, err := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), syscall.F_PREALLOCATE, uintptr(unsafe.Pointer(&store)))
 	if err != 0 {
 		store.Flags = syscall.F_ALLOCATEALL
-		_, _, err = syscall.Syscall(syscall.SYS_FCNTL, fd, syscall.F_PREALLOCATE, uintptr(unsafe.Pointer(&store)))
+		_, _, err = syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), syscall.F_PREALLOCATE, uintptr(unsafe.Pointer(&store)))
 		if err != 0 {
 			return err
 		}
