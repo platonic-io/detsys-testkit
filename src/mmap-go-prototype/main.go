@@ -25,10 +25,9 @@ func NewMmap(f string) *Mmap {
 
 	// XXX: Passing `FALLOC_FL_ZERO_RANGE` as mode would zero the file, but
 	// I couldn't find this constant in `syscall`...
-	// mode := uint32(0) // syscall.F_PREALLOCATE
+	mode := uint32(0) // syscall.F_PREALLOCATE
 
-	//if err := syscall.Fallocate(int(file.Fd()), mode, 0, int64(pageSize)); err != nil {
-	if err := MacFallocate(file, 0, int64(pageSize)); err != nil {
+	if err := fallocate(int(file.Fd()), mode, 0, int64(pageSize)); err != nil {
 		panic(err)
 	}
 
