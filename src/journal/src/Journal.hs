@@ -38,6 +38,7 @@ import System.FilePath (takeDirectory, (</>))
 import Journal.Internal
 import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBufferPtr
+import Journal.Internal.FileAllocate (fileAllocate)
 import Journal.Internal.Mmap (sysconfPageSize)
 import Journal.Types
 import Journal.Types.AtomicCounter
