@@ -21,6 +21,7 @@ import GHC.Exts
 import GHC.ForeignPtr
 import GHC.IO (IO(IO))
 import GHC.Int (Int32(I32#), Int64(I64#))
+import GHC.Word (Word8(W8#), Word16(W16#), Word32(W32#), Word64(W64#))
 import GHC.Stack
 import System.Posix.IO
        (OpenMode(ReadWrite), closeFd, defaultFileFlags, openFd)
@@ -314,11 +315,14 @@ getLazyByteString :: ByteBuffer -> Int -> IO LBS.ByteString
 getLazyByteString bb len = do
   bs <- getByteString bb len
   return (LBS.fromStrict bs)
+-}
 
 getByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
 getByteStringAt bb offset len = do
-  undefined
--}
+  boundCheck bb (len - 1) -- XXX?
+  withForeignPtr (bbPtr bb) $ \sptr ->
+    BS.create len $ \dptr ->
+      copyBytes (sptr `plusPtr` offset) dptr len
 
 ------------------------------------------------------------------------
 -- * Relative operations on `Storable` elements
@@ -415,11 +419,29 @@ indexWord8OffAddr bb offset@(I# offset#) = do
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     return (fromIntegral (W# (indexWord8OffAddr# addr# offset#)))
 
-  {-
--- readWord16OffArray#
--- readWord32OffArray#
--- readWord64OffArray#
+primitiveWord :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Word# #))
+             -> (Word# -> w) -> ByteBuffer -> Int -> IO w
+primitiveWord f c bb offset@(I# offset#) = do
+  boundCheck bb offset
+  Slice (I# slice#) <- readIORef (bbSlice bb)
+  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# s of
+        (# s', i #) -> (# s', c i #)
 
+readWord8OffAddr :: ByteBuffer -> Int -> IO Word8
+readWord8OffAddr = primitiveWord readWord8OffAddr# W8#
+
+readWord16OffAddr :: ByteBuffer -> Int -> IO Word16
+readWord16OffAddr = primitiveWord readWord16OffAddr# W16#
+
+readWord32OffAddr :: ByteBuffer -> Int -> IO Word32
+readWord32OffAddr = primitiveWord readWord32OffAddr# W32#
+
+readWord64OffAddr :: ByteBuffer -> Int -> IO Word64
+readWord64OffAddr = primitiveWord readWord64OffAddr# W64#
+
+  {-
 -- writeCharOffArray#
 -- writeWideCharOffArray#
 -}

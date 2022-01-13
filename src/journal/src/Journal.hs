@@ -185,6 +185,34 @@ appendRecv jour sock len = do
 
 -- * Consumption
 
+-- XXX: move
+readTermBufferTermOffset :: Journal' -> IO (ByteBuffer, TermOffset)
+readTermBufferTermOffset jour = do
+  termCount <- activeTermCount (jMetadata jour)
+  let activeTermIndex = indexByTermCount termCount
+  rawTail <- readRawTail (jMetadata jour) activeTermIndex
+  termLen <- readTermLength (jMetadata jour)
+  let bb = jTermBuffers jour Vector.! unPartitionIndex activeTermIndex
+  return (bb, rawTailTermOffset rawTail termLen)
+
+readJournal' :: Journal' -> IO (Maybe ByteString)
+readJournal' jour = do
+  offset <- readCounter (jBytesConsumed jour)
+  putStrLn ("readJournal, offset: " ++ show offset)
+  (termBuffer , TermOffset termOffset) <- readTermBufferTermOffset jour
+  assertM (offset <= int322Int termOffset)
+  if offset == int322Int termOffset
+  then return Nothing
+  else do
+    assertM (offset < int322Int termOffset)
+    HeaderLength len <- readFrameLength termBuffer (TermOffset (int2Int32 offset))
+    putStrLn ("readJournal, len: " ++ show len)
+    bs <- getByteStringAt termBuffer
+            (offset + hEADER_LENGTH) (word322Int len - hEADER_LENGTH)
+    assertM (BS.length bs == word322Int len - hEADER_LENGTH)
+    incrCounter_ (word322Int len) (jBytesConsumed jour)
+    return (Just bs)
+
 readJournal :: JournalConsumer -> IO ByteString
 readJournal jc = do
   ptr <- readJournalConsumerPtr jc
@@ -275,5 +303,7 @@ tj = do
   putStrLn ("offset: " ++ show offset)
   putBS claimBuf (BSChar8.pack "hello")
   commit claimBuf
+  Just bs <- readJournal' jour
+  putStrLn ("read bytestring: '" ++ BSChar8.unpack bs ++ "'")
   dumpMetadata (jMetadata jour)
   return ()
