@@ -307,3 +307,11 @@ tj = do
   putStrLn ("read bytestring: '" ++ BSChar8.unpack bs ++ "'")
   dumpMetadata (jMetadata jour)
   return ()
+
+tbc :: IO ()
+tbc = do
+  bb <- allocate 16
+  bc <- newBufferClaim bb 0 16
+  putBS bc "helloooooooooooo"
+  bs <- getByteStringAt bb 0 5
+  putStrLn (BSChar8.unpack bs)

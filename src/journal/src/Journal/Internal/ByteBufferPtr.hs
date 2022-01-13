@@ -149,10 +149,10 @@ invariant bb = do
 ------------------------------------------------------------------------
 -- * Create
 
--- allocate :: Int -> IO ByteBuffer
--- allocate capa@(I# capa#) = IO $ \s ->
---   case newPinnedByteArray# capa# s of
---     (# s', mba# #) -> unIO (newByteBuffer mba# (Capacity capa) (Limit capa) 0 Nothing) s'
+allocate :: Int -> IO ByteBuffer
+allocate size = do
+  fptr <- mallocForeignPtrBytes size
+  newByteBuffer fptr (Capacity size) (Limit size) 0 Nothing
 
 allocateAligned :: Int -> Int -> IO ByteBuffer
 allocateAligned size align = do

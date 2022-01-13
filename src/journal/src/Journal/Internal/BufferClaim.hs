@@ -7,14 +7,15 @@ import Foreign.Ptr (Ptr)
 
 import Journal.Internal.ByteBufferPtr
 import Journal.Types
+import Journal.Internal.Utils
 
 ------------------------------------------------------------------------
 
 newtype BufferClaim = BufferClaim ByteBuffer
 
 newBufferClaim :: ByteBuffer -> TermOffset -> Int -> IO BufferClaim
-newBufferClaim src offset len = BufferClaim <$>
-  wrapPart src (fromIntegral offset) len
+newBufferClaim src (TermOffset offset) len = BufferClaim <$>
+  wrapPart src (int322Int offset) len
 
 putBS :: BufferClaim -> ByteString -> IO ()
 putBS (BufferClaim bb) bs = putByteString bb bs
