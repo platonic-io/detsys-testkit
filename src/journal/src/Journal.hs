@@ -271,8 +271,8 @@ tj = do
       opts = defaultOptions
   allocateJournal fp opts
   jour <- startJournal' fp opts
-  Just (sz, claimBuf) <- tryClaim jour 5
-  putStrLn ("sz: " ++ show sz)
+  Just (offset, claimBuf) <- tryClaim jour 5
+  putStrLn ("offset: " ++ show offset)
   putBS claimBuf (BSChar8.pack "hello")
   commit claimBuf
   dumpMetadata (jMetadata jour)

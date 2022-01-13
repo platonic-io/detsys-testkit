@@ -357,9 +357,10 @@ primitiveInt :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# 
              -> (Int# -> i) -> ByteBuffer -> Int -> IO i
 primitiveInt f c bb offset@(I# offset#) = do
   boundCheck bb offset
+  Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case f (addr# `plusAddr#` offset#) 0# s of
+      case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# s of
         (# s', i #) -> (# s', c i #)
 
 primitiveInt32 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
@@ -408,9 +409,10 @@ writeInt = writeIntOffAddr
 writeIntOffAddr :: ByteBuffer -> Int -> Int -> IO ()
 writeIntOffAddr bb offset@(I# offset#) (I# value#) = do
   boundCheck bb offset
+  Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case writeIntOffAddr# (addr# `plusAddr#` offset#) 0# value# s of
+      case writeIntOffAddr# (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
         s' -> (# s', () #)
 
 -- writeWordOffArray#
@@ -424,17 +426,19 @@ writeIntOffAddr bb offset@(I# offset#) (I# value#) = do
 writeInt32OffAddr :: ByteBuffer -> Int -> Int32 -> IO ()
 writeInt32OffAddr bb offset@(I# offset#) (I32# value#) = do
   boundCheck bb offset
+  Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case writeInt32OffAddr# (addr# `plusAddr#` offset#) 0# value# s of
+      case writeInt32OffAddr# (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
         s' -> (# s', () #)
 
 writeInt64OffAddr :: ByteBuffer -> Int -> Int64 -> IO ()
 writeInt64OffAddr bb offset@(I# offset#) (I64# value#) = do
   boundCheck bb offset
+  Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case writeInt64OffAddr# (addr# `plusAddr#` offset#) 0# value# s of
+      case writeInt64OffAddr# (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
         s' -> (# s', () #)
 
 -- writeWord8OffArray#
