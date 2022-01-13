@@ -371,6 +371,25 @@ primitiveInt64 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int
                -> ByteBuffer -> Int ->  IO Int64
 primitiveInt64 f bb offset = primitiveInt f I64# bb offset
 
+primitiveInt_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
+              -> (i -> Int#) -> ByteBuffer -> Int -> i -> IO ()
+primitiveInt_ f d bb offset@(I# offset#) i = do
+  boundCheck bb offset
+  let value# = d i
+  Slice (I# slice#) <- readIORef (bbSlice bb)
+  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
+        s' -> (# s', () #)
+
+primitiveInt32_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
+              -> ByteBuffer -> Int -> Int32 -> IO ()
+primitiveInt32_ f = primitiveInt_ f (\(I32# x#) -> x#)
+
+primitiveInt64_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
+              -> ByteBuffer -> Int -> Int64 -> IO ()
+primitiveInt64_ f = primitiveInt_ f (\(I64# x#) -> x#)
+
 -- readCharOffArray#
 -- readWideCharOffArray#
 readIntOffArrayIx :: ByteBuffer -> Int -> IO Int
@@ -407,13 +426,7 @@ indexWord8OffAddr bb offset@(I# offset#) = do
 writeInt = writeIntOffAddr
 
 writeIntOffAddr :: ByteBuffer -> Int -> Int -> IO ()
-writeIntOffAddr bb offset@(I# offset#) (I# value#) = do
-  boundCheck bb offset
-  Slice (I# slice#) <- readIORef (bbSlice bb)
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
-    IO $ \s ->
-      case writeIntOffAddr# (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
-        s' -> (# s', () #)
+writeIntOffAddr = primitiveInt_ writeIntOffAddr# (\(I# x#) -> x#)
 
 -- writeWordOffArray#
 -- writeArrayOffAddr#
@@ -424,22 +437,10 @@ writeIntOffAddr bb offset@(I# offset#) (I# value#) = do
 -- writeInt16OffArray#
 
 writeInt32OffAddr :: ByteBuffer -> Int -> Int32 -> IO ()
-writeInt32OffAddr bb offset@(I# offset#) (I32# value#) = do
-  boundCheck bb offset
-  Slice (I# slice#) <- readIORef (bbSlice bb)
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
-    IO $ \s ->
-      case writeInt32OffAddr# (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
-        s' -> (# s', () #)
+writeInt32OffAddr = primitiveInt32_ writeInt32OffAddr#
 
 writeInt64OffAddr :: ByteBuffer -> Int -> Int64 -> IO ()
-writeInt64OffAddr bb offset@(I# offset#) (I64# value#) = do
-  boundCheck bb offset
-  Slice (I# slice#) <- readIORef (bbSlice bb)
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
-    IO $ \s ->
-      case writeInt64OffAddr# (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
-        s' -> (# s', () #)
+writeInt64OffAddr = primitiveInt64_ writeInt64OffAddr#
 
 -- writeWord8OffArray#
 -- writeWord16OffArray#
