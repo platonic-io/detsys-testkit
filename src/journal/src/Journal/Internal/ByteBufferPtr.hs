@@ -122,7 +122,8 @@ boundCheck :: HasCallStack => ByteBuffer -> Int -> IO ()
 boundCheck bb ix = do
   -- XXX: parametrise on build flag and only do these checks if enabled?
   Slice slice <- readIORef (bbSlice bb)
-  if ix - slice < fromIntegral (getCapacity bb)
+  if ix - slice < fromIntegral (getCapacity bb) &&
+     0 <= ix + slice
   then return ()
   else do
     putStrLn (prettyCallStack callStack)
