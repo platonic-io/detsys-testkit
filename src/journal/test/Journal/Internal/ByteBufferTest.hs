@@ -1,7 +1,7 @@
 module Journal.Internal.ByteBufferTest where
 
 import Control.Arrow ((&&&))
-import Control.Exception (IOException, catch, displayException)
+import Control.Exception (IOException, catch, displayException, ArrayException(IndexOutOfBounds))
 import Control.Monad (unless, when)
 import Data.Binary (decode, encode)
 import Data.ByteString.Internal (w2c)
@@ -133,6 +133,7 @@ data Response
   | Int32 Int32
   | Int64 Int64
   | IOException IOException
+  | IndexOutOfBound
   deriving Eq
 
 prettyResponse :: Response -> String
@@ -140,23 +141,39 @@ prettyResponse (Unit ())       = "Unit ()"
 prettyResponse (Int32 i)       = "Int32 " ++ show i
 prettyResponse (Int64 i)       = "Int64 " ++ show i
 prettyResponse (IOException e) = "IOException " ++ displayException e
+prettyResponse IndexOutOfBound = "IndexOutOfBound"
 
 type Model = FakeByteBuffer
 
 precondition :: Model -> Command -> Bool
 precondition _m _cmd = True
 
+-- should maybe have the size of the requested type?
+validOffset :: Int -> Model -> Bool
+validOffset offset m
+  = offset >= 0 && offset <= fbbSize m
+
 step :: Command -> Model -> (Model, Response)
-step (ReadInt32 offset)        m = Int32 <$> readInt32Fake  m offset
-step (WriteInt32 offset value) m = Unit  <$> writeInt32Fake m offset value
-step (ReadInt64 offset)        m = Int64 <$> readInt64Fake  m offset
-step (WriteInt64 offset value) m = Unit  <$> writeInt64Fake m offset value
+step cmd m = case cmd of
+  ReadInt32 offset        -> checkValid offset $ Int32 <$> readInt32Fake  m offset
+  WriteInt32 offset value -> checkValid offset $ Unit  <$> writeInt32Fake m offset value
+  ReadInt64 offset        -> checkValid offset $ Int64 <$> readInt64Fake  m offset
+  WriteInt64 offset value -> checkValid offset $ Unit  <$> writeInt64Fake m offset value
+  where
+    checkValid offset x
+      | validOffset offset m = x
+      | otherwise = (m, IndexOutOfBound)
+
+exec' :: Command -> ByteBuffer -> IO Response
+exec' (ReadInt32  offset)       bb = Int32 <$> readInt32OffAddr bb offset
+exec' (WriteInt32 offset value) bb = Unit <$> writeInt32OffAddr bb offset value
+exec' (ReadInt64  offset)       bb = Int64 <$> readInt64OffAddr bb offset
+exec' (WriteInt64 offset value) bb = Unit <$> writeInt64OffAddr bb offset value
 
 exec :: Command -> ByteBuffer -> IO Response
-exec (ReadInt32  offset)       bb = Int32 <$> readInt32OffAddr bb offset
-exec (WriteInt32 offset value) bb = Unit <$> writeInt32OffAddr bb offset value
-exec (ReadInt64  offset)       bb = Int64 <$> readInt64OffAddr bb offset
-exec (WriteInt64 offset value) bb = Unit <$> writeInt64OffAddr bb offset value
+exec c b = exec' c b
+  `catch` (\ (IndexOutOfBounds _) -> return IndexOutOfBound)
+  `catch` (\ x -> return (IOException x))
 
 genCommand :: Model -> Gen Command
 genCommand m = frequency
@@ -168,7 +185,11 @@ genCommand m = frequency
 
 genOffset :: Int -> Int -> Gen Int
 genOffset sizeOfElem sizeOfVec =
-  elements [ o | o <- [ 0 .. (sizeOfVec `div` sizeOfElem) - 1 ] ]
+  frequency
+    [ (10, chooseInt (0, sizeOfVec - sizeOfElem)) -- valid-index
+    , (1, chooseInt (-sizeOfVec, -1)) -- invalid before
+    , (1, chooseInt (sizeOfVec, 3*sizeOfVec)) -- invalid after
+    ]
 
 genCommands :: Model -> Gen [Command]
 genCommands m0 = sized (go m0)
@@ -223,7 +244,7 @@ prop_byteBuffer =
       go []          _m _bb hist = return (True, reverse hist)
       go (cmd : cmds) m  bb hist = do
         let (m', resp) = step cmd m
-        resp' <- run (exec cmd bb `catch` (return . IOException))
+        resp' <- run (exec cmd bb)
         assertWithFail (resp == resp') $
           "expected: " ++ prettyResponse resp ++ "\n        got: " ++ prettyResponse resp'
         go cmds m' bb (resp : hist)
@@ -255,7 +276,7 @@ runCommands cmds = do
       if null cmds
       then putStrLn (prettyFakeByteBuffer m')
       else return ()
-      resp' <- exec cmd bb `catch` (return . IOException)
+      resp' <- exec cmd bb
       if resp == resp'
       then go m' bb cmds ((cmd, resp) : hist)
       else do
