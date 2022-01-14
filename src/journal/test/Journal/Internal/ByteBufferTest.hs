@@ -1,7 +1,15 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Journal.Internal.ByteBufferTest where
 
 import Control.Arrow ((&&&))
-import Control.Exception (IOException, catch, displayException, ArrayException(IndexOutOfBounds))
+import Control.Exception
+       ( ArrayException(IndexOutOfBounds)
+       , Handler(Handler)
+       , IOException
+       , catches
+       , displayException
+       )
 import Control.Monad (unless, when)
 import Data.Binary (decode, encode)
 import Data.ByteString.Internal (w2c)
@@ -13,7 +21,8 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Data.Word (Word8)
 import Foreign (sizeOf)
-import GHC.ByteOrder (targetByteOrder, ByteOrder(LittleEndian, BigEndian))
+import GHC.ByteOrder
+       (ByteOrder(BigEndian, LittleEndian), targetByteOrder)
 import System.Directory
        (canonicalizePath, getTemporaryDirectory, removePathForcibly)
 import System.IO (hClose, openTempFile)
@@ -172,8 +181,9 @@ exec' (WriteInt64 offset value) bb = Unit <$> writeInt64OffAddr bb offset value
 
 exec :: Command -> ByteBuffer -> IO Response
 exec c b = exec' c b
-  `catch` (\ (IndexOutOfBounds _) -> return IndexOutOfBound)
-  `catch` (\ x -> return (IOException x))
+  `catches` [ Handler (\(IndexOutOfBounds {}) -> return IndexOutOfBound)
+            , Handler (\(ex :: IOException)   -> return (IOException ex))
+            ]
 
 genCommand :: Model -> Gen Command
 genCommand m = frequency
@@ -188,7 +198,7 @@ genOffset sizeOfElem sizeOfVec =
   frequency
     [ (10, chooseInt (0, sizeOfVec - sizeOfElem)) -- valid-index
     , (1, chooseInt (-sizeOfVec, -1)) -- invalid before
-    , (1, chooseInt (sizeOfVec, 3*sizeOfVec)) -- invalid after
+    , (1, chooseInt (sizeOfVec - sizeOfElem + 1, 3 * sizeOfVec)) -- invalid after
     ]
 
 genCommands :: Model -> Gen [Command]

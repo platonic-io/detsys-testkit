@@ -56,7 +56,7 @@ int2Int64 (I# i#) =
 int642Int :: Int64 -> Int
 int642Int i@(I64# i#) =
   assert (fromIntegral (minBound :: Int) <= i
-           && i <= fromIntegral (maxBound :: Int))
+          && i <= fromIntegral (maxBound :: Int))
     (I# i#)
 
 word322Int :: Word32 -> Int
