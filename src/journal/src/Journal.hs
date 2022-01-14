@@ -286,6 +286,11 @@ replay jc f x = do
 
 -- * Debugging
 
+dumpJournal' :: Journal' -> IO ()
+dumpJournal' jour = do
+  Vector.mapM_ dumpTermBuffer (jTermBuffers jour)
+  dumpMetadata (jMetadata jour)
+
 dumpJournal :: Journal -> IO ()
 dumpJournal jour = do
   dumpFile (jDirectory jour </> aCTIVE_FILE)
@@ -312,6 +317,13 @@ tbc :: IO ()
 tbc = do
   bb <- allocate 16
   bc <- newBufferClaim bb 0 16
-  putBS bc "helloooooooooooo"
+  putBS bc (BSChar8.pack "helloooooooooooo")
+  bs <- getByteStringAt bb 0 5
+  putStrLn (BSChar8.unpack bs)
+
+tbb :: IO ()
+tbb = do
+  bb <- allocate 16
+  putByteStringAt bb 0 (BSChar8.pack "helloooooooooooo")
   bs <- getByteStringAt bb 0 5
   putStrLn (BSChar8.unpack bs)

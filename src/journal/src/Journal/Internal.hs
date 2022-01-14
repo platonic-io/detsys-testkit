@@ -447,6 +447,9 @@ dumpFile fp = do
                (totBytes + hEADER_LENGTH + fromIntegral len)
                (BS.drop (fromIntegral len) bs')
 
+dumpTermBuffer :: ByteBuffer -> IO ()
+dumpTermBuffer bb = return ()
+
 dumpMetadata :: Metadata -> IO ()
 dumpMetadata meta = do
   putStrLn "Metadata"

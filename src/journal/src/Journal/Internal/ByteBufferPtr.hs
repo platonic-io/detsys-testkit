@@ -66,10 +66,6 @@ newByteBuffer fptr capa lim pos mSli
   <*> newIORef (-1)
   <*> maybe (newIORef 0) return mSli
 
-bbPtr :: ByteBuffer -> ForeignPtr Word8
-bbPtr (ByteBuffer fptr _ _ _ _ _) = fptr
-{-# INLINE bbPtr #-}
-
 getCapacity :: ByteBuffer -> Capacity
 getCapacity = bbCapacity
 {-# INLINE getCapacity #-}
@@ -285,13 +281,13 @@ getBytes :: ByteBuffer -> Int -> Int -> IO [Word8]
 getBytes bb offset len = undefined
 -}
 
-putByteString :: ByteBuffer -> BS.ByteString -> IO ()
-putByteString bb bs = do
-  let (fptr, offset, len) = BS.toForeignPtr bs
-  boundCheck bb (len - 1)
+putByteStringAt :: ByteBuffer -> Int -> BS.ByteString -> IO ()
+putByteStringAt bb doffset bs = do
+  let (fptr, soffset, len) = BS.toForeignPtr bs
+  boundCheck bb (doffset + len - 1)
   withForeignPtr fptr $ \sptr ->
     withForeignPtr (bbData bb) $ \dptr ->
-      copyBytes (sptr `plusPtr` offset) dptr len
+      copyBytes (sptr `plusPtr` soffset) (dptr `plusPtr` doffset) len
 {-
 putLazyByteString :: ByteBuffer -> LBS.ByteString -> IO ()
 putLazyByteString bb lbs = do
@@ -320,7 +316,7 @@ getLazyByteString bb len = do
 getByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
 getByteStringAt bb offset len = do
   boundCheck bb (len - 1) -- XXX?
-  withForeignPtr (bbPtr bb) $ \sptr ->
+  withForeignPtr (bbData bb) $ \sptr ->
     BS.create len $ \dptr ->
       copyBytes (sptr `plusPtr` offset) dptr len
 
@@ -346,13 +342,13 @@ getStorable bb = do
 putStorableAt :: Storable a => ByteBuffer -> Int -> a -> IO ()
 putStorableAt bb ix x = do
   boundCheck bb ix
-  withForeignPtr (bbPtr bb) $ \ptr ->
+  withForeignPtr (bbData bb) $ \ptr ->
     pokeByteOff ptr ix x
 
 getStorableAt :: Storable a => ByteBuffer -> Int -> IO a
 getStorableAt bb ix = do
   boundCheck bb ix
-  withForeignPtr (bbPtr bb) $ \ptr ->
+  withForeignPtr (bbData bb) $ \ptr ->
     peekByteOff ptr ix
 
 ------------------------------------------------------------------------
@@ -362,7 +358,7 @@ primitiveInt :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# 
 primitiveInt f c bb offset@(I# offset#) = do
   boundCheck bb offset
   Slice (I# slice#) <- readIORef (bbSlice bb)
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
       case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# s of
         (# s', i #) -> (# s', c i #)
@@ -381,7 +377,7 @@ primitiveInt_ f d bb offset@(I# offset#) i = do
   boundCheck bb offset
   let value# = d i
   Slice (I# slice#) <- readIORef (bbSlice bb)
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
       case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
         s' -> (# s', () #)
@@ -416,7 +412,7 @@ readInt64OffAddr = primitiveInt64 readInt64OffAddr#
 indexWord8OffAddr :: ByteBuffer -> Int -> IO Word8
 indexWord8OffAddr bb offset@(I# offset#) = do
   boundCheck bb offset
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     return (fromIntegral (W# (indexWord8OffAddr# addr# offset#)))
 
 primitiveWord :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Word# #))
@@ -424,7 +420,7 @@ primitiveWord :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Word
 primitiveWord f c bb offset@(I# offset#) = do
   boundCheck bb offset
   Slice (I# slice#) <- readIORef (bbSlice bb)
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
       case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# s of
         (# s', i #) -> (# s', c i #)
@@ -535,7 +531,7 @@ fetchAddWordAddr' bb offset@(I# offset#) (W# incr#) = do
 -- | Calls `msync` which forces the data in memory to be synced to disk.
 force :: ByteBuffer -> IO ()
 force bb =
-  withForeignPtr (bbPtr bb) $ \ ptr ->
+  withForeignPtr (bbData bb) $ \ ptr ->
     msync ptr (fromIntegral (bbCapacity bb)) mS_SYNC False
 
 ------------------------------------------------------------------------

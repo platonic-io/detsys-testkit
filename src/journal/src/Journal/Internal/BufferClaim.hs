@@ -18,12 +18,13 @@ newBufferClaim src (TermOffset offset) len = BufferClaim <$>
   wrapPart src (int322Int offset) len
 
 putBS :: BufferClaim -> ByteString -> IO ()
-putBS (BufferClaim bb) bs = putByteString bb bs
+putBS (BufferClaim bb) bs = putByteStringAt bb 0 bs
 
 withPtr :: BufferClaim -> (Ptr Word8 -> IO a) -> IO a
 withPtr (BufferClaim bb) k = do
   Position offset <- readPosition bb
-  withForeignPtr (bbPtr bb `plusForeignPtr` offset) k
+  -- XXX: boundcheck?
+  withForeignPtr (bbData bb `plusForeignPtr` offset) k
 
 commit :: BufferClaim -> IO ()
 commit (BufferClaim bb) = do
