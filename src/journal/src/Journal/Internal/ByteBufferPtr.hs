@@ -287,7 +287,7 @@ putByteStringAt bb doffset bs = do
   boundCheck bb (doffset + len - 1)
   withForeignPtr fptr $ \sptr ->
     withForeignPtr (bbData bb) $ \dptr ->
-      copyBytes (sptr `plusPtr` soffset) (dptr `plusPtr` doffset) len
+      copyBytes (dptr `plusPtr` doffset) (sptr `plusPtr` soffset) len
 {-
 putLazyByteString :: ByteBuffer -> LBS.ByteString -> IO ()
 putLazyByteString bb lbs = do
@@ -318,7 +318,7 @@ getByteStringAt bb offset len = do
   boundCheck bb (len - 1) -- XXX?
   withForeignPtr (bbData bb) $ \sptr ->
     BS.create len $ \dptr ->
-      copyBytes (sptr `plusPtr` offset) dptr len
+      copyBytes dptr (sptr `plusPtr` offset) len
 
 ------------------------------------------------------------------------
 -- * Relative operations on `Storable` elements
