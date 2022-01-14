@@ -122,12 +122,11 @@ boundCheck bb ix = do
   if ix - slice < fromIntegral (getCapacity bb) &&
      0 <= ix + slice
   then return ()
-  else do
-    putStrLn (prettyCallStack callStack)
-    throwIO (IndexOutOfBounds errMsg)
+  else throwIO (IndexOutOfBounds errMsg)
   where
     errMsg = concat
-      [ "boundCheck: index out of bounds "
+      [ prettyCallStack callStack
+      , "boundCheck: index out of bounds "
       , "(", show ix, ",", show (unCapacity (getCapacity bb)), ")"
       ]
 
