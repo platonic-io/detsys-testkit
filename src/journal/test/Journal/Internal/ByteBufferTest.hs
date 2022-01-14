@@ -45,10 +45,15 @@ runLengthEncoding :: Vector Word8 -> [(Int, Word8)]
 runLengthEncoding = map (length &&& head) . group . Vector.toList
 
 prettyRunLenEnc :: [(Int, Word8)] -> String
-prettyRunLenEnc []       = ""
-prettyRunLenEnc [(n, w)] = show n ++ "x" ++ show (w2c w)
-prettyRunLenEnc ((n, w) : nws) =
-  show n ++ "x" ++ show (w2c w) ++ ", " ++ prettyRunLenEnc nws
+prettyRunLenEnc nws0 =
+  case nws0 of
+    []             -> ""
+    [(n, w)]       -> go n w
+    ((n, w) : nws) ->
+      go n w ++ ", " ++ prettyRunLenEnc nws
+  where
+    go 1 w = show (w2c w)
+    go n w = show n ++ "x" ++ show (w2c w)
 
 data Command
   = ReadInt32 Int

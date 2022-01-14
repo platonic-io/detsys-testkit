@@ -131,8 +131,8 @@ rawTailTermOffset (RawTail rt) termLen =
   fromIntegral (min (rt .&. 0xFFFF_FFFF) (fromIntegral termLen))
 
 packTail :: TermId -> TermOffset -> RawTail
-packTail termId0 termOffset0 =
-  (fromIntegral termId0 `shiftL` 32) .|. (fromIntegral termOffset0 .&. 0xFFFF_FFFF);
+packTail termId termOffset =
+  (fromIntegral termId `shiftL` 32) .|. (fromIntegral termOffset .&. 0xFFFF_FFFF);
 
 writeRawTail :: Metadata -> TermId -> TermOffset -> PartitionIndex -> IO ()
 writeRawTail (Metadata meta) termId termOffset (PartitionIndex partitionIndex) =
@@ -298,6 +298,10 @@ writeFrameLength :: ByteBuffer -> TermOffset -> HeaderLength -> IO ()
 writeFrameLength termBuffer termOffset (HeaderLength len) =
   writeWord32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
     len
+
+readFrameLength :: ByteBuffer -> TermOffset -> IO HeaderLength
+readFrameLength termBuffer termOffset = HeaderLength <$>
+  readWord32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
 
 ------------------------------------------------------------------------
 

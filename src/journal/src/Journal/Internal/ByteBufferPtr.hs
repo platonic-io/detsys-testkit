@@ -21,6 +21,7 @@ import GHC.Exts
 import GHC.ForeignPtr
 import GHC.IO (IO(IO))
 import GHC.Int (Int32(I32#), Int64(I64#))
+import GHC.Word (Word8(W8#), Word16(W16#), Word32(W32#), Word64(W64#))
 import GHC.Stack
 import System.Posix.IO
        (OpenMode(ReadWrite), closeFd, defaultFileFlags, openFd)
@@ -64,10 +65,6 @@ newByteBuffer fptr capa lim pos mSli
   <*> newIORef pos
   <*> newIORef (-1)
   <*> maybe (newIORef 0) return mSli
-
-bbPtr :: ByteBuffer -> ForeignPtr Word8
-bbPtr (ByteBuffer fptr _ _ _ _ _) = fptr
-{-# INLINE bbPtr #-}
 
 getCapacity :: ByteBuffer -> Capacity
 getCapacity = bbCapacity
@@ -148,10 +145,10 @@ invariant bb = do
 ------------------------------------------------------------------------
 -- * Create
 
--- allocate :: Int -> IO ByteBuffer
--- allocate capa@(I# capa#) = IO $ \s ->
---   case newPinnedByteArray# capa# s of
---     (# s', mba# #) -> unIO (newByteBuffer mba# (Capacity capa) (Limit capa) 0 Nothing) s'
+allocate :: Int -> IO ByteBuffer
+allocate size = do
+  fptr <- mallocForeignPtrBytes size
+  newByteBuffer fptr (Capacity size) (Limit size) 0 Nothing
 
 allocateAligned :: Int -> Int -> IO ByteBuffer
 allocateAligned size align = do
@@ -284,13 +281,13 @@ getBytes :: ByteBuffer -> Int -> Int -> IO [Word8]
 getBytes bb offset len = undefined
 -}
 
-putByteString :: ByteBuffer -> BS.ByteString -> IO ()
-putByteString bb bs = do
-  let (fptr, offset, len) = BS.toForeignPtr bs
-  boundCheck bb (len - 1)
+putByteStringAt :: ByteBuffer -> Int -> BS.ByteString -> IO ()
+putByteStringAt bb doffset bs = do
+  let (fptr, soffset, len) = BS.toForeignPtr bs
+  boundCheck bb (doffset + len - 1)
   withForeignPtr fptr $ \sptr ->
     withForeignPtr (bbData bb) $ \dptr ->
-      copyBytes (sptr `plusPtr` offset) dptr len
+      copyBytes (dptr `plusPtr` doffset) (sptr `plusPtr` soffset) len
 {-
 putLazyByteString :: ByteBuffer -> LBS.ByteString -> IO ()
 putLazyByteString bb lbs = do
@@ -314,11 +311,14 @@ getLazyByteString :: ByteBuffer -> Int -> IO LBS.ByteString
 getLazyByteString bb len = do
   bs <- getByteString bb len
   return (LBS.fromStrict bs)
+-}
 
 getByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
 getByteStringAt bb offset len = do
-  undefined
--}
+  boundCheck bb (len - 1) -- XXX?
+  withForeignPtr (bbData bb) $ \sptr ->
+    BS.create len $ \dptr ->
+      copyBytes dptr (sptr `plusPtr` offset) len
 
 ------------------------------------------------------------------------
 -- * Relative operations on `Storable` elements
@@ -342,13 +342,13 @@ getStorable bb = do
 putStorableAt :: Storable a => ByteBuffer -> Int -> a -> IO ()
 putStorableAt bb ix x = do
   boundCheck bb ix
-  withForeignPtr (bbPtr bb) $ \ptr ->
+  withForeignPtr (bbData bb) $ \ptr ->
     pokeByteOff ptr ix x
 
 getStorableAt :: Storable a => ByteBuffer -> Int -> IO a
 getStorableAt bb ix = do
   boundCheck bb ix
-  withForeignPtr (bbPtr bb) $ \ptr ->
+  withForeignPtr (bbData bb) $ \ptr ->
     peekByteOff ptr ix
 
 ------------------------------------------------------------------------
@@ -358,7 +358,7 @@ primitiveInt :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# 
 primitiveInt f c bb offset@(I# offset#) = do
   boundCheck bb offset
   Slice (I# slice#) <- readIORef (bbSlice bb)
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
       case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# s of
         (# s', i #) -> (# s', c i #)
@@ -377,7 +377,7 @@ primitiveInt_ f d bb offset@(I# offset#) i = do
   boundCheck bb offset
   let value# = d i
   Slice (I# slice#) <- readIORef (bbSlice bb)
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
       case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
         s' -> (# s', () #)
@@ -412,14 +412,32 @@ readInt64OffAddr = primitiveInt64 readInt64OffAddr#
 indexWord8OffAddr :: ByteBuffer -> Int -> IO Word8
 indexWord8OffAddr bb offset@(I# offset#) = do
   boundCheck bb offset
-  withForeignPtr (bbPtr bb) $ \(Ptr addr#) ->
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     return (fromIntegral (W# (indexWord8OffAddr# addr# offset#)))
 
-  {-
--- readWord16OffArray#
--- readWord32OffArray#
--- readWord64OffArray#
+primitiveWord :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Word# #))
+             -> (Word# -> w) -> ByteBuffer -> Int -> IO w
+primitiveWord f c bb offset@(I# offset#) = do
+  boundCheck bb offset
+  Slice (I# slice#) <- readIORef (bbSlice bb)
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# s of
+        (# s', i #) -> (# s', c i #)
 
+readWord8OffAddr :: ByteBuffer -> Int -> IO Word8
+readWord8OffAddr = primitiveWord readWord8OffAddr# W8#
+
+readWord16OffAddr :: ByteBuffer -> Int -> IO Word16
+readWord16OffAddr = primitiveWord readWord16OffAddr# W16#
+
+readWord32OffAddr :: ByteBuffer -> Int -> IO Word32
+readWord32OffAddr = primitiveWord readWord32OffAddr# W32#
+
+readWord64OffAddr :: ByteBuffer -> Int -> IO Word64
+readWord64OffAddr = primitiveWord readWord64OffAddr# W64#
+
+  {-
 -- writeCharOffArray#
 -- writeWideCharOffArray#
 -}
@@ -513,7 +531,7 @@ fetchAddWordAddr' bb offset@(I# offset#) (W# incr#) = do
 -- | Calls `msync` which forces the data in memory to be synced to disk.
 force :: ByteBuffer -> IO ()
 force bb =
-  withForeignPtr (bbPtr bb) $ \ ptr ->
+  withForeignPtr (bbData bb) $ \ ptr ->
     msync ptr (fromIntegral (bbCapacity bb)) mS_SYNC False
 
 ------------------------------------------------------------------------
