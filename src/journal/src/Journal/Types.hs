@@ -323,7 +323,7 @@ tagString other   = "Unknown: " ++ show other
 newtype HeaderVersion = HeaderVersion Word8
   deriving newtype (Eq, Binary, Num, Storable, Integral, Real, Ord, Enum)
 
-newtype HeaderLength = HeaderLength Word32
+newtype HeaderLength = HeaderLength { unHeaderLength :: Word32 }
   deriving newtype (Eq, Ord, Binary, Enum, Real, Integral, Num, Storable)
 
 newtype HeaderIndex = HeaderIndex Word32

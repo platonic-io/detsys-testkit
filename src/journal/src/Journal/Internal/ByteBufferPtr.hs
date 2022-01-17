@@ -117,30 +117,32 @@ remaining bb = do
 
 boundCheck :: HasCallStack => ByteBuffer -> Int -> IO ()
 boundCheck bb ix = do
+  invariant bb
   -- XXX: parametrise on build flag and only do these checks if enabled?
   Slice slice <- readIORef (bbSlice bb)
-  if ix - slice < fromIntegral (getCapacity bb) &&
-     0 <= ix + slice
+  Limit limit <- readIORef (bbLimit bb)
+  if 0 <= ix &&
+     ix < limit
   then return ()
   else throwIO (IndexOutOfBounds errMsg)
   where
     errMsg = concat
       [ prettyCallStack callStack
-      , "boundCheck: index out of bounds "
+      , "\nboundCheck: index out of bounds "
       , "(", show ix, ",", show (unCapacity (getCapacity bb)), ")"
       ]
 
-invariant :: ByteBuffer -> IO ()
+invariant :: HasCallStack => ByteBuffer -> IO ()
 invariant bb = do
-  mark <- readMark bb
-  pos  <- readPosition bb
-  lim  <- readLimit bb
-  let capa = getCapacity bb
-  assert ((mark == (-1) || 0 <= mark) &&
-          mark <= fromIntegral pos &&
-          pos <= fromIntegral lim &&
-          lim <= fromIntegral capa)
-    (return ())
+  Position mark <- readMark bb
+  Position pos <- readPosition bb
+  Slice slice <- readIORef (bbSlice bb)
+  Limit lim  <- readLimit bb
+  let Capacity capa = getCapacity bb
+  assertM (mark == (-1) || 0 <= mark)
+  assertM (mark <= pos)
+  assertM (pos <= lim)
+  assertM (lim - slice <= capa)
 
 ------------------------------------------------------------------------
 -- * Create
@@ -175,8 +177,9 @@ wrap bb = newByteBuffer (bbData bb) capa lim (Position 0) (Just (bbSlice bb))
 
 wrapPart :: ByteBuffer -> Int -> Int -> IO ByteBuffer
 wrapPart bb offset len = do
-  slice <- newIORef (Slice offset)
-  newByteBuffer (bbData bb) capa lim pos (Just slice)
+  Slice slice <- readIORef (bbSlice bb)
+  slice' <- newIORef (Slice (slice + offset))
+  newByteBuffer (bbData bb) capa lim pos (Just slice')
   where
     capa = Capacity len
     lim  = Limit (fromIntegral offset + fromIntegral len)
@@ -283,11 +286,12 @@ getBytes bb offset len = undefined
 
 putByteStringAt :: ByteBuffer -> Int -> BS.ByteString -> IO ()
 putByteStringAt bb doffset bs = do
+  Slice slice <- readIORef (bbSlice bb)
   let (fptr, soffset, len) = BS.toForeignPtr bs
   boundCheck bb (doffset + len - 1)
   withForeignPtr fptr $ \sptr ->
     withForeignPtr (bbData bb) $ \dptr ->
-      copyBytes (dptr `plusPtr` doffset) (sptr `plusPtr` soffset) len
+      copyBytes (dptr `plusPtr` (slice + doffset)) (sptr `plusPtr` soffset) len
 {-
 putLazyByteString :: ByteBuffer -> LBS.ByteString -> IO ()
 putLazyByteString bb lbs = do
@@ -316,9 +320,10 @@ getLazyByteString bb len = do
 getByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
 getByteStringAt bb offset len = do
   boundCheck bb (len - 1) -- XXX?
+  Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \sptr ->
     BS.create len $ \dptr ->
-      copyBytes dptr (sptr `plusPtr` offset) len
+      copyBytes dptr (sptr `plusPtr` (slice + offset)) len
 
 ------------------------------------------------------------------------
 -- * Relative operations on `Storable` elements
@@ -360,7 +365,7 @@ primitiveInt f c bb offset@(I# offset#) = do
   Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# s of
+      case f (addr# `plusAddr#` (offset# +# slice#)) 0# s of
         (# s', i #) -> (# s', c i #)
 
 primitiveInt32 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
@@ -379,7 +384,7 @@ primitiveInt_ f d bb offset@(I# offset#) i = do
   Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
+      case f (addr# `plusAddr#` (offset# +# slice#)) 0# value# s of
         s' -> (# s', () #)
 
 primitiveInt32_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
@@ -422,8 +427,19 @@ primitiveWord f c bb offset@(I# offset#) = do
   Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# s of
+      case f (addr# `plusAddr#` (offset# +# slice#)) 0# s of
         (# s', i #) -> (# s', c i #)
+
+primitiveWord_ :: (Addr# -> Int# -> Word# -> State# RealWorld -> State# RealWorld)
+              -> (w -> Word#) -> ByteBuffer -> Int -> w -> IO ()
+primitiveWord_ f d bb offset@(I# offset#) w = do
+  boundCheck bb offset
+  let value# = d w
+  Slice (I# slice#) <- readIORef (bbSlice bb)
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case f (addr# `plusAddr#` (offset# +# slice#)) 0# value# s of
+        s' -> (# s', () #)
 
 readWord8OffAddr :: ByteBuffer -> Int -> IO Word8
 readWord8OffAddr = primitiveWord readWord8OffAddr# W8#
@@ -464,14 +480,8 @@ writeInt64OffAddr = primitiveInt64_ writeInt64OffAddr#
 -- writeWord16OffArray#
 
 writeWord32OffAddr :: ByteBuffer -> Int -> Word32 -> IO ()
-writeWord32OffAddr bb offset@(I# offset#) value = do
-  boundCheck bb offset
-  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
-    IO $ \s ->
-      case writeWord32OffAddr# addr# offset# value# s of
-        s' -> (# s', () #)
-  where
-    W# value# = fromIntegral value
+writeWord32OffAddr = primitiveWord_ writeWord32OffAddr# (\(W32# w#) -> w#)
+
   {-
 -- writeWord64OffArray#
 
