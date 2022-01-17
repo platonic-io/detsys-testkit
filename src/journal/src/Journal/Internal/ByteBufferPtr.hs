@@ -248,7 +248,7 @@ reset bb = do
   writePosition bb mrk
 
 ------------------------------------------------------------------------
--- * Single-byte relative and absolute operations
+-- * Single-byte relative operations
 
 putByte :: ByteBuffer -> Word8 -> IO ()
 putByte = undefined
@@ -259,12 +259,6 @@ getByte bb = do
   w8 <- indexWord8OffAddr bb (unPosition pos)
   writePosition bb (pos + 1)
   return w8
-
-putByteAt :: ByteBuffer -> Int -> Word8 -> IO ()
-putByteAt = undefined
-
-getByteAt :: ByteBuffer -> Int -> IO Word8
-getByteAt = undefined
 
 ------------------------------------------------------------------------
 -- * Multi-byte relative and absolute operations
@@ -476,18 +470,20 @@ writeInt32OffAddr = primitiveInt32_ writeInt32OffAddr#
 writeInt64OffAddr :: ByteBuffer -> Int -> Int64 -> IO ()
 writeInt64OffAddr = primitiveInt64_ writeInt64OffAddr#
 
--- writeWord8OffArray#
--- writeWord16OffArray#
+writeWord8OffAddr :: ByteBuffer -> Int -> Word8 -> IO ()
+writeWord8OffAddr = primitiveWord_ writeWord8OffAddr# (\(W8# w#) -> w#)
+
+writeWord16OffAddr :: ByteBuffer -> Int -> Word16 -> IO ()
+writeWord16OffAddr = primitiveWord_ writeWord16OffAddr# (\(W16# w#) -> w#)
 
 writeWord32OffAddr :: ByteBuffer -> Int -> Word32 -> IO ()
 writeWord32OffAddr = primitiveWord_ writeWord32OffAddr# (\(W32# w#) -> w#)
 
-  {-
--- writeWord64OffArray#
+writeWord64OffAddr :: ByteBuffer -> Int -> Word64 -> IO ()
+writeWord64OffAddr = primitiveWord_ writeWord64OffAddr# (\(W64# w#) -> w#)
 
 -- atomicReadIntArray#
 -- atomicWriteIntArray#
--}
 
 -- | Given a bytebuffer, an offset in machine words, the expected old value, and
 -- the new value, perform an atomic compare and swap i.e. write the new value if

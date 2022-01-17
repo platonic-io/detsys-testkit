@@ -159,9 +159,11 @@ headerWrite termBuffer termOffset len _termId = do
       versionFlagsType = fromIntegral cURRENT_VERSION `shiftL` 32
   -- XXX: Atomic write?
   putStrLn ("headerWrite, versionFlagsType: " ++ show versionFlagsType)
-  putStrLn ("headerWrite, len: " ++ show (unHeaderLength len))
+  putStrLn ("headerWrite, len: " ++ show (- unHeaderLength len))
+  putStrLn ("headerWrite, value: " ++ show
+            (versionFlagsType .|. ((- int322Int64 (unHeaderLength len)) .&. 0xFFFF_FFFF)))
   writeInt64OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
-    (versionFlagsType .|. ((- fromIntegral len) .&. 0xFFFF_FFFF))
+     (versionFlagsType .|. ((- int322Int64 (unHeaderLength len)) .&. 0xFFFF_FFFF))
   -- XXX: store termId and offset (only need for replication?)
 
 rotateTerm :: Metadata -> IO ()
