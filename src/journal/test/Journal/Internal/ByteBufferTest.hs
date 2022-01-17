@@ -198,7 +198,8 @@ genOffset sizeOfElem sizeOfVec =
   frequency
     [ (10, chooseInt (0, sizeOfVec - sizeOfElem - 1)) -- valid-index
     , (1, chooseInt (-sizeOfVec, -1)) -- invalid before
-    , (1, chooseInt (sizeOfVec - sizeOfElem, 3 * sizeOfVec)) -- invalid after
+    , (3, chooseInt (sizeOfVec - sizeOfElem, sizeOfVec - sizeOfElem + 8)) -- invalid after
+    , (1, chooseInt (sizeOfVec - sizeOfElem + 8, 3 * sizeOfVec)) -- invalid after
     ]
 
 genCommands :: Model -> Gen [Command]
