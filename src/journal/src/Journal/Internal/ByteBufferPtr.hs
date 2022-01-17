@@ -117,10 +117,12 @@ remaining bb = do
 
 boundCheck :: HasCallStack => ByteBuffer -> Int -> IO ()
 boundCheck bb ix = do
+  invariant bb
   -- XXX: parametrise on build flag and only do these checks if enabled?
   Slice slice <- readIORef (bbSlice bb)
-  if ix - slice < fromIntegral (getCapacity bb) &&
-     0 <= ix + slice
+  Limit limit <- readIORef (bbLimit bb)
+  if 0 <= ix + slice &&
+     ix - slice < limit - slice
   then return ()
   else throwIO (IndexOutOfBounds errMsg)
   where
@@ -130,17 +132,17 @@ boundCheck bb ix = do
       , "(", show ix, ",", show (unCapacity (getCapacity bb)), ")"
       ]
 
-invariant :: ByteBuffer -> IO ()
+invariant :: HasCallStack => ByteBuffer -> IO ()
 invariant bb = do
-  mark <- readMark bb
-  pos  <- readPosition bb
-  lim  <- readLimit bb
-  let capa = getCapacity bb
-  assert ((mark == (-1) || 0 <= mark) &&
-          mark <= fromIntegral pos &&
-          pos <= fromIntegral lim &&
-          lim <= fromIntegral capa)
-    (return ())
+  Position mark <- readMark bb
+  Position pos <- readPosition bb
+  Slice slice <- readIORef (bbSlice bb)
+  Limit lim  <- readLimit bb
+  let Capacity capa = getCapacity bb
+  assertM (mark == (-1) || 0 <= mark)
+  assertM (mark <= pos)
+  assertM (pos <= lim)
+  assertM (lim - slice <= capa)
 
 ------------------------------------------------------------------------
 -- * Create
@@ -175,8 +177,9 @@ wrap bb = newByteBuffer (bbData bb) capa lim (Position 0) (Just (bbSlice bb))
 
 wrapPart :: ByteBuffer -> Int -> Int -> IO ByteBuffer
 wrapPart bb offset len = do
-  slice <- newIORef (Slice offset)
-  newByteBuffer (bbData bb) capa lim pos (Just slice)
+  Slice slice <- readIORef (bbSlice bb)
+  slice' <- newIORef (Slice (slice + offset))
+  newByteBuffer (bbData bb) capa lim pos (Just slice')
   where
     capa = Capacity len
     lim  = Limit (fromIntegral offset + fromIntegral len)
@@ -283,11 +286,12 @@ getBytes bb offset len = undefined
 
 putByteStringAt :: ByteBuffer -> Int -> BS.ByteString -> IO ()
 putByteStringAt bb doffset bs = do
+  Slice slice <- readIORef (bbSlice bb)
   let (fptr, soffset, len) = BS.toForeignPtr bs
   boundCheck bb (doffset + len - 1)
   withForeignPtr fptr $ \sptr ->
     withForeignPtr (bbData bb) $ \dptr ->
-      copyBytes (dptr `plusPtr` doffset) (sptr `plusPtr` soffset) len
+      copyBytes (dptr `plusPtr` (slice + doffset)) (sptr `plusPtr` soffset) len
 {-
 putLazyByteString :: ByteBuffer -> LBS.ByteString -> IO ()
 putLazyByteString bb lbs = do

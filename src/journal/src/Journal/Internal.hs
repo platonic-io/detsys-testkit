@@ -54,6 +54,7 @@ tryClaim jour len = do
       termBeginPosition =
         computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
 
+  putStrLn ("tryClaim, termOffset: " ++ show (unTermOffset termOffset))
   limit <- calculatePositionLimit jour
   let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
       position     = termBeginPosition + fromIntegral termOffset
@@ -125,12 +126,16 @@ termAppenderClaim meta termBuffer termId termOffset len = do
     termLength      = getCapacity termBuffer
   termCount <- activeTermCount meta
   let activePartitionIndex = indexByTermCount termCount
+  putStrLn ("termAppenderClaim, resultingOffset: " ++
+            show (unTermOffset resultingOffset))
   writeRawTail meta termId resultingOffset activePartitionIndex
   if resultingOffset > fromIntegral termLength
   then do
     handleEndOfLogCondition termBuffer termOffset termLength termId
     return Nothing
   else do
+    putStrLn ("termAppenderClaim, frameLength: " ++
+              show frameLength)
     headerWrite termBuffer termOffset (fromIntegral frameLength) termId
     bufClaim <- newBufferClaim termBuffer termOffset frameLength
     return (Just (resultingOffset, bufClaim))
