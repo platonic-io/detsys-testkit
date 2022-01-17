@@ -158,19 +158,19 @@ precondition :: Model -> Command -> Bool
 precondition _m _cmd = True
 
 -- should maybe have the size of the requested type?
-validOffset :: Int -> Model -> Bool
-validOffset offset m
-  = offset >= 0 && offset <= fbbSize m
+validOffset :: Int -> Int -> Model -> Bool
+validOffset offset size m
+  = offset >= 0 && offset + size - 1 < fbbSize m
 
 step :: Command -> Model -> (Model, Response)
 step cmd m = case cmd of
-  ReadInt32 offset        -> checkValid offset $ Int32 <$> readInt32Fake  m offset
-  WriteInt32 offset value -> checkValid offset $ Unit  <$> writeInt32Fake m offset value
-  ReadInt64 offset        -> checkValid offset $ Int64 <$> readInt64Fake  m offset
-  WriteInt64 offset value -> checkValid offset $ Unit  <$> writeInt64Fake m offset value
+  ReadInt32 offset        -> checkValid offset 4 $ Int32 <$> readInt32Fake  m offset
+  WriteInt32 offset value -> checkValid offset 4 $ Unit  <$> writeInt32Fake m offset value
+  ReadInt64 offset        -> checkValid offset 8 $ Int64 <$> readInt64Fake  m offset
+  WriteInt64 offset value -> checkValid offset 8 $ Unit  <$> writeInt64Fake m offset value
   where
-    checkValid offset x
-      | validOffset offset m = x
+    checkValid offset size x
+      | validOffset offset size m = x
       | otherwise = (m, IndexOutOfBound)
 
 exec' :: Command -> ByteBuffer -> IO Response
@@ -196,9 +196,9 @@ genCommand m = frequency
 genOffset :: Int -> Int -> Gen Int
 genOffset sizeOfElem sizeOfVec =
   frequency
-    [ (10, chooseInt (0, sizeOfVec - sizeOfElem)) -- valid-index
+    [ (10, chooseInt (0, sizeOfVec - sizeOfElem - 1)) -- valid-index
     , (1, chooseInt (-sizeOfVec, -1)) -- invalid before
-    , (1, chooseInt (sizeOfVec - sizeOfElem + 1, 3 * sizeOfVec)) -- invalid after
+    , (1, chooseInt (sizeOfVec - sizeOfElem, 3 * sizeOfVec)) -- invalid after
     ]
 
 genCommands :: Model -> Gen [Command]
