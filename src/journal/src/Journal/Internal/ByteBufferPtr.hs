@@ -427,8 +427,19 @@ primitiveWord f c bb offset@(I# offset#) = do
   Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# s of
+      case f (addr# `plusAddr#` (offset# +# slice#)) 0# s of
         (# s', i #) -> (# s', c i #)
+
+primitiveWord_ :: (Addr# -> Int# -> Word# -> State# RealWorld -> State# RealWorld)
+              -> (w -> Word#) -> ByteBuffer -> Int -> w -> IO ()
+primitiveWord_ f d bb offset@(I# offset#) w = do
+  boundCheck bb offset
+  let value# = d w
+  Slice (I# slice#) <- readIORef (bbSlice bb)
+  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
+    IO $ \s ->
+      case f (addr# `plusAddr#` (offset# +# slice#)) 0# value# s of
+        s' -> (# s', () #)
 
 readWord8OffAddr :: ByteBuffer -> Int -> IO Word8
 readWord8OffAddr = primitiveWord readWord8OffAddr# W8#
@@ -469,14 +480,8 @@ writeInt64OffAddr = primitiveInt64_ writeInt64OffAddr#
 -- writeWord16OffArray#
 
 writeWord32OffAddr :: ByteBuffer -> Int -> Word32 -> IO ()
-writeWord32OffAddr bb offset@(I# offset#) value = do
-  boundCheck bb offset
-  withForeignPtr (bbData bb) $ \(Ptr addr#) ->
-    IO $ \s ->
-      case writeWord32OffAddr# addr# offset# value# s of
-        s' -> (# s', () #)
-  where
-    W# value# = fromIntegral value
+writeWord32OffAddr = primitiveWord_ writeWord32OffAddr# (\(W32# w#) -> w#)
+
   {-
 -- writeWord64OffArray#
 
