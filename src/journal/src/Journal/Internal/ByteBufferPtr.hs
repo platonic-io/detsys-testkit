@@ -121,8 +121,8 @@ boundCheck bb ix = do
   -- XXX: parametrise on build flag and only do these checks if enabled?
   Slice slice <- readIORef (bbSlice bb)
   Limit limit <- readIORef (bbLimit bb)
-  if 0 <= ix + slice &&
-     ix - slice < limit - slice
+  if 0 <= ix &&
+     ix < limit
   then return ()
   else throwIO (IndexOutOfBounds errMsg)
   where
