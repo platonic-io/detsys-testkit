@@ -126,7 +126,7 @@ boundCheck bb ix = do
   where
     errMsg = concat
       [ prettyCallStack callStack
-      , "boundCheck: index out of bounds "
+      , "\nboundCheck: index out of bounds "
       , "(", show ix, ",", show (unCapacity (getCapacity bb)), ")"
       ]
 

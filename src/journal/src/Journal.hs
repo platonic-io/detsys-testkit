@@ -304,12 +304,21 @@ tj = do
       opts = defaultOptions
   allocateJournal fp opts
   jour <- startJournal' fp opts
+
   Just (offset, claimBuf) <- tryClaim jour 5
   putStrLn ("offset: " ++ show offset)
   putBS claimBuf hEADER_LENGTH (BSChar8.pack "hello")
   commit claimBuf
   Just bs <- readJournal' jour
-  putStrLn ("read bytestring: '" ++ BSChar8.unpack bs ++ "'")
+  putStrLn ("read bytestring 1: '" ++ BSChar8.unpack bs ++ "'")
+
+  Just (offset', claimBuf') <- tryClaim jour 5
+  putStrLn ("offset': " ++ show offset')
+  putBS claimBuf' hEADER_LENGTH (BSChar8.pack "world")
+  commit claimBuf'
+  Just bs' <- readJournal' jour
+  putStrLn ("read bytestring 2: '" ++ BSChar8.unpack bs' ++ "'")
+
   dumpMetadata (jMetadata jour)
   return ()
 
