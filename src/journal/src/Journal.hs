@@ -208,9 +208,9 @@ readJournal' jour = do
     HeaderLength len <- readFrameLength termBuffer (TermOffset (int2Int32 offset))
     putStrLn ("readJournal, len: " ++ show len)
     bs <- getByteStringAt termBuffer
-            (offset + hEADER_LENGTH) (word322Int len - hEADER_LENGTH)
-    assertM (BS.length bs == word322Int len - hEADER_LENGTH)
-    incrCounter_ (word322Int len) (jBytesConsumed jour)
+            (offset + hEADER_LENGTH) (int322Int len - hEADER_LENGTH)
+    assertM (BS.length bs == int322Int len - hEADER_LENGTH)
+    incrCounter_ (int322Int len) (jBytesConsumed jour)
     return (Just bs)
 
 readJournal :: JournalConsumer -> IO ByteString
@@ -348,6 +348,7 @@ tfl = do
   HeaderLength headerLen <- readFrameLength bb 0
   putStrLn ("headerLength: " ++ show headerLen)
 
-  writeFrameLength bb 4 {- (sizeOf (4 :: Word32)) -} 6
-  HeaderLength headerLen' <- readFrameLength bb 4 {- (sizeOf (4 :: Word32)) -}
+  writeFrameLength bb 4 {- (sizeOf (4 :: Int32)) -} (-6)
+  writeFrameLength bb 4 {- (sizeOf (4 :: Int32)) -} 6
+  HeaderLength headerLen' <- readFrameLength bb 4 {- (sizeOf (4 :: Int32)) -}
   putStrLn ("headerLength': " ++ show headerLen')

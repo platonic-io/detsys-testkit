@@ -292,16 +292,16 @@ rotateLog meta termCount termId = do
 
 writeFrameType :: ByteBuffer -> TermOffset -> HeaderTag -> IO ()
 writeFrameType termBuffer termOffset (HeaderTag tag) =
-  putByteAt termBuffer (fromIntegral termOffset + tAG_FIELD_OFFSET) tag
+  writeWord8OffAddr termBuffer (fromIntegral termOffset + tAG_FIELD_OFFSET) tag
 
 writeFrameLength :: ByteBuffer -> TermOffset -> HeaderLength -> IO ()
 writeFrameLength termBuffer termOffset (HeaderLength len) =
-  writeWord32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
+  writeInt32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
     len
 
 readFrameLength :: ByteBuffer -> TermOffset -> IO HeaderLength
 readFrameLength termBuffer termOffset = HeaderLength <$>
-  readWord32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
+  readInt32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
 
 ------------------------------------------------------------------------
 
@@ -323,7 +323,7 @@ tagString other   = "Unknown: " ++ show other
 newtype HeaderVersion = HeaderVersion Word8
   deriving newtype (Eq, Binary, Num, Storable, Integral, Real, Ord, Enum)
 
-newtype HeaderLength = HeaderLength { unHeaderLength :: Word32 }
+newtype HeaderLength = HeaderLength { unHeaderLength :: Int32 }
   deriving newtype (Eq, Ord, Binary, Enum, Real, Integral, Num, Storable)
 
 newtype HeaderIndex = HeaderIndex Word32

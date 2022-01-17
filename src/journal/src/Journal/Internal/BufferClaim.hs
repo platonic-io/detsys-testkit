@@ -28,15 +28,12 @@ withPtr (BufferClaim bb) k = do
 
 commit :: BufferClaim -> IO ()
 commit (BufferClaim bb) = do
-  Position offset <- readPosition bb
   let Capacity frameLen = getCapacity bb
-  putStrLn ("commit, offset: " ++ show offset)
   putStrLn ("commit, frameLen: " ++ show frameLen)
-  writeFrameLength bb (fromIntegral offset) (fromIntegral frameLen)
+  writeFrameLength bb 0 (HeaderLength (int2Int32 frameLen))
 
 abort :: BufferClaim -> IO ()
 abort (BufferClaim bb) = do
-  Position offset <- readPosition bb
   let Capacity frameLen = getCapacity bb
-  writeFrameType bb (fromIntegral offset) Padding
-  writeFrameLength bb (fromIntegral offset) (fromIntegral frameLen)
+  writeFrameType bb 0 Padding
+  writeFrameLength bb 0 (HeaderLength (int2Int32 frameLen))

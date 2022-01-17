@@ -62,6 +62,9 @@ int642Int i@(I64# i#) =
 word322Int :: Word32 -> Int
 word322Int w@(W32# w#) = assert (W64# w# <= fromIntegral (maxBound :: Int)) (fromIntegral w)
 
+int322Int64 :: Int32 -> Int64
+int322Int64 (I32# i#) = I64# i#
+
 fallocate :: FilePath -> Int -> IO ()
 fallocate fp len = do
   withRWFd fp $ \fd -> do
