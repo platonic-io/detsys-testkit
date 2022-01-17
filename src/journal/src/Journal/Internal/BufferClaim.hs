@@ -17,8 +17,8 @@ newBufferClaim :: ByteBuffer -> TermOffset -> Int -> IO BufferClaim
 newBufferClaim src (TermOffset offset) len = BufferClaim <$>
   wrapPart src (int322Int offset) len
 
-putBS :: BufferClaim -> ByteString -> IO ()
-putBS (BufferClaim bb) bs = putByteStringAt bb 0 bs
+putBS :: BufferClaim -> Int -> ByteString -> IO ()
+putBS (BufferClaim bb) offset bs = putByteStringAt bb offset bs
 
 withPtr :: BufferClaim -> (Ptr Word8 -> IO a) -> IO a
 withPtr (BufferClaim bb) k = do
