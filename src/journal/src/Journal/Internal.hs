@@ -134,6 +134,8 @@ termAppenderClaim meta termBuffer termId termOffset len = do
     handleEndOfLogCondition termBuffer termOffset termLength termId
     return Nothing
   else do
+    putStrLn ("termAppenderClaim, termOffset: " ++
+              show (unTermOffset termOffset))
     putStrLn ("termAppenderClaim, frameLength: " ++
               show frameLength)
     headerWrite termBuffer termOffset (fromIntegral frameLength) termId
@@ -156,6 +158,8 @@ headerWrite termBuffer termOffset len _termId = do
   let versionFlagsType :: Int64
       versionFlagsType = fromIntegral cURRENT_VERSION `shiftL` 32
   -- XXX: Atomic write?
+  putStrLn ("headerWrite, versionFlagsType: " ++ show versionFlagsType)
+  putStrLn ("headerWrite, len: " ++ show (unHeaderLength len))
   writeInt64OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
     (versionFlagsType .|. ((- fromIntegral len) .&. 0xFFFF_FFFF))
   -- XXX: store termId and offset (only need for replication?)

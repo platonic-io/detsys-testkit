@@ -320,9 +320,10 @@ getLazyByteString bb len = do
 getByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
 getByteStringAt bb offset len = do
   boundCheck bb (len - 1) -- XXX?
+  Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \sptr ->
     BS.create len $ \dptr ->
-      copyBytes dptr (sptr `plusPtr` offset) len
+      copyBytes dptr (sptr `plusPtr` (slice + offset)) len
 
 ------------------------------------------------------------------------
 -- * Relative operations on `Storable` elements
@@ -364,7 +365,7 @@ primitiveInt f c bb offset@(I# offset#) = do
   Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# s of
+      case f (addr# `plusAddr#` (offset# +# slice#)) 0# s of
         (# s', i #) -> (# s', c i #)
 
 primitiveInt32 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
@@ -383,7 +384,7 @@ primitiveInt_ f d bb offset@(I# offset#) i = do
   Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
-      case f (addr# `plusAddr#` offset# `plusAddr#` slice#) 0# value# s of
+      case f (addr# `plusAddr#` (offset# +# slice#)) 0# value# s of
         s' -> (# s', () #)
 
 primitiveInt32_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)

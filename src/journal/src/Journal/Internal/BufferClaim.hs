@@ -30,6 +30,8 @@ commit :: BufferClaim -> IO ()
 commit (BufferClaim bb) = do
   Position offset <- readPosition bb
   let Capacity frameLen = getCapacity bb
+  putStrLn ("commit, offset: " ++ show offset)
+  putStrLn ("commit, frameLen: " ++ show frameLen)
   writeFrameLength bb (fromIntegral offset) (fromIntegral frameLen)
 
 abort :: BufferClaim -> IO ()

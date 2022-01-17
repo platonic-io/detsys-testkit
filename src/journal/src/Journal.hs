@@ -325,10 +325,14 @@ tj = do
 tbc :: IO ()
 tbc = do
   bb <- allocate 16
-  bc <- newBufferClaim bb 0 16
-  putBS bc 0 (BSChar8.pack "helloooooooooooo")
+  bc <- newBufferClaim bb 0 5
+  putBS bc 0 (BSChar8.pack "hello")
   bs <- getByteStringAt bb 0 5
-  putStrLn (BSChar8.unpack bs)
+  putStrLn ("'" ++ BSChar8.unpack bs ++ "'")
+  bc' <- newBufferClaim bb 5 6
+  putBS bc' 0 (BSChar8.pack "world!")
+  bs' <- getByteStringAt bb 5 6
+  putStrLn ("'" ++ BSChar8.unpack bs' ++ "'")
 
 tbb :: IO ()
 tbb = do
@@ -336,3 +340,14 @@ tbb = do
   putByteStringAt bb 0 (BSChar8.pack "helloooooooooooo")
   bs <- getByteStringAt bb 0 5
   putStrLn (BSChar8.unpack bs)
+
+tfl :: IO ()
+tfl = do
+  bb <- allocate 16
+  writeFrameLength bb 0 5
+  HeaderLength headerLen <- readFrameLength bb 0
+  putStrLn ("headerLength: " ++ show headerLen)
+
+  writeFrameLength bb 4 {- (sizeOf (4 :: Word32)) -} 6
+  HeaderLength headerLen' <- readFrameLength bb 4 {- (sizeOf (4 :: Word32)) -}
+  putStrLn ("headerLength': " ++ show headerLen')
