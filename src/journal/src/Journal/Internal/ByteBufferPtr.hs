@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE UnboxedTuples #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Journal.Internal.ByteBufferPtr where
 
@@ -115,21 +116,23 @@ remaining bb = do
 ------------------------------------------------------------------------
 -- * Checks
 
-boundCheck :: HasCallStack => ByteBuffer -> Int -> IO ()
-boundCheck bb ix = do
+boundCheck :: HasCallStack => ByteBuffer -> Int -> Int -> IO ()
+boundCheck bb ix size = do
   invariant bb
+  -- XXX: use Word for size?
   -- XXX: parametrise on build flag and only do these checks if enabled?
   Slice slice <- readIORef (bbSlice bb)
   Limit limit <- readIORef (bbLimit bb)
-  if 0 <= ix &&
-     ix < limit
+  if 0 <= size &&
+     0 <= ix &&
+     ix + size - 1 < limit -- XXX:
   then return ()
-  else throwIO (IndexOutOfBounds errMsg)
+  else throwIO (IndexOutOfBounds $ errMsg limit)
   where
-    errMsg = concat
+    errMsg limit = concat
       [ prettyCallStack callStack
       , "\nboundCheck: index out of bounds "
-      , "(", show ix, ",", show (unCapacity (getCapacity bb)), ")"
+      , show [ix, ix+size] , " isn't in [0," , show limit, ")"
       ]
 
 invariant :: HasCallStack => ByteBuffer -> IO ()
@@ -282,7 +285,7 @@ putByteStringAt :: ByteBuffer -> Int -> BS.ByteString -> IO ()
 putByteStringAt bb doffset bs = do
   Slice slice <- readIORef (bbSlice bb)
   let (fptr, soffset, len) = BS.toForeignPtr bs
-  boundCheck bb (doffset + len - 1)
+  boundCheck bb doffset len
   withForeignPtr fptr $ \sptr ->
     withForeignPtr (bbData bb) $ \dptr ->
       copyBytes (dptr `plusPtr` (slice + doffset)) (sptr `plusPtr` soffset) len
@@ -313,7 +316,7 @@ getLazyByteString bb len = do
 
 getByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
 getByteStringAt bb offset len = do
-  boundCheck bb (len - 1) -- XXX?
+  boundCheck bb offset len -- XXX???
   Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \sptr ->
     BS.create len $ \dptr ->
@@ -338,24 +341,24 @@ getStorable bb = do
 ------------------------------------------------------------------------
 -- * Absolute operations on `Storable` elements
 
-putStorableAt :: Storable a => ByteBuffer -> Int -> a -> IO ()
+putStorableAt :: forall a. Storable a => ByteBuffer -> Int -> a -> IO ()
 putStorableAt bb ix x = do
-  boundCheck bb ix
+  boundCheck bb ix (sizeOf (undefined :: a))
   withForeignPtr (bbData bb) $ \ptr ->
     pokeByteOff ptr ix x
 
-getStorableAt :: Storable a => ByteBuffer -> Int -> IO a
+getStorableAt :: forall a . Storable a => ByteBuffer -> Int -> IO a
 getStorableAt bb ix = do
-  boundCheck bb ix
+  boundCheck bb ix (sizeOf (undefined :: a))
   withForeignPtr (bbData bb) $ \ptr ->
     peekByteOff ptr ix
 
 ------------------------------------------------------------------------
 
 primitiveInt :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
-             -> (Int# -> i) -> ByteBuffer -> Int -> IO i
-primitiveInt f c bb offset@(I# offset#) = do
-  boundCheck bb offset
+             -> (Int# -> i) -> Int -> ByteBuffer -> Int -> IO i
+primitiveInt f c size bb offset@(I# offset#) = do
+  boundCheck bb offset size
   Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
@@ -364,16 +367,16 @@ primitiveInt f c bb offset@(I# offset#) = do
 
 primitiveInt32 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
                -> ByteBuffer -> Int ->  IO Int32
-primitiveInt32 f bb offset = primitiveInt f I32# bb offset
+primitiveInt32 f bb offset = primitiveInt f I32# (sizeOf (4 :: Int32)) bb offset
 
 primitiveInt64 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
                -> ByteBuffer -> Int ->  IO Int64
-primitiveInt64 f bb offset = primitiveInt f I64# bb offset
+primitiveInt64 f bb offset = primitiveInt f I64# (sizeOf (8 :: Int64)) bb offset
 
 primitiveInt_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
-              -> (i -> Int#) -> ByteBuffer -> Int -> i -> IO ()
-primitiveInt_ f d bb offset@(I# offset#) i = do
-  boundCheck bb offset
+              -> (i -> Int#) -> Int -> ByteBuffer -> Int -> i -> IO ()
+primitiveInt_ f d size bb offset@(I# offset#) i = do
+  boundCheck bb offset size
   let value# = d i
   Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
@@ -383,16 +386,16 @@ primitiveInt_ f d bb offset@(I# offset#) i = do
 
 primitiveInt32_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
               -> ByteBuffer -> Int -> Int32 -> IO ()
-primitiveInt32_ f = primitiveInt_ f (\(I32# x#) -> x#)
+primitiveInt32_ f = primitiveInt_ f (\(I32# x#) -> x#) (sizeOf (4 :: Int32))
 
 primitiveInt64_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
               -> ByteBuffer -> Int -> Int64 -> IO ()
-primitiveInt64_ f = primitiveInt_ f (\(I64# x#) -> x#)
+primitiveInt64_ f = primitiveInt_ f (\(I64# x#) -> x#) (sizeOf (8 :: Int64))
 
 -- readCharOffArray#
 -- readWideCharOffArray#
 readIntOffArrayIx :: ByteBuffer -> Int -> IO Int
-readIntOffArrayIx = primitiveInt readIntOffAddr# I#
+readIntOffArrayIx = primitiveInt readIntOffAddr# I# (sizeOf (8 :: Int))
 
 -- readWordOffArray#
 -- readArrayOffAddr#
@@ -410,14 +413,14 @@ readInt64OffAddr = primitiveInt64 readInt64OffAddr#
 
 indexWord8OffAddr :: ByteBuffer -> Int -> IO Word8
 indexWord8OffAddr bb offset@(I# offset#) = do
-  boundCheck bb offset
+  boundCheck bb offset (sizeOf (1 :: Word8))
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     return (fromIntegral (W# (indexWord8OffAddr# addr# offset#)))
 
 primitiveWord :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Word# #))
-             -> (Word# -> w) -> ByteBuffer -> Int -> IO w
-primitiveWord f c bb offset@(I# offset#) = do
-  boundCheck bb offset
+             -> (Word# -> w) -> Int -> ByteBuffer -> Int -> IO w
+primitiveWord f c size bb offset@(I# offset#) = do
+  boundCheck bb offset size
   Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
@@ -425,9 +428,9 @@ primitiveWord f c bb offset@(I# offset#) = do
         (# s', i #) -> (# s', c i #)
 
 primitiveWord_ :: (Addr# -> Int# -> Word# -> State# RealWorld -> State# RealWorld)
-              -> (w -> Word#) -> ByteBuffer -> Int -> w -> IO ()
-primitiveWord_ f d bb offset@(I# offset#) w = do
-  boundCheck bb offset
+              -> (w -> Word#) -> Int -> ByteBuffer -> Int -> w -> IO ()
+primitiveWord_ f d size bb offset@(I# offset#) w = do
+  boundCheck bb offset size
   let value# = d w
   Slice (I# slice#) <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
@@ -436,16 +439,16 @@ primitiveWord_ f d bb offset@(I# offset#) w = do
         s' -> (# s', () #)
 
 readWord8OffAddr :: ByteBuffer -> Int -> IO Word8
-readWord8OffAddr = primitiveWord readWord8OffAddr# W8#
+readWord8OffAddr = primitiveWord readWord8OffAddr# W8# (sizeOf (1 :: Word8))
 
 readWord16OffAddr :: ByteBuffer -> Int -> IO Word16
-readWord16OffAddr = primitiveWord readWord16OffAddr# W16#
+readWord16OffAddr = primitiveWord readWord16OffAddr# W16# (sizeOf (2 :: Word16))
 
 readWord32OffAddr :: ByteBuffer -> Int -> IO Word32
-readWord32OffAddr = primitiveWord readWord32OffAddr# W32#
+readWord32OffAddr = primitiveWord readWord32OffAddr# W32# (sizeOf (4 :: Word32))
 
 readWord64OffAddr :: ByteBuffer -> Int -> IO Word64
-readWord64OffAddr = primitiveWord readWord64OffAddr# W64#
+readWord64OffAddr = primitiveWord readWord64OffAddr# W64# (sizeOf (8 :: Word64))
 
   {-
 -- writeCharOffArray#
@@ -454,7 +457,7 @@ readWord64OffAddr = primitiveWord readWord64OffAddr# W64#
 writeInt = writeIntOffAddr
 
 writeIntOffAddr :: ByteBuffer -> Int -> Int -> IO ()
-writeIntOffAddr = primitiveInt_ writeIntOffAddr# (\(I# x#) -> x#)
+writeIntOffAddr = primitiveInt_ writeIntOffAddr# (\(I# x#) -> x#) (sizeOf (8 :: Int))
 
 -- writeWordOffArray#
 -- writeArrayOffAddr#
@@ -471,16 +474,16 @@ writeInt64OffAddr :: ByteBuffer -> Int -> Int64 -> IO ()
 writeInt64OffAddr = primitiveInt64_ writeInt64OffAddr#
 
 writeWord8OffAddr :: ByteBuffer -> Int -> Word8 -> IO ()
-writeWord8OffAddr = primitiveWord_ writeWord8OffAddr# (\(W8# w#) -> w#)
+writeWord8OffAddr = primitiveWord_ writeWord8OffAddr# (\(W8# w#) -> w#) (sizeOf (1 :: Word8))
 
 writeWord16OffAddr :: ByteBuffer -> Int -> Word16 -> IO ()
-writeWord16OffAddr = primitiveWord_ writeWord16OffAddr# (\(W16# w#) -> w#)
+writeWord16OffAddr = primitiveWord_ writeWord16OffAddr# (\(W16# w#) -> w#) (sizeOf (2 :: Word16))
 
 writeWord32OffAddr :: ByteBuffer -> Int -> Word32 -> IO ()
-writeWord32OffAddr = primitiveWord_ writeWord32OffAddr# (\(W32# w#) -> w#)
+writeWord32OffAddr = primitiveWord_ writeWord32OffAddr# (\(W32# w#) -> w#) (sizeOf (4 :: Word32))
 
 writeWord64OffAddr :: ByteBuffer -> Int -> Word64 -> IO ()
-writeWord64OffAddr = primitiveWord_ writeWord64OffAddr# (\(W64# w#) -> w#)
+writeWord64OffAddr = primitiveWord_ writeWord64OffAddr# (\(W64# w#) -> w#) (sizeOf (8 :: Word64))
 
 -- atomicReadIntArray#
 -- atomicWriteIntArray#
@@ -492,13 +495,13 @@ writeWord64OffAddr = primitiveWord_ writeWord64OffAddr# (\(W64# w#) -> w#)
 -- memory barrier.
 casInt32Addr :: ByteBuffer -> Int -> Int32 -> Int32 -> IO Bool
 casInt32Addr bb offset expected desired = do
-  boundCheck bb offset
+  boundCheck bb offset (sizeOf (4 :: Int32))
   withForeignPtr (bbData bb) $ \ptr ->
     casInt32Ptr (ptr `plusPtr` offset) expected desired
 
 casInt64Addr :: ByteBuffer -> Int -> Int64 -> Int64 -> IO Bool
 casInt64Addr bb offset expected desired = do
-  boundCheck bb offset
+  boundCheck bb offset (sizeOf (4 :: Int64))
   withForeignPtr (bbData bb) $ \ptr ->
     casInt64Ptr (ptr `plusPtr` offset) expected desired
 
@@ -507,7 +510,7 @@ casInt64Addr bb offset expected desired = do
 -- before the operation. Implies a full memory barrier.
 fetchAddIntArray :: ByteBuffer -> Int -> Int -> IO Int
 fetchAddIntArray bb offset incr = do
-  boundCheck bb offset
+  boundCheck bb offset (sizeOf (8 :: Int))
   withForeignPtr (bbData bb) $ \ptr ->
     fromIntegral <$> fetchAddWord64Ptr (ptr `plusPtr` offset) (fromIntegral incr)
 
@@ -515,7 +518,7 @@ fetchAddIntArray bb offset incr = do
 -- atomically add the value to the element. Implies a full memory barrier.
 fetchAddIntArray_ :: ByteBuffer -> Int -> Int -> IO ()
 fetchAddIntArray_ bb offset incr = do
-  boundCheck bb offset
+  boundCheck bb offset (sizeOf (8 :: Int))
   withForeignPtr (bbData bb) $ \ptr ->
     void $ fetchAddWord64Ptr (ptr `plusPtr` offset) (fromIntegral incr)
 
