@@ -306,7 +306,7 @@ tj = do
   jour <- startJournal' fp opts
   Just (offset, claimBuf) <- tryClaim jour 5
   putStrLn ("offset: " ++ show offset)
-  putBS claimBuf (BSChar8.pack "hello")
+  putBS claimBuf hEADER_LENGTH (BSChar8.pack "hello")
   commit claimBuf
   Just bs <- readJournal' jour
   putStrLn ("read bytestring: '" ++ BSChar8.unpack bs ++ "'")
@@ -317,7 +317,7 @@ tbc :: IO ()
 tbc = do
   bb <- allocate 16
   bc <- newBufferClaim bb 0 16
-  putBS bc (BSChar8.pack "helloooooooooooo")
+  putBS bc 0 (BSChar8.pack "helloooooooooooo")
   bs <- getByteStringAt bb 0 5
   putStrLn (BSChar8.unpack bs)
 
