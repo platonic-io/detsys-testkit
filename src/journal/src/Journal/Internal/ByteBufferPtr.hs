@@ -163,11 +163,11 @@ allocateAligned size align = do
 mmapped :: FilePath -> Int -> IO ByteBuffer
 mmapped fp capa =
   bracket (openFd fp ReadWrite Nothing defaultFileFlags) closeFd $ \fd -> do
-    pageSize <- sysconfPageSize
+    -- pageSize <- sysconfPageSize -- XXX align with `pageSize`?
     ptr <- mmap Nothing (fromIntegral capa)
              (pROT_READ .|. pROT_WRITE) mAP_SHARED (Just fd) 0
-    fptr <- newForeignPtr ptr (finalizer ptr pageSize)
-    newByteBuffer fptr (Capacity pageSize) (Limit pageSize) 0 Nothing
+    fptr <- newForeignPtr ptr (finalizer ptr capa)
+    newByteBuffer fptr (Capacity capa) (Limit capa) 0 Nothing
   where
     finalizer :: Ptr a -> Int -> IO ()
     finalizer ptr size = munmap ptr (fromIntegral size)
