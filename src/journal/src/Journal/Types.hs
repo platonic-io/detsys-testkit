@@ -5,7 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Journal.Types
---  ( Journal'(Journal')
+--  ( Journal(Journal)
 --  , Journal(Journal)
 --  , jMaxByteSize
 --  , jOffset
@@ -57,7 +57,7 @@ pARTITION_COUNT = 3
 
 newtype Metadata = Metadata { unMetadata :: ByteBuffer }
 
-data Journal' = Journal'
+data Journal = Journal
   { jTermBuffers   :: {-# UNPACK #-} !(Vector ByteBuffer)
   , jMetadata      :: {-# UNPACK #-} !Metadata
   , jBytesConsumed :: {-# UNPACK #-} !AtomicCounter -- ???
@@ -348,21 +348,6 @@ fOOTER_LENGTH = hEADER_LENGTH
 cURRENT_VERSION :: HeaderVersion
 cURRENT_VERSION = 0
 
-aCTIVE_FILE :: FilePath
-aCTIVE_FILE = "active"
-
-dIRTY_FILE :: FilePath
-dIRTY_FILE = "dirty"
-
-cLEAN_FILE :: FilePath
-cLEAN_FILE = "clean"
-
-sNAPSHOT_FILE :: FilePath
-sNAPSHOT_FILE = "snapshot"
-
-aRCHIVE_FILE :: FilePath
-aRCHIVE_FILE = "archive"
-
 fRAME_LENGTH_FIELD_OFFSET :: Int
 fRAME_LENGTH_FIELD_OFFSET = 0
 
@@ -370,34 +355,6 @@ tAG_FIELD_OFFSET :: Int
 tAG_FIELD_OFFSET = 6
 
 ------------------------------------------------------------------------
-
-data Journal = Journal
-  { jPtr           :: {-# UNPACK #-} !(TVar (Ptr Word8))
-  , jOffset        :: {-# UNPACK #-} !AtomicCounter
-  , jMaxByteSize   :: {-# UNPACK #-} !Int
-  , jDirectory     ::                !FilePath
-  , jBytesConsumed' :: {-# UNPACK #-} !AtomicCounter -- jGatingBytes?
-  , jFileCount     :: {-# UNPACK #-} !AtomicCounter
-  -- , jMetrics :: Metrics
-  }
-
-newJournalPtrRef :: Ptr Word8 -> IO (TVar (Ptr Word8))
-newJournalPtrRef = newTVarIO
-
-readJournalPtr :: Journal -> IO (Ptr Word8)
-readJournalPtr = atomically . readTVar . jPtr
-
-updateJournalPtr :: Journal -> Ptr Word8 -> IO ()
-updateJournalPtr jour ptr = atomically (writeTVar (jPtr jour) ptr)
-
-getMaxByteSize :: Journal -> Int
-getMaxByteSize = jMaxByteSize
-
-readFileCount :: Journal -> IO Int
-readFileCount = readCounter . jFileCount
-
-bumpFileCount :: Journal -> IO ()
-bumpFileCount = incrCounter_ 1 . jFileCount
 
 data Metrics = Metrics
   { mAbortedConnections :: Word32
@@ -417,19 +374,3 @@ data Options = Options
   -- checksum? none, crc32 or sha256?
   -- wait strategy?
   -- page size? (for prefetching (see ghc-prim) and buffering writes?)
-
-data JournalConsumer = JournalConsumer
-  { jcPtr           :: {-# UNPACK #-} !(IORef (Ptr Word8))
-  , jcBytesConsumed :: {-# UNPACK #-} !AtomicCounter
-  , jcDirectory     ::                !FilePath
-  , jcMaxByteSize   :: {-# UNPACK #-} !Int
-  }
-
-newJournalConsumerPtrRef :: Ptr Word8 -> IO (IORef (Ptr Word8))
-newJournalConsumerPtrRef = newIORef
-
-readJournalConsumerPtr :: JournalConsumer -> IO (Ptr Word8)
-readJournalConsumerPtr = readIORef . jcPtr
-
-updateJournalConsumerPtr :: JournalConsumer -> Ptr Word8 -> IO ()
-updateJournalConsumerPtr jc ptr = writeIORef (jcPtr jc) ptr

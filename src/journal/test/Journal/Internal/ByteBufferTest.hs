@@ -14,6 +14,7 @@ import Control.Monad (unless, when)
 import Data.Binary (decode, encode)
 import Data.ByteString.Internal (w2c)
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Char8 as BSChar8
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int32, Int64)
 import Data.List (group)
@@ -306,3 +307,12 @@ assertProgram :: String -> [Command] -> Assertion
 assertProgram msg cmds = do
   b <- runCommands cmds
   assertBool msg b
+
+------------------------------------------------------------------------
+
+unit_byteBufferByteString :: IO ()
+unit_byteBufferByteString = do
+  bb <- allocate 16
+  putByteStringAt bb 0 (BSChar8.pack "helloooooooooooo")
+  bs <- getByteStringAt bb 0 5
+  assertEqual "" (BSChar8.pack "hello") bs
