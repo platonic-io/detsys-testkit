@@ -98,7 +98,7 @@ lOG_PAGE_SIZE_OFFSET = lOG_TERM_LENGTH_OFFSET +
   sizeOf (4 :: Int32)
 
 lOG_META_DATA_LENGTH :: Int
-lOG_META_DATA_LENGTH = lOG_PAGE_SIZE_OFFSET
+lOG_META_DATA_LENGTH = lOG_PAGE_SIZE_OFFSET + sizeOf (4 :: Int32) -- is this correct?
 
 ------------------------------------------------------------------------
 
