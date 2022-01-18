@@ -527,16 +527,18 @@ casInt64Addr bb offset expected desired = do
 fetchAddIntArray :: ByteBuffer -> Int -> Int -> IO Int
 fetchAddIntArray bb offset incr = do
   boundCheck bb offset (sizeOf (8 :: Int))
+  Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \ptr ->
-    fromIntegral <$> fetchAddWord64Ptr (ptr `plusPtr` offset) (fromIntegral incr)
+    fromIntegral <$> fetchAddWord64Ptr (ptr `plusPtr` offset `plusPtr` slice) (fromIntegral incr)
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Implies a full memory barrier.
 fetchAddIntArray_ :: ByteBuffer -> Int -> Int -> IO ()
 fetchAddIntArray_ bb offset incr = do
   boundCheck bb offset (sizeOf (8 :: Int))
+  Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \ptr ->
-    void $ fetchAddWord64Ptr (ptr `plusPtr` offset) (fromIntegral incr)
+    void $ fetchAddWord64Ptr (ptr `plusPtr` offset `plusPtr` slice) (fromIntegral incr)
 
 {-
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
