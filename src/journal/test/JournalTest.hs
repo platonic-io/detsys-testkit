@@ -110,9 +110,9 @@ step :: Command -> Model -> (Model, Response)
 step (AppendBS bs) m = Unit <$> appendBSFake bs m
 step ReadJournal   m = ByteString <$> readJournalFake m
 
-exec :: Command -> Journal' -> IO Response
-exec (AppendBS bs) j = Unit <$> appendBS' j bs
-exec ReadJournal   j = ByteString <$> readJournal' j
+exec :: Command -> Journal -> IO Response
+exec (AppendBS bs) j = Unit <$> appendBS j bs
+exec ReadJournal   j = ByteString <$> readJournal j
 
 -- Generates ASCII bytestrings.
 genByteString :: Gen ByteString
@@ -170,7 +170,7 @@ prop_journal =
     tmp <- run (canonicalizePath =<< getTemporaryDirectory)
     (fp, h) <- run (openTempFile tmp "JournalTest")
     run (allocateJournal fp testOptions)
-    j <- run (startJournal' fp testOptions)
+    j <- run (startJournal fp testOptions)
     monitor (tabulate "Commands" (map constructorString cmds))
     (result, hist) <- go cmds m j []
     -- run (uncurry stopJournal j)
@@ -223,11 +223,11 @@ runCommands cmds = do
   let m = startJournalFake
   withTempFile "runCommands" $ \fp _handle -> do
     allocateJournal fp testOptions
-    j <- startJournal' fp testOptions
+    j <- startJournal fp testOptions
     putStrLn ""
     go m j cmds []
   where
-    go :: Model -> Journal' -> [Command] -> [(Command, Response)] -> IO Bool
+    go :: Model -> Journal -> [Command] -> [(Command, Response)] -> IO Bool
     go m j [] _hist = putStrLn "\nSuccess!" >> return True
     go m j (cmd : cmds) hist = do
       let (m', resp) = step cmd m
@@ -250,7 +250,7 @@ runCommands cmds = do
         --   putStrLn ("Inconsistencies: " ++ inconsistenciesString is)
         putStrLn ""
         putStrLn "Journal dump:"
-        dumpJournal' j
+        dumpJournal j
         print (stats (reverse hist))
         return False
 

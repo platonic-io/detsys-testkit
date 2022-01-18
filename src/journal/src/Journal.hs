@@ -3,20 +3,15 @@ module Journal
   , defaultOptions
   , allocateJournal
   , startJournal
-  , startJournal'
-  , stopJournal
   , appendBS
-  , appendBS'
-  , tee
-  , appendRecv
+  -- , tee
+  -- , appendRecv
   , readJournal
-  , readJournal'
-  , saveSnapshot
-  , truncateAfterSnapshot
-  , loadSnapshot
-  , replay
+  -- , saveSnapshot
+  -- , truncateAfterSnapshot
+  -- , loadSnapshot
+  -- , replay
   , dumpJournal
-  , dumpJournal'
   ) where
 
 import Control.Exception (assert, bracket)
@@ -83,8 +78,8 @@ allocateJournal fp (Options _ termBufferLen) = do
     pageSize <- sysconfPageSize
     writePageSize (Metadata meta) (int2Int32 pageSize)
 
-startJournal' :: FilePath -> Options -> IO Journal'
-startJournal' fp (Options _ termLength) = do
+startJournal :: FilePath -> Options -> IO Journal
+startJournal fp (Options _ termLength) = do
 
   logLength <- fromIntegral <$> getFileSize fp
   bb <- mmapped fp logLength
@@ -101,68 +96,14 @@ startJournal' fp (Options _ termLength) = do
   -- XXX: This counter needs to be persisted somehow (mmapped?) in order to be
   -- able to recover from restarts.
   bytesConsumedCounter <- newCounter 0
-  return (Journal' termBuffers (Metadata meta) bytesConsumedCounter)
-
-startJournal :: FilePath -> Options -> IO (Journal, JournalConsumer)
-startJournal dir (Options maxByteSize _) = do
-  unless (popCount maxByteSize == 1) $
-    -- NOTE: The use of bitwise and (`.&.`) in `claim` relies on this.
-    error "startJournal: oMaxByteSize must be a power of 2"
-  dirExists <- doesDirectoryExist dir
-  unless dirExists (createDirectoryIfMissing True dir)
-
-  offset <- do
-    activeExists <- doesFileExist (dir </> aCTIVE_FILE)
-    if activeExists
-    then do
-      nuls <- BS.length . BS.takeWhileEnd (== (fromIntegral 0)) <$>
-                BS.readFile (dir </> aCTIVE_FILE)
-      return (maxByteSize - nuls)
-    else return 0
-
-  (ptr, _rawSize) <- mmapFile (dir </> aCTIVE_FILE) maxByteSize
-
-  cleanExists <- doesFileExist (dir </> cLEAN_FILE)
-  if cleanExists
-  then do
-    -- XXX: check that it actually is clean
-    return ()
-  else do
-    (ptr, rawSize) <- mmapFile (dir </> cLEAN_FILE) maxByteSize
-    munmapFile ptr rawSize
-
-  bytesProducedCounter <- newCounter offset
-  ptrRef <- newJournalPtrRef ptr
-  bytesConsumedCounter <- newCounter 0
-  jc <- JournalConsumer <$> newJournalConsumerPtrRef ptr <*> pure bytesConsumedCounter
-                        <*> pure dir <*> pure maxByteSize
-  fileCount <- newCounter 0 -- XXX: always start over from 0?
-  return (Journal ptrRef bytesProducedCounter maxByteSize dir bytesConsumedCounter fileCount,
-          jc)
-
-stopJournal :: Journal -> JournalConsumer -> IO ()
-stopJournal jour jc = do
-  jPtr <- readJournalPtr jour
-  munmapFile jPtr (jMaxByteSize jour)
-  jcPtr <- readJournalConsumerPtr jc
-  munmapFile jcPtr (jMaxByteSize jour)
+  return (Journal termBuffers (Metadata meta) bytesConsumedCounter)
 
 ------------------------------------------------------------------------
 
 -- * Production
 
-appendBS :: Journal -> ByteString -> IO ()
+appendBS :: Journal -> ByteString -> IO (Maybe ())
 appendBS jour bs = do
-  assertM (0 < BS.length bs &&
-           hEADER_LENGTH + BS.length bs + fOOTER_LENGTH <= jMaxByteSize jour)
-  let len = BS.length bs
-  offset <- claim jour len
-  buf <- readJournalPtr jour
-  writeBSToPtr bs (buf `plusPtr` (offset + hEADER_LENGTH))
-  writeHeader (buf `plusPtr` offset) (makeValidHeader len)
-
-appendBS' :: Journal' -> ByteString -> IO (Maybe ())
-appendBS' jour bs = do
   -- XXX: update assert
   --assertM (0 < BS.length bs &&
   --         hEADER_LENGTH + BS.length bs + fOOTER_LENGTH <= jMaxByteSize jour)
@@ -174,47 +115,38 @@ appendBS' jour bs = do
       putBS bufferClaim hEADER_LENGTH bs
       Just <$> commit bufferClaim
 
-tee :: Journal -> Socket -> Int -> IO ByteString
-tee jour sock len = do
-  assertM (0 < len && hEADER_LENGTH + len + fOOTER_LENGTH <= jMaxByteSize jour)
-  offset <- claim jour len
-  putStrLn ("tee: writing to offset: " ++ show offset)
-  buf <- readJournalPtr jour
-  receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_LENGTH)) len
-  writeHeader (buf `plusPtr` offset) (makeValidHeader len)
-  fptr <- newForeignPtr_ buf
-  return (BS.copy (fromForeignPtr fptr (offset + hEADER_LENGTH) len))
+-- tee :: Journal -> Socket -> Int -> IO ByteString
+-- tee jour sock len = do
+--   assertM (0 < len && hEADER_LENGTH + len + fOOTER_LENGTH <= jMaxByteSize jour)
+--   offset <- claim jour len
+--   putStrLn ("tee: writing to offset: " ++ show offset)
+--   buf <- readJournalPtr jour
+--   receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_LENGTH)) len
+--   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
+--   fptr <- newForeignPtr_ buf
+--   return (BS.copy (fromForeignPtr fptr (offset + hEADER_LENGTH) len))
 
 recvBytes :: BufferClaim -> Socket -> Int -> IO Int
 recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock ptr len
 
-appendRecv :: Journal -> Socket -> Int -> IO Int
-appendRecv jour sock len = do
-  assertM (0 < len && hEADER_LENGTH + len + fOOTER_LENGTH <= jMaxByteSize jour)
-  offset <- claim jour len
-  buf <- readJournalPtr jour
-  receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_LENGTH)) len
-  -- XXX: if receivedBytes /= len or if sock isn't connected, or other failure
-  -- modes of `recv(2)`?
-  writeHeader (buf `plusPtr` offset) (makeValidHeader len)
-  return receivedBytes
+-- appendRecv :: Journal -> Socket -> Int -> IO Int
+-- appendRecv jour sock len = do
+--   assertM (0 < len && hEADER_LENGTH + len + fOOTER_LENGTH <= jMaxByteSize jour)
+--   offset <- claim jour len
+--   buf <- readJournalPtr jour
+--   receivedBytes <- recvBuf sock (buf `plusPtr` (offset + hEADER_LENGTH)) len
+--   -- XXX: if receivedBytes /= len or if sock isn't connected, or other failure
+--   -- modes of `recv(2)`?
+--   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
+--   return receivedBytes
 
 ------------------------------------------------------------------------
 
 -- * Consumption
 
 -- XXX: move
-readTermBufferTermOffset :: Journal' -> IO (ByteBuffer, TermOffset)
-readTermBufferTermOffset jour = do
-  termCount <- activeTermCount (jMetadata jour)
-  let activeTermIndex = indexByTermCount termCount
-  rawTail <- readRawTail (jMetadata jour) activeTermIndex
-  termLen <- readTermLength (jMetadata jour)
-  let bb = jTermBuffers jour Vector.! unPartitionIndex activeTermIndex
-  return (bb, rawTailTermOffset rawTail termLen)
-
-readJournal' :: Journal' -> IO (Maybe ByteString)
-readJournal' jour = do
+readJournal :: Journal -> IO (Maybe ByteString)
+readJournal jour = do
   offset <- readCounter (jBytesConsumed jour)
   putStrLn ("readJournal, offset: " ++ show offset)
   (termBuffer , TermOffset termOffset) <- readTermBufferTermOffset jour
@@ -230,39 +162,15 @@ readJournal' jour = do
     assertM (BS.length bs == int322Int len - hEADER_LENGTH)
     incrCounter_ (int322Int len) (jBytesConsumed jour)
     return (Just bs)
-
-readJournal :: JournalConsumer -> IO ByteString
-readJournal jc = do
-  ptr <- readJournalConsumerPtr jc
-  offset <- readCounter (jcBytesConsumed jc)
-  len <- waitForHeader ptr offset
-  putStrLn ("readJournal, offset: " ++ show offset)
-  putStrLn ("readJournal, len: " ++ show len)
-  fptr <- newForeignPtr_ ptr
-  let bs = BS.copy (fromForeignPtr fptr (offset + hEADER_LENGTH) len)
-  bytesRead <- incrCounter (hEADER_LENGTH + len) (jcBytesConsumed jc)
-  putStrLn ("readJournal, bytesRead: " ++ show bytesRead)
-  if bytesRead == jcMaxByteSize jc
-  then do
-    putStrLn "readJournal, rotating..."
-    tag <- peekTag (ptr `plusPtr` offset)
-    if tag == Padding
-    then do
-      putStrLn "readJournal, skipping padding..."
-      ptr <- readJournalConsumerPtr jc
-      munmapFile ptr (jcMaxByteSize jc)
-      (ptr', _rawSize) <- mmapFile (jcDirectory jc </> aCTIVE_FILE) (jcMaxByteSize jc)
-      updateJournalConsumerPtr jc ptr'
-      writeCounter (jcBytesConsumed jc) 0
-      readJournal jc
-    else do
-      putStrLn ("readJournal, tag: " ++ tagString tag)
-      assertM (HeaderTag (BS.head bs) == Valid)
-      return bs
-  else do
-    putStrLn ("readJournal, returning: " ++ show bs ++
-              " (" ++ show (BS.length bs) ++ " bytes)")
-    return bs
+  where
+    readTermBufferTermOffset :: Journal -> IO (ByteBuffer, TermOffset)
+    readTermBufferTermOffset jour = do
+      termCount <- activeTermCount (jMetadata jour)
+      let activeTermIndex = indexByTermCount termCount
+      rawTail <- readRawTail (jMetadata jour) activeTermIndex
+      termLen <- readTermLength (jMetadata jour)
+      let bb = jTermBuffers jour Vector.! unPartitionIndex activeTermIndex
+      return (bb, rawTailTermOffset rawTail termLen)
 
 ------------------------------------------------------------------------
 
@@ -271,41 +179,41 @@ readJournal jc = do
 -- | NOTE: @saveSnapshot@ assumes the serialisation of the application @state@
 -- was done at the point of @bytesConsumed@ having been processed by the
 -- application.
-saveSnapshot :: JournalConsumer -> ByteString -> Int -> IO ()
-saveSnapshot jc state bytesConsumed = do
-  -- b <- doesFileExist (jDirectory jour </> snapshotFile)
-  -- XXX: snapshot header
-  BS.writeFile (jcDirectory jc </> sNAPSHOT_FILE) state
-
-truncateAfterSnapshot :: JournalConsumer -> Int -> IO ()
-truncateAfterSnapshot jc bytesConsumed = do
-  -- XXX: needs to get the "oldest" ptr...
-  ptr <- readJournalConsumerPtr jc
-  mapHeadersUntil Valid (\hdr -> hdr { jhTag = Invalid }) ptr bytesConsumed
-
-loadSnapshot :: Journal -> IO (Maybe ByteString)
-loadSnapshot jour = do
-  -- XXX: load snapshot header
-  b <- doesFileExist (jDirectory jour </> sNAPSHOT_FILE)
-  if b
-  then do
-    bs <- BS.readFile (jDirectory jour </> sNAPSHOT_FILE)
-    return (Just bs)
-  else return Nothing
-
-replay :: JournalConsumer -> (a -> ByteString -> a) -> a -> IO (Int, a)
-replay jc f x = do
-  ptr <- readJournalConsumerPtr jc
-  iterJournal ptr (jcBytesConsumed jc) go (0, x)
-  where
-    go (n, acc) bs = (n + 1, f acc bs)
+-- saveSnapshot :: JournalConsumer -> ByteString -> Int -> IO ()
+-- saveSnapshot jc state bytesConsumed = do
+--   -- b <- doesFileExist (jDirectory jour </> snapshotFile)
+--   -- XXX: snapshot header
+--   BS.writeFile (jcDirectory jc </> sNAPSHOT_FILE) state
+--
+-- truncateAfterSnapshot :: JournalConsumer -> Int -> IO ()
+-- truncateAfterSnapshot jc bytesConsumed = do
+--   -- XXX: needs to get the "oldest" ptr...
+--   ptr <- readJournalConsumerPtr jc
+--   mapHeadersUntil Valid (\hdr -> hdr { jhTag = Invalid }) ptr bytesConsumed
+--
+-- loadSnapshot :: Journal -> IO (Maybe ByteString)
+-- loadSnapshot jour = do
+--   -- XXX: load snapshot header
+--   b <- doesFileExist (jDirectory jour </> sNAPSHOT_FILE)
+--   if b
+--   then do
+--     bs <- BS.readFile (jDirectory jour </> sNAPSHOT_FILE)
+--     return (Just bs)
+--   else return Nothing
+--
+-- replay :: JournalConsumer -> (a -> ByteString -> a) -> a -> IO (Int, a)
+-- replay jc f x = do
+--   ptr <- readJournalConsumerPtr jc
+--   iterJournal ptr (jcBytesConsumed jc) go (0, x)
+--   where
+--     go (n, acc) bs = (n + 1, f acc bs)
 
 ------------------------------------------------------------------------
 
 -- * Debugging
 
-dumpJournal' :: Journal' -> IO ()
-dumpJournal' jour = do
+dumpJournal :: Journal -> IO ()
+dumpJournal jour = do
   Vector.mapM_ dumpTermBuffer (jTermBuffers jour)
   dumpMetadata (jMetadata jour)
   {-
@@ -318,11 +226,6 @@ dumpJournal' jour = do
   putStrLn $ "termOffset = " ++ show (unTermOffset termOffset)
 -}
 
-dumpJournal :: Journal -> IO ()
-dumpJournal jour = do
-  dumpFile (jDirectory jour </> aCTIVE_FILE)
-  dumpFile (jDirectory jour </> dIRTY_FILE)
-
 ------------------------------------------------------------------------
 
 tj :: IO ()
@@ -330,20 +233,20 @@ tj = do
   let fp   = "/tmp/journal.txt"
       opts = defaultOptions
   allocateJournal fp opts
-  jour <- startJournal' fp opts
+  jour <- startJournal fp opts
 
   Just (offset, claimBuf) <- tryClaim jour 5
   putStrLn ("offset: " ++ show offset)
   putBS claimBuf hEADER_LENGTH (BSChar8.pack "hello")
   commit claimBuf
-  Just bs <- readJournal' jour
+  Just bs <- readJournal jour
   putStrLn ("read bytestring 1: '" ++ BSChar8.unpack bs ++ "'")
 
   Just (offset', claimBuf') <- tryClaim jour 6
   putStrLn ("offset': " ++ show offset')
   putBS claimBuf' hEADER_LENGTH (BSChar8.pack "world!")
   commit claimBuf'
-  Just bs' <- readJournal' jour
+  Just bs' <- readJournal jour
   putStrLn ("read bytestring 2: '" ++ BSChar8.unpack bs' ++ "'")
 
   dumpMetadata (jMetadata jour)
@@ -360,22 +263,3 @@ tbc = do
   putBS bc' 0 (BSChar8.pack "world!")
   bs' <- getByteStringAt bb 5 6
   putStrLn ("'" ++ BSChar8.unpack bs' ++ "'")
-
-tbb :: IO ()
-tbb = do
-  bb <- allocate 16
-  putByteStringAt bb 0 (BSChar8.pack "helloooooooooooo")
-  bs <- getByteStringAt bb 0 5
-  putStrLn (BSChar8.unpack bs)
-
-tfl :: IO ()
-tfl = do
-  bb <- allocate 16
-  writeFrameLength bb 0 5
-  HeaderLength headerLen <- readFrameLength bb 0
-  putStrLn ("headerLength: " ++ show headerLen)
-
-  writeFrameLength bb 4 {- (sizeOf (4 :: Int32)) -} (-6)
-  writeFrameLength bb 4 {- (sizeOf (4 :: Int32)) -} 6
-  HeaderLength headerLen' <- readFrameLength bb 4 {- (sizeOf (4 :: Int32)) -}
-  putStrLn ("headerLength': " ++ show headerLen')
