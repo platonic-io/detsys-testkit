@@ -115,6 +115,19 @@ remaining bb = do
 
 ------------------------------------------------------------------------
 -- * Checks
+checkInRange :: HasCallStack => Int -> (Int, Int) -> String -> IO ()
+checkInRange val (lower, upper) name
+  | val < lower = throwIO $ IndexOutOfBounds $ errMsg "below" lower
+  | val > upper = throwIO $ IndexOutOfBounds $ errMsg "above" upper
+  | otherwise = pure ()
+  where
+    errMsg what who = concat
+      [ prettyCallStack callStack
+      , "\ncheckInRange: index(", name , ") out of bounds "
+      , show val, " is ", what, " ", show who, " in the range [", show lower
+      , ", ", show upper, "]"
+      ]
+
 
 boundCheck :: HasCallStack => ByteBuffer -> Int -> Int -> IO ()
 boundCheck bb ix size = do
@@ -180,13 +193,16 @@ wrap bb = newByteBuffer (bbData bb) capa lim (Position 0) (Just (bbSlice bb))
 
 wrapPart :: ByteBuffer -> Int -> Int -> IO ByteBuffer
 wrapPart bb offset len = do
+  Limit oldLimit <- readIORef (bbLimit bb)
   Slice slice <- readIORef (bbSlice bb)
+  checkInRange offset (0, oldLimit) "offset"
+  checkInRange len (0, oldLimit-offset) "len"
   slice' <- newIORef (Slice (slice + offset))
   newByteBuffer (bbData bb) capa lim pos (Just slice')
   where
     capa = Capacity len
-    lim  = Limit (fromIntegral offset + fromIntegral len)
-    pos  = Position (fromIntegral offset)
+    lim  = Limit len
+    pos  = Position 0
 
 slice :: ByteBuffer -> IO ByteBuffer
 slice bb = do
