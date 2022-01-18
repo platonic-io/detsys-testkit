@@ -495,17 +495,3 @@ dumpMetadata meta = do
   putStrLn ("termOffset: " ++ show (unTermOffset termOffset))
   putStrLn ("termBeginPosition: " ++ show termBeginPosition)
   putStrLn ("activePartitionIndex: " ++ show (unPartitionIndex activePartitionIndex))
-
-
-dumpJournal' :: Journal' -> IO ()
-dumpJournal' jour = do
-  undefined
-  {-
-  limit <- calculatePositionLimit jour
-  let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
-      position     = termBeginPosition + fromIntegral termOffset
-
-  putStrLn $ "limit: " ++ show limit
-  putStrLn $ "termBeginPosition = " ++ show termBeginPosition
-  putStrLn $ "termOffset = " ++ show (unTermOffset termOffset)
--}
