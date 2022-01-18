@@ -171,7 +171,7 @@ appendBS' jour bs = do
   case mClaim of
     Nothing -> return Nothing
     Just (_offset, bufferClaim) -> do
-      putBS bufferClaim 0 bs
+      putBS bufferClaim hEADER_LENGTH bs
       Just <$> commit bufferClaim
 
 tee :: Journal -> Socket -> Int -> IO ByteString
