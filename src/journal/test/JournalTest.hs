@@ -1,5 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module JournalTest where
 
@@ -13,7 +13,9 @@ import Data.Monoid (Sum(Sum))
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Data.Word (Word8)
-import System.Directory (removePathForcibly)
+import System.Directory
+       (canonicalizePath, getTemporaryDirectory, removeFile)
+import System.IO (openTempFile)
 import System.Timeout (timeout)
 import Test.QuickCheck
 import Test.QuickCheck.Instances.ByteString ()
@@ -22,6 +24,7 @@ import Test.Tasty.HUnit (Assertion, assertBool)
 
 import Journal
 import Journal.Internal
+import Journal.Internal.Utils
 
 ------------------------------------------------------------------------
 
@@ -39,11 +42,12 @@ prettyFakeJournal = show . fmap (prettyRunLenEnc . runLengthEncoding)
 startJournalFake :: FakeJournal
 startJournalFake = FakeJournal Vector.empty 0
 
-appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, ())
-appendBSFake bs (FakeJournal jour ix) = (FakeJournal (Vector.snoc jour bs) ix, ())
+appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Maybe ())
+appendBSFake bs (FakeJournal jour ix) = (FakeJournal (Vector.snoc jour bs) ix, Just ())
 
-readJournalFake :: FakeJournal -> (FakeJournal, ByteString)
-readJournalFake fj@(FakeJournal jour ix) = (FakeJournal jour (ix + 1), jour Vector.! ix)
+readJournalFake :: FakeJournal -> (FakeJournal, Maybe ByteString)
+readJournalFake fj@(FakeJournal jour ix) =
+  (FakeJournal jour (ix + 1), Just (jour Vector.! ix))
 
 ------------------------------------------------------------------------
 
@@ -71,18 +75,26 @@ runLengthEncoding :: ByteString -> [(Int, Word8)]
 runLengthEncoding = map (BS.length &&& BS.head) . BS.group
 
 prettyRunLenEnc :: [(Int, Word8)] -> String
-prettyRunLenEnc [(n, w)] = show n ++ "x" ++ [ w2c w ]
+prettyRunLenEnc nws0 = case nws0 of
+  []           -> ""
+  [(n, w)]     -> go n w
+  (n, w) : nws -> go n w ++ " " ++ prettyRunLenEnc nws
+  where
+    go 1 w = [ w2c w ]
+    go n w = show n ++ "x" ++ [ w2c w ]
 
 data Response
-  = Unit ()
-  | ByteString ByteString
+  = Unit (Maybe ())
+  | ByteString (Maybe ByteString)
   | IOException IOException
   deriving Eq
 
 prettyResponse :: Response -> String
-prettyResponse (Unit ())       = "Unit ()"
-prettyResponse (ByteString bs) =
+prettyResponse (Unit mu) = "Unit " ++ show mu
+prettyResponse (ByteString (Just bs)) =
   "ByteString \"" ++ prettyRunLenEnc (runLengthEncoding bs) ++ "\""
+prettyResponse (ByteString Nothing) =
+  "ByteString Nothing"
 prettyResponse (IOException e) = "IOException " ++ displayException e
 
 type Model = FakeJournal
@@ -98,13 +110,13 @@ step :: Command -> Model -> (Model, Response)
 step (AppendBS bs) m = Unit <$> appendBSFake bs m
 step ReadJournal   m = ByteString <$> readJournalFake m
 
-exec :: Command -> (Journal, JournalConsumer) -> IO Response
-exec (AppendBS bs) (j, _jc) = Unit <$> appendBS j bs
-exec ReadJournal   (_j, jc) = ByteString <$> readJournal jc
+exec :: Command -> Journal' -> IO Response
+exec (AppendBS bs) j = Unit <$> appendBS' j bs
+exec ReadJournal   j = ByteString <$> readJournal' j
 
 -- Generates ASCII bytestrings.
 genByteString :: Gen ByteString
-genByteString = oneof (map genBs [65..90])
+genByteString = oneof (map genBs [65..90]) -- A-Z
   where
     genBs :: Int -> Gen ByteString
     genBs i = frequency
@@ -147,34 +159,32 @@ validProgram = go True
     go valid _m []          = valid
     go valid m (cmd : cmds) = go (precondition m cmd) (fst (step cmd m)) cmds
 
--- XXX: This isn't enough to isolate tests from each other, so running multiple
--- test concurrently will likely fail.
-tEST_DIRECTORY :: FilePath
-tEST_DIRECTORY = "/tmp/journal-test"
-
 testOptions :: Options
-testOptions = defaultOptions { oMaxByteSize = 128 }
+testOptions = defaultOptions
 
 prop_journal :: Property
 prop_journal =
   let m = startJournalFake in
   forAllShrink (genCommands m) (shrinkCommands m) $ \cmds -> monadicIO $ do
     run (putStrLn ("Generated commands: " ++ show cmds))
-    run (removePathForcibly tEST_DIRECTORY)
-    jjc <- run (startJournal tEST_DIRECTORY testOptions)
+    tmp <- run (canonicalizePath =<< getTemporaryDirectory)
+    (fp, h) <- run (openTempFile tmp "JournalTest")
+    run (allocateJournal fp testOptions)
+    j <- run (startJournal' fp testOptions)
     monitor (tabulate "Commands" (map constructorString cmds))
-    (result, hist) <- go cmds m jjc []
-    run (uncurry stopJournal jjc)
+    (result, hist) <- go cmds m j []
+    -- run (uncurry stopJournal j)
     monitorStats (stats (zip cmds hist))
+    run (removeFile fp)
     return result
     where
-      go []          _m _jjc hist = return (True, reverse hist)
-      go (cmd : cmds) m  jjc hist = do
+      go []          _m _j hist = return (True, reverse hist)
+      go (cmd : cmds) m  j hist = do
         let (m', resp) = step cmd m
-        resp' <- run (exec cmd jjc `catch` (return . IOException))
+        resp' <- run (exec cmd j `catch` (return . IOException))
         assertWithFail (resp == resp') $
           prettyResponse resp ++ " /= " ++ prettyResponse resp'
-        go cmds m' jjc (resp : hist)
+        go cmds m' j (resp : hist)
 
       assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
       assertWithFail condition msg = do
@@ -211,13 +221,15 @@ monitorStats stats
 runCommands :: [Command] -> IO Bool
 runCommands cmds = do
   let m = startJournalFake
-  removePathForcibly tEST_DIRECTORY
-  jjc <- startJournal tEST_DIRECTORY testOptions
-  putStrLn ""
-  go m jjc cmds []
+  withTempFile "runCommands" $ \fp _handle -> do
+    allocateJournal fp testOptions
+    j <- startJournal' fp testOptions
+    putStrLn ""
+    go m j cmds []
   where
-    go m jjc [] _hist = putStrLn "\nSuccess!" >> return True
-    go m jjc (cmd : cmds) hist = do
+    go :: Model -> Journal' -> [Command] -> [(Command, Response)] -> IO Bool
+    go m j [] _hist = putStrLn "\nSuccess!" >> return True
+    go m j (cmd : cmds) hist = do
       let (m', resp) = step cmd m
       putStrLn (prettyFakeJournal m)
       putStrLn ""
@@ -226,19 +238,19 @@ runCommands cmds = do
       if null cmds
       then putStrLn (prettyFakeJournal m')
       else return ()
-      resp' <- exec cmd jjc `catch` (return . IOException)
-      is <- checkForInconsistencies (fst jjc)
-      if resp == resp' && null is
-      then go m' jjc cmds ((cmd, resp) : hist)
+      resp' <- exec cmd j `catch` (return . IOException)
+      -- is <- checkForInconsistencies (fst j)
+      if resp == resp' -- && null is
+      then go m' j cmds ((cmd, resp) : hist)
       else do
         putStrLn ""
         when (resp /= resp') $
           putStrLn ("Failed: " ++ prettyResponse resp ++ " /= " ++ prettyResponse resp')
-        when (not (null is)) $
-          putStrLn ("Inconsistencies: " ++ inconsistenciesString is)
+        -- when (not (null is)) $
+        --   putStrLn ("Inconsistencies: " ++ inconsistenciesString is)
         putStrLn ""
         putStrLn "Journal dump:"
-        dumpJournal (fst jjc)
+        dumpJournal' j
         print (stats (reverse hist))
         return False
 

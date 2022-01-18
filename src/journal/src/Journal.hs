@@ -1,17 +1,22 @@
 module Journal
   ( module Journal.Types
   , defaultOptions
+  , allocateJournal
   , startJournal
+  , startJournal'
   , stopJournal
   , appendBS
+  , appendBS'
   , tee
   , appendRecv
   , readJournal
+  , readJournal'
   , saveSnapshot
   , truncateAfterSnapshot
   , loadSnapshot
   , replay
   , dumpJournal
+  , dumpJournal'
   ) where
 
 import Control.Exception (assert, bracket)
@@ -156,6 +161,19 @@ appendBS jour bs = do
   writeBSToPtr bs (buf `plusPtr` (offset + hEADER_LENGTH))
   writeHeader (buf `plusPtr` offset) (makeValidHeader len)
 
+appendBS' :: Journal' -> ByteString -> IO (Maybe ())
+appendBS' jour bs = do
+  -- XXX: update assert
+  --assertM (0 < BS.length bs &&
+  --         hEADER_LENGTH + BS.length bs + fOOTER_LENGTH <= jMaxByteSize jour)
+  let len = BS.length bs
+  mClaim <- tryClaim jour len
+  case mClaim of
+    Nothing -> return Nothing
+    Just (_offset, bufferClaim) -> do
+      putBS bufferClaim 0 bs
+      Just <$> commit bufferClaim
+
 tee :: Journal -> Socket -> Int -> IO ByteString
 tee jour sock len = do
   assertM (0 < len && hEADER_LENGTH + len + fOOTER_LENGTH <= jMaxByteSize jour)
@@ -290,6 +308,15 @@ dumpJournal' :: Journal' -> IO ()
 dumpJournal' jour = do
   Vector.mapM_ dumpTermBuffer (jTermBuffers jour)
   dumpMetadata (jMetadata jour)
+  {-
+  limit <- calculatePositionLimit jour
+  let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
+      position     = termBeginPosition + fromIntegral termOffset
+
+  putStrLn $ "limit: " ++ show limit
+  putStrLn $ "termBeginPosition = " ++ show termBeginPosition
+  putStrLn $ "termOffset = " ++ show (unTermOffset termOffset)
+-}
 
 dumpJournal :: Journal -> IO ()
 dumpJournal jour = do
