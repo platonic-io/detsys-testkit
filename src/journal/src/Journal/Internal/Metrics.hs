@@ -52,9 +52,8 @@ incrCounter (Metrics cbuf _) label value = do
 
 measure :: (Enum h) => Metrics c h -> h -> Double -> IO ()
 measure (Metrics _ hbuf) label value = do
-  Position basePtr <- readPosition hbuf
   let
-    offsetToHistogram = basePtr + sizeOfAHistogram * fromEnum label
+    offsetToHistogram = sizeOfAHistogram * fromEnum label
     offsetToHistogramSum = offsetToHistogram
     offsetToHistogramCount = offsetToHistogram + sizeOf (8 :: Int)
     offsetToBucket = offsetToHistogram +
@@ -100,9 +99,8 @@ percentile :: Enum h => Metrics c h -> h -> Double -> IO (Maybe Double)
 percentile (Metrics _ hbuf) label p
   | p > 100.0 = error "percentile: percentiles cannot be over 100"
   | otherwise  = do
-      Position basePtr <- readPosition hbuf
       let
-        offsetHistogram = basePtr + sizeOfAHistogram * fromEnum label
+        offsetHistogram = sizeOfAHistogram * fromEnum label
         offsetHistogramCount = offsetHistogram + sizeOf (8 :: Int)
 
         offsetBucket = offsetHistogram + 2 * sizeOf (8 :: Int)
