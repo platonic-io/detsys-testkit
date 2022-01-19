@@ -54,6 +54,8 @@ tryClaim jour len = do
       termBeginPosition =
         computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
 
+  putStrLn ("tryClaim, termCount: " ++ show (unTermCount termCount))
+  putStrLn ("tryClaim, activePartitionIndex: " ++ show (unPartitionIndex activePartitionIndex))
   putStrLn ("tryClaim, termOffset: " ++ show (unTermOffset termOffset))
   limit <- calculatePositionLimit jour
   let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
@@ -171,14 +173,20 @@ headerWrite termBuffer termOffset len _termId = do
 rotateTerm :: Metadata -> IO ()
 rotateTerm meta = do
   termCount <- activeTermCount meta
+  putStrLn ("rotateTerm, termCount: " ++ show (unTermCount termCount))
   let activePartitionIndex = indexByTermCount termCount
       nextIndex = nextPartitionIndex activePartitionIndex
   rawTail <- readRawTail meta activePartitionIndex
   initTermId <- readInitialTermId meta
   let termId = rawTailTermId rawTail
-      nextTermId = termId + 1
-      termCount = fromIntegral (nextTermId - initTermId)
-  putStrLn ("rotateTerm, nextTermId: " ++ show (unTermId nextTermId))
+      termId' = termId + 1
+      termCount' = fromIntegral (termId' - initTermId)
+  putStrLn ("rotateTerm, activePartitionIndex: " ++
+            show (unPartitionIndex activePartitionIndex))
+  putStrLn ("rotateTerm, initialTermId: " ++ show (unTermId initTermId))
+  putStrLn ("rotateTerm, termId: " ++ show (unTermId termId))
+  putStrLn ("rotateTerm, termId': " ++ show (unTermId termId'))
+  putStrLn ("rotateTerm, termCount': " ++ show (unTermCount termCount'))
 
   -- XXX: cache this? where exactly?
   -- activePartionIndex := nextIndex
@@ -186,8 +194,15 @@ rotateTerm meta = do
   -- termId := nextTermId
   -- termBeginPosition += termBufferLength
 
-  initialiseTailWithTermId meta nextIndex nextTermId
-  writeActiveTermCount meta termCount
+  initialiseTailWithTermId meta nextIndex termId'
+  writeActiveTermCount meta termCount'
+
+  -- XXX: Remove
+  newTermCount <- activeTermCount meta
+  putStrLn ("rotateTerm, newTermCount: " ++ show (unTermCount newTermCount))
+  let newActivePartitionIndex = indexByTermCount newTermCount
+  putStrLn ("rotateTerm, newActivePartitionIndex: " ++
+            show (unPartitionIndex newActivePartitionIndex))
 
 ------------------------------------------------------------------------
 
