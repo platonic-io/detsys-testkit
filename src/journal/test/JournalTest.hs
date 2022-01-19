@@ -104,7 +104,7 @@ type Model = FakeJournal
 precondition :: Model -> Command -> Bool
 precondition m ReadJournal   = Vector.length (fjJournal m) /= fjIndex m
 precondition m (AppendBS bs) =
-  not (BS.null bs) && BS.length bs + hEADER_LENGTH <= oMaxByteSize testOptions
+  not (BS.null bs) && BS.length bs + hEADER_LENGTH <= oTermBufferLength testOptions
 
 step :: Command -> Model -> (Model, Response)
 step (AppendBS bs) m = Unit <$> appendBSFake bs m
@@ -124,7 +124,7 @@ genByteString = oneof (map genBs [65..90]) -- A-Z
       , (1, return (BS.replicate  maxLen      (fromIntegral i)))
       , (1, return (BS.replicate (maxLen - 1) (fromIntegral i)))
       ]
-    maxLen = oMaxByteSize testOptions - hEADER_LENGTH - fOOTER_LENGTH
+    maxLen = oTermBufferLength testOptions - hEADER_LENGTH - fOOTER_LENGTH
 
 genCommand :: Gen Command
 genCommand = frequency
@@ -166,7 +166,7 @@ prop_journal :: Property
 prop_journal =
   let m = startJournalFake in
   forAllShrink (genCommands m) (shrinkCommands m) $ \cmds -> monadicIO $ do
-    run (putStrLn ("Generated commands: " ++ show cmds))
+    -- run (putStrLn ("Generated commands: " ++ show cmds))
     tmp <- run (canonicalizePath =<< getTemporaryDirectory)
     (fp, h) <- run (openTempFile tmp "JournalTest")
     run (allocateJournal fp testOptions)
@@ -203,7 +203,7 @@ stats :: [(Command, Response)] -> Stats
 stats hist = Stats
   { sBytesWritten = totalAppended
   -- XXX: doesn't account for footers...
-  , sRotations    = totalAppended `div` oMaxByteSize testOptions
+  , sRotations    = totalAppended `div` oTermBufferLength testOptions
   }
   where
     Sum totalAppended =
