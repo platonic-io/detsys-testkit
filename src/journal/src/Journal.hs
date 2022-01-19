@@ -75,6 +75,7 @@ allocateJournal fp (Options termBufferLen) = do
 
     writeTermLength meta (fromIntegral termBufferLen)
     writeInitialTermId meta 4 -- XXX: should be random rather than 4.
+    initialiseTailWithTermId (Metadata meta) 0 4
     pageSize <- sysconfPageSize
     writePageSize (Metadata meta) (int2Int32 pageSize)
 

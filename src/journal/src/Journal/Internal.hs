@@ -182,7 +182,7 @@ rotateTerm meta = do
   initTermId <- readInitialTermId meta
   let termId = rawTailTermId rawTail
       termId' = termId + 1
-      termCount' = fromIntegral (termId' - initTermId)
+      termCount' = TermCount (unTermId (termId' - initTermId))
   putStrLn ("rotateTerm, activePartitionIndex: " ++
             show (unPartitionIndex activePartitionIndex))
   putStrLn ("rotateTerm, initialTermId: " ++ show (unTermId initTermId))
