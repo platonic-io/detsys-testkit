@@ -105,9 +105,9 @@ startJournal fp (Options termLength) = do
 
 appendBS :: Journal -> ByteString -> IO (Maybe ())
 appendBS jour bs = do
-  -- XXX: update assert
-  --assertM (0 < BS.length bs &&
-  --         hEADER_LENGTH + BS.length bs + fOOTER_LENGTH <= jMaxByteSize jour)
+  -- XXX: need IO to get termBufferLen, so it can't be inside the assert...
+  -- assertM (0 < BS.length bs &&
+  --          hEADER_LENGTH + BS.length bs < oTermBufferLength jour / 2)
   let len = BS.length bs
   mClaim <- tryClaim jour len
   case mClaim of

@@ -43,7 +43,16 @@ startJournalFake :: FakeJournal
 startJournalFake = FakeJournal Vector.empty 0
 
 appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Maybe ())
-appendBSFake bs (FakeJournal jour ix) = (FakeJournal (Vector.snoc jour bs) ix, Just ())
+appendBSFake bs fj@(FakeJournal jour ix)
+  | unreadBytes jour ix < limit = (FakeJournal (Vector.snoc jour bs) ix, Just ())
+  | otherwise                   = (fj, Nothing)
+  where
+    limit = oTermBufferLength testOptions `div` 2
+
+    unreadBytes :: Vector ByteString -> Int -> Int
+    unreadBytes bs ix = sum [ BS.length b
+                            | b <- map (bs Vector.!) [ix..Vector.length bs - 1]
+                            ]
 
 readJournalFake :: FakeJournal -> (FakeJournal, Maybe ByteString)
 readJournalFake fj@(FakeJournal jour ix) =
@@ -148,7 +157,7 @@ genRunLenEncoding = sized $ \n -> do
   chr <- elements ['A'..'Z']
   return [(len, chr)]
   where
-    maxLen = oTermBufferLength testOptions - hEADER_LENGTH - fOOTER_LENGTH
+    maxLen = (oTermBufferLength testOptions - hEADER_LENGTH - fOOTER_LENGTH) `div` 2
 
 genCommand :: Gen Command
 genCommand = frequency

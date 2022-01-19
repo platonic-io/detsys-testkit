@@ -61,6 +61,8 @@ tryClaim jour len = do
   let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
       position     = termBeginPosition + fromIntegral termOffset
 
+  putStrLn ("tryClaim, position: " ++ show position)
+  putStrLn ("tryClaim, limit: " ++ show limit)
   if position < fromIntegral limit
   then do
     mResult <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len
@@ -181,7 +183,10 @@ rotateTerm meta = do
   rawTail <- readRawTail meta activePartitionIndex
   initTermId <- readInitialTermId meta
   let termId = rawTailTermId rawTail
-      termId' = termId + 1
+
+  assertM (termCount == TermCount (unTermId (termId - initTermId)))
+
+  let termId' = termId + 1
       termCount' = TermCount (unTermId (termId' - initTermId))
   putStrLn ("rotateTerm, activePartitionIndex: " ++
             show (unPartitionIndex activePartitionIndex))
@@ -189,6 +194,7 @@ rotateTerm meta = do
   putStrLn ("rotateTerm, termId: " ++ show (unTermId termId))
   putStrLn ("rotateTerm, termId': " ++ show (unTermId termId'))
   putStrLn ("rotateTerm, termCount': " ++ show (unTermCount termCount'))
+
 
   -- XXX: cache this? where exactly?
   -- activePartionIndex := nextIndex
@@ -198,13 +204,6 @@ rotateTerm meta = do
 
   initialiseTailWithTermId meta nextIndex termId'
   writeActiveTermCount meta termCount'
-
-  -- XXX: Remove
-  newTermCount <- activeTermCount meta
-  putStrLn ("rotateTerm, newTermCount: " ++ show (unTermCount newTermCount))
-  let newActivePartitionIndex = indexByTermCount newTermCount
-  putStrLn ("rotateTerm, newActivePartitionIndex: " ++
-            show (unPartitionIndex newActivePartitionIndex))
 
 ------------------------------------------------------------------------
 
