@@ -67,9 +67,7 @@ constructorString AppendBS {} = "AppendBS"
 constructorString ReadJournal = "ReadJournal"
 
 prettyCommand :: Command -> String
-prettyCommand (AppendBS rle) =
-  "AppendBS \"" ++ prettyRunLenEnc rle ++ "\""
-prettyCommand ReadJournal   = "ReadJournal"
+prettyCommand = show
 
 prettyCommands :: [Command] -> String
 prettyCommands = concat . go ["["] . map prettyCommand
@@ -287,6 +285,18 @@ runCommands cmds = do
 ------------------------------------------------------------------------
 
 -- XXX: make sure all these unit tests are part of the coverage...
+
+unit_bug0 :: Assertion
+unit_bug0 = assertProgram ""
+  [ AppendBS [(2, 'E')]
+  , AppendBS [(65524, 'O')]
+  ]
+
+unit_bug1 :: Assertion
+unit_bug1 = assertProgram ""
+  [ AppendBS [(65524, 'O')]
+  , AppendBS [(65524, 'G')]
+  ]
 
 {-
 nit_bug0 :: Assertion
