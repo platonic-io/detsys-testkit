@@ -144,7 +144,9 @@ termAppenderClaim meta termBuffer termId termOffset len = do
 
 handleEndOfLogCondition :: ByteBuffer -> TermOffset -> Capacity -> TermId -> IO ()
 handleEndOfLogCondition termBuffer termOffset (Capacity termLen) termId = do
+  putStrLn "handleEndOfLogCondition"
   when (termOffset < fromIntegral termLen) $ do
+    putStrLn "handleEndOfLogCondition: when"
 
     let paddingLength :: HeaderLength
         paddingLength = fromIntegral (termLen - fromIntegral termOffset)
@@ -176,6 +178,7 @@ rotateTerm meta = do
   let termId = rawTailTermId rawTail
       nextTermId = termId + 1
       termCount = fromIntegral (nextTermId - initTermId)
+  putStrLn ("rotateTerm, nextTermId: " ++ show (unTermId nextTermId))
 
   -- XXX: cache this? where exactly?
   -- activePartionIndex := nextIndex
