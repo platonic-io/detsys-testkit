@@ -155,8 +155,8 @@ activeTermCount (Metadata meta) =
   TermCount <$> readInt32OffAddr meta lOG_ACTIVE_TERM_COUNT_OFFSET
 
 writeActiveTermCount :: Metadata -> TermCount -> IO ()
-writeActiveTermCount (Metadata meta) = do
-  writeIntOffAddr meta lOG_ACTIVE_TERM_COUNT_OFFSET . fromIntegral
+writeActiveTermCount (Metadata meta) =
+  writeInt32OffAddr meta lOG_ACTIVE_TERM_COUNT_OFFSET . unTermCount
 
 casActiveTermCount :: Metadata -> TermCount -> TermCount -> IO Bool
 casActiveTermCount (Metadata meta) (TermCount expected) (TermCount new) =

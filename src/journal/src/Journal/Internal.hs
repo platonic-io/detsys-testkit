@@ -88,7 +88,9 @@ calculatePositionLimit jour = do
 cleanBufferTo :: Journal -> Int -> IO ()
 cleanBufferTo _ _ = return ()
 
-backPressureStatus _ _ = return Nothing
+backPressureStatus _ _ = do
+  putStrLn "backPressureStatus"
+  return Nothing
 
 newPosition :: Metadata -> Maybe (TermOffset, BufferClaim) -> IO (Maybe (Int64, BufferClaim))
 newPosition meta mResult =
