@@ -1,8 +1,11 @@
 {-# LANGUAGE MagicHash #-}
 
-module Journal.Internal.Utils where
+module Journal.Internal.Utils
+  ( module Journal.Internal.Utils
+  , module Assert)
+  where
 
-import Control.Exception (assert, bracket)
+import Control.Exception (bracket)
 import Data.Bits ((.|.))
 import Data.Int (Int32, Int64)
 import Foreign.Marshal.Alloc (callocBytes, free)
@@ -21,12 +24,10 @@ import System.Posix.IO
        )
 import System.Posix.Types (Fd)
 
+import Assert
 import Journal.Internal.FileAllocate
 
 ------------------------------------------------------------------------
-
-assertM :: (HasCallStack, Monad m) => Bool -> m ()
-assertM b = assert b (return ())
 
 withRWFd :: FilePath -> (Fd -> IO a) -> IO a
 withRWFd fp k =
