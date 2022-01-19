@@ -128,7 +128,6 @@ checkInRange val (lower, upper) name
       , ", ", show upper, "]"
       ]
 
-
 boundCheck :: HasCallStack => ByteBuffer -> Int -> Int -> IO ()
 boundCheck bb ix size = do
   invariant bb
