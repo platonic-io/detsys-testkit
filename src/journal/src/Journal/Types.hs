@@ -365,8 +365,7 @@ emptyMetrics :: Metrics
 emptyMetrics = Metrics 0 0
 
 data Options = Options
-  { oMaxByteSize :: !Int
-  , oTermBufferLength :: !Int
+  { oTermBufferLength :: !Int
   }
   -- archive
   -- buffer and fsync every ms?

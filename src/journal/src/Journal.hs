@@ -49,10 +49,10 @@ import Journal.Internal.Utils
 -- * Initialisation and shutdown
 
 defaultOptions :: Options
-defaultOptions = Options 1024 (64 * 1024)
+defaultOptions = Options (64 * 1024)
 
 allocateJournal :: FilePath -> Options -> IO ()
-allocateJournal fp (Options _ termBufferLen) = do
+allocateJournal fp (Options termBufferLen) = do
   unless (popCount termBufferLen == 1) $
     -- XXX: check bounds
     error "allocateJournal: oTermBufferLength must be a power of 2"
@@ -79,7 +79,7 @@ allocateJournal fp (Options _ termBufferLen) = do
     writePageSize (Metadata meta) (int2Int32 pageSize)
 
 startJournal :: FilePath -> Options -> IO Journal
-startJournal fp (Options _ termLength) = do
+startJournal fp (Options termLength) = do
 
   logLength <- fromIntegral <$> getFileSize fp
   bb <- mmapped fp logLength
