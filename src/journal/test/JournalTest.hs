@@ -71,6 +71,14 @@ prettyCommand (AppendBS rle) =
   "AppendBS \"" ++ prettyRunLenEnc rle ++ "\""
 prettyCommand ReadJournal   = "ReadJournal"
 
+prettyCommands :: [Command] -> String
+prettyCommands = concat . go ["["] . map prettyCommand
+  where
+    go :: [String] -> [String] -> [String]
+    go acc []       = reverse ("]" : acc)
+    go acc [s]      = reverse ("]" : s : acc)
+    go acc (s : ss) = go (", " : s : acc) ss
+
 encodeRunLength :: ByteString -> [(Int, Char)]
 encodeRunLength = map (BS.length &&& BS.head) . BS.group
 
@@ -80,6 +88,13 @@ decodeRunLength = go mempty
     go :: BS.Builder -> [(Int, Char)] -> ByteString
     go acc []             = LBS.toStrict (BS.toLazyByteString acc)
     go acc ((n, c) : ncs) = go (acc <> BS.byteString (BS.replicate n c)) ncs
+
+prop_runLengthEncoding :: ByteString -> Property
+prop_runLengthEncoding bs = bs === decodeRunLength (encodeRunLength bs)
+
+prop_runLengthEncoding' :: Property
+prop_runLengthEncoding' = forAll genRunLenEncoding $ \rle ->
+  rle === encodeRunLength (decodeRunLength rle)
 
 prettyRunLenEnc :: [(Int, Char)] -> String
 prettyRunLenEnc ncs0 = case ncs0 of
@@ -130,7 +145,8 @@ exec ReadJournal   j = ByteString <$> readJournal j
 
 genRunLenEncoding :: Gen [(Int, Char)]
 genRunLenEncoding = sized $ \n -> do
-  len <- elements [n, maxLen, maxLen - 1]
+  len <- elements [ max 1 n -- Disallow n == 0.
+                  , maxLen, maxLen - 1]
   chr <- elements ['A'..'Z']
   return [(len, chr)]
   where
@@ -177,7 +193,7 @@ testOptions = defaultOptions
 prop_journal :: Property
 prop_journal =
   let m = startJournalFake in
-  forAllShrink (genCommands m) (shrinkCommands m) $ \cmds -> monadicIO $ do
+  forAllShrinkShow (genCommands m) (shrinkCommands m) prettyCommands $ \cmds -> monadicIO $ do
     -- run (putStrLn ("Generated commands: " ++ show cmds))
     tmp <- run (canonicalizePath =<< getTemporaryDirectory)
     (fp, h) <- run (openTempFile tmp "JournalTest")
