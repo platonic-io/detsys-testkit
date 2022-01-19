@@ -25,12 +25,21 @@ extra-source-files:
   cbits/atomic.c
   cbits/mac_falloc.c
 
+flag SkipAssert
+  description: Disable running asserts
+  default: False
+  manual: True
+
 library
   hs-source-dirs:   src
   if os(darwin)
     hs-source-dirs: osx
   if os(linux)
     hs-source-dirs: linux
+  if flag(SkipAssert)
+    hs-source-dirs: extra/assert/skiprun
+  else
+    hs-source-dirs: extra/assert/dorun
 
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
@@ -64,6 +73,7 @@ library
     Journal.Internal.Utils
     Journal.Types
     Journal.Types.AtomicCounter
+    Assert
 
   ghc-options:      -O2
   if os(linux)
