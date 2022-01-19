@@ -7,12 +7,12 @@ import Control.Arrow ((&&&))
 import Control.Exception (IOException, catch, displayException)
 import Control.Monad (unless, when)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import Data.ByteString.Internal (w2c)
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Builder as BS
 import Data.Monoid (Sum(Sum))
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
-import Data.Word (Word8)
 import System.Directory
        (canonicalizePath, getTemporaryDirectory, removeFile)
 import System.IO (openTempFile)
@@ -37,7 +37,7 @@ data FakeJournal' a = FakeJournal
 type FakeJournal = FakeJournal' ByteString
 
 prettyFakeJournal :: FakeJournal -> String
-prettyFakeJournal = show . fmap (prettyRunLenEnc . runLengthEncoding)
+prettyFakeJournal = show . fmap (prettyRunLenEnc . encodeRunLength)
 
 startJournalFake :: FakeJournal
 startJournalFake = FakeJournal Vector.empty 0
@@ -52,7 +52,7 @@ readJournalFake fj@(FakeJournal jour ix) =
 ------------------------------------------------------------------------
 
 data Command
-  = AppendBS ByteString
+  = AppendBS [(Int, Char)] -- Run length encoded bytestring.
   -- Tee
   -- AppendRecv
   | ReadJournal
@@ -67,21 +67,28 @@ constructorString AppendBS {} = "AppendBS"
 constructorString ReadJournal = "ReadJournal"
 
 prettyCommand :: Command -> String
-prettyCommand (AppendBS bs) =
-  "AppendBS \"" ++ prettyRunLenEnc (runLengthEncoding bs) ++ "\""
+prettyCommand (AppendBS rle) =
+  "AppendBS \"" ++ prettyRunLenEnc rle ++ "\""
 prettyCommand ReadJournal   = "ReadJournal"
 
-runLengthEncoding :: ByteString -> [(Int, Word8)]
-runLengthEncoding = map (BS.length &&& BS.head) . BS.group
+encodeRunLength :: ByteString -> [(Int, Char)]
+encodeRunLength = map (BS.length &&& BS.head) . BS.group
 
-prettyRunLenEnc :: [(Int, Word8)] -> String
-prettyRunLenEnc nws0 = case nws0 of
-  []           -> ""
-  [(n, w)]     -> go n w
-  (n, w) : nws -> go n w ++ " " ++ prettyRunLenEnc nws
+decodeRunLength :: [(Int, Char)] -> ByteString
+decodeRunLength = go mempty
   where
-    go 1 w = [ w2c w ]
-    go n w = show n ++ "x" ++ [ w2c w ]
+    go :: BS.Builder -> [(Int, Char)] -> ByteString
+    go acc []             = LBS.toStrict (BS.toLazyByteString acc)
+    go acc ((n, c) : ncs) = go (acc <> BS.byteString (BS.replicate n c)) ncs
+
+prettyRunLenEnc :: [(Int, Char)] -> String
+prettyRunLenEnc ncs0 = case ncs0 of
+  []           -> ""
+  [(n, c)]     -> go n c
+  (n, c) : ncs -> go n c ++ " " ++ prettyRunLenEnc ncs
+  where
+    go 1 c = [ c ]
+    go n c = show n ++ "x" ++ [ c ]
 
 data Response
   = Unit (Maybe ())
@@ -90,9 +97,9 @@ data Response
   deriving Eq
 
 prettyResponse :: Response -> String
-prettyResponse (Unit mu) = "Unit " ++ show mu
+prettyResponse (Unit mu) = "Unit (" ++ show mu ++ ")"
 prettyResponse (ByteString (Just bs)) =
-  "ByteString \"" ++ prettyRunLenEnc (runLengthEncoding bs) ++ "\""
+  "ByteString \"" ++ prettyRunLenEnc (encodeRunLength bs) ++ "\""
 prettyResponse (ByteString Nothing) =
   "ByteString Nothing"
 prettyResponse (IOException e) = "IOException " ++ displayException e
@@ -103,32 +110,35 @@ type Model = FakeJournal
 -- blocking) and don't append empty bytestrings.
 precondition :: Model -> Command -> Bool
 precondition m ReadJournal   = Vector.length (fjJournal m) /= fjIndex m
-precondition m (AppendBS bs) =
+precondition m (AppendBS rle) = let bs = decodeRunLength rle in
   not (BS.null bs) && BS.length bs + hEADER_LENGTH <= oTermBufferLength testOptions
 
 step :: Command -> Model -> (Model, Response)
-step (AppendBS bs) m = Unit <$> appendBSFake bs m
-step ReadJournal   m = ByteString <$> readJournalFake m
+step (AppendBS rle) m = Unit <$> appendBSFake (decodeRunLength rle) m
+step ReadJournal    m = ByteString <$> readJournalFake m
 
 exec :: Command -> Journal -> IO Response
-exec (AppendBS bs) j = Unit <$> appendBS j bs
+exec (AppendBS rle) j = do
+  let bs = decodeRunLength rle
+  mu <- appendBS j bs
+  case mu of
+    Nothing ->
+      -- Rotation or backpressure happend, retry...
+      Unit <$> appendBS j bs
+    Just () -> return (Unit (Just ()))
 exec ReadJournal   j = ByteString <$> readJournal j
 
--- Generates ASCII bytestrings.
-genByteString :: Gen ByteString
-genByteString = oneof (map genBs [65..90]) -- A-Z
+genRunLenEncoding :: Gen [(Int, Char)]
+genRunLenEncoding = sized $ \n -> do
+  len <- elements [n, maxLen, maxLen - 1]
+  chr <- elements ['A'..'Z']
+  return [(len, chr)]
   where
-    genBs :: Int -> Gen ByteString
-    genBs i = frequency
-      [ (1, sized (\n -> return (BS.replicate n (fromIntegral i))))
-      , (1, return (BS.replicate  maxLen      (fromIntegral i)))
-      , (1, return (BS.replicate (maxLen - 1) (fromIntegral i)))
-      ]
     maxLen = oTermBufferLength testOptions - hEADER_LENGTH - fOOTER_LENGTH
 
 genCommand :: Gen Command
 genCommand = frequency
-  [ (1, AppendBS <$> genByteString)
+  [ (1, AppendBS <$> genRunLenEncoding)
   , (1, pure ReadJournal)
   ]
 
@@ -144,10 +154,12 @@ genCommands m0 = sized (go m0)
 
 shrinkCommand :: Command -> [Command]
 shrinkCommand ReadJournal   = []
-shrinkCommand (AppendBS bs) =
-  [ AppendBS (BS.pack w8s)
-  | w8s <- shrinkList (const []) (BS.unpack bs)
-  , not (null w8s) ]
+shrinkCommand (AppendBS rle) = []
+  -- [ AppendBS (BS.drop 1 bs) ] -- , AppendBS (BS.drop (hEADER_LENGTH * 2 + 1) bs) ]
+  -- ++
+  -- [ AppendBS (BS.pack w8s)
+  -- | w8s <- shrinkList (const []) (BS.unpack bs)
+  -- , not (null w8s) ]
 
 shrinkCommands :: Model -> [Command] -> [[Command]]
 shrinkCommands m = filter (validProgram m) . shrinkList shrinkCommand
@@ -174,7 +186,7 @@ prop_journal =
     monitor (tabulate "Commands" (map constructorString cmds))
     (result, hist) <- go cmds m j []
     -- run (uncurry stopJournal j)
-    monitorStats (stats (zip cmds hist))
+    -- monitorStats (stats (zip cmds hist))
     run (removeFile fp)
     return result
     where
@@ -193,6 +205,7 @@ prop_journal =
         assert condition
 
 -- XXX: Get this straight from the metrics of the journal instead?
+  {-
 data Stats = Stats
   { sBytesWritten :: Int
   , sRotations    :: Int
@@ -217,6 +230,7 @@ monitorStats stats
   = monitor
   $ collect ("Bytes written: " <> show (sBytesWritten stats))
   . collect ("Rotations: "     <> show (sRotations stats))
+-}
 
 runCommands :: [Command] -> IO Bool
 runCommands cmds = do
@@ -251,15 +265,16 @@ runCommands cmds = do
         putStrLn ""
         putStrLn "Journal dump:"
         dumpJournal j
-        print (stats (reverse hist))
+        -- print (stats (reverse hist))
         return False
 
 ------------------------------------------------------------------------
 
 -- XXX: make sure all these unit tests are part of the coverage...
 
-unit_bug0 :: Assertion
-unit_bug0 = assertProgram "read after rotation"
+{-
+nit_bug0 :: Assertion
+nit_bug0 = assertProgram "read after rotation"
   [ AppendBS "AAAAAAAAAAAAAAAAA"
   , AppendBS "BBBBBBBBBBBBBBBB"
   , ReadJournal
@@ -274,8 +289,8 @@ unit_bug0 = assertProgram "read after rotation"
   , ReadJournal
   ]
 
-unit_bug1 :: Assertion
-unit_bug1 = assertProgram "two rotations"
+nit_bug1 :: Assertion
+nit_bug1 = assertProgram "two rotations"
   [ AppendBS "XXXXXXXXXXXXXXXXXXXX"
   , AppendBS "XXXXXXXXXXXXXXXXXXXX"
   , AppendBS "XXXXXXXXXXXXXXXXXXXX"
@@ -288,8 +303,8 @@ unit_bug1 = assertProgram "two rotations"
   , AppendBS "XXXXXXXXXXXXXXXXXXXX"
   ]
 
-unit_bug2 :: Assertion
-unit_bug2 = assertProgram "stuck reading"
+nit_bug2 :: Assertion
+nit_bug2 = assertProgram "stuck reading"
   [ AppendBS "OOOOOOOOOOOOO"
   , ReadJournal
   , AppendBS "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" -- 116 + 6 = 122 bytes
@@ -298,14 +313,15 @@ unit_bug2 = assertProgram "stuck reading"
   , ReadJournal
   ]
 
-unit_bug3 :: Assertion
-unit_bug3 = assertProgram "two rotations reading side"
+nit_bug3 :: Assertion
+nit_bug3 = assertProgram "two rotations reading side"
   [ AppendBS "M"
   , AppendBS "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR" -- 110 + 6 = 116 bytes
   , AppendBS "L"
   , ReadJournal
   , ReadJournal
   ]
+  -}
 
 ------------------------------------------------------------------------
 
