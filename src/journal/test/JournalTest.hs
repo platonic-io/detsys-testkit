@@ -24,7 +24,7 @@ import Test.Tasty.HUnit (Assertion, assertBool)
 
 import Journal
 import Journal.Internal
-import Journal.Internal.Utils
+import Journal.Internal.Utils hiding (assert)
 
 ------------------------------------------------------------------------
 

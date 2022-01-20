@@ -33,7 +33,7 @@ import Test.Tasty.HUnit (Assertion, assertBool, assertEqual)
 
 import Journal.Internal.ByteBufferPtr
 import Journal.Internal.Mmap
-import Journal.Internal.Utils
+import Journal.Internal.Utils hiding (assert)
 
 ------------------------------------------------------------------------
 
