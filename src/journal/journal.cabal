@@ -93,6 +93,7 @@ test-suite test
     Journal.Internal.AtomicsTest
     Journal.Internal.ByteBufferTest
     Journal.Internal.MmapTest
+    Journal.Internal.MetricTest
     JournalTest
     TastyDiscover
 
@@ -101,6 +102,7 @@ test-suite test
     , base
     , binary
     , bytestring
+    , containers
     , directory
     , HUnit
     , journal
