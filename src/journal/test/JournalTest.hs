@@ -47,7 +47,7 @@ appendBSFake bs fj@(FakeJournal jour ix)
   | unreadBytes jour ix < limit = (FakeJournal (Vector.snoc jour bs) ix, Just ())
   | otherwise                   = (fj, Nothing)
   where
-    limit = oTermBufferLength testOptions `div` 2
+    limit = (oTermBufferLength testOptions `div` 2) - hEADER_LENGTH
 
     unreadBytes :: Vector ByteString -> Int -> Int
     unreadBytes bs ix = sum [ BS.length b
@@ -133,7 +133,7 @@ type Model = FakeJournal
 precondition :: Model -> Command -> Bool
 precondition m ReadJournal   = Vector.length (fjJournal m) /= fjIndex m
 precondition m (AppendBS rle) = let bs = decodeRunLength rle in
-  not (BS.null bs) && BS.length bs + hEADER_LENGTH <= oTermBufferLength testOptions
+  not (BS.null bs) && BS.length bs + hEADER_LENGTH < oTermBufferLength testOptions `div` 2
 
 step :: Command -> Model -> (Model, Response)
 step (AppendBS rle) m = Unit <$> appendBSFake (decodeRunLength rle) m
@@ -176,13 +176,12 @@ genCommands m0 = sized (go m0)
       return (cmd : cmds)
 
 shrinkCommand :: Command -> [Command]
-shrinkCommand ReadJournal   = []
-shrinkCommand (AppendBS rle) = []
-  -- [ AppendBS (BS.drop 1 bs) ] -- , AppendBS (BS.drop (hEADER_LENGTH * 2 + 1) bs) ]
-  -- ++
-  -- [ AppendBS (BS.pack w8s)
-  -- | w8s <- shrinkList (const []) (BS.unpack bs)
-  -- , not (null w8s) ]
+shrinkCommand ReadJournal    = []
+shrinkCommand (AppendBS rle) =
+  [ AppendBS rle'
+  | rle' <- shrinkList (\(i, c) -> [ (i', c) | i' <- shrink i ]) rle
+  , not (null rle')
+  ]
 
 shrinkCommands :: Model -> [Command] -> [[Command]]
 shrinkCommands m = filter (validProgram m) . shrinkList shrinkCommand
@@ -207,12 +206,14 @@ prop_journal =
     run (allocateJournal fp testOptions)
     j <- run (startJournal fp testOptions)
     monitor (tabulate "Commands" (map constructorString cmds))
+    monitor (whenFail (dumpJournal j))
     (result, hist) <- go cmds m j []
     -- run (uncurry stopJournal j)
     -- monitorStats (stats (zip cmds hist))
     run (removeFile fp)
     return result
     where
+      go :: [Command] -> Model -> Journal -> [Response] -> PropertyM IO (Bool, [Response])
       go []          _m _j hist = return (True, reverse hist)
       go (cmd : cmds) m  j hist = do
         let (m', resp) = step cmd m
@@ -298,14 +299,40 @@ runCommands cmds = do
 unit_bug0 :: Assertion
 unit_bug0 = assertProgram ""
   [ AppendBS [(2, 'E')]
-  , AppendBS [(65524, 'O')]
+  , AppendBS [(32762, 'O')]
   ]
 
 unit_bug1 :: Assertion
 unit_bug1 = assertProgram ""
-  [ AppendBS [(65524, 'O')]
-  , AppendBS [(65524, 'G')]
+  [ AppendBS [(32762, 'O')]
+  , AppendBS [(32762, 'G')]
   ]
+
+unit_bug11 :: Assertion
+unit_bug11 = assertProgram ""
+  [ AppendBS [(32762, 'O')]
+  , ReadJournal
+  , AppendBS [(32762, 'G')]
+  , ReadJournal
+  , AppendBS [(32762, 'K')]
+  , ReadJournal
+  , AppendBS [(32762, 'J')]
+  ]
+
+unit_bug2 :: Assertion
+unit_bug2 = assertProgram ""
+  [ AppendBS [(7,'N')]
+  , ReadJournal
+  , AppendBS [(32762,'N')]
+  , ReadJournal
+  , AppendBS [(32761,'W')]
+  , AppendBS [(32762,'Q')]
+  ]
+  -- limit = termBufferLength / 2 - hEADER_LENGTH = 65536 / 2 - 6 = 32762
+
+unit_bug3 :: Assertion
+unit_bug3 = assertProgram ""
+  [AppendBS [(1, 'A')], AppendBS [(32755,'Q')], AppendBS [(1,'D')]]
 
 {-
 nit_bug0 :: Assertion

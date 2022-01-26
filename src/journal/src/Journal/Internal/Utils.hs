@@ -2,13 +2,19 @@
 
 module Journal.Internal.Utils where
 
-import Control.Exception (assert, bracket)
+import Control.Exception (Exception, assert, bracket, throw)
 import Data.Bits ((.|.))
 import Data.Int (Int32, Int64)
 import Foreign.Marshal.Alloc (callocBytes, free)
 import GHC.Int (Int(I#), Int32(I32#), Int64(I64#))
+import GHC.Stack
+       ( CallStack
+       , HasCallStack
+       , callStack
+       , popCallStack
+       , prettyCallStack
+       )
 import GHC.Word (Word32(W32#), Word64(W64#))
-import GHC.Stack (HasCallStack)
 import System.Directory (canonicalizePath, getTemporaryDirectory)
 import System.IO (Handle, hClose, openTempFile)
 import System.Posix.Files (ownerReadMode, ownerWriteMode)
@@ -79,3 +85,32 @@ withTempFile :: String -> (FilePath -> Handle -> IO a) -> IO a
 withTempFile name k = do
   tmp <- canonicalizePath =<< getTemporaryDirectory
   bracket (openTempFile tmp name) (\(_fp, h) -> hClose h) (uncurry k)
+
+------------------------------------------------------------------------
+-- Stolen from the Agda code base
+
+data Impossible = Impossible CallStack
+
+instance Exception Impossible
+
+instance Show Impossible where
+  show (Impossible loc) = unlines
+    [ "An internal error has occurred. Please report this as a bug."
+    , "Location of the error: " ++ prettyCallStack loc
+    ]
+
+__IMPOSSIBLE__ :: HasCallStack => a
+__IMPOSSIBLE__ = withCallerCallStack (throw . Impossible)
+
+withCallerCallStack :: HasCallStack => (CallStack -> b) -> b
+withCallerCallStack = withNBackCallStack 1
+
+withNBackCallStack :: HasCallStack => Word -> (CallStack -> b) -> b
+withNBackCallStack n f = f (popnCallStack n from)
+  where
+    here = callStack
+    from = popCallStack here
+
+popnCallStack :: Word -> CallStack -> CallStack
+popnCallStack 0 = id
+popnCallStack n = (popnCallStack (n - 1)) . popCallStack

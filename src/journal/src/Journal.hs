@@ -105,9 +105,10 @@ startJournal fp (Options termLength) = do
 
 appendBS :: Journal -> ByteString -> IO (Maybe ())
 appendBS jour bs = do
-  -- XXX: need IO to get termBufferLen, so it can't be inside the assert...
-  -- assertM (0 < BS.length bs &&
-  --          hEADER_LENGTH + BS.length bs < oTermBufferLength jour / 2)
+  -- XXX: use new assertM
+  -- assertM $ do
+  --   termBufferLen <- int322Int <$> readTermLength (jMetadata jour)
+  --   0 < BS.length bs && hEADER_LENGTH + BS.length bs < termBufferLen / 2
   let len = BS.length bs
   mClaim <- tryClaim jour len
   case mClaim of
@@ -215,7 +216,11 @@ readJournal jour = do
 
 dumpJournal :: Journal -> IO ()
 dumpJournal jour = do
-  Vector.mapM_ dumpTermBuffer (jTermBuffers jour)
+  termLen <- readTermLength (jMetadata jour)
+  termOffsets <- Vector.generateM pARTITION_COUNT $ \i -> do
+    rawTail <- readRawTail (jMetadata jour) (PartitionIndex i)
+    return (rawTailTermOffset rawTail termLen)
+  Vector.imapM_ dumpTermBuffer (jTermBuffers jour `Vector.zip` termOffsets)
   dumpMetadata (jMetadata jour)
   {-
   limit <- calculatePositionLimit jour

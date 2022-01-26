@@ -299,6 +299,10 @@ writeFrameLength termBuffer termOffset (HeaderLength len) =
   writeInt32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
     len
 
+readFrameType :: ByteBuffer -> TermOffset -> IO HeaderTag
+readFrameType termBuffer termOffset = HeaderTag <$>
+  readWord8OffAddr termBuffer (fromIntegral termOffset + tAG_FIELD_OFFSET)
+
 readFrameLength :: ByteBuffer -> TermOffset -> IO HeaderLength
 readFrameLength termBuffer termOffset = HeaderLength <$>
   readInt32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
