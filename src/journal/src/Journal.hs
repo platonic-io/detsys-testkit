@@ -75,6 +75,7 @@ allocateJournal fp (Options termBufferLen) = do
 
     writeTermLength meta (fromIntegral termBufferLen)
     writeInitialTermId meta 4 -- XXX: should be random rather than 4.
+    initialiseTailWithTermId (Metadata meta) 0 4
     pageSize <- sysconfPageSize
     writePageSize (Metadata meta) (int2Int32 pageSize)
 
@@ -104,9 +105,9 @@ startJournal fp (Options termLength) = do
 
 appendBS :: Journal -> ByteString -> IO (Maybe ())
 appendBS jour bs = do
-  -- XXX: update assert
-  --assertM (0 < BS.length bs &&
-  --         hEADER_LENGTH + BS.length bs + fOOTER_LENGTH <= jMaxByteSize jour)
+  assertIO $ do
+    termBufferLen <- int322Int <$> readTermLength (jMetadata jour)
+    return (0 < BS.length bs && hEADER_LENGTH + BS.length bs < termBufferLen `div` 2)
   let len = BS.length bs
   mClaim <- tryClaim jour len
   case mClaim of
@@ -214,7 +215,11 @@ readJournal jour = do
 
 dumpJournal :: Journal -> IO ()
 dumpJournal jour = do
-  Vector.mapM_ dumpTermBuffer (jTermBuffers jour)
+  termLen <- readTermLength (jMetadata jour)
+  termOffsets <- Vector.generateM pARTITION_COUNT $ \i -> do
+    rawTail <- readRawTail (jMetadata jour) (PartitionIndex i)
+    return (rawTailTermOffset rawTail termLen)
+  Vector.imapM_ dumpTermBuffer (jTermBuffers jour `Vector.zip` termOffsets)
   dumpMetadata (jMetadata jour)
   {-
   limit <- calculatePositionLimit jour

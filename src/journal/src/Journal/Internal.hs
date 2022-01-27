@@ -4,6 +4,7 @@
 
 module Journal.Internal where
 
+import Control.Arrow ((&&&))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (atomically, writeTVar)
 import Control.Exception (assert, bracket)
@@ -11,6 +12,7 @@ import Control.Monad (unless, when)
 import Data.Binary (Binary, decode, encode)
 import Data.Bits (Bits, shiftL, shiftR, (.&.), (.|.))
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSChar8
 import Data.ByteString.Internal (fromForeignPtr)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int32, Int64)
@@ -54,11 +56,15 @@ tryClaim jour len = do
       termBeginPosition =
         computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
 
+  putStrLn ("tryClaim, termCount: " ++ show (unTermCount termCount))
+  putStrLn ("tryClaim, activePartitionIndex: " ++ show (unPartitionIndex activePartitionIndex))
   putStrLn ("tryClaim, termOffset: " ++ show (unTermOffset termOffset))
   limit <- calculatePositionLimit jour
   let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
       position     = termBeginPosition + fromIntegral termOffset
 
+  putStrLn ("tryClaim, position: " ++ show position)
+  putStrLn ("tryClaim, limit: " ++ show limit)
   if position < fromIntegral limit
   then do
     mResult <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len
@@ -86,7 +92,9 @@ calculatePositionLimit jour = do
 cleanBufferTo :: Journal -> Int -> IO ()
 cleanBufferTo _ _ = return ()
 
-backPressureStatus _ _ = return Nothing
+backPressureStatus _ _ = do
+  putStrLn "backPressureStatus"
+  return Nothing
 
 newPosition :: Metadata -> Maybe (TermOffset, BufferClaim) -> IO (Maybe (Int64, BufferClaim))
 newPosition meta mResult =
@@ -171,14 +179,24 @@ headerWrite termBuffer termOffset len _termId = do
 rotateTerm :: Metadata -> IO ()
 rotateTerm meta = do
   termCount <- activeTermCount meta
+  putStrLn ("rotateTerm, termCount: " ++ show (unTermCount termCount))
   let activePartitionIndex = indexByTermCount termCount
       nextIndex = nextPartitionIndex activePartitionIndex
   rawTail <- readRawTail meta activePartitionIndex
   initTermId <- readInitialTermId meta
   let termId = rawTailTermId rawTail
-      nextTermId = termId + 1
-      termCount = fromIntegral (nextTermId - initTermId)
-  putStrLn ("rotateTerm, nextTermId: " ++ show (unTermId nextTermId))
+
+  assertM (termCount == TermCount (unTermId (termId - initTermId)))
+
+  let termId' = termId + 1
+      termCount' = TermCount (unTermId (termId' - initTermId))
+  putStrLn ("rotateTerm, activePartitionIndex: " ++
+            show (unPartitionIndex activePartitionIndex))
+  putStrLn ("rotateTerm, initialTermId: " ++ show (unTermId initTermId))
+  putStrLn ("rotateTerm, termId: " ++ show (unTermId termId))
+  putStrLn ("rotateTerm, termId': " ++ show (unTermId termId'))
+  putStrLn ("rotateTerm, termCount': " ++ show (unTermCount termCount'))
+
 
   -- XXX: cache this? where exactly?
   -- activePartionIndex := nextIndex
@@ -186,8 +204,8 @@ rotateTerm meta = do
   -- termId := nextTermId
   -- termBeginPosition += termBufferLength
 
-  initialiseTailWithTermId meta nextIndex nextTermId
-  writeActiveTermCount meta termCount
+  initialiseTailWithTermId meta nextIndex termId'
+  writeActiveTermCount meta termCount'
 
 ------------------------------------------------------------------------
 
@@ -226,8 +244,46 @@ fixInconsistency = undefined
 
 -- * Debugging
 
-dumpTermBuffer :: ByteBuffer -> IO ()
-dumpTermBuffer bb = return ()
+dumpTermBuffer :: Int -> (ByteBuffer, TermOffset) -> IO ()
+dumpTermBuffer i (bb, termOffset) = do
+  putStrLn ("TermBuffer " ++ show i ++ ":")
+  dumpEntries 0
+  where
+    dumpEntries :: TermOffset -> IO ()
+    dumpEntries offset
+      | offset == termOffset = return ()
+      | offset >  termOffset = __IMPOSSIBLE__
+      | offset <  termOffset = do
+        h <- readHeader offset
+        dumpHeader h
+        dumpBody offset (bodyLength h)
+        dumpEntries (offset +
+                     TermOffset (int2Int32 hEADER_LENGTH) +
+                     TermOffset (bodyLength h))
+
+    readHeader :: TermOffset -> IO (HeaderTag, HeaderLength)
+    readHeader offset = (,) <$> readFrameType bb offset <*> readFrameLength bb offset
+
+    dumpHeader :: (HeaderTag, HeaderLength) -> IO ()
+    dumpHeader (HeaderTag tag, HeaderLength len) = do
+      putStrLn ("headerTag: " ++ show tag)
+      putStrLn ("headerLength: " ++ show len)
+
+    dumpBody :: TermOffset -> Int32 -> IO ()
+    dumpBody offset len = do
+      bs <- getByteStringAt bb (int322Int (unTermOffset offset) + hEADER_LENGTH)
+              (int322Int len)
+      putStr "body: "
+      case encodeRunLength bs of
+        [(n, c)]   -> putStrLn (show n ++ "x" ++ show c)
+        _otherwise -> BSChar8.putStrLn bs
+
+    encodeRunLength :: BS.ByteString -> [(Int, Char)]
+    encodeRunLength = map (BSChar8.length &&& BSChar8.head) . BSChar8.group
+
+    bodyLength :: (HeaderTag, HeaderLength) -> Int32
+    bodyLength (_tag, HeaderLength len) = len - int2Int32 hEADER_LENGTH
+
 
 dumpMetadata :: Metadata -> IO ()
 dumpMetadata meta = do

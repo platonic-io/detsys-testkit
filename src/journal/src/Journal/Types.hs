@@ -155,8 +155,8 @@ activeTermCount (Metadata meta) =
   TermCount <$> readInt32OffAddr meta lOG_ACTIVE_TERM_COUNT_OFFSET
 
 writeActiveTermCount :: Metadata -> TermCount -> IO ()
-writeActiveTermCount (Metadata meta) = do
-  writeIntOffAddr meta lOG_ACTIVE_TERM_COUNT_OFFSET . fromIntegral
+writeActiveTermCount (Metadata meta) =
+  writeInt32OffAddr meta lOG_ACTIVE_TERM_COUNT_OFFSET . unTermCount
 
 casActiveTermCount :: Metadata -> TermCount -> TermCount -> IO Bool
 casActiveTermCount (Metadata meta) (TermCount expected) (TermCount new) =
@@ -298,6 +298,10 @@ writeFrameLength :: ByteBuffer -> TermOffset -> HeaderLength -> IO ()
 writeFrameLength termBuffer termOffset (HeaderLength len) =
   writeInt32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
     len
+
+readFrameType :: ByteBuffer -> TermOffset -> IO HeaderTag
+readFrameType termBuffer termOffset = HeaderTag <$>
+  readWord8OffAddr termBuffer (fromIntegral termOffset + tAG_FIELD_OFFSET)
 
 readFrameLength :: ByteBuffer -> TermOffset -> IO HeaderLength
 readFrameLength termBuffer termOffset = HeaderLength <$>
