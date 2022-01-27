@@ -1,0 +1,14 @@
+packages: .
+  , ../../journal/journal.cabal
+  , ../../runtime-prototype/stunt-double.cabal
+
+with-compiler: ghc-8.10.4
+
+reject-unconstrained-dependencies: all
+
+constraints: QuickCheck +old-random
+
+package dumblog
+
+allow-older: *
+allow-newer: *
