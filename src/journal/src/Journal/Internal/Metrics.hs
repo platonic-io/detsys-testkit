@@ -28,16 +28,25 @@ data MetricsSchema c h = MetricsSchema
   { msVersion :: Int
   }
 
+metricSizeOfCounters :: forall c h. (Enum c, Bounded c) => MetricsSchema c h -> Int
+metricSizeOfCounters _ = (fromEnum (maxBound :: c) + 1) * sizeOfACounter
+
+metricSizeOfHistograms :: forall c h. (Enum h, Bounded h) => MetricsSchema c h -> Int
+metricSizeOfHistograms _ = (fromEnum (maxBound :: h) + 1) * sizeOfAHistogram
+
+metricSize :: forall c h. (Enum c, Bounded c, Enum h, Bounded h) => MetricsSchema c h -> Int
+metricSize schema = metricSizeOfCounters schema + metricSizeOfHistograms schema
+
 -- TODO have a header in the file and check that schema is the same as existing in file?
-newMetrics :: forall c h. (Enum c, Bounded c, Enum h, Bounded h) => MetricsSchema c h -> FilePath -> IO (Metrics c h)
-newMetrics _ fp = do
-  bb <- mmapped fp (sizeOfCounters + sizeOfHistograms)
+newMetrics :: (Enum c, Bounded c, Enum h, Bounded h) => MetricsSchema c h -> FilePath -> IO (Metrics c h)
+newMetrics schema fp = do
+  bb <- mmapped fp (metricSize schema)
   cbuf <- wrapPart bb 0 sizeOfCounters
   hbuf <- wrapPart bb sizeOfCounters sizeOfHistograms
   return (Metrics cbuf hbuf)
   where
-    sizeOfCounters = (fromEnum (maxBound :: c) + 1) * sizeOfACounter
-    sizeOfHistograms = (fromEnum (maxBound :: h) + 1) * sizeOfAHistogram
+    sizeOfCounters = metricSizeOfCounters schema
+    sizeOfHistograms = metricSizeOfHistograms schema
 
 cleanMetrics :: Metrics c h -> IO ()
 cleanMetrics (Metrics cbuf hbuf) = do
@@ -47,6 +56,12 @@ cleanMetrics (Metrics cbuf hbuf) = do
 incrCounter :: (Enum c) => Metrics c h -> c -> Int -> IO ()
 incrCounter (Metrics cbuf _) label value = do
   fetchAddIntArray_ cbuf offset value
+  where
+    offset = sizeOfACounter * fromEnum label
+
+getCounter :: (Enum c) => Metrics c h -> c -> IO Int
+getCounter (Metrics cbuf _) label = do
+  readIntOffArrayIx cbuf offset
   where
     offset = sizeOfACounter * fromEnum label
 
