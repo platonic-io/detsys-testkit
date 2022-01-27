@@ -105,10 +105,9 @@ startJournal fp (Options termLength) = do
 
 appendBS :: Journal -> ByteString -> IO (Maybe ())
 appendBS jour bs = do
-  -- XXX: use new assertM
-  -- assertM $ do
-  --   termBufferLen <- int322Int <$> readTermLength (jMetadata jour)
-  --   0 < BS.length bs && hEADER_LENGTH + BS.length bs < termBufferLen / 2
+  assertIO $ do
+    termBufferLen <- int322Int <$> readTermLength (jMetadata jour)
+    return (0 < BS.length bs && hEADER_LENGTH + BS.length bs < termBufferLen `div` 2)
   let len = BS.length bs
   mClaim <- tryClaim jour len
   case mClaim of
