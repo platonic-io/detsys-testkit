@@ -3,20 +3,26 @@ module Main where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async)
+import Control.Monad (unless)
+import qualified Data.Binary as Binary
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSChar8
 import qualified Data.ByteString.Lazy as LBS
 import Data.Time (getCurrentTime, diffUTCTime)
 
-import Network.HTTP.Types.Status (status200)
+import Network.HTTP.Types.Status (status200, status400)
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
 
 import Journal (Journal)
 import qualified Journal
+import Journal.Types.AtomicCounter (AtomicCounter)
+import qualified Journal.Types.AtomicCounter as AtomicCounter
 import Journal.Internal.Metrics (MetricsSchema, Metrics) -- should maybe be moved to separate package
 import qualified Journal.Internal.Metrics as Metrics
+
+import Blocker
 
 data DumblogCounters
   = CurrentNumberTransactions
@@ -34,21 +40,32 @@ type DumblogMetrics = Metrics DumblogCounters DumblogHistograms
 dumblogSchema :: MetricsSchema DumblogCounters DumblogHistograms
 dumblogSchema = Metrics.MetricsSchema 1
 
-httpFrontend :: Journal -> Wai.Application
-httpFrontend journal req respond = do
+data FrontEndInfo = FrontEndInfo
+  { sequenceNumber :: AtomicCounter
+  , blockers :: Blocker (Either Response Response)
+  }
+
+httpFrontend :: Journal -> FrontEndInfo -> Wai.Application
+httpFrontend journal (FrontEndInfo c blocker) req respond = do
   body <- Wai.strictRequestBody req
-  -- we need to be able to know what command this is so that we can wait for the appropriate response
-  Journal.appendBS journal (LBS.toStrict body)
-  putStrLn $ "Added to journal: " <> show body
+  key <- AtomicCounter.incrCounter 1 c
+  Journal.appendBS journal (LBS.toStrict $ Binary.encode (key, body))
+  resp <- blockUntil blocker key
   Journal.dumpJournal journal
-  respond $ Wai.responseLBS status200 [] "Added to journal"
+  case resp of
+    Left errMsg -> respond $ Wai.responseLBS status400 [] errMsg
+    Right msg -> respond $ Wai.responseLBS status200 [] msg
 
 data Command
   = Write ByteString
   | Read Int
 
-parseCommand :: ByteString -> IO (Maybe Command)
-parseCommand _ = pure Nothing
+parseCommand :: ByteString -> IO (Int, Maybe Command)
+parseCommand bs = do
+  let
+    cmd :: LBS.ByteString
+    (key, cmd) = Binary.decode $ LBS.fromStrict bs
+  pure (key, Nothing)
 
 -- This is the main state of Dumblog, which is the result of applying all commands in the log
 data InMemoryDumblog = InMemoryDumblog
@@ -56,6 +73,10 @@ data InMemoryDumblog = InMemoryDumblog
   }
 
 initState = InMemoryDumblog []
+
+data WorkerInfo = WorkerInfo
+  { wiBlockers :: Blocker (Either Response Response)
+  }
 
 type Response = LBS.ByteString
 
@@ -73,22 +94,25 @@ timeIt metrics action = do
   return result
 
 
-worker :: Journal -> DumblogMetrics -> InMemoryDumblog -> IO ()
-worker journal metrics = go
+worker :: Journal -> DumblogMetrics -> WorkerInfo -> InMemoryDumblog -> IO ()
+worker journal metrics (WorkerInfo blocker) = go
   where
     go s = do
       { val <- Journal.readJournal journal
       ; s' <- case val of
         { Nothing -> return s
         ; Just entry -> timeIt metrics $ do
-          mcmd <- parseCommand entry
+          (key, mcmd) <- parseCommand entry
           case mcmd of
             Nothing -> do
               Metrics.incrCounter metrics ErrorsEncountered 1
+              b <- wakeUp blocker key $ Left "Couldn't parse request" -- should be better error message
+              unless b $
+                error $ "Frontend never added MVar"
               return s
             Just cmd -> do
               (s', r) <- runCommand s cmd
-              -- we should return r somehow?
+              wakeUp blocker key (Right r)
               return s'
         }
       ; threadDelay 10
@@ -97,7 +121,6 @@ worker journal metrics = go
 
 {-
 Unclear how to:
-* How to respond to synchronous client calls
 * How to archive the journal
 * How to read from journal in a blocking way?
   - The journal should be the thing that decides order
@@ -116,6 +139,10 @@ main = do
   Journal.allocateJournal fpj opts -- should we really allocate?
   journal <- Journal.startJournal fpj opts
   metrics <- Metrics.newMetrics dumblogSchema fpm
+  blocker <- emptyBlocker
+  counter <- AtomicCounter.newCounter 0
   let state = initState -- shis should be from snapshot/or replay journal
-  async $ worker journal metrics state
-  run 8053 (httpFrontend journal)
+      feInfo = FrontEndInfo counter blocker
+      wInfo = WorkerInfo blocker
+  async $ worker journal metrics wInfo state
+  run 8053 (httpFrontend journal feInfo)
