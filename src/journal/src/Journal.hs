@@ -145,33 +145,36 @@ recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock ptr len
 
 -- * Consumption
 
--- XXX: move
 readJournal :: Journal -> IO (Maybe ByteString)
 readJournal jour = do
   offset <- readCounter (jBytesConsumed jour)
   putStrLn ("readJournal, offset: " ++ show offset)
-  (termBuffer , TermOffset termOffset) <- readTermBufferTermOffset jour
-  assertM (offset <= int322Int termOffset)
-  if offset == int322Int termOffset
+
+  termCount <- activeTermCount (jMetadata jour)
+  let activeTermIndex = indexByTermCount termCount
+  rawTail <- readRawTail (jMetadata jour) activeTermIndex
+  termLen <- readTermLength (jMetadata jour)
+  let termBuffer = jTermBuffers jour Vector.! unPartitionIndex activeTermIndex
+      activeTermId = rawTailTermId rawTail
+      termOffset = rawTailTermOffset rawTail termLen
+
+  putStrLn ("readJournal, termOffset: " ++ show (unTermOffset termOffset))
+  initTermId <- readInitialTermId (jMetadata jour)
+  let position =
+        computePosition activeTermId termOffset (positionBitsToShift termLen) initTermId
+  assertM (int2Int64 offset <= position)
+  if int2Int64 offset == position
   then return Nothing
   else do
-    assertM (offset < int322Int termOffset)
+    assertM (int2Int64 offset < position)
     HeaderLength len <- readFrameLength termBuffer (TermOffset (int2Int32 offset))
     putStrLn ("readJournal, len: " ++ show len)
+    assertM (len > 0)
     bs <- getByteStringAt termBuffer
             (offset + hEADER_LENGTH) (int322Int len - hEADER_LENGTH)
     assertM (BS.length bs == int322Int len - hEADER_LENGTH)
     incrCounter_ (int322Int len) (jBytesConsumed jour)
     return (Just bs)
-  where
-    readTermBufferTermOffset :: Journal -> IO (ByteBuffer, TermOffset)
-    readTermBufferTermOffset jour = do
-      termCount <- activeTermCount (jMetadata jour)
-      let activeTermIndex = indexByTermCount termCount
-      rawTail <- readRawTail (jMetadata jour) activeTermIndex
-      termLen <- readTermLength (jMetadata jour)
-      let bb = jTermBuffers jour Vector.! unPartitionIndex activeTermIndex
-      return (bb, rawTailTermOffset rawTail termLen)
 
 ------------------------------------------------------------------------
 

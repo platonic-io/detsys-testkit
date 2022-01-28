@@ -69,11 +69,13 @@ data Command
   -- TruncateAfterSnapshot
   -- LoadSnapshot
   -- Replay
+  | DumpJournal
   deriving Show
 
 constructorString :: Command -> String
 constructorString AppendBS {} = "AppendBS"
 constructorString ReadJournal = "ReadJournal"
+constructorString DumpJournal = "DumpJournal"
 
 prettyCommand :: Command -> String
 prettyCommand = show
@@ -134,10 +136,12 @@ precondition :: Model -> Command -> Bool
 precondition m ReadJournal   = Vector.length (fjJournal m) /= fjIndex m
 precondition m (AppendBS rle) = let bs = decodeRunLength rle in
   not (BS.null bs) && BS.length bs + hEADER_LENGTH < oTermBufferLength testOptions `div` 2
+precondition m DumpJournal = True
 
 step :: Command -> Model -> (Model, Response)
 step (AppendBS rle) m = Unit <$> appendBSFake (decodeRunLength rle) m
 step ReadJournal    m = ByteString <$> readJournalFake m
+step DumpJournal    m = (m, Unit (Just ()))
 
 exec :: Command -> Journal -> IO Response
 exec (AppendBS rle) j = do
@@ -149,6 +153,7 @@ exec (AppendBS rle) j = do
       Unit <$> appendBS j bs
     Just () -> return (Unit (Just ()))
 exec ReadJournal   j = ByteString <$> readJournal j
+exec DumpJournal   j = Unit . Just <$> dumpJournal j
 
 genRunLenEncoding :: Gen [(Int, Char)]
 genRunLenEncoding = sized $ \n -> do
@@ -263,7 +268,9 @@ runCommands cmds = do
     allocateJournal fp testOptions
     j <- startJournal fp testOptions
     putStrLn ""
-    go m j cmds []
+    b <- go m j cmds []
+    dumpJournal j
+    return b
   where
     go :: Model -> Journal -> [Command] -> [(Command, Response)] -> IO Bool
     go m j [] _hist = putStrLn "\nSuccess!" >> return True
@@ -299,24 +306,25 @@ runCommands cmds = do
 unit_bug0 :: Assertion
 unit_bug0 = assertProgram ""
   [ AppendBS [(2, 'E')]
-  , AppendBS [(32762, 'O')]
+  , AppendBS [(32752, 'O')]
   ]
 
 unit_bug1 :: Assertion
 unit_bug1 = assertProgram ""
-  [ AppendBS [(32762, 'O')]
-  , AppendBS [(32762, 'G')]
+  [ AppendBS [(32756, 'O')]
+  , AppendBS [(32756, 'G')]
   ]
 
 unit_bug11 :: Assertion
 unit_bug11 = assertProgram ""
-  [ AppendBS [(32762, 'O')]
+  [ AppendBS [(32756, 'O')]
   , ReadJournal
-  , AppendBS [(32762, 'G')]
+  , AppendBS [(32756, 'G')]
   , ReadJournal
-  , AppendBS [(32762, 'K')]
+  , AppendBS [(32756, 'K')]
+  , DumpJournal
   , ReadJournal
-  , AppendBS [(32762, 'J')]
+  , AppendBS [(32756, 'J')]
   ]
 
 unit_bug2 :: Assertion
