@@ -150,16 +150,19 @@ readJournal jour = do
   offset <- readCounter (jBytesConsumed jour)
   putStrLn ("readJournal, offset: " ++ show offset)
 
+  termLen <- readTermLength (jMetadata jour)
+  let readIndex = indexByPosition (int2Int64 offset) (positionBitsToShift termLen)
+
   termCount <- activeTermCount (jMetadata jour)
   let activeTermIndex = indexByTermCount termCount
   rawTail <- readRawTail (jMetadata jour) activeTermIndex
-  termLen <- readTermLength (jMetadata jour)
-  let termBuffer = jTermBuffers jour Vector.! unPartitionIndex activeTermIndex
+  let termBuffer = jTermBuffers jour Vector.! unPartitionIndex readIndex
       activeTermId = rawTailTermId rawTail
       termOffset = rawTailTermOffset rawTail termLen
 
   putStrLn ("readJournal, termOffset: " ++ show (unTermOffset termOffset))
   initTermId <- readInitialTermId (jMetadata jour)
+  putStrLn ("readJournal, initTermId: " ++ show (unTermId initTermId))
   let position =
         computePosition activeTermId termOffset (positionBitsToShift termLen) initTermId
   assertM (int2Int64 offset <= position)
@@ -167,14 +170,27 @@ readJournal jour = do
   then return Nothing
   else do
     assertM (int2Int64 offset < position)
-    HeaderLength len <- readFrameLength termBuffer (TermOffset (int2Int32 offset))
+
+    let relativeOffset = int2Int32 offset - unTermCount termCount * termLen
+    putStrLn ("readJournal, relativeOffset: " ++ show relativeOffset)
+    tag <- readFrameType termBuffer (TermOffset relativeOffset)
+    putStrLn ("readJournal, tag: " ++ show tag)
+    HeaderLength len <- readFrameLength termBuffer (TermOffset relativeOffset)
     putStrLn ("readJournal, len: " ++ show len)
-    assertM (len > 0)
-    bs <- getByteStringAt termBuffer
-            (offset + hEADER_LENGTH) (int322Int len - hEADER_LENGTH)
-    assertM (BS.length bs == int322Int len - hEADER_LENGTH)
-    incrCounter_ (int322Int len) (jBytesConsumed jour)
-    return (Just bs)
+    if tag == Padding
+    then do
+      incrCounter_ (int322Int len) (jBytesConsumed jour)
+      putStrLn "readJournal, skipping padding..."
+      readJournal jour
+    else do
+      assertM (len > 0)
+      putStrLn ("readJournal, termCount: " ++ show (unTermCount termCount))
+      bs <- getByteStringAt termBuffer
+              (int322Int relativeOffset + hEADER_LENGTH)
+              (int322Int len - hEADER_LENGTH)
+      assertM (BS.length bs == int322Int len - hEADER_LENGTH)
+      incrCounter_ (int322Int len) (jBytesConsumed jour)
+      return (Just bs)
 
 ------------------------------------------------------------------------
 
