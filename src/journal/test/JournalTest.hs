@@ -331,10 +331,10 @@ unit_bug2 :: Assertion
 unit_bug2 = assertProgram ""
   [ AppendBS [(7,'N')]
   , ReadJournal
-  , AppendBS [(32762,'N')]
+  , AppendBS [(32756,'N')]
   , ReadJournal
-  , AppendBS [(32761,'W')]
-  , AppendBS [(32762,'Q')]
+  , AppendBS [(32756,'W')]
+  , AppendBS [(32756,'Q')]
   ]
   -- limit = termBufferLength / 2 - hEADER_LENGTH = 65536 / 2 - 6 = 32762
 

@@ -152,6 +152,7 @@ readJournal jour = do
 
   termLen <- readTermLength (jMetadata jour)
   let readIndex = indexByPosition (int2Int64 offset) (positionBitsToShift termLen)
+  putStrLn ("readJournal, readIndex: " ++ show (unPartitionIndex readIndex))
 
   termCount <- activeTermCount (jMetadata jour)
   let activeTermIndex = indexByTermCount termCount
@@ -166,12 +167,19 @@ readJournal jour = do
   let position =
         computePosition activeTermId termOffset (positionBitsToShift termLen) initTermId
   assertM (int2Int64 offset <= position)
+
+  let readTermCount =
+        computeTermIdFromPosition (int2Int64 offset) (positionBitsToShift termLen) initTermId
+        - unTermId initTermId
+
+  putStrLn ("readJournal, readTermCount: " ++ show readTermCount)
+
   if int2Int64 offset == position
   then return Nothing
   else do
     assertM (int2Int64 offset < position)
 
-    let relativeOffset = int2Int32 offset - unTermCount termCount * termLen
+    let relativeOffset = int2Int32 offset - readTermCount * termLen
     putStrLn ("readJournal, relativeOffset: " ++ show relativeOffset)
     tag <- readFrameType termBuffer (TermOffset relativeOffset)
     putStrLn ("readJournal, tag: " ++ show tag)
@@ -179,6 +187,7 @@ readJournal jour = do
     putStrLn ("readJournal, len: " ++ show len)
     if tag == Padding
     then do
+      assertM (len >= 0)
       incrCounter_ (int322Int len) (jBytesConsumed jour)
       putStrLn "readJournal, skipping padding..."
       readJournal jour
