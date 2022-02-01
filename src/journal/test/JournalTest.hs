@@ -3,7 +3,6 @@
 
 module JournalTest where
 
-import Debug.Trace (trace) -- XXX
 import Control.Arrow ((&&&))
 import Control.Exception (IOException, catch, displayException)
 import Control.Monad (unless, when)
@@ -45,15 +44,25 @@ startJournalFake = FakeJournal Vector.empty 0
 
 appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Either AppendError ())
 appendBSFake bs fj@(FakeJournal jour ix)
-  | unreadBytes jour ix < limit = trace ("(unreadBytes, limit): " ++ show (unreadBytes jour ix, limit)) $ (FakeJournal (Vector.snoc jour bs) ix, Right ())
+  | unreadBytes jour ix < limit = (FakeJournal (Vector.snoc jour bs) ix, Right ())
   | otherwise                   = (fj, Left BackPressure)
   where
-    limit = oTermBufferLength testOptions `div` 2
+    termLen = oTermBufferLength testOptions
+
+    limit = termLen `div` 2
 
     unreadBytes :: Vector ByteString -> Int -> Int
-    unreadBytes bs ix = sum [ BS.length b
-                            | b <- map (bs Vector.!) [ix..Vector.length bs - 1]
-                            ]
+    unreadBytes bss ix = sum [ BS.length bs
+                             | bs <- map (bss Vector.!) [ix..Vector.length bss - 1]
+                             ]
+                       + padding 0 0 (Vector.toList (Vector.map BS.length bss))
+      where
+        padding :: Int -> Int -> [Int] -> Int
+        padding acc pad []       = pad
+        padding acc pad (l : ls)
+          | acc + l + hEADER_LENGTH > termLen = padding acc (pad + (termLen - acc)) ls
+          | otherwise                         = padding (acc + l + hEADER_LENGTH) pad ls
+
 
 readJournalFake :: FakeJournal -> (FakeJournal, Maybe ByteString)
 readJournalFake fj@(FakeJournal jour ix) =
