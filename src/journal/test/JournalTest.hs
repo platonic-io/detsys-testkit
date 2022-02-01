@@ -47,8 +47,10 @@ appendBSFake bs fj@(FakeJournal jour ix)
   | unreadBytes jour ix < limit = (FakeJournal (Vector.snoc jour bs) ix, Right ())
   | otherwise                   = (fj, Left BackPressure)
   where
+    termLen :: Int
     termLen = oTermBufferLength testOptions
 
+    limit :: Int
     limit = termLen `div` 2
 
     unreadBytes :: Vector ByteString -> Int -> Int
@@ -60,9 +62,9 @@ appendBSFake bs fj@(FakeJournal jour ix)
         padding :: Int -> Int -> [Int] -> Int
         padding acc pad []       = pad
         padding acc pad (l : ls)
-          | acc + l + hEADER_LENGTH > termLen = padding acc (pad + (termLen - acc)) ls
-          | otherwise                         = padding (acc + l + hEADER_LENGTH) pad ls
-
+          | acc + l + hEADER_LENGTH <= termLen = padding (acc + l + hEADER_LENGTH) pad ls
+          | otherwise                          = padding (l + hEADER_LENGTH)
+                                                         (pad + (termLen - acc)) ls
 
 readJournalFake :: FakeJournal -> (FakeJournal, Maybe ByteString)
 readJournalFake fj@(FakeJournal jour ix) =
