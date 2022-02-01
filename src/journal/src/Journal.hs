@@ -103,18 +103,18 @@ startJournal fp (Options termLength) = do
 
 -- * Production
 
-appendBS :: Journal -> ByteString -> IO (Maybe ())
+appendBS :: Journal -> ByteString -> IO (Either AppendError ())
 appendBS jour bs = do
   assertIO $ do
     termBufferLen <- int322Int <$> readTermLength (jMetadata jour)
     return (0 < BS.length bs && hEADER_LENGTH + BS.length bs < termBufferLen `div` 2)
   let len = BS.length bs
-  mClaim <- tryClaim jour len
-  case mClaim of
-    Nothing -> return Nothing
-    Just (_offset, bufferClaim) -> do
+  eClaim <- tryClaim jour len
+  case eClaim of
+    Left err -> return (Left err)
+    Right (_offset, bufferClaim) -> do
       putBS bufferClaim hEADER_LENGTH bs
-      Just <$> commit bufferClaim
+      Right <$> commit bufferClaim
 
 -- tee :: Journal -> Socket -> Int -> IO ByteString
 -- tee jour sock len = do
@@ -268,14 +268,14 @@ tj = do
   allocateJournal fp opts
   jour <- startJournal fp opts
 
-  Just (offset, claimBuf) <- tryClaim jour 5
+  Right (offset, claimBuf) <- tryClaim jour 5
   putStrLn ("offset: " ++ show offset)
   putBS claimBuf hEADER_LENGTH (BSChar8.pack "hello")
   commit claimBuf
   Just bs <- readJournal jour
   putStrLn ("read bytestring 1: '" ++ BSChar8.unpack bs ++ "'")
 
-  Just (offset', claimBuf') <- tryClaim jour 6
+  Right (offset', claimBuf') <- tryClaim jour 6
   putStrLn ("offset': " ++ show offset')
   putBS claimBuf' hEADER_LENGTH (BSChar8.pack "world!")
   commit claimBuf'

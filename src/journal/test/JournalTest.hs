@@ -3,6 +3,7 @@
 
 module JournalTest where
 
+import Debug.Trace (trace) -- XXX
 import Control.Arrow ((&&&))
 import Control.Exception (IOException, catch, displayException)
 import Control.Monad (unless, when)
@@ -42,12 +43,12 @@ prettyFakeJournal = show . fmap (prettyRunLenEnc . encodeRunLength)
 startJournalFake :: FakeJournal
 startJournalFake = FakeJournal Vector.empty 0
 
-appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Maybe ())
+appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Either AppendError ())
 appendBSFake bs fj@(FakeJournal jour ix)
-  | unreadBytes jour ix < limit = (FakeJournal (Vector.snoc jour bs) ix, Just ())
-  | otherwise                   = (fj, Nothing)
+  | unreadBytes jour ix < limit = trace ("(unreadBytes, limit): " ++ show (unreadBytes jour ix, limit)) $ (FakeJournal (Vector.snoc jour bs) ix, Right ())
+  | otherwise                   = (fj, Left BackPressure)
   where
-    limit = (oTermBufferLength testOptions `div` 2) - hEADER_LENGTH
+    limit = oTermBufferLength testOptions `div` 2
 
     unreadBytes :: Vector ByteString -> Int -> Int
     unreadBytes bs ix = sum [ BS.length b
@@ -115,13 +116,13 @@ prettyRunLenEnc ncs0 = case ncs0 of
     go n c = show n ++ "x" ++ [ c ]
 
 data Response
-  = Unit (Maybe ())
+  = Result (Either AppendError ())
   | ByteString (Maybe ByteString)
   | IOException IOException
   deriving Eq
 
 prettyResponse :: Response -> String
-prettyResponse (Unit mu) = "Unit (" ++ show mu ++ ")"
+prettyResponse (Result eu) = "Result (" ++ show eu ++ ")"
 prettyResponse (ByteString (Just bs)) =
   "ByteString \"" ++ prettyRunLenEnc (encodeRunLength bs) ++ "\""
 prettyResponse (ByteString Nothing) =
@@ -133,27 +134,26 @@ type Model = FakeJournal
 -- If there's nothing new to read, then don't generate reads (because they are
 -- blocking) and don't append empty bytestrings.
 precondition :: Model -> Command -> Bool
-precondition m ReadJournal   = Vector.length (fjJournal m) /= fjIndex m
+precondition m ReadJournal    = Vector.length (fjJournal m) /= fjIndex m
 precondition m (AppendBS rle) = let bs = decodeRunLength rle in
   not (BS.null bs) && BS.length bs + hEADER_LENGTH < oTermBufferLength testOptions `div` 2
 precondition m DumpJournal = True
 
 step :: Command -> Model -> (Model, Response)
-step (AppendBS rle) m = Unit <$> appendBSFake (decodeRunLength rle) m
+step (AppendBS rle) m = Result <$> appendBSFake (decodeRunLength rle) m
 step ReadJournal    m = ByteString <$> readJournalFake m
-step DumpJournal    m = (m, Unit (Just ()))
+step DumpJournal    m = (m, Result (Right ()))
 
 exec :: Command -> Journal -> IO Response
 exec (AppendBS rle) j = do
   let bs = decodeRunLength rle
-  mu <- appendBS j bs
-  case mu of
-    Nothing ->
-      -- Rotation or backpressure happend, retry...
-      Unit <$> appendBS j bs
-    Just () -> return (Unit (Just ()))
+  eu <- appendBS j bs
+  case eu of
+    Left Rotation     -> Result <$> appendBS j bs
+    Left BackPressure -> return (Result (Left BackPressure))
+    Right ()          -> return (Result (Right ()))
 exec ReadJournal   j = ByteString <$> readJournal j
-exec DumpJournal   j = Unit . Just <$> dumpJournal j
+exec DumpJournal   j = Result . Right <$> dumpJournal j
 
 genRunLenEncoding :: Gen [(Int, Char)]
 genRunLenEncoding = sized $ \n -> do

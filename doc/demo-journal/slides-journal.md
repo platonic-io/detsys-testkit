@@ -147,7 +147,7 @@ nocite: |
   - Get all the deterministic testing stuff for free
   - Rich time traveling debugger
 * How to add a built-in a profiler and how to use it in benchmarks
-
+* Zero third-party dependency observability (metrics/logs/tracing)
 
 # Future work
 
