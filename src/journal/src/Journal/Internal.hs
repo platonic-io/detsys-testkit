@@ -40,7 +40,10 @@ import Journal.Types.AtomicCounter
 offer :: Ptr Word8 -> Int -> Int -> IO Int
 offer buf offset len = undefined
 
-tryClaim :: Journal -> Int -> IO (Maybe (Int64, BufferClaim))
+data AppendError = BackPressure | Rotation
+  deriving (Eq, Show)
+
+tryClaim :: Journal -> Int -> IO (Either AppendError (Int64, BufferClaim))
 tryClaim jour len = do
   -- checkPayloadLength len
   termCount <- activeTermCount (jMetadata jour)
@@ -94,12 +97,13 @@ cleanBufferTo _ _ = return ()
 
 backPressureStatus _ _ = do
   putStrLn "backPressureStatus"
-  return Nothing
+  return (Left BackPressure)
 
-newPosition :: Metadata -> Maybe (TermOffset, BufferClaim) -> IO (Maybe (Int64, BufferClaim))
-newPosition meta mResult =
-  case mResult of
-    Just (resultingOffset, bufClaim) -> do
+newPosition :: Metadata -> Either AppendError (TermOffset, BufferClaim)
+            -> IO (Either AppendError (Int64, BufferClaim))
+newPosition meta eResult =
+  case eResult of
+    Right (resultingOffset, bufClaim) -> do
       -- XXX: cache
       -- termOffset := resultingOffset
       termCount <- activeTermCount meta
@@ -112,20 +116,20 @@ newPosition meta mResult =
           termOffset        = rawTailTermOffset rt termLen
           termBeginPosition =
             computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
-      return (Just (termBeginPosition + fromIntegral resultingOffset, bufClaim))
-    Nothing -> do
+      return (Right (termBeginPosition + fromIntegral resultingOffset, bufClaim))
+    Left Rotation -> do
       -- XXX:
       -- if termBeginPosition + termBufferLength >= maxPossiblePosition
       -- then return Nothing -- return MAX_POSSILBE_POSITION_EXCEEDED ?
       -- else do
       rotateTerm meta
-      return Nothing -- ADMIN_ACTION
+      return (Left Rotation) -- ADMIN_ACTION
 
 fRAME_ALIGNMENT :: Int
 fRAME_ALIGNMENT = 32
 
 termAppenderClaim :: Metadata -> ByteBuffer -> TermId -> TermOffset -> Int
-                  -> IO (Maybe (TermOffset, BufferClaim))
+                  -> IO (Either AppendError (TermOffset, BufferClaim))
 termAppenderClaim meta termBuffer termId termOffset len = do
   let
     frameLength     = len + hEADER_LENGTH
@@ -140,7 +144,7 @@ termAppenderClaim meta termBuffer termId termOffset len = do
   if resultingOffset > fromIntegral termLength
   then do
     handleEndOfLogCondition termBuffer termOffset termLength termId
-    return Nothing
+    return (Left Rotation)
   else do
     putStrLn ("termAppenderClaim, termOffset: " ++
               show (unTermOffset termOffset))
@@ -148,7 +152,7 @@ termAppenderClaim meta termBuffer termId termOffset len = do
               show frameLength)
     headerWrite termBuffer termOffset (fromIntegral frameLength) termId
     bufClaim <- newBufferClaim termBuffer termOffset frameLength
-    return (Just (resultingOffset, bufClaim))
+    return (Right (resultingOffset, bufClaim))
 
 handleEndOfLogCondition :: ByteBuffer -> TermOffset -> Capacity -> TermId -> IO ()
 handleEndOfLogCondition termBuffer termOffset (Capacity termLen) termId = do
