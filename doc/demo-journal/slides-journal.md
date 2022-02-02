@@ -115,6 +115,10 @@ nocite: |
 * Counters
 * Histograms
 
+# Design of the event loop
+
+* TODO
+
 # Demo
 
 * The first version uses SQLite to persist the application log, all reads and
