@@ -25,6 +25,7 @@ eventLoop :: Network -> [(Addr, StateMachine)] -> IO ()
 eventLoop nw nodes = do
   socks <- mapM (deploy nw) (map fst nodes)
   connectAllNodesToEachOther nw nodes
+  -- ^ Or do this as part of creating `Network`.
   let env = nodes `zip` initialStates
   go env
     where
