@@ -4,7 +4,10 @@
 
 0. Assume familiarity with Haskell and QuickCheck
 1. State machine testing
+  - Pre-conditions
   - Coverage
+  - Execution trace for counterexamples
+  - Regression tests from counterexamples
   - Metrics
   - References?
 2. Consumer-driven contract tests using state machines
@@ -16,9 +19,9 @@
 
 ```haskell
 data Network = Network
-  { deploy  :: Addr -> IO Socket -- bind and listen
-  , send    :: [(Addr, Msg)] -> IO ()
-  , select  :: [Socket] -> IO (Addr, Msg, Time) -- accept and recv
+  { deploy  :: Addr -> IO () -- bind and listen
+  , connect :: Addr -> IO ()
+  , select  :: [(Addr, Msg)] -> IO (Addr, Msg, Time) -- send, accept and recv
   }
 
 eventLoop :: Network -> [(Addr, StateMachine)] -> IO ()
