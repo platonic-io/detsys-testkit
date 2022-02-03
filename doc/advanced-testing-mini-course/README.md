@@ -4,7 +4,10 @@
 
 0. Assume familiarity with Haskell and QuickCheck
 1. State machine testing
+  - Pre-conditions
   - Coverage
+  - Execution trace for counterexamples
+  - Regression tests from counterexamples
   - Metrics
   - References?
 2. Consumer-driven contract tests using state machines
@@ -16,9 +19,9 @@
 
 ```haskell
 data Network = Network
-  { deploy  :: Addr -> IO Socket -- bind and listen
-  , send    :: [(Addr, Msg)] -> IO ()
-  , select  :: [Socket] -> IO (Addr, Msg, Time) -- accept and recv
+  { deploy  :: Addr -> IO () -- bind and listen
+  , connect :: Addr -> IO ()
+  , select  :: [(Addr, Msg)] -> IO (Addr, Msg, Time) -- send, accept and recv
   }
 
 eventLoop :: Network -> [(Addr, StateMachine)] -> IO ()
@@ -27,26 +30,30 @@ eventLoop nw nodes = do
   connectAllNodesToEachOther nw nodes
   -- ^ Or do this as part of creating `Network`.
   let env = nodes `zip` initialStates
-  go env
+  go env []
     where
-      go env = do
-        (receiver, msg, time) <- select socks
-        (outgoing, env') <- step env receiver msg time
-        send nw outgoing
-        go env'
+      go env outgoing = do
+        (receiver, msg, time) <- select outgoing
+        (outgoing', env') <- step env receiver msg time
+        go env' outgoing'
 
 fakeSend :: Heap -> Addr -> Msg -> (Heap, ())
 fakeSend heap addr msg = do
   t <- genArrivalTime
   (enqueue (addr, msg, t) heap, ())
 
+fakeRecv :: Heap -> (Heap, (Addr, Msg, Time))
+fakeRecv = dequeue -- XXX: partial function
+
 newFakeNetwork :: IO Network
 newFakeNetwork = do
   heap <- newIORef emptyHeap
-  let send = do
+  let select outgoing = do
         h <- readIORef heap
-        let (h', ()) = fakeSend h
-        writeIORef heap h'
+        let h' = fakeSendAll h outgoing
+            (h'', incoming) = fakeRecv h'
+        writeIORef heap h''
+        return incoming
   ...
   return Network {..}
 ```
