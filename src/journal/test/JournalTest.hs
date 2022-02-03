@@ -422,6 +422,16 @@ unit_bug5 = assertProgram ""
 -- related to the append of Rs, this gives us a position of 32770+32767 = 65537
 -- which is over the limit and so backpressure should happen.
 
+unit_bug6 :: Assertion
+unit_bug6 = assertProgram ""
+  [ AppendBS [(1,'J')], ReadJournal, AppendBS [(32757,'K')], AppendBS [(32761,'H')]
+  , AppendBS [(1,'F')]]
+
+unit_bug7 :: Assertion
+unit_bug7 = assertProgram ""
+  [AppendBS [(32756,'Y')], AppendBS [(32761,'A')], ReadJournal, AppendBS [(1,'J')]]
+
+
 ------------------------------------------------------------------------
 
 assertProgram :: String -> [Command] -> Assertion
