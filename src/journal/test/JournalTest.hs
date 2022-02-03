@@ -7,9 +7,9 @@ import Control.Arrow ((&&&))
 import Control.Exception (IOException, catch, displayException)
 import Control.Monad (unless, when)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Builder as BS
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LBS
-import qualified Data.ByteString.Builder as BS
 import Data.Monoid (Sum(Sum))
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -43,9 +43,9 @@ startJournalFake :: FakeJournal
 startJournalFake = FakeJournal Vector.empty 0
 
 appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Either AppendError ())
-appendBSFake bs fj@(FakeJournal jour ix)
-  | unreadBytes jour ix < limit = (FakeJournal (Vector.snoc jour bs) ix, Right ())
-  | otherwise                   = (fj, Left BackPressure)
+appendBSFake bs fj@(FakeJournal bss ix)
+  | unreadBytes < limit = (FakeJournal (Vector.snoc bss bs) ix, Right ())
+  | otherwise           = (fj, Left BackPressure)
   where
     termLen :: Int
     termLen = oTermBufferLength testOptions
@@ -53,17 +53,26 @@ appendBSFake bs fj@(FakeJournal jour ix)
     limit :: Int
     limit = termLen `div` 2
 
-    unreadBytes :: Vector ByteString -> Int -> Int
-    unreadBytes bss ix = sum [ BS.length bs
-                             | bs <- map (bss Vector.!) [ix..Vector.length bss - 1]
-                             ]
-                       + padding 0 0 (Vector.toList (Vector.map BS.length bss))
-      where
-        padding :: Int -> Int -> [Int] -> Int
-        padding acc pad []       = pad
-        padding acc pad (l : ls)
-          | acc + l + hEADER_LENGTH <= termLen = padding (acc + l + hEADER_LENGTH) pad ls
-          | otherwise                          = padding (l + hEADER_LENGTH)
+    unreadBytes :: Int
+    unreadBytes = sum [ hEADER_LENGTH + BS.length bs
+                      | bs <- map (bss Vector.!) [ix..Vector.length bss - 1]
+                      ]
+                + padBytes
+
+    padBytes :: Int
+    padBytes =
+      let
+        (lbss, rbss) = Vector.splitAt ix bss
+        (lacc, lpad) = padding 0 0 (Vector.toList (Vector.map BS.length lbss))
+        (racc, rpad) = padding lacc 0 (Vector.toList (Vector.map BS.length rbss))
+      in
+        rpad
+
+    padding :: Int -> Int -> [Int] -> (Int, Int)
+    padding acc pad []       = (acc, pad)
+    padding acc pad (l : ls)
+      | acc + l + hEADER_LENGTH <= termLen = padding (acc + l + hEADER_LENGTH) pad ls
+      | otherwise                          = padding (l + hEADER_LENGTH)
                                                          (pad + (termLen - acc)) ls
 
 readJournalFake :: FakeJournal -> (FakeJournal, Maybe ByteString)
@@ -326,8 +335,8 @@ unit_bug1 = assertProgram ""
   , AppendBS [(32756, 'G')]
   ]
 
-unit_bug11 :: Assertion
-unit_bug11 = assertProgram ""
+unit_bug2 :: Assertion
+unit_bug2 = assertProgram ""
   [ AppendBS [(32756, 'O')]
   , ReadJournal
   , AppendBS [(32756, 'G')]
@@ -338,8 +347,8 @@ unit_bug11 = assertProgram ""
   , AppendBS [(32756, 'J')]
   ]
 
-unit_bug2 :: Assertion
-unit_bug2 = assertProgram ""
+unit_bug3 :: Assertion
+unit_bug3 = assertProgram ""
   [ AppendBS [(7,'N')]
   , ReadJournal
   , AppendBS [(32756,'N')]
@@ -347,62 +356,10 @@ unit_bug2 = assertProgram ""
   , AppendBS [(32756,'W')]
   , AppendBS [(32756,'Q')]
   ]
-  -- limit = termBufferLength / 2 - hEADER_LENGTH = 65536 / 2 - 6 = 32762
 
-unit_bug3 :: Assertion
-unit_bug3 = assertProgram ""
+unit_bug4 :: Assertion
+unit_bug4 = assertProgram ""
   [AppendBS [(1, 'A')], AppendBS [(32755,'Q')], AppendBS [(1,'D')]]
-
-{-
-nit_bug0 :: Assertion
-nit_bug0 = assertProgram "read after rotation"
-  [ AppendBS "AAAAAAAAAAAAAAAAA"
-  , AppendBS "BBBBBBBBBBBBBBBB"
-  , ReadJournal
-  , ReadJournal
-  , AppendBS "CCCCCCCCCCCCCCCCC"
-  , ReadJournal
-  , AppendBS "DDDDDDDDDDDDDDDD"
-  , ReadJournal
-  , AppendBS "EEEEEEEEEEEEEEEE"
-  , ReadJournal
-  , AppendBS "FFFFFFFFFFFFFFFF"
-  , ReadJournal
-  ]
-
-nit_bug1 :: Assertion
-nit_bug1 = assertProgram "two rotations"
-  [ AppendBS "XXXXXXXXXXXXXXXXXXXX"
-  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
-  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
-  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
-  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
-  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
-  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
-  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
-  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
-  , AppendBS "XXXXXXXXXXXXXXXXXXXX"
-  ]
-
-nit_bug2 :: Assertion
-nit_bug2 = assertProgram "stuck reading"
-  [ AppendBS "OOOOOOOOOOOOO"
-  , ReadJournal
-  , AppendBS "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" -- 116 + 6 = 122 bytes
-  , ReadJournal
-  , AppendBS "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU" -- 116 + 6 = 122 bytes
-  , ReadJournal
-  ]
-
-nit_bug3 :: Assertion
-nit_bug3 = assertProgram "two rotations reading side"
-  [ AppendBS "M"
-  , AppendBS "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR" -- 110 + 6 = 116 bytes
-  , AppendBS "L"
-  , ReadJournal
-  , ReadJournal
-  ]
-  -}
 
 ------------------------------------------------------------------------
 

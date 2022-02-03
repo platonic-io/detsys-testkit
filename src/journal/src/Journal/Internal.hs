@@ -95,8 +95,9 @@ calculatePositionLimit jour = do
 cleanBufferTo :: Journal -> Int -> IO ()
 cleanBufferTo _ _ = return ()
 
-backPressureStatus _ _ = do
-  putStrLn "backPressureStatus"
+backPressureStatus :: Int64 -> Int -> IO (Either AppendError (Int64, BufferClaim))
+backPressureStatus position len = do
+  putStrLn ("backPressureStatus, position: " ++ show position ++ ", len: " ++ show len)
   return (Left BackPressure)
 
 newPosition :: Metadata -> Either AppendError (TermOffset, BufferClaim)
