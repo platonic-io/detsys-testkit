@@ -93,6 +93,11 @@ timeIt metrics action = do
   Metrics.measure metrics ResponseTime (realToFrac . (*1000) $ diffUTCTime endTime startTime)
   return result
 
+wakeUpFrontend :: Blocker (Either Response Response) -> Int -> Either Response Response -> IO ()
+wakeUpFrontend blocker key resp = do
+  b <- wakeUp blocker key resp
+  unless b $
+    error $ "Frontend never added MVar"
 
 worker :: Journal -> DumblogMetrics -> WorkerInfo -> InMemoryDumblog -> IO ()
 worker journal metrics (WorkerInfo blocker) = go
@@ -106,13 +111,11 @@ worker journal metrics (WorkerInfo blocker) = go
           case mcmd of
             Nothing -> do
               Metrics.incrCounter metrics ErrorsEncountered 1
-              b <- wakeUp blocker key $ Left "Couldn't parse request" -- should be better error message
-              unless b $
-                error $ "Frontend never added MVar"
+              wakeUpFrontend blocker key $ Left "Couldn't parse request" -- should be better error message
               return s
             Just cmd -> do
               (s', r) <- runCommand s cmd
-              wakeUp blocker key (Right r)
+              wakeUpFrontend blocker key (Right r)
               return s'
         }
       ; threadDelay 10
