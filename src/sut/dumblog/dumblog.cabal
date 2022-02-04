@@ -57,6 +57,7 @@ library
       , warp
   exposed-modules:
       Blocker
+    , Codec
     , FrontEnd
     , Metrics
     , StateMachine

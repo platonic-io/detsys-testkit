@@ -3,9 +3,7 @@ module Worker where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
-import qualified Data.Binary as Binary
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as LBS
 import Data.Time (getCurrentTime, diffUTCTime)
 
 import Journal (Journal)
@@ -13,16 +11,14 @@ import qualified Journal
 import qualified Journal.Internal.Metrics as Metrics
 
 import Blocker
+import Codec
 import Metrics
 import StateMachine
 import Types
 
-parseCommand :: ByteString -> IO (Int, Maybe Command)
+parseCommand :: ByteString -> IO (Maybe Command)
 parseCommand bs = do
-  let
-    cmd :: LBS.ByteString
-    (key, cmd) = Binary.decode $ LBS.fromStrict bs
-  pure (key, Nothing)
+  pure Nothing
 
 data WorkerInfo = WorkerInfo
   { wiBlockers :: Blocker (Either Response Response)
@@ -52,7 +48,8 @@ worker journal metrics (WorkerInfo blocker) = go
       ; s' <- case val of
         { Nothing -> return s
         ; Just entry -> timeIt metrics $ do
-          (key, mcmd) <- parseCommand entry
+          let Envelope key cmdString = decode entry
+          mcmd <- parseCommand cmdString
           case mcmd of
             Nothing -> do
               Metrics.incrCounter metrics ErrorsEncountered 1

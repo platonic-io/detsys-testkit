@@ -1,8 +1,6 @@
 module FrontEnd where
 
-import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as LBS
-
 import Network.HTTP.Types.Status (status200, status400)
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
@@ -13,6 +11,7 @@ import Journal.Types.AtomicCounter (AtomicCounter)
 import qualified Journal.Types.AtomicCounter as AtomicCounter
 
 import Blocker
+import Codec
 import Types
 
 data FrontEndInfo = FrontEndInfo
@@ -24,7 +23,7 @@ httpFrontend :: Journal -> FrontEndInfo -> Wai.Application
 httpFrontend journal (FrontEndInfo c blocker) req respond = do
   body <- Wai.strictRequestBody req
   key <- AtomicCounter.incrCounter 1 c
-  Journal.appendBS journal (LBS.toStrict $ Binary.encode (key, body))
+  Journal.appendBS journal (encode $ Envelope key $ LBS.toStrict body)
   resp <- blockUntil blocker key
   Journal.dumpJournal journal
   case resp of
