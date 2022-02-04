@@ -1,16 +1,25 @@
+{-# LANGUAGE OverloadedStrings #-}
 module StateMachine where
 
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Lazy.Char8 as LBS8
 
 import Types
 
 -- This is the main state of Dumblog, which is the result of applying all commands in the log
 data InMemoryDumblog = InMemoryDumblog
   { theLog :: [ByteString] -- not very memory efficient, but not the point
+  , nextIx :: Int
   }
 
 initState :: InMemoryDumblog
-initState = InMemoryDumblog []
+initState = InMemoryDumblog [] 0
 
+-- this could be pure?
 runCommand :: InMemoryDumblog -> Command -> IO (InMemoryDumblog, Response)
-runCommand s _ = pure (s, error "Not implemented")
+runCommand state@(InMemoryDumblog log ix) cmd = case cmd of
+  Write bs -> pure (InMemoryDumblog (bs:log) (ix+1), "Appended to position: " <> LBS8.pack (show ix))
+  Read i
+    | i < ix -> pure (state, LBS.fromStrict $ log !! (ix - 1 - i))
+    | otherwise -> pure (state, "Transaction not in the store!") -- we probably should really signal failure
