@@ -11,10 +11,6 @@ import qualified Data.ByteString.Char8 as BSChar8
 import qualified Data.ByteString.Lazy as LBS
 import Data.Time (getCurrentTime, diffUTCTime)
 
-import Network.HTTP.Types.Status (status200, status400)
-import qualified Network.Wai as Wai
-import Network.Wai.Handler.Warp
-
 import Journal (Journal)
 import qualified Journal
 import Journal.Types.AtomicCounter (AtomicCounter)
@@ -23,24 +19,9 @@ import Journal.Internal.Metrics (MetricsSchema, Metrics) -- should maybe be move
 import qualified Journal.Internal.Metrics as Metrics
 
 import Blocker
+import FrontEnd
 import Metrics
 import Types
-
-data FrontEndInfo = FrontEndInfo
-  { sequenceNumber :: AtomicCounter
-  , blockers :: Blocker (Either Response Response)
-  }
-
-httpFrontend :: Journal -> FrontEndInfo -> Wai.Application
-httpFrontend journal (FrontEndInfo c blocker) req respond = do
-  body <- Wai.strictRequestBody req
-  key <- AtomicCounter.incrCounter 1 c
-  Journal.appendBS journal (LBS.toStrict $ Binary.encode (key, body))
-  resp <- blockUntil blocker key
-  Journal.dumpJournal journal
-  case resp of
-    Left errMsg -> respond $ Wai.responseLBS status400 [] errMsg
-    Right msg -> respond $ Wai.responseLBS status200 [] msg
 
 parseCommand :: ByteString -> IO (Int, Maybe Command)
 parseCommand bs = do
@@ -128,4 +109,4 @@ main = do
       feInfo = FrontEndInfo counter blocker
       wInfo = WorkerInfo blocker
   async $ worker journal metrics wInfo state
-  run 8053 (httpFrontend journal feInfo)
+  runFrontEnd 8053 journal feInfo

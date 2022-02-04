@@ -39,22 +39,25 @@ executable dumblog
       , binary
       , bytestring
       , dumblog
-      , http-types
       , journal
       , stunt-double
       , time
-      , wai
-      , warp
     hs-source-dirs:   app
     default-language: Haskell2010
 
 library
   build-depends:
       , base ^>=4.14.1.0
+      , binary
+      , bytestring
       , containers
+      , http-types
       , journal
+      , wai
+      , warp
   exposed-modules:
       Blocker
+    , FrontEnd
     , Metrics
     , Types
   hs-source-dirs: src
