@@ -67,18 +67,10 @@ appendBSFake bs fj@(FakeJournal bss ix)
     limit = readBytes + termLen `div` 2
 
     readBytes :: Int
-    readBytes = Vector.sum
-              . Vector.cons readPadBytes
+    readBytes = (+ readPadBytes)
+              . Vector.sum
               . Vector.map (\bs -> hEADER_LENGTH + BS.length bs)
               $ Vector.slice 0 (max 0 (ix - 1)) bss
-
-    readPadBytes :: Int
-    readPadBytes =
-      let
-        (lbss, _rbss) = Vector.splitAt ix (Vector.snoc bss bs)
-        (_lacc, lpad) = padding 0 0 (Vector.map BS.length lbss)
-      in
-        lpad
 
     unreadBytes :: Int
     unreadBytes = sum [ hEADER_LENGTH + BS.length bs
@@ -88,13 +80,14 @@ appendBSFake bs fj@(FakeJournal bss ix)
 
     -- XXX: figure out why this doesn't work:
     -- unreadBytes :: Int
-    -- unreadBytes = Vector.sum
-    --             . Vector.cons unreadPadBytes
+    -- unreadBytes = (+ unreadPadBytes)
+    --             . Vector.sum
     --             . Vector.map (\bs -> hEADER_LENGTH + BS.length bs)
     --             $ Vector.slice ix (max 0 (Vector.length bss - 1)) bss
 
-    unreadPadBytes :: Int
-    unreadPadBytes =
+
+    readPadBytes, unreadPadBytes :: Int
+    (readPadBytes, unreadPadBytes) =
       let
         (lbss, rbss) = Vector.splitAt ix (Vector.snoc bss bs)
         (lacc, lpad) = padding 0    0 (Vector.map BS.length lbss)
@@ -109,7 +102,7 @@ appendBSFake bs fj@(FakeJournal bss ix)
                        , "racc: " ++ show racc
                        , "rpad: " ++ show rpad
                        ])
-        rpad
+        (lpad, rpad)
 
     padding :: Int -> Int -> Vector Int -> (Int, Int)
     padding acc pad ls = case Vector.uncons ls of
