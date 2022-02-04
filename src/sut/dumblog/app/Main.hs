@@ -1,25 +1,15 @@
 module Main where
 
 import Control.Concurrent.Async (async)
-import qualified Data.Binary as Binary
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BSChar8
-import qualified Data.ByteString.Lazy as LBS
-
-import Journal (Journal)
 import qualified Journal
-import Journal.Types.AtomicCounter (AtomicCounter)
 import qualified Journal.Types.AtomicCounter as AtomicCounter
-import Journal.Internal.Metrics (MetricsSchema, Metrics) -- should maybe be moved to separate package
 import qualified Journal.Internal.Metrics as Metrics
 
-import Blocker
-import FrontEnd
-import Metrics
-import StateMachine
-import Types
-import Worker
+import Blocker (emptyBlocker)
+import FrontEnd (runFrontEnd, FrontEndInfo(..))
+import Metrics (dumblogSchema)
+import StateMachine(initState)
+import Worker (worker, WorkerInfo(..))
 
 
 {-
