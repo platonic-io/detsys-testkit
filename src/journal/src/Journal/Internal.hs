@@ -62,6 +62,7 @@ tryClaim jour len = do
   putStrLn ("tryClaim, termCount: " ++ show (unTermCount termCount))
   putStrLn ("tryClaim, activePartitionIndex: " ++ show (unPartitionIndex activePartitionIndex))
   putStrLn ("tryClaim, termOffset: " ++ show (unTermOffset termOffset))
+  putStrLn ("tryClaim, termBeginPosition: " ++ show termBeginPosition)
   limit <- calculatePositionLimit jour
   let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
       position     = termBeginPosition + fromIntegral termOffset
