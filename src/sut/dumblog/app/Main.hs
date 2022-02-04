@@ -24,6 +24,7 @@ import qualified Journal.Internal.Metrics as Metrics
 
 import Blocker
 import Metrics
+import Types
 
 data FrontEndInfo = FrontEndInfo
   { sequenceNumber :: AtomicCounter
@@ -40,10 +41,6 @@ httpFrontend journal (FrontEndInfo c blocker) req respond = do
   case resp of
     Left errMsg -> respond $ Wai.responseLBS status400 [] errMsg
     Right msg -> respond $ Wai.responseLBS status200 [] msg
-
-data Command
-  = Write ByteString
-  | Read Int
 
 parseCommand :: ByteString -> IO (Int, Maybe Command)
 parseCommand bs = do
@@ -62,8 +59,6 @@ initState = InMemoryDumblog []
 data WorkerInfo = WorkerInfo
   { wiBlockers :: Blocker (Either Response Response)
   }
-
-type Response = LBS.ByteString
 
 runCommand :: InMemoryDumblog -> Command -> IO (InMemoryDumblog, Response)
 runCommand s _ = pure (s, error "Not implemented")
