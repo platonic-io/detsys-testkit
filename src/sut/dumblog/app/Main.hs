@@ -23,22 +23,7 @@ import Journal.Internal.Metrics (MetricsSchema, Metrics) -- should maybe be move
 import qualified Journal.Internal.Metrics as Metrics
 
 import Blocker
-
-data DumblogCounters
-  = CurrentNumberTransactions
-  | NumberOfWrites
-  | NumberOfReads
-  | ErrorsEncountered
-  deriving (Eq, Show, Enum, Bounded)
-
-data DumblogHistograms
-  = ResponseTime
-  deriving (Eq, Show, Enum, Bounded)
-
-type DumblogMetrics = Metrics DumblogCounters DumblogHistograms
-
-dumblogSchema :: MetricsSchema DumblogCounters DumblogHistograms
-dumblogSchema = Metrics.MetricsSchema 1
+import Metrics
 
 data FrontEndInfo = FrontEndInfo
   { sequenceNumber :: AtomicCounter
