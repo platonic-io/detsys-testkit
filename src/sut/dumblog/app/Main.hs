@@ -21,6 +21,7 @@ import qualified Journal.Internal.Metrics as Metrics
 import Blocker
 import FrontEnd
 import Metrics
+import StateMachine
 import Types
 
 parseCommand :: ByteString -> IO (Int, Maybe Command)
@@ -30,19 +31,9 @@ parseCommand bs = do
     (key, cmd) = Binary.decode $ LBS.fromStrict bs
   pure (key, Nothing)
 
--- This is the main state of Dumblog, which is the result of applying all commands in the log
-data InMemoryDumblog = InMemoryDumblog
-  { theLog :: [ByteString] -- not very memory efficient, but not the point
-  }
-
-initState = InMemoryDumblog []
-
 data WorkerInfo = WorkerInfo
   { wiBlockers :: Blocker (Either Response Response)
   }
-
-runCommand :: InMemoryDumblog -> Command -> IO (InMemoryDumblog, Response)
-runCommand s _ = pure (s, error "Not implemented")
 
 -- Currently always uses `ResponseTime`
 timeIt :: DumblogMetrics -> IO a -> IO a
