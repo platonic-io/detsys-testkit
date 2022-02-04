@@ -56,7 +56,7 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
                  , "limit: " ++ show limit
                  ]) $
     if position < limit
-    then if journalLength >= termLen * termCount
+    then if journalLength > termLen * termCount
          then (FakeJournal (Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
          else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
     else (fj, Left BackPressure)
@@ -405,11 +405,13 @@ unit_bug6 = assertProgram ""
                            -- discarded previously it's not part of the padding
                            -- calculation...
 
-
 unit_bug7 :: Assertion
 unit_bug7 = assertProgram ""
   [AppendBS [(32756,'Y')], AppendBS [(32761,'A')], ReadJournal, AppendBS [(1,'J')]]
 
+unit_bug8 :: Assertion
+unit_bug8 = assertProgram ""
+  [AppendBS [(32756,'I')], ReadJournal, AppendBS [(16381,'Q')], AppendBS [(16381,'U')]]
 
 ------------------------------------------------------------------------
 
