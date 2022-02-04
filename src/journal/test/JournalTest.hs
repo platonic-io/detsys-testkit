@@ -30,8 +30,9 @@ import Journal.Internal.Utils hiding (assert)
 ------------------------------------------------------------------------
 
 data FakeJournal' a = FakeJournal
-  { fjJournal :: Vector a
-  , fjIndex   :: Int
+  { fjJournal   :: Vector a
+  , fjIndex     :: Int
+  , fjTermCount :: Int
   }
   deriving (Show, Functor)
 
@@ -41,23 +42,32 @@ prettyFakeJournal :: FakeJournal -> String
 prettyFakeJournal = show . fmap (prettyRunLenEnc . encodeRunLength)
 
 startJournalFake :: FakeJournal
-startJournalFake = FakeJournal Vector.empty 0
+startJournalFake = FakeJournal Vector.empty 0 1
 
 appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Either AppendError ())
-appendBSFake bs fj@(FakeJournal bss ix)
-  | position < limit =
-    trace (unlines [ "TRACE"
-                   , "ix: " ++ show ix
-                   , "readBytes: " ++ show readBytes
-                   , "unreadBytes: " ++  show unreadBytes
-                   , "readPadBytes: " ++  show readPadBytes
-                   , "unreadPadBytes: " ++ show unreadPadBytes
-                   , "position: " ++ show position
-                   , "limit: " ++ show limit
-                   ])
-    (FakeJournal (Vector.snoc bss bs) ix, Right ())
-  | otherwise           = (fj, Left BackPressure)
+appendBSFake bs fj@(FakeJournal bss ix termCount) =
+  trace (unlines [ "TRACE"
+                 , "ix: " ++ show ix
+                 , "termCount: " ++ show termCount
+                 , "bs: " ++ show (encodeRunLength bs)
+                 , "readBytes: " ++ show readBytes
+                 , "unreadBytes: " ++  show unreadBytes
+                 , "position: " ++ show position
+                 , "limit: " ++ show limit
+                 ]) $
+    if position < limit
+    then if journalLength >= termLen * termCount
+         then (FakeJournal (Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
+         else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
+    else (fj, Left BackPressure)
   where
+    journalLength :: Int
+    journalLength = sum (Vector.map (\bs -> hEADER_LENGTH + BS.length bs) bss)
+                  + hEADER_LENGTH + BS.length bs
+
+    padding :: ByteString
+    padding = BS.replicate (termLen * termCount - journalLength) '0'
+
     termLen :: Int
     termLen = oTermBufferLength testOptions
 
@@ -67,54 +77,24 @@ appendBSFake bs fj@(FakeJournal bss ix)
     limit = readBytes + termLen `div` 2
 
     readBytes :: Int
-    readBytes = (+ readPadBytes)
-              . Vector.sum
-              . Vector.map (\bs -> hEADER_LENGTH + BS.length bs)
-              $ Vector.slice 0 (max 0 (ix - 1)) bss
+    readBytes = sum [ hEADER_LENGTH + BS.length bs
+                    | bs <- map (bss Vector.!) [0..ix - 1]
+                    ]
 
     unreadBytes :: Int
     unreadBytes = sum [ hEADER_LENGTH + BS.length bs
                       | bs <- map (bss Vector.!) [ix..Vector.length bss - 1]
                       ]
-                + unreadPadBytes
-
-    -- XXX: figure out why this doesn't work:
-    -- unreadBytes :: Int
-    -- unreadBytes = (+ unreadPadBytes)
-    --             . Vector.sum
-    --             . Vector.map (\bs -> hEADER_LENGTH + BS.length bs)
-    --             $ Vector.slice ix (max 0 (Vector.length bss - 1)) bss
-
-
-    readPadBytes, unreadPadBytes :: Int
-    (readPadBytes, unreadPadBytes) =
-      let
-        (lbss, rbss) = Vector.splitAt ix (Vector.snoc bss bs)
-        (lacc, lpad) = padding 0    0 (Vector.map BS.length lbss)
-        (racc, rpad) = padding lacc 0 (Vector.map BS.length rbss)
-      in
-        trace (unlines [ "PAD"
-                       , "ix: "   ++ show ix
-                       , "lbss: " ++ show (Vector.map encodeRunLength lbss)
-                       , "rbss: " ++ show (Vector.map encodeRunLength rbss)
-                       , "lacc: " ++ show lacc
-                       , "lpad: " ++ show lpad
-                       , "racc: " ++ show racc
-                       , "rpad: " ++ show rpad
-                       ])
-        (lpad, rpad)
-
-    padding :: Int -> Int -> Vector Int -> (Int, Int)
-    padding acc pad ls = case Vector.uncons ls of
-      Nothing -> (acc, pad)
-      Just (l, ls)
-        | acc + l + hEADER_LENGTH <= termLen -> padding (acc + l + hEADER_LENGTH) pad ls
-        | otherwise                          -> padding (l + hEADER_LENGTH)
-                                                        (pad + (termLen - acc)) ls
 
 readJournalFake :: FakeJournal -> (FakeJournal, Maybe ByteString)
-readJournalFake fj@(FakeJournal jour ix) =
-  (FakeJournal jour (ix + 1), Just (jour Vector.! ix))
+readJournalFake fj@(FakeJournal jour ix termCount)
+  -- Nothing to read:
+  | Vector.length jour == ix = (fj, Nothing)
+  -- Padding, skip:
+  | BS.length (jour Vector.! ix) == 0 || BS.head (jour Vector.! ix) == '0' =
+      readJournalFake (fj { fjIndex = ix + 1 })
+  -- Normal read:
+  | otherwise =  (FakeJournal jour (ix + 1) termCount, Just (jour Vector.! ix))
 
 ------------------------------------------------------------------------
 
@@ -202,15 +182,9 @@ step ReadJournal    m = ByteString <$> readJournalFake m
 step DumpJournal    m = (m, Result (Right ()))
 
 exec :: Command -> Journal -> IO Response
-exec (AppendBS rle) j = do
-  let bs = decodeRunLength rle
-  eu <- appendBS j bs
-  case eu of
-    Left Rotation     -> Result <$> appendBS j bs
-    Left BackPressure -> return (Result (Left BackPressure))
-    Right ()          -> return (Result (Right ()))
-exec ReadJournal   j = ByteString <$> readJournal j
-exec DumpJournal   j = Result . Right <$> dumpJournal j
+exec (AppendBS rle) j = Result <$> appendBS j (decodeRunLength rle)
+exec ReadJournal    j = ByteString <$> readJournal j
+exec DumpJournal    j = Result . Right <$> dumpJournal j
 
 genRunLenEncoding :: Gen [(Int, Char)]
 genRunLenEncoding = sized $ \n -> do
@@ -412,13 +386,25 @@ unit_bug5 = assertProgram ""
 -- 1+6+(64*1024/2) = 32775, so that's fine, however 32770+32761+6 = 65537 so it
 -- doesn't fit in the current term. 65536-(1+6+32757+6) = 32766 bytes of padding
 -- is written instead and then term rotation happens before the 32761+6 bytes
--- related to the append of Rs, this gives us a position of 32770+32767 = 65537
+-- related to the append of Rs, this gives us a position of 32770+32766 = 65536
 -- which is over the limit and so backpressure should happen.
 
 unit_bug6 :: Assertion
 unit_bug6 = assertProgram ""
-  [ AppendBS [(1,'J')], ReadJournal, AppendBS [(32757,'K')], AppendBS [(32761,'H')]
-  , AppendBS [(1,'F')]]
+  [ AppendBS [(1,'J')], ReadJournal, AppendBS [(32757,'K')] -- 1+6+32757+6 = 32770
+
+  , AppendBS [(32761,'H')] -- 32770+32761+6 = 65537 doesn't fit in term,
+                           -- 65536-32770 = 32766 padding is written instead,
+                           -- the Hs get discarded, resulting in a position of
+                           -- 32770+32766=65536, while the limit is
+                           -- 1+6+(64*1024/2)=32775, so backpressure should
+                           -- happen (which it does in both the model and SUT).
+
+  , AppendBS [(1,'F')]]    -- Here backpressure should happen again, but it
+                           -- doesn't in the model, because Hs has been
+                           -- discarded previously it's not part of the padding
+                           -- calculation...
+
 
 unit_bug7 :: Assertion
 unit_bug7 = assertProgram ""
