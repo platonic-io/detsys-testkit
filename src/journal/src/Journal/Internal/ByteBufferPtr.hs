@@ -133,18 +133,17 @@ boundCheck bb ix size = do
   invariant bb
   -- XXX: use Word for size?
   -- XXX: parametrise on build flag and only do these checks if enabled?
-  Slice slice <- readIORef (bbSlice bb)
   Limit limit <- readIORef (bbLimit bb)
   if 0 <= size &&
      0 <= ix &&
-     ix + size - 1 < limit -- XXX:
+     ix + size - 1 < limit
   then return ()
   else throwIO (IndexOutOfBounds $ errMsg limit)
   where
     errMsg limit = concat
       [ prettyCallStack callStack
       , "\nboundCheck: index out of bounds "
-      , show [ix, ix+size] , " isn't in [0," , show limit, ")"
+      , show [ix, ix + size - 1] , " isn't in [0," , show limit, ")"
       ]
 
 invariant :: HasCallStack => ByteBuffer -> IO ()

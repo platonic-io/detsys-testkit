@@ -29,6 +29,9 @@ import Journal.Internal.Utils hiding (assert)
 
 ------------------------------------------------------------------------
 
+prop_alignment :: Positive Int -> Bool
+prop_alignment (Positive i) = align i fRAME_ALIGNMENT `mod` fRAME_ALIGNMENT == 0
+
 data FakeJournal' a = FakeJournal
   { fjJournal   :: Vector a
   , fjIndex     :: Int
@@ -56,13 +59,14 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
                  , "limit: " ++ show limit
                  ]) $
     if position < limit
-    then if journalLength > termLen * termCount
+    then if journalLength >= termLen * termCount
          then (FakeJournal (Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
          else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
     else (fj, Left BackPressure)
   where
     journalLength :: Int
-    journalLength = sum (Vector.map (\bs -> hEADER_LENGTH + BS.length bs) bss)
+    journalLength = sum (Vector.map
+                         (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT) bss)
                   + hEADER_LENGTH + BS.length bs
 
     padding :: ByteString
@@ -77,12 +81,12 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
     limit = readBytes + termLen `div` 2
 
     readBytes :: Int
-    readBytes = sum [ hEADER_LENGTH + BS.length bs
+    readBytes = sum [ align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT
                     | bs <- map (bss Vector.!) [0..ix - 1]
                     ]
 
     unreadBytes :: Int
-    unreadBytes = sum [ hEADER_LENGTH + BS.length bs
+    unreadBytes = sum [ align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT
                       | bs <- map (bss Vector.!) [ix..Vector.length bss - 1]
                       ]
 
@@ -173,7 +177,8 @@ type Model = FakeJournal
 precondition :: Model -> Command -> Bool
 precondition m ReadJournal    = Vector.length (fjJournal m) /= fjIndex m
 precondition m (AppendBS rle) = let bs = decodeRunLength rle in
-  not (BS.null bs) && BS.length bs + hEADER_LENGTH < oTermBufferLength testOptions `div` 2
+  not (BS.null bs) &&
+  align (BS.length bs + hEADER_LENGTH) fRAME_ALIGNMENT < oTermBufferLength testOptions `div` 2
 precondition m DumpJournal = True
 
 step :: Command -> Model -> (Model, Response)
@@ -381,7 +386,7 @@ unit_bug4 = assertProgram ""
 
 unit_bug5 :: Assertion
 unit_bug5 = assertProgram ""
-  [AppendBS [(1,'K')], AppendBS [(32757,'Q')], ReadJournal, AppendBS [(32761,'R')]]
+  [AppendBS [(1,'K')], AppendBS [(32757,'Q')], ReadJournal, AppendBS [(32759,'R')]]
 -- ^ Before writing the Rs, we have posiiton: 1+6+32757+6 = 32770 and limit:
 -- 1+6+(64*1024/2) = 32775, so that's fine, however 32770+32761+6 = 65537 so it
 -- doesn't fit in the current term. 65536-(1+6+32757+6) = 32766 bytes of padding
@@ -391,12 +396,12 @@ unit_bug5 = assertProgram ""
 
 unit_bug6 :: Assertion
 unit_bug6 = assertProgram ""
-  [ AppendBS [(1,'J')], ReadJournal, AppendBS [(32757,'K')] -- 1+6+32757+6 = 32770
+  [ AppendBS [(1,'J')], ReadJournal, AppendBS [(32757,'K')] -- 1+8+32757+8 = 32774
 
-  , AppendBS [(32761,'H')] -- 32770+32761+6 = 65537 doesn't fit in term,
-                           -- 65536-32770 = 32766 padding is written instead,
+  , AppendBS [(32755,'H')] -- 32774+32755+8 = 65537 doesn't fit in term,
+                           -- 65536-32774 = 32762 padding is written instead,
                            -- the Hs get discarded, resulting in a position of
-                           -- 32770+32766=65536, while the limit is
+                           -- 32774+32762=65536, while the limit is
                            -- 1+6+(64*1024/2)=32775, so backpressure should
                            -- happen (which it does in both the model and SUT).
 
@@ -407,11 +412,21 @@ unit_bug6 = assertProgram ""
 
 unit_bug7 :: Assertion
 unit_bug7 = assertProgram ""
-  [AppendBS [(32756,'Y')], AppendBS [(32761,'A')], ReadJournal, AppendBS [(1,'J')]]
+  [AppendBS [(32756,'Y')], AppendBS [(32756,'A')], ReadJournal, AppendBS [(1,'J')]]
 
 unit_bug8 :: Assertion
 unit_bug8 = assertProgram ""
   [AppendBS [(32756,'I')], ReadJournal, AppendBS [(16381,'Q')], AppendBS [(16381,'U')]]
+
+unit_bug9 :: Assertion
+unit_bug9 = assertProgram ""
+  [AppendBS [(32754,'L')], ReadJournal, AppendBS [(32759,'K')], AppendBS [(1,'M')]]
+
+unit_bug10 :: Assertion
+unit_bug10 = assertProgram ""
+  [ AppendBS [(1,'K')], AppendBS [(1,'P')], ReadJournal, ReadJournal
+  , AppendBS [(1,'X')], ReadJournal
+  ]
 
 ------------------------------------------------------------------------
 
