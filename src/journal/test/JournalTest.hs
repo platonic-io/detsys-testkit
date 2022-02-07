@@ -3,7 +3,6 @@
 
 module JournalTest where
 
-import Debug.Trace (trace)
 import Control.Arrow ((&&&))
 import Control.Exception (IOException, catch, displayException)
 import Control.Monad (unless, when)
@@ -11,9 +10,11 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Builder as BS
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.Int (Int64)
 import Data.Monoid (Sum(Sum))
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
+import Debug.Trace (trace)
 import System.Directory
        (canonicalizePath, getTemporaryDirectory, removeFile)
 import System.IO (openTempFile)
@@ -247,20 +248,11 @@ prop_journal =
     run (allocateJournal fp testOptions)
     j <- run (startJournal fp testOptions)
     monitor (tabulate "Commands" (map constructorString cmds))
-    monitor (classify (length cmds == 0) "0  == length commands")
-    monitor (classify (0 < length cmds && length cmds <= 10)
-             "0   < length commands <= 10")
-    monitor (classify (10 < length cmds && length cmds <= 50)
-             "10  < length commands <= 50")
-    monitor (classify (50 < length cmds && length cmds <= 100)
-             "50  < length commands <= 100")
-    monitor (classify (100 < length cmds && length cmds <= 200)
-             "100 < length commands <= 200")
-    monitor (classify (200 < length cmds && length cmds <= 500)
-             "200 < length commands <= 500")
+    monitor (classifyCommandsLength cmds)
     monitor (whenFail (dumpJournal j))
     (result, hist) <- go cmds m j []
-    -- run (uncurry stopJournal j)
+    written <- run (metricsBytesWritten j)
+    monitor (classifyBytesWritten written)
     -- monitorStats (stats (zip cmds hist))
     run (removeFile fp)
     return result
@@ -280,33 +272,31 @@ prop_journal =
           monitor (counterexample ("Failed: " ++ msg))
         assert condition
 
--- XXX: Get this straight from the metrics of the journal instead?
-  {-
-data Stats = Stats
-  { sBytesWritten :: Int
-  , sRotations    :: Int
-  }
-  deriving Show
+classifyCommandsLength :: [Command] -> Property -> Property
+classifyCommandsLength cmds
+  = classify (length cmds == 0)                        "length commands: 0"
+  . classify (0   < length cmds && length cmds <= 10)  "length commands: 1-10"
+  . classify (10  < length cmds && length cmds <= 50)  "length commands: 11-50"
+  . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
+  . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
+  . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
+  . classify (500 < length cmds)                       "length commands: 501<"
 
-stats :: [(Command, Response)] -> Stats
-stats hist = Stats
-  { sBytesWritten = totalAppended
-  -- XXX: doesn't account for footers...
-  , sRotations    = totalAppended `div` oTermBufferLength testOptions
-  }
+classifyBytesWritten :: Int64 -> Property -> Property
+classifyBytesWritten bytes
+  = classify (bytes == 0)
+             "bytes written: 0"
+  . classify (0 < bytes && bytes <= termBufferLen)                     (msg 0 1)
+  . classify (1 * termBufferLen < bytes && bytes <= 2 * termBufferLen) (msg 1 2)
+  . classify (2 * termBufferLen < bytes && bytes <= 3 * termBufferLen) (msg 2 3)
+  . classify (3 * termBufferLen < bytes && bytes <= 4 * termBufferLen) (msg 3 4)
+  . classify (4 * termBufferLen < bytes && bytes <= 5 * termBufferLen) (msg 4 5)
+  . classify (5 * termBufferLen < bytes)
+             ("bytes written: " ++ show (5 * termBufferLen) ++ "<")
   where
-    Sum totalAppended =
-      foldMap (\(cmd, _resp) ->
-                 case cmd of
-                   AppendBS bs -> Sum (hEADER_LENGTH + BS.length bs)
-                   _otherwise  -> mempty) hist
-
-monitorStats :: Monad m => Stats -> PropertyM m ()
-monitorStats stats
-  = monitor
-  $ collect ("Bytes written: " <> show (sBytesWritten stats))
-  . collect ("Rotations: "     <> show (sRotations stats))
--}
+    msg low high = concat
+      ["bytes written: ", show (low * termBufferLen), "-", show (high * termBufferLen)]
+    termBufferLen = int2Int64 (oTermBufferLength testOptions)
 
 runCommands :: [Command] -> IO Bool
 runCommands cmds = do
