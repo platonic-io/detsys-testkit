@@ -49,6 +49,7 @@ library
       , containers
       , http-types
       , journal
+      , text
       , time
       , wai
       , warp

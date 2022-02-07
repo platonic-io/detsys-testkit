@@ -3,7 +3,10 @@ module Worker where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
-import Data.ByteString (ByteString)
+import qualified Data.Binary as Binary
+import Data.ByteString (ByteString, uncons)
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Char as Char
 import Data.Time (getCurrentTime, diffUTCTime)
 
 import Journal (Journal)
@@ -15,10 +18,6 @@ import Codec
 import Metrics
 import StateMachine
 import Types
-
-parseCommand :: ByteString -> IO (Maybe Command)
-parseCommand bs = do
-  pure Nothing
 
 data WorkerInfo = WorkerInfo
   { wiBlockers :: Blocker (Either Response Response)
@@ -48,17 +47,14 @@ worker journal metrics (WorkerInfo blocker) = go
       ; s' <- case val of
         { Nothing -> return s
         ; Just entry -> timeIt metrics $ do
-          let Envelope key cmdString = decode entry
-          mcmd <- parseCommand cmdString
-          case mcmd of
-            Nothing -> do
+          let Envelope key cmd = decode entry
+          {- // in case of decode error
               Metrics.incrCounter metrics ErrorsEncountered 1
               wakeUpFrontend blocker key $ Left "Couldn't parse request" -- should be better error message
-              return s
-            Just cmd -> do
-              (s', r) <- runCommand s cmd
-              wakeUpFrontend blocker key (Right r)
-              return s'
+-}
+          (s', r) <- runCommand s cmd
+          wakeUpFrontend blocker key (Right r)
+          return s'
         }
       ; threadDelay 10
       ; go s'

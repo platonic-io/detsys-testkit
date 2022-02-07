@@ -1,20 +1,24 @@
+{-# LANGUAGE DeriveGeneric, DeriveFunctor#-}
 module Codec where
 
+import Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 
-data Envelope = Envelope
-  { eLength :: Int
-  , eContent :: ByteString -- maybe should be strict?
-  }
+import GHC.Generics(Generic)
 
-encode :: Envelope -> ByteString
-encode e = LBS.toStrict (Binary.encode (eLength e, eContent e))
+data Envelope a = Envelope
+  { eLength :: Int
+  , eContent :: a
+  } deriving (Functor, Generic)
+
+instance Binary a => Binary (Envelope a) where
+
+encode :: Binary a => Envelope a -> ByteString
+encode e = LBS.toStrict (Binary.encode e)
 
 -- this is guaranteed not to copy the bytestring
 -- but we should probably allow this to fail
-decode :: ByteString -> Envelope
-decode bs =
-  let (key, content) = Binary.decode $ LBS.fromStrict bs
-  in Envelope key content
+decode :: Binary a => ByteString -> Envelope a
+decode bs = Binary.decode $ LBS.fromStrict bs
