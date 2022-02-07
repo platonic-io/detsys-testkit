@@ -1,21 +1,103 @@
 ## Advanced property-based testing mini-course
 
-### Table of content
+* Goals:
+  - Show how to test stateful (i.e. impure/monadic) programs using
+    property-based testing in general;
+  - Show how to use fault injection and so called simulation testing to test
+    distributed systems in particular;
+  - Introduce the reader to related work and open problems in the area.
 
-0. Assume familiarity with Haskell and QuickCheck
+* Pre-requisites:
+  - Enough familiarity with Haskell to be able to read simple programs;
+  - Basic knowledge of state machines (i.e. Mealy and Moore machines)
+
+    + https://en.wikipedia.org/wiki/Finite-state_transducer
+    + [Computation and State
+      Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
+      (2008) by Leslie Lamport
+
+  - Some experience with property-based testing of non-stateful (i.e. pure)
+    programs.
+    + The original paper: [QuickCheck: a lightweight tool for random testing of
+      Haskell
+      programs](http://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf)
+      (2000) by Koen Claessen and John Hughes
+
+### Table of contents
+
 1. State machine testing
+  - State machine models
   - Pre-conditions
   - Coverage
   - Execution trace for counterexamples
   - Regression tests from counterexamples
   - Metrics
   - References?
-2. Consumer-driven contract tests using state machines
-3. Concurrent state machine testing with linearisability
+2. Concurrent state machine testing with linearisability
+  - Generalise generation and execution to N threads
+  - Collect history
+  - Enumerate all possible sequential executions from concurrent history
+  - Write simple linearisability checker: check if there's any such sequential
+    execution that satisifies the (sequential) state machine model
+3. Consumer-driven contract tests using state machines
 4. Fault-injection
 5. Simulation testing
 
-### Simulation testing
+### 1. State machine testing
+
+* The software under test (SUT)
+
+```haskell
+newtype Counter = Counter (IORef Int)
+
+incr :: Counter -> IO ()
+incr = undefined
+
+get :: Counter -> IO Int
+get = undefined
+```
+
+```haskell
+newtype FakeCounter = FakeCounter Int
+
+fakeIncr :: FakeCounter -> (FakeCounter, ())
+fakeIncr (FakeCounter i) = (FakeCounter (i + 1), ())
+
+fakeGet :: FakeCounter -> (FakeCounter, Int)
+fakeGet (FakeCounter i) = (FakeCounter i, i)
+```
+
+
+```haskell
+data Command = Incr | Get
+
+data Response = Unit () | Int Int
+
+type Model = FakeCounter
+
+step :: Model -> Command -> (Model, Response)
+step m cmd = case cmd of
+  Incr -> Unit <$> fakeIncr m
+  Get  -> Int  <$> fakeGet m
+
+exec :: Counter -> Command -> IO Response
+exec = undefined
+
+genCommands :: Model -> Gen [Command]
+genCommands = undefined
+
+prop_counter :: Property
+prop_counter = forAll genCommands $ \cmds -> do
+  undefined
+```
+
+### 2. Concurrent state machine testing with linearisability
+
+### 3. Consumer-driven contract testing using state machines
+
+### 4. Fault-injection
+
+### 5. Simulation testing
 
 ```haskell
 data Network = Network
