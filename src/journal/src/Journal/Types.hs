@@ -339,10 +339,10 @@ newtype HeaderIndex = HeaderIndex Word32
 
 -- | The length of the journal entry header in bytes.
 hEADER_LENGTH :: Int
-hEADER_LENGTH
-  = sizeOf (1 :: HeaderTag)
-  + sizeOf (1 :: HeaderVersion)
-  + sizeOf (4 :: HeaderLength)
+hEADER_LENGTH = 8
+  -- = sizeOf (1 :: HeaderTag)
+  -- + sizeOf (1 :: HeaderVersion)
+  -- + sizeOf (4 :: HeaderLength)
   -- + sizeOf (4 :: HeaderIndex)
   -- XXX: CRC?
 

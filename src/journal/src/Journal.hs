@@ -179,7 +179,7 @@ readJournal jour = do
   else do
     assertM (int2Int64 offset < position)
 
-    let relativeOffset = int2Int32 offset - readTermCount * termLen
+    let relativeOffset = int2Int32 (align offset fRAME_ALIGNMENT) - readTermCount * termLen
     putStrLn ("readJournal, relativeOffset: " ++ show relativeOffset)
     tag <- readFrameType termBuffer (TermOffset relativeOffset)
     putStrLn ("readJournal, tag: " ++ show tag)
@@ -188,7 +188,7 @@ readJournal jour = do
     if tag == Padding
     then do
       assertM (len >= 0)
-      incrCounter_ (int322Int len) (jBytesConsumed jour)
+      incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
       putStrLn "readJournal, skipping padding..."
       readJournal jour
     else do
@@ -198,7 +198,7 @@ readJournal jour = do
               (int322Int relativeOffset + hEADER_LENGTH)
               (int322Int len - hEADER_LENGTH)
       assertM (BS.length bs == int322Int len - hEADER_LENGTH)
-      incrCounter_ (int322Int len) (jBytesConsumed jour)
+      incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
       return (Just bs)
 
 ------------------------------------------------------------------------

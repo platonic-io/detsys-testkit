@@ -135,7 +135,7 @@ termAppenderClaim :: Metadata -> ByteBuffer -> TermId -> TermOffset -> Int
 termAppenderClaim meta termBuffer termId termOffset len = do
   let
     frameLength     = len + hEADER_LENGTH
-    alignedLength   = frameLength -- XXX: align frameLength fRAME_ALIGNMENT ?
+    alignedLength   = align frameLength fRAME_ALIGNMENT
     resultingOffset = termOffset + fromIntegral alignedLength
     termLength      = getCapacity termBuffer
   termCount <- activeTermCount meta
@@ -143,7 +143,7 @@ termAppenderClaim meta termBuffer termId termOffset len = do
   putStrLn ("termAppenderClaim, resultingOffset: " ++
             show (unTermOffset resultingOffset))
   writeRawTail meta termId resultingOffset activePartitionIndex
-  if resultingOffset > fromIntegral termLength
+  if resultingOffset > TermOffset (int2Int32 (unCapacity termLength))
   then do
     handleEndOfLogCondition termBuffer termOffset termLength termId
     return (Left Rotation)
@@ -165,9 +165,13 @@ handleEndOfLogCondition termBuffer termOffset (Capacity termLen) termId = do
     let paddingLength :: HeaderLength
         paddingLength = fromIntegral (termLen - fromIntegral termOffset)
 
+    putStrLn ("handleEndOfLogCondition, paddingLength: " ++ show (unHeaderLength paddingLength))
     headerWrite termBuffer termOffset paddingLength termId
+    putStrLn ("handleEndOfLogCondition, headerWrite")
     writeFrameType termBuffer termOffset Padding
+    putStrLn ("handleEndOfLogCondition, writeFrameType: padding")
     writeFrameLength termBuffer termOffset paddingLength
+    putStrLn ("handleEndOfLogCondition, writeFrameLength")
 
 headerWrite :: ByteBuffer -> TermOffset -> HeaderLength -> TermId -> IO ()
 headerWrite termBuffer termOffset len _termId = do
@@ -264,8 +268,8 @@ dumpTermBuffer i (bb, termOffset) = do
         dumpHeader h
         dumpBody offset (bodyLength h)
         dumpEntries (offset +
-                     TermOffset (int2Int32 hEADER_LENGTH) +
-                     TermOffset (bodyLength h))
+                     TermOffset (int2Int32 (align (hEADER_LENGTH + bodyLength h)
+                                            fRAME_ALIGNMENT)))
 
     readHeader :: TermOffset -> IO (HeaderTag, HeaderLength)
     readHeader offset = (,) <$> readFrameType bb offset <*> readFrameLength bb offset
@@ -275,10 +279,9 @@ dumpTermBuffer i (bb, termOffset) = do
       putStrLn ("headerTag: " ++ show tag)
       putStrLn ("headerLength: " ++ show len)
 
-    dumpBody :: TermOffset -> Int32 -> IO ()
+    dumpBody :: TermOffset -> Int -> IO ()
     dumpBody offset len = do
-      bs <- getByteStringAt bb (int322Int (unTermOffset offset) + hEADER_LENGTH)
-              (int322Int len)
+      bs <- getByteStringAt bb (int322Int (unTermOffset offset) + hEADER_LENGTH) len
       putStr "body: "
       case encodeRunLength bs of
         [(n, c)]   -> putStrLn (show n ++ "x" ++ show c)
@@ -287,8 +290,8 @@ dumpTermBuffer i (bb, termOffset) = do
     encodeRunLength :: BS.ByteString -> [(Int, Char)]
     encodeRunLength = map (BSChar8.length &&& BSChar8.head) . BSChar8.group
 
-    bodyLength :: (HeaderTag, HeaderLength) -> Int32
-    bodyLength (_tag, HeaderLength len) = len - int2Int32 hEADER_LENGTH
+    bodyLength :: (HeaderTag, HeaderLength) -> Int
+    bodyLength (_tag, HeaderLength len) = int322Int len - hEADER_LENGTH
 
 
 dumpMetadata :: Metadata -> IO ()
