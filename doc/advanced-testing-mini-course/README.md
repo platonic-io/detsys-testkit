@@ -102,6 +102,19 @@ prop_counter = forAll genProgram $ \(Program cmds) -> do
   undefined
 ```
 
+* Regression tests
+
+```haskell
+runProgram :: Program -> IO Bool
+runProgram = undefined
+
+assertProgram :: String -> Program -> Assertion
+assertProgram msg prog = do
+  b <- runProgram prog
+  assertBool msg b
+
+```
+
 * Excerises
 
 1. Implement shrinking for programs.
