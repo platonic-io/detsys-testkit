@@ -51,6 +51,7 @@ library
     , filepath
     , parsec
     , stm
+    , text
     , unix
 
   build-depends:
@@ -69,6 +70,7 @@ library
     Journal.Internal.ByteBuffer
     Journal.Internal.ByteBufferPtr
     Journal.Internal.BufferClaim
+    Journal.Internal.Logger
     Journal.Internal.Mmap
     Journal.Internal.Utils
     Journal.Types

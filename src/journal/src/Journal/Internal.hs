@@ -30,6 +30,7 @@ import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
 import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBufferPtr
+import Journal.Internal.Logger (Logger, logg)
 import Journal.Internal.Parse
 import Journal.Internal.Utils
 import Journal.Types
@@ -58,23 +59,24 @@ tryClaim jour len = do
       termOffset        = rawTailTermOffset rt termLen
       termBeginPosition =
         computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
+      jLog = logg (jLogger jour)
 
-  putStrLn ("tryClaim, termCount: " ++ show (unTermCount termCount))
-  putStrLn ("tryClaim, activePartitionIndex: " ++ show (unPartitionIndex activePartitionIndex))
-  putStrLn ("tryClaim, termOffset: " ++ show (unTermOffset termOffset))
-  putStrLn ("tryClaim, termBeginPosition: " ++ show termBeginPosition)
+  jLog ("tryClaim, termCount: " ++ show (unTermCount termCount))
+  jLog ("tryClaim, activePartitionIndex: " ++ show (unPartitionIndex activePartitionIndex))
+  jLog ("tryClaim, termOffset: " ++ show (unTermOffset termOffset))
+  jLog ("tryClaim, termBeginPosition: " ++ show termBeginPosition)
   limit <- calculatePositionLimit jour
   let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
       position     = termBeginPosition + fromIntegral termOffset
 
-  putStrLn ("tryClaim, position: " ++ show position)
-  putStrLn ("tryClaim, limit: " ++ show limit)
+  jLog ("tryClaim, position: " ++ show position)
+  jLog ("tryClaim, limit: " ++ show limit)
   if position < fromIntegral limit
   then do
-    mResult <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len
-    newPosition (jMetadata jour) mResult
+    mResult <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len (jLogger jour)
+    newPosition (jMetadata jour) mResult (jLogger jour)
   else
-    backPressureStatus position len
+    backPressureStatus position len (jLogger jour)
 
 -- XXX: Save the result in `producerLimit :: AtomicCounter` and update it in a
 -- separate process?
@@ -96,14 +98,14 @@ calculatePositionLimit jour = do
 cleanBufferTo :: Journal -> Int -> IO ()
 cleanBufferTo _ _ = return ()
 
-backPressureStatus :: Int64 -> Int -> IO (Either AppendError (Int64, BufferClaim))
-backPressureStatus position len = do
-  putStrLn ("backPressureStatus, position: " ++ show position ++ ", len: " ++ show len)
+backPressureStatus :: Int64 -> Int -> Logger -> IO (Either AppendError (Int64, BufferClaim))
+backPressureStatus position len logger = do
+  logg logger ("backPressureStatus, position: " ++ show position ++ ", len: " ++ show len)
   return (Left BackPressure)
 
-newPosition :: Metadata -> Either AppendError (TermOffset, BufferClaim)
+newPosition :: Metadata -> Either AppendError (TermOffset, BufferClaim) -> Logger
             -> IO (Either AppendError (Int64, BufferClaim))
-newPosition meta eResult =
+newPosition meta eResult logger =
   case eResult of
     Right (resultingOffset, bufClaim) -> do
       -- XXX: cache
@@ -124,15 +126,15 @@ newPosition meta eResult =
       -- if termBeginPosition + termBufferLength >= maxPossiblePosition
       -- then return Nothing -- return MAX_POSSILBE_POSITION_EXCEEDED ?
       -- else do
-      rotateTerm meta
+      rotateTerm meta logger
       return (Left Rotation) -- ADMIN_ACTION
 
 fRAME_ALIGNMENT :: Int
 fRAME_ALIGNMENT = hEADER_LENGTH
 
-termAppenderClaim :: Metadata -> ByteBuffer -> TermId -> TermOffset -> Int
+termAppenderClaim :: Metadata -> ByteBuffer -> TermId -> TermOffset -> Int -> Logger
                   -> IO (Either AppendError (TermOffset, BufferClaim))
-termAppenderClaim meta termBuffer termId termOffset len = do
+termAppenderClaim meta termBuffer termId termOffset len logger = do
   let
     frameLength     = len + hEADER_LENGTH
     alignedLength   = align frameLength fRAME_ALIGNMENT
@@ -140,56 +142,58 @@ termAppenderClaim meta termBuffer termId termOffset len = do
     termLength      = getCapacity termBuffer
   termCount <- activeTermCount meta
   let activePartitionIndex = indexByTermCount termCount
-  putStrLn ("termAppenderClaim, resultingOffset: " ++
+      jLog = logg logger
+  jLog ("termAppenderClaim, resultingOffset: " ++
             show (unTermOffset resultingOffset))
   writeRawTail meta termId resultingOffset activePartitionIndex
   if resultingOffset > TermOffset (int2Int32 (unCapacity termLength))
   then do
-    handleEndOfLogCondition termBuffer termOffset termLength termId
+    handleEndOfLogCondition termBuffer termOffset termLength termId logger
     return (Left Rotation)
   else do
-    putStrLn ("termAppenderClaim, termOffset: " ++
-              show (unTermOffset termOffset))
-    putStrLn ("termAppenderClaim, frameLength: " ++
-              show frameLength)
-    headerWrite termBuffer termOffset (fromIntegral frameLength) termId
+    jLog ("termAppenderClaim, termOffset: " ++ show (unTermOffset termOffset))
+    jLog ("termAppenderClaim, frameLength: " ++ show frameLength)
+    headerWrite termBuffer termOffset (fromIntegral frameLength) termId logger
     bufClaim <- newBufferClaim termBuffer termOffset frameLength
     return (Right (resultingOffset, bufClaim))
 
-handleEndOfLogCondition :: ByteBuffer -> TermOffset -> Capacity -> TermId -> IO ()
-handleEndOfLogCondition termBuffer termOffset (Capacity termLen) termId = do
-  putStrLn "handleEndOfLogCondition"
+handleEndOfLogCondition :: ByteBuffer -> TermOffset -> Capacity -> TermId -> Logger -> IO ()
+handleEndOfLogCondition termBuffer termOffset (Capacity termLen) termId logger = do
+  let jLog = logg logger
+  jLog "handleEndOfLogCondition"
   when (termOffset < fromIntegral termLen) $ do
-    putStrLn "handleEndOfLogCondition: when"
+    jLog "handleEndOfLogCondition: when"
 
     let paddingLength :: HeaderLength
         paddingLength = fromIntegral (termLen - fromIntegral termOffset)
 
-    putStrLn ("handleEndOfLogCondition, paddingLength: " ++ show (unHeaderLength paddingLength))
-    headerWrite termBuffer termOffset paddingLength termId
-    putStrLn ("handleEndOfLogCondition, headerWrite")
+    jLog ("handleEndOfLogCondition, paddingLength: " ++ show (unHeaderLength paddingLength))
+    headerWrite termBuffer termOffset paddingLength termId logger
+    jLog ("handleEndOfLogCondition, headerWrite")
     writeFrameType termBuffer termOffset Padding
-    putStrLn ("handleEndOfLogCondition, writeFrameType: padding")
+    jLog ("handleEndOfLogCondition, writeFrameType: padding")
     writeFrameLength termBuffer termOffset paddingLength
-    putStrLn ("handleEndOfLogCondition, writeFrameLength")
+    jLog ("handleEndOfLogCondition, writeFrameLength")
 
-headerWrite :: ByteBuffer -> TermOffset -> HeaderLength -> TermId -> IO ()
-headerWrite termBuffer termOffset len _termId = do
+headerWrite :: ByteBuffer -> TermOffset -> HeaderLength -> TermId -> Logger -> IO ()
+headerWrite termBuffer termOffset len _termId logger = do
   let versionFlagsType :: Int64
       versionFlagsType = fromIntegral cURRENT_VERSION `shiftL` 32
+      jLog = logg logger
   -- XXX: Atomic write?
-  putStrLn ("headerWrite, versionFlagsType: " ++ show versionFlagsType)
-  putStrLn ("headerWrite, len: " ++ show (- unHeaderLength len))
-  putStrLn ("headerWrite, value: " ++ show
+  jLog ("headerWrite, versionFlagsType: " ++ show versionFlagsType)
+  jLog ("headerWrite, len: " ++ show (- unHeaderLength len))
+  jLog ("headerWrite, value: " ++ show
             (versionFlagsType .|. ((- int322Int64 (unHeaderLength len)) .&. 0xFFFF_FFFF)))
   writeInt64OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
      (versionFlagsType .|. ((- int322Int64 (unHeaderLength len)) .&. 0xFFFF_FFFF))
   -- XXX: store termId and offset (only need for replication?)
 
-rotateTerm :: Metadata -> IO ()
-rotateTerm meta = do
+rotateTerm :: Metadata -> Logger -> IO ()
+rotateTerm meta logger = do
   termCount <- activeTermCount meta
-  putStrLn ("rotateTerm, termCount: " ++ show (unTermCount termCount))
+  let jLog = logg logger
+  jLog ("rotateTerm, termCount: " ++ show (unTermCount termCount))
   let activePartitionIndex = indexByTermCount termCount
       nextIndex = nextPartitionIndex activePartitionIndex
   rawTail <- readRawTail meta activePartitionIndex
@@ -200,12 +204,12 @@ rotateTerm meta = do
 
   let termId' = termId + 1
       termCount' = TermCount (unTermId (termId' - initTermId))
-  putStrLn ("rotateTerm, activePartitionIndex: " ++
+  jLog ("rotateTerm, activePartitionIndex: " ++
             show (unPartitionIndex activePartitionIndex))
-  putStrLn ("rotateTerm, initialTermId: " ++ show (unTermId initTermId))
-  putStrLn ("rotateTerm, termId: " ++ show (unTermId termId))
-  putStrLn ("rotateTerm, termId': " ++ show (unTermId termId'))
-  putStrLn ("rotateTerm, termCount': " ++ show (unTermCount termCount'))
+  jLog ("rotateTerm, initialTermId: " ++ show (unTermId initTermId))
+  jLog ("rotateTerm, termId: " ++ show (unTermId termId))
+  jLog ("rotateTerm, termId': " ++ show (unTermId termId'))
+  jLog ("rotateTerm, termCount': " ++ show (unTermCount termCount'))
 
 
   -- XXX: cache this? where exactly?

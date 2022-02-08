@@ -41,6 +41,7 @@ import Journal.Internal
 import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBufferPtr
 import Journal.Internal.FileAllocate (fileAllocate)
+import Journal.Internal.Logger (Logger, ioLogger, logg)
 import Journal.Internal.Mmap (sysconfPageSize)
 import Journal.Internal.Utils
 import Journal.Types
@@ -51,20 +52,19 @@ import Journal.Types.AtomicCounter
 -- * Initialisation and shutdown
 
 defaultOptions :: Options
-defaultOptions = Options (64 * 1024)
+defaultOptions = Options (64 * 1024) ioLogger
 
 allocateJournal :: FilePath -> Options -> IO ()
-allocateJournal fp (Options termBufferLen) = do
+allocateJournal fp (Options termBufferLen logger) = do
   unless (popCount termBufferLen == 1) $
     -- XXX: check bounds
     error "allocateJournal: oTermBufferLength must be a power of 2"
   -- XXX: only for debugging:
-  putStrLn ("removing " ++ fp)
+  logg logger ("removing " ++ fp)
   removeFile fp
   b <- doesFileExist fp
   when (not b) $ do
-
-    putStrLn ("allocateJournal, creating new journal: " ++ fp)
+    logg logger ("allocateJournal, creating new journal: " ++ fp)
     let dir = takeDirectory fp
     dirExists <- doesDirectoryExist dir
     unless dirExists (createDirectoryIfMissing True dir)
@@ -82,7 +82,7 @@ allocateJournal fp (Options termBufferLen) = do
     writePageSize (Metadata meta) (int2Int32 pageSize)
 
 startJournal :: FilePath -> Options -> IO Journal
-startJournal fp (Options termLength) = do
+startJournal fp (Options termLength logger) = do
 
   logLength <- fromIntegral <$> getFileSize fp
   bb <- mmapped fp logLength
@@ -99,7 +99,7 @@ startJournal fp (Options termLength) = do
   -- XXX: This counter needs to be persisted somehow (mmapped?) in order to be
   -- able to recover from restarts.
   bytesConsumedCounter <- newCounter 0
-  return (Journal termBuffers (Metadata meta) bytesConsumedCounter)
+  return (Journal termBuffers (Metadata meta) bytesConsumedCounter logger)
 
 ------------------------------------------------------------------------
 
@@ -117,7 +117,7 @@ appendBS jour bs = do
     Left err -> return (Left err)
     Right (_offset, bufferClaim) -> do
       putBS bufferClaim hEADER_LENGTH bs
-      Right <$> commit bufferClaim
+      Right <$> commit bufferClaim (jLogger jour)
 
 -- tee :: Journal -> Socket -> Int -> IO ByteString
 -- tee jour sock len = do
@@ -151,11 +151,12 @@ recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock ptr len
 readJournal :: Journal -> IO (Maybe ByteString)
 readJournal jour = do
   offset <- readCounter (jBytesConsumed jour)
-  putStrLn ("readJournal, offset: " ++ show offset)
+  let jLog = logg (jLogger jour)
+  jLog ("readJournal, offset: " ++ show offset)
 
   termLen <- readTermLength (jMetadata jour)
   let readIndex = indexByPosition (int2Int64 offset) (positionBitsToShift termLen)
-  putStrLn ("readJournal, readIndex: " ++ show (unPartitionIndex readIndex))
+  jLog ("readJournal, readIndex: " ++ show (unPartitionIndex readIndex))
 
   termCount <- activeTermCount (jMetadata jour)
   let activeTermIndex = indexByTermCount termCount
@@ -164,9 +165,9 @@ readJournal jour = do
       activeTermId = rawTailTermId rawTail
       termOffset = rawTailTermOffset rawTail termLen
 
-  putStrLn ("readJournal, termOffset: " ++ show (unTermOffset termOffset))
+  jLog ("readJournal, termOffset: " ++ show (unTermOffset termOffset))
   initTermId <- readInitialTermId (jMetadata jour)
-  putStrLn ("readJournal, initTermId: " ++ show (unTermId initTermId))
+  jLog ("readJournal, initTermId: " ++ show (unTermId initTermId))
   let position =
         computePosition activeTermId termOffset (positionBitsToShift termLen) initTermId
   assertM (int2Int64 offset <= position)
@@ -175,7 +176,7 @@ readJournal jour = do
         computeTermIdFromPosition (int2Int64 offset) (positionBitsToShift termLen) initTermId
         - unTermId initTermId
 
-  putStrLn ("readJournal, readTermCount: " ++ show readTermCount)
+  jLog ("readJournal, readTermCount: " ++ show readTermCount)
 
   if int2Int64 offset == position
   then return Nothing
@@ -183,20 +184,20 @@ readJournal jour = do
     assertM (int2Int64 offset < position)
 
     let relativeOffset = int2Int32 (align offset fRAME_ALIGNMENT) - readTermCount * termLen
-    putStrLn ("readJournal, relativeOffset: " ++ show relativeOffset)
+    jLog ("readJournal, relativeOffset: " ++ show relativeOffset)
     tag <- readFrameType termBuffer (TermOffset relativeOffset)
-    putStrLn ("readJournal, tag: " ++ show tag)
+    jLog ("readJournal, tag: " ++ show tag)
     HeaderLength len <- readFrameLength termBuffer (TermOffset relativeOffset)
-    putStrLn ("readJournal, len: " ++ show len)
+    jLog ("readJournal, len: " ++ show len)
     if tag == Padding
     then do
       assertM (len >= 0)
       incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
-      putStrLn "readJournal, skipping padding..."
+      jLog "readJournal, skipping padding..."
       readJournal jour
     else do
       assertM (len > 0)
-      putStrLn ("readJournal, termCount: " ++ show (unTermCount termCount))
+      jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
       bs <- getByteStringAt termBuffer
               (int322Int relativeOffset + hEADER_LENGTH)
               (int322Int len - hEADER_LENGTH)
@@ -284,20 +285,21 @@ tj :: IO ()
 tj = do
   let fp   = "/tmp/journal.txt"
       opts = defaultOptions
+      logger = oLogger opts
   allocateJournal fp opts
   jour <- startJournal fp opts
 
   Right (offset, claimBuf) <- tryClaim jour 5
   putStrLn ("offset: " ++ show offset)
   putBS claimBuf hEADER_LENGTH (BSChar8.pack "hello")
-  commit claimBuf
+  commit claimBuf logger
   Just bs <- readJournal jour
   putStrLn ("read bytestring 1: '" ++ BSChar8.unpack bs ++ "'")
 
   Right (offset', claimBuf') <- tryClaim jour 6
   putStrLn ("offset': " ++ show offset')
   putBS claimBuf' hEADER_LENGTH (BSChar8.pack "world!")
-  commit claimBuf'
+  commit claimBuf' logger
   Just bs' <- readJournal jour
   putStrLn ("read bytestring 2: '" ++ BSChar8.unpack bs' ++ "'")
 
