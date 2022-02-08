@@ -238,10 +238,17 @@ validProgram = go True
 testOptions :: Options
 testOptions = defaultOptions
 
+forAllCommands :: ([Command] -> Property) -> Property
+forAllCommands k =
+  forAllShrinkShow (genCommands m) (shrinkCommands m) prettyCommands k
+  where
+    m :: Model
+    m = startJournalFake
+
 prop_journal :: Property
 prop_journal =
   let m = startJournalFake in
-  forAllShrinkShow (genCommands m) (shrinkCommands m) prettyCommands $ \cmds -> monadicIO $ do
+  forAllCommands $ \cmds -> monadicIO $ do
     -- run (putStrLn ("Generated commands: " ++ show cmds))
     tmp <- run (canonicalizePath =<< getTemporaryDirectory)
     (fp, h) <- run (openTempFile tmp "JournalTest")
@@ -427,6 +434,18 @@ unit_bug10 :: Assertion
 unit_bug10 = assertProgram ""
   [ AppendBS [(1,'K')], AppendBS [(1,'P')], ReadJournal, ReadJournal
   , AppendBS [(1,'X')], ReadJournal
+  ]
+
+unit_bug11 :: Assertion
+unit_bug11 = assertProgram ""
+  [ AppendBS [(32754,'A')], ReadJournal
+  , AppendBS [(32754,'B')], ReadJournal
+  , AppendBS [(32754,'C')], ReadJournal
+  , AppendBS [(32754,'D')], ReadJournal
+  , AppendBS [(32754,'E')], ReadJournal
+  , AppendBS [(32754,'F')], ReadJournal
+  , AppendBS [(32754,'G')], ReadJournal
+  , AppendBS [(32754,'H')], ReadJournal
   ]
 
 ------------------------------------------------------------------------
