@@ -12,6 +12,7 @@ module Journal
   -- , loadSnapshot
   -- , replay
   , dumpJournal
+  , metricsBytesWritten
   ) where
 
 import Control.Exception (assert, bracket)
@@ -22,6 +23,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSChar8
 import Data.ByteString.Internal (fromForeignPtr)
 import Data.IORef (newIORef)
+import Data.Int (Int64)
 import qualified Data.Vector as Vector
 import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr (plusPtr)
@@ -40,9 +42,9 @@ import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBufferPtr
 import Journal.Internal.FileAllocate (fileAllocate)
 import Journal.Internal.Mmap (sysconfPageSize)
+import Journal.Internal.Utils
 import Journal.Types
 import Journal.Types.AtomicCounter
-import Journal.Internal.Utils
 
 ------------------------------------------------------------------------
 
@@ -258,6 +260,22 @@ dumpJournal jour = do
   putStrLn $ "termBeginPosition = " ++ show termBeginPosition
   putStrLn $ "termOffset = " ++ show (unTermOffset termOffset)
 -}
+
+------------------------------------------------------------------------
+
+-- * Metrics
+
+metricsBytesWritten :: Journal -> IO Int64
+metricsBytesWritten jour = do
+  let meta = jMetadata jour
+  termCount <- activeTermCount meta
+  initTermId <- readInitialTermId meta
+  termLen <- readTermLength meta
+  let index                = indexByTermCount termCount
+  rawTail <- readRawTail meta index
+  let termId     = rawTailTermId rawTail
+      termOffset = rawTailTermOffset rawTail termLen
+  return (computePosition termId termOffset (positionBitsToShift termLen) initTermId)
 
 ------------------------------------------------------------------------
 
