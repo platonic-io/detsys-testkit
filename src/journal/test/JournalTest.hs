@@ -180,7 +180,7 @@ precondition :: Model -> Command -> Bool
 precondition m ReadJournal    = Vector.length (fjJournal m) /= fjIndex m
 precondition m (AppendBS rle) = let bs = decodeRunLength rle in
   not (BS.null bs) &&
-  align (BS.length bs + hEADER_LENGTH) fRAME_ALIGNMENT < oTermBufferLength testOptions `div` 2
+  align (BS.length bs + hEADER_LENGTH) fRAME_ALIGNMENT <= oTermBufferLength testOptions `div` 2
 precondition m DumpJournal = True
 
 step :: Command -> Model -> (Model, Response)
@@ -196,11 +196,13 @@ exec DumpJournal    j = Result . Right <$> dumpJournal j
 genRunLenEncoding :: Gen [(Int, Char)]
 genRunLenEncoding = sized $ \n -> do
   len <- elements [ max 1 n -- Disallow n == 0.
-                  , maxLen, maxLen - 1]
+                  , maxLen
+                  , maxLen - 1
+                  ]
   chr <- elements ['A'..'Z']
   return [(len, chr)]
   where
-    maxLen = (oTermBufferLength testOptions - hEADER_LENGTH - fOOTER_LENGTH) `div` 2
+    maxLen = oTermBufferLength testOptions `div` 2 - hEADER_LENGTH
 
 genCommand :: Gen Command
 genCommand = frequency
