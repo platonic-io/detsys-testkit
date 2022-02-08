@@ -51,6 +51,7 @@ library
     , filepath
     , parsec
     , stm
+    , template-haskell
     , unix
 
   build-depends:
@@ -74,6 +75,7 @@ library
     Journal.Types
     Journal.Types.AtomicCounter
     Assert
+    OffsetMacro
 
   ghc-options:      -O2
   if os(linux)
