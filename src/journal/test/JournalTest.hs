@@ -268,7 +268,7 @@ timeIt io = do
   start <- getCurrentTime
   x <- io
   end <- getCurrentTime
-  return (x, realToFrac (diffUTCTime end start * 1000))
+  return (x, realToFrac (diffUTCTime end start * 1000 * 1000))
 
 prop_journal :: Property
 prop_journal =
@@ -309,10 +309,11 @@ prop_journal =
 classifyLatencies :: [(Command, Double)] -> Property -> Property
 classifyLatencies []             = id
 classifyLatencies ((c, t) : cts)
-  = classify (0  < t && t <= 10) ("latency " ++ constructorString c ++ ": 0-10ms")
-  . classify (10 < t && t <= 20) ("latency " ++ constructorString c ++ ": 11-20ms")
-  . classify (20 < t && t <= 30) ("latency " ++ constructorString c ++ ": 21-30ms")
-  . classify (t > 30)            ("latency " ++ constructorString c ++ ": >30ms")
+  = classify (0  < t && t <= 5)  ("latency " ++ constructorString c ++ ": 0-5ns")
+  . classify (5  < t && t <= 10) ("latency " ++ constructorString c ++ ": 5-10ns")
+  . classify (10 < t && t <= 20) ("latency " ++ constructorString c ++ ": 11-20ns")
+  . classify (20 < t && t <= 30) ("latency " ++ constructorString c ++ ": 21-30ns")
+  . classify (t > 30)            ("latency " ++ constructorString c ++ ": >30ns")
   . classifyLatencies cts
 
 classifyCommandsLength :: [Command] -> Property -> Property
