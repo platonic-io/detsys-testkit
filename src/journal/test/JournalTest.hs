@@ -58,21 +58,25 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
                  , "unreadBytes: " ++  show unreadBytes
                  , "position: " ++ show position
                  , "limit: " ++ show limit
-                 , "journalLength: " ++ show journalLength
+                 , "journalLength': " ++ show journalLength'
                  , "termLen * termCount: " ++ show (termLen * termCount)
                  ]) $
     if position < limit
-    then if journalLength > termLen * termCount
-         then (FakeJournal (Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
+    then if journalLength' > termLen * termCount
+         then (FakeJournal (if BS.length padding == 0
+                            then bss
+                            else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
          else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
     else (fj, Left BackPressure)
   where
     journalLength :: Int
-    journalLength = sum (Vector.map (\bs -> hEADER_LENGTH + BS.length bs) bss)
-                  + align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT
+    journalLength = sum (Vector.map
+                         (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT) bss)
+    journalLength' :: Int
+    journalLength' = journalLength + align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT
 
     padding :: ByteString
-    padding = BS.replicate (termLen * termCount - journalLength) '0'
+    padding = BS.replicate (termLen * termCount - journalLength - hEADER_LENGTH) '0'
 
     termLen :: Int
     termLen = oTermBufferLength testOptions
@@ -441,15 +445,33 @@ unit_bug10 = assertProgram ""
 
 unit_bug11 :: Assertion
 unit_bug11 = assertProgram ""
-  [ AppendBS [(32754,'A')], ReadJournal
-  , AppendBS [(32754,'B')], ReadJournal
-  , AppendBS [(32754,'C')], ReadJournal
-  , AppendBS [(32754,'D')], ReadJournal
-  , AppendBS [(32754,'E')], ReadJournal
-  , AppendBS [(32754,'F')], ReadJournal
-  , AppendBS [(32754,'G')], ReadJournal
-  , AppendBS [(32754,'H')], ReadJournal
+  [ AppendBS [(32753,'A')], ReadJournal
+  , AppendBS [(32753,'B')], ReadJournal
+  , AppendBS [(32753,'C')], ReadJournal
+  , AppendBS [(32753,'D')], ReadJournal
+  , AppendBS [(32753,'E')], ReadJournal
+  , AppendBS [(32753,'F')], ReadJournal
+  , AppendBS [(32753,'G')], ReadJournal
+  , AppendBS [(32753,'H')], ReadJournal
   ]
+
+unit_bug12 :: Assertion
+unit_bug12 = assertProgram ""
+  [AppendBS [(1,'E')], AppendBS [(32745,'A')], ReadJournal, AppendBS [(32753,'U')]]
+
+unit_bug13 :: Assertion
+unit_bug13 = assertProgram ""
+  [ AppendBS [(32737,'Q')], ReadJournal, AppendBS [(9,'I')]
+  , AppendBS [(32753,'W')], AppendBS [(1,'U')]
+  ]
+
+unit_bug14 :: Assertion
+unit_bug14 = assertProgram ""
+  [ AppendBS [(32737,'H')], ReadJournal, AppendBS [(9,'D')]
+  , AppendBS [(32753,'F')], ReadJournal, AppendBS [(1,'Z')]]
+
+alignedLength :: Int -> Int
+alignedLength n = align (hEADER_LENGTH + n) fRAME_ALIGNMENT
 
 ------------------------------------------------------------------------
 
