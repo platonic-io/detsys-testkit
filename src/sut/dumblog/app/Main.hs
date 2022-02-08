@@ -4,6 +4,7 @@ import Control.Concurrent.Async (async)
 import qualified Journal
 import qualified Journal.Types.AtomicCounter as AtomicCounter
 import qualified Journal.Internal.Metrics as Metrics
+import Journal.Internal.Logger as Logger
 
 import Blocker (emptyBlocker)
 import FrontEnd (runFrontEnd, FrontEndInfo(..))
@@ -28,7 +29,7 @@ main = do
 
   let fpj = "/tmp/dumblog.journal"
       fpm = "/tmp/dumblog.metrics"
-      opts = Journal.defaultOptions
+      opts = Journal.defaultOptions { Journal.oLogger = Logger.nullLogger }
   Journal.allocateJournal fpj opts -- should we really allocate?
   journal <- Journal.startJournal fpj opts
   metrics <- Metrics.newMetrics dumblogSchema fpm
