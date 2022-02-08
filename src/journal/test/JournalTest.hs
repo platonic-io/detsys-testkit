@@ -26,6 +26,7 @@ import Test.Tasty.HUnit (Assertion, assertBool)
 
 import Journal
 import Journal.Internal
+import Journal.Internal.Logger (ioLogger, nullLogger)
 import Journal.Internal.Utils hiding (assert)
 
 ------------------------------------------------------------------------
@@ -37,6 +38,7 @@ data FakeJournal' a = FakeJournal
   { fjJournal   :: Vector a
   , fjIndex     :: Int
   , fjTermCount :: Int
+  , fjTrace     :: Bool
   }
   deriving (Show, Functor)
 
@@ -46,27 +48,35 @@ prettyFakeJournal :: FakeJournal -> String
 prettyFakeJournal = show . fmap (prettyRunLenEnc . encodeRunLength)
 
 startJournalFake :: FakeJournal
-startJournalFake = FakeJournal Vector.empty 0 1
+startJournalFake = FakeJournal Vector.empty 0 1 False
+
+startTracingJournalFake :: FakeJournal
+startTracingJournalFake = startJournalFake { fjTrace = True }
+
+doTrace :: Bool -> String -> b -> b
+doTrace True = trace
+doTrace False = const id
 
 appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Either AppendError ())
-appendBSFake bs fj@(FakeJournal bss ix termCount) =
-  trace (unlines [ "TRACE"
-                 , "ix: " ++ show ix
-                 , "termCount: " ++ show termCount
-                 , "bs: " ++ show (encodeRunLength bs)
-                 , "readBytes: " ++ show readBytes
-                 , "unreadBytes: " ++  show unreadBytes
-                 , "position: " ++ show position
-                 , "limit: " ++ show limit
-                 , "journalLength': " ++ show journalLength'
-                 , "termLen * termCount: " ++ show (termLen * termCount)
-                 ]) $
+appendBSFake bs fj@(FakeJournal bss ix termCount toTrace) =
+  doTrace toTrace
+    (unlines [ "TRACE"
+             , "ix: " ++ show ix
+             , "termCount: " ++ show termCount
+             , "bs: " ++ show (encodeRunLength bs)
+             , "readBytes: " ++ show readBytes
+             , "unreadBytes: " ++  show unreadBytes
+             , "position: " ++ show position
+             , "limit: " ++ show limit
+             , "journalLength': " ++ show journalLength'
+             , "termLen * termCount: " ++ show (termLen * termCount)
+             ]) $
     if position < limit
     then if journalLength' > termLen * termCount
          then (FakeJournal (if BS.length padding == 0
                             then bss
-                            else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
-         else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
+                            else Vector.snoc bss padding) ix (termCount + 1) toTrace, Left Rotation)
+         else (FakeJournal (Vector.snoc bss bs) ix termCount toTrace, Right ())
     else (fj, Left BackPressure)
   where
     journalLength :: Int
@@ -97,14 +107,14 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
                       ]
 
 readJournalFake :: FakeJournal -> (FakeJournal, Maybe ByteString)
-readJournalFake fj@(FakeJournal jour ix termCount)
+readJournalFake fj@(FakeJournal jour ix termCount toTrace)
   -- Nothing to read:
   | Vector.length jour == ix = (fj, Nothing)
   -- Padding, skip:
   | BS.length (jour Vector.! ix) == 0 || BS.head (jour Vector.! ix) == '0' =
       readJournalFake (fj { fjIndex = ix + 1 })
   -- Normal read:
-  | otherwise =  (FakeJournal jour (ix + 1) termCount, Just (jour Vector.! ix))
+  | otherwise =  (FakeJournal jour (ix + 1) termCount toTrace, Just (jour Vector.! ix))
 
 ------------------------------------------------------------------------
 
@@ -254,13 +264,14 @@ forAllCommands k =
 
 prop_journal :: Property
 prop_journal =
-  let m = startJournalFake in
+  let m = startJournalFake
+      propOptions = testOptions { oLogger = nullLogger } in
   forAllCommands $ \cmds -> monadicIO $ do
     -- run (putStrLn ("Generated commands: " ++ show cmds))
     tmp <- run (canonicalizePath =<< getTemporaryDirectory)
     (fp, h) <- run (openTempFile tmp "JournalTest")
-    run (allocateJournal fp testOptions)
-    j <- run (startJournal fp testOptions)
+    run (allocateJournal fp propOptions)
+    j <- run (startJournal fp propOptions)
     monitor (tabulate "Commands" (map constructorString cmds))
     monitor (classifyCommandsLength cmds)
     monitor (whenFail (dumpJournal j))
@@ -314,7 +325,7 @@ classifyBytesWritten bytes
 
 runCommands :: [Command] -> IO Bool
 runCommands cmds = do
-  let m = startJournalFake
+  let m = startTracingJournalFake
   withTempFile "runCommands" $ \fp _handle -> do
     allocateJournal fp testOptions
     j <- startJournal fp testOptions

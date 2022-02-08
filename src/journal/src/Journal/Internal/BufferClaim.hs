@@ -6,6 +6,7 @@ import Foreign.ForeignPtr (ForeignPtr, plusForeignPtr, withForeignPtr)
 import Foreign.Ptr (Ptr)
 
 import Journal.Internal.ByteBufferPtr
+import Journal.Internal.Logger (Logger, logg)
 import Journal.Types
 import Journal.Internal.Utils
 
@@ -26,10 +27,10 @@ withPtr (BufferClaim bb) k = do
   -- XXX: boundcheck?
   withForeignPtr (bbData bb `plusForeignPtr` offset) k
 
-commit :: BufferClaim -> IO ()
-commit (BufferClaim bb) = do
+commit :: BufferClaim -> Logger -> IO ()
+commit (BufferClaim bb) logger = do
   let Capacity frameLen = getCapacity bb
-  putStrLn ("commit, frameLen: " ++ show frameLen)
+  logg logger ("commit, frameLen: " ++ show frameLen)
   writeFrameLength bb 0 (HeaderLength (int2Int32 frameLen))
 
 abort :: BufferClaim -> IO ()

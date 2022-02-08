@@ -48,6 +48,7 @@ import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (Storable, sizeOf)
 
 import Journal.Internal.ByteBufferPtr
+import Journal.Internal.Logger (Logger)
 import Journal.Types.AtomicCounter
 
 ------------------------------------------------------------------------
@@ -61,6 +62,7 @@ data Journal = Journal
   { jTermBuffers   :: {-# UNPACK #-} !(Vector ByteBuffer)
   , jMetadata      :: {-# UNPACK #-} !Metadata
   , jBytesConsumed :: {-# UNPACK #-} !AtomicCounter -- ???
+  , jLogger        ::                !Logger
   }
 
 data JMetadata = JMetadata
@@ -370,6 +372,7 @@ emptyMetrics = Metrics 0 0
 
 data Options = Options
   { oTermBufferLength :: !Int
+  , oLogger :: !Logger
   }
   -- archive
   -- buffer and fsync every ms?
