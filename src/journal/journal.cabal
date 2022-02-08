@@ -111,6 +111,7 @@ test-suite test
     , tasty
     , tasty-hunit
     , tasty-quickcheck
+    , time
     , vector
     , unix
     , zlib

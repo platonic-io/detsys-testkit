@@ -12,6 +12,7 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
 import Data.Monoid (Sum(Sum))
+import Data.Time (diffUTCTime, getCurrentTime)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Debug.Trace (trace)
@@ -252,6 +253,13 @@ forAllCommands k =
     m :: Model
     m = startJournalFake
 
+timeIt :: IO a -> IO (a, Double)
+timeIt io = do
+  start <- getCurrentTime
+  x <- io
+  end <- getCurrentTime
+  return (x, realToFrac (diffUTCTime end start * 1000))
+
 prop_journal :: Property
 prop_journal =
   let m = startJournalFake in
@@ -267,24 +275,34 @@ prop_journal =
     (result, hist) <- go cmds m j []
     written <- run (metricsBytesWritten j)
     monitor (classifyBytesWritten written)
-    -- monitorStats (stats (zip cmds hist))
+    monitor (classifyLatencies (zip cmds (map snd hist)))
     run (removeFile fp)
     return result
     where
-      go :: [Command] -> Model -> Journal -> [Response] -> PropertyM IO (Bool, [Response])
+      go :: [Command] -> Model -> Journal -> [(Response, Double)]
+         -> PropertyM IO (Bool, [(Response, Double)])
       go []          _m _j hist = return (True, reverse hist)
       go (cmd : cmds) m  j hist = do
         let (m', resp) = step cmd m
-        resp' <- run (exec cmd j `catch` (return . IOException))
+        (resp', t) <- run (timeIt (exec cmd j `catch` (return . IOException)))
         assertWithFail (resp == resp') $
           prettyResponse resp ++ " /= " ++ prettyResponse resp'
-        go cmds m' j (resp : hist)
+        go cmds m' j ((resp, t) : hist)
 
       assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
       assertWithFail condition msg = do
         unless condition $
           monitor (counterexample ("Failed: " ++ msg))
         assert condition
+
+classifyLatencies :: [(Command, Double)] -> Property -> Property
+classifyLatencies []             = id
+classifyLatencies ((c, t) : cts)
+  = classify (0  < t && t <= 10) ("latency " ++ constructorString c ++ ": 0-10ms")
+  . classify (10 < t && t <= 20) ("latency " ++ constructorString c ++ ": 11-20ms")
+  . classify (20 < t && t <= 30) ("latency " ++ constructorString c ++ ": 21-30ms")
+  . classify (t > 30)            ("latency " ++ constructorString c ++ ": >30ms")
+  . classifyLatencies cts
 
 classifyCommandsLength :: [Command] -> Property -> Property
 classifyCommandsLength cmds
@@ -294,19 +312,24 @@ classifyCommandsLength cmds
   . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
   . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
   . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
-  . classify (500 < length cmds)                       "length commands: 501<"
+  . classify (500 < length cmds)                       "length commands: >501"
 
 classifyBytesWritten :: Int64 -> Property -> Property
 classifyBytesWritten bytes
   = classify (bytes == 0)
              "bytes written: 0"
   . classify (0 < bytes && bytes <= termBufferLen)                     (msg 0 1)
-  . classify (1 * termBufferLen < bytes && bytes <= 2 * termBufferLen) (msg 1 2)
-  . classify (2 * termBufferLen < bytes && bytes <= 3 * termBufferLen) (msg 2 3)
-  . classify (3 * termBufferLen < bytes && bytes <= 4 * termBufferLen) (msg 3 4)
-  . classify (4 * termBufferLen < bytes && bytes <= 5 * termBufferLen) (msg 4 5)
-  . classify (5 * termBufferLen < bytes)
-             ("bytes written: " ++ show (5 * termBufferLen) ++ "<")
+  . classify (1 * termBufferLen < bytes && bytes <= 2  * termBufferLen) (msg 1 2)
+  . classify (2 * termBufferLen < bytes && bytes <= 3  * termBufferLen) (msg 2 3)
+  . classify (3 * termBufferLen < bytes && bytes <= 4  * termBufferLen) (msg 3 4)
+  . classify (4 * termBufferLen < bytes && bytes <= 5  * termBufferLen) (msg 4 5)
+  . classify (5 * termBufferLen < bytes && bytes <= 6  * termBufferLen) (msg 5 6)
+  . classify (6 * termBufferLen < bytes && bytes <= 7  * termBufferLen) (msg 6 7)
+  . classify (7 * termBufferLen < bytes && bytes <= 8  * termBufferLen) (msg 7 8)
+  . classify (8 * termBufferLen < bytes && bytes <= 9  * termBufferLen) (msg 8 9)
+  . classify (9 * termBufferLen < bytes && bytes <= 10 * termBufferLen) (msg 9 10)
+  . classify (10 * termBufferLen < bytes)
+             ("bytes written: >" ++ show (10 * termBufferLen))
   where
     msg low high = concat
       ["bytes written: ", show (low * termBufferLen), "-", show (high * termBufferLen)]
