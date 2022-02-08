@@ -128,7 +128,7 @@ newPosition meta eResult =
       return (Left Rotation) -- ADMIN_ACTION
 
 fRAME_ALIGNMENT :: Int
-fRAME_ALIGNMENT = 32
+fRAME_ALIGNMENT = hEADER_LENGTH
 
 termAppenderClaim :: Metadata -> ByteBuffer -> TermId -> TermOffset -> Int
                   -> IO (Either AppendError (TermOffset, BufferClaim))

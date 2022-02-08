@@ -109,7 +109,8 @@ appendBS :: Journal -> ByteString -> IO (Either AppendError ())
 appendBS jour bs = do
   assertIO $ do
     termBufferLen <- int322Int <$> readTermLength (jMetadata jour)
-    return (0 < BS.length bs && hEADER_LENGTH + BS.length bs < termBufferLen `div` 2)
+    return (0 < BS.length bs && align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT <=
+            termBufferLen `div` 2)
   let len = BS.length bs
   eClaim <- tryClaim jour len
   case eClaim of
