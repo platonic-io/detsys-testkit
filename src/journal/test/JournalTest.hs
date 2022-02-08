@@ -58,17 +58,18 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
                  , "unreadBytes: " ++  show unreadBytes
                  , "position: " ++ show position
                  , "limit: " ++ show limit
+                 , "journalLength: " ++ show journalLength
+                 , "termLen * termCount: " ++ show (termLen * termCount)
                  ]) $
     if position < limit
-    then if journalLength >= termLen * termCount
+    then if journalLength > termLen * termCount
          then (FakeJournal (Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
          else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
     else (fj, Left BackPressure)
   where
     journalLength :: Int
-    journalLength = sum (Vector.map
-                         (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT) bss)
-                  + hEADER_LENGTH + BS.length bs
+    journalLength = sum (Vector.map (\bs -> hEADER_LENGTH + BS.length bs) bss)
+                  + align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT
 
     padding :: ByteString
     padding = BS.replicate (termLen * termCount - journalLength) '0'
