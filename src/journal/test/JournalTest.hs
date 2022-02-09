@@ -308,11 +308,11 @@ prop_journal =
           prettyResponse resp ++ " /= " ++ prettyResponse resp'
         go cmds m' j ((resp, t) : hist)
 
-      assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
-      assertWithFail condition msg = do
-        unless condition $
-          monitor (counterexample ("Failed: " ++ msg))
-        assert condition
+assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
+assertWithFail condition msg = do
+  unless condition $
+    monitor (counterexample ("Failed: " ++ msg))
+  assert condition
 
 classifyLatencies :: [(Command, Double)] -> Property -> Property
 classifyLatencies []             = id
@@ -656,5 +656,4 @@ prop_concurrent = forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
     run (mapM_ (mapConcurrently (concExec queue jour)) cmdss)
     hist <- History <$> run (atomically (flushTQueue queue))
     run (removeFile fp)
-    assert (linearisable (interleavings hist))
-    monitor (whenFail (putStrLn (prettyHistory hist)))
+    assertWithFail (linearisable (interleavings hist)) (prettyHistory hist)
