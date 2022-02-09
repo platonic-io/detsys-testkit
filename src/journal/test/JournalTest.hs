@@ -215,8 +215,8 @@ exec DumpJournal    j = Result . Right <$> dumpJournal j
 genRunLenEncoding :: Gen [(Int, Char)]
 genRunLenEncoding = sized $ \n -> do
   len <- elements [ max 1 n -- Disallow n == 0.
-                  , maxLen
-                  , maxLen - 1
+                  -- , maxLen
+                  -- , maxLen - 1
                   ]
   chr <- elements ['A'..'Z']
   return [(len, chr)]
@@ -528,40 +528,46 @@ assertProgram msg cmds = do
 
 ------------------------------------------------------------------------
 
-newtype ConcProgram = ConcProgram [[Command]]
+newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
   deriving Show
 
 forAllConcProgram :: (ConcProgram -> Property) -> Property
 forAllConcProgram k =
-  forAllShrinkShow (genConcProgram m) (shrinkConcProgram m) prettyConcProgram k
+  forAllShrinkShow (genConcProgram m) (const []) -- (shrinkConcProgram m)
+    prettyConcProgram k
   where
     m = initModel
 
 genConcProgram :: Model -> Gen ConcProgram
-genConcProgram m = sized (go [])
+genConcProgram m0 = sized (go m0 [])
   where
-    go :: [[Command]] -> Int -> Gen ConcProgram
-    go acc sz | sz <= 0   = return (ConcProgram (reverse acc))
-              | otherwise = do
-                  n <- chooseInt (2, 5)
-                  cmds <- vectorOf n genCommand `suchThat` concSafe m
-                  go (cmds : acc) (sz - n)
+    go :: Model -> [[Command]] -> Int -> Gen ConcProgram
+    go m acc sz | sz <= 0   = return (ConcProgram (reverse acc))
+                | otherwise = do
+                    n <- chooseInt (2, 2)
+                    cmds <- vectorOf n genCommand `suchThat` concSafe m
+                    go (advanceModel m cmds) (cmds : acc) (sz - n)
 
-    concSafe :: Model -> [Command] -> Bool
-    concSafe m0 = all (go' m0 True) . permutations
-      where
-        go' :: Model -> Bool -> [Command] -> Bool
-        go' m False _            = False
-        go' m acc   []           = acc
-        go' m acc   (cmd : cmds) =
-          let
-            (m', _resp) = step cmd m
-          in
-            go' m' (precondition m cmd) cmds
+advanceModel :: Model -> [Command] -> Model
+advanceModel m cmds = foldl (\ih cmd -> fst (step cmd ih)) m cmds
+
+concSafe :: Model -> [Command] -> Bool
+concSafe m0 = all (validProgram m0) . permutations
+
+validConcProgram :: Model -> ConcProgram -> Bool
+validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
+  where
+    go :: Model -> Bool -> [[Command]] -> Bool
+    go m False _              = False
+    go m acc   []             = acc
+    go m acc   (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
 
 shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
-shrinkConcProgram m (ConcProgram cmds) =
-  map ConcProgram (shrinkList (shrinkCommands m) cmds)
+shrinkConcProgram m
+  = filter (validConcProgram m)
+  . map ConcProgram
+  . shrinkList (shrinkCommands m)
+  . unConcProgram
 
 prettyConcProgram :: ConcProgram -> String
 prettyConcProgram = show
@@ -588,7 +594,7 @@ concExec queue jour cmd = do
   pid <- toPid <$> myThreadId
   atomically (writeTQueue queue (Invoke pid cmd))
   -- Adds some entropy to the possible interleavings.
-  sleep <- randomRIO (5, 200)
+  sleep <- randomRIO (5, 20)
   threadDelay sleep
   resp <- exec cmd jour
   atomically (writeTQueue queue (Ok pid resp))
@@ -643,11 +649,12 @@ linearisable = any' (go initModel)
 prop_concurrent :: Property
 prop_concurrent = forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
   -- Rerun a couple of times, to avoid being lucky with the interleavings.
+  monitor (tabulate "Commands" (map constructorString (concat cmdss)))
   replicateM_ 10 $ do
     (fp, jour) <- run initJournal
     queue <- run newTQueueIO
     run (mapM_ (mapConcurrently (concExec queue jour)) cmdss)
     hist <- History <$> run (atomically (flushTQueue queue))
-    monitor (whenFail (putStrLn (prettyHistory hist)))
     run (removeFile fp)
     assert (linearisable (interleavings hist))
+    monitor (whenFail (putStrLn (prettyHistory hist)))
