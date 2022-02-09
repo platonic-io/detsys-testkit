@@ -533,15 +533,14 @@ newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
 
 forAllConcProgram :: (ConcProgram -> Property) -> Property
 forAllConcProgram k =
-  forAllShrinkShow (genConcProgram m) (const []) -- (shrinkConcProgram m)
-    prettyConcProgram k
+  forAllShrinkShow (genConcProgram m) (shrinkConcProgram m) prettyConcProgram k
   where
     m = initModel
 
 genConcProgram :: Model -> Gen ConcProgram
 genConcProgram m0 = sized (go m0 [])
   where
-    go :: Model -> [[Command]] -> Int -> Gen ConcProgram
+    go :: Model -> [[Command]] -> Int -> Gen ConcProgram
     go m acc sz | sz <= 0   = return (ConcProgram (reverse acc))
                 | otherwise = do
                     n <- chooseInt (2, 2)

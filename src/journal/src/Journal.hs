@@ -192,18 +192,31 @@ readJournal jour = do
     if tag == Padding
     then do
       assertM (len >= 0)
-      incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
+      -- Single-threaded case:
+      -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
+      _success <- casCounter (jBytesConsumed jour) offset (offset + int322Int len)
       jLog "readJournal, skipping padding..."
+      -- If the CAS fails, it just means that some other process incremented the
+      -- counter already.
       readJournal jour
     else do
       assertM (len > 0)
       jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
-      bs <- getByteStringAt termBuffer
-              (int322Int relativeOffset + hEADER_LENGTH)
-              (int322Int len - hEADER_LENGTH)
-      assertM (BS.length bs == int322Int len - hEADER_LENGTH)
-      incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
-      return (Just bs)
+      success <- casCounter (jBytesConsumed jour) offset
+                   (offset + (align (int322Int len) fRAME_ALIGNMENT))
+      if success
+      then do
+        bs <- getByteStringAt termBuffer
+                (int322Int relativeOffset + hEADER_LENGTH)
+                (int322Int len - hEADER_LENGTH)
+        assertM (BS.length bs == int322Int len - hEADER_LENGTH)
+        -- Single-threaded case:
+        -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
+        return (Just bs)
+      else
+        -- If the CAS failed it means that another process read what we were
+        -- about to read, so we retry reading the next item instead.
+        readJournal jour
 
 ------------------------------------------------------------------------
 
