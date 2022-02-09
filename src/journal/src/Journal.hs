@@ -59,9 +59,6 @@ allocateJournal fp (Options termBufferLen logger) = do
   unless (popCount termBufferLen == 1) $
     -- XXX: check bounds
     error "allocateJournal: oTermBufferLength must be a power of 2"
-  -- XXX: only for debugging:
-  logg logger ("removing " ++ fp)
-  removeFile fp
   b <- doesFileExist fp
   when (not b) $ do
     logg logger ("allocateJournal, creating new journal: " ++ fp)
