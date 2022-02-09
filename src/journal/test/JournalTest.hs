@@ -651,3 +651,51 @@ prop_concurrent = forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
     monitor (whenFail (putStrLn (prettyHistory hist)))
     run (removeFile fp)
     assert (linearisable (interleavings hist))
+
+data PidStatus
+  = DoingNothing
+  | MadeRequest Command
+  | CommittedRequest Command Response -- we don't support :INFO, or failures so we will always have response
+
+-- `selectOne` will pick one element from the list, and return all other elements (in no specific order)
+selectOne :: [a] -> Gen (a,[a])
+selectOne = elements . gens []
+  where
+    gens :: [a] -> [a] -> [(a,[a])]
+    gens before [] = []
+    gens before (a:rest) = (a,before ++ rest) : gens (a:before) rest
+
+-- generate a `History` and the linearised history `[Command]`
+genHistory :: [Pid] -> Model -> Gen (History, [Command])
+genHistory pids initModel = sized $ \s -> go (History []) [] initModel s $ zip pids (repeat DoingNothing)
+  where
+    consH x (History xs) = History (x:xs)
+    go :: History -> [Command] -> Model -> Int -> [(Pid, PidStatus)] -> Gen (History, [Command])
+    go (History conc) linear model size [] = pure (History $ reverse conc, reverse linear)
+    go conc linear model size pids = do
+      ((pid, state), pids') <- selectOne pids
+      case state of
+        DoingNothing
+          | size <= 0 -> -- we are done generating commands
+            go conc linear model size pids'
+          | otherwise -> do -- generate command
+            cmd <- genCommand
+            go (consH (Invoke pid cmd) conc) linear model (pred size) ((pid, MadeRequest cmd):pids')
+        MadeRequest cmd -> do -- request succeed, and response succeed
+          let (model', resp) = step cmd model
+          go conc (cmd:linear) model' size ((pid, CommittedRequest cmd resp):pids')
+        CommittedRequest cmd resp -> do -- request returns
+          go (consH (Ok pid resp) conc) linear model size ((pid, DoingNothing):pids')
+
+prop_lineariseIsOkay :: Property
+prop_lineariseIsOkay =
+  -- above 30 it starts to take too much time to check
+  forAll (withMaxSize 30 $ genHistory pids initModel) $ \(history, _) ->
+    linearisable (interleavings history)
+  where
+    pids = map Pid [0..5]
+    withMaxSize s g = do
+      n <- getSize
+      if n < s
+        then g
+        else resize s g
