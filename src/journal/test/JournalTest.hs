@@ -540,6 +540,7 @@ forAllConcProgram k =
 genConcProgram :: Model -> Gen ConcProgram
 genConcProgram m = sized (go [])
   where
+    go :: [[Command]] -> Int -> Gen ConcProgram
     go acc sz | sz <= 0   = return (ConcProgram (reverse acc))
               | otherwise = do
                   n <- chooseInt (2, 5)
