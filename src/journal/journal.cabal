@@ -110,6 +110,8 @@ test-suite test
     , journal
     , QuickCheck
     , quickcheck-instances
+    , random
+    , stm
     , tasty
     , tasty-hunit
     , tasty-quickcheck

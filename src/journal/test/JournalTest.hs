@@ -4,21 +4,29 @@
 module JournalTest where
 
 import Control.Arrow ((&&&))
+import Control.Concurrent (ThreadId, myThreadId, threadDelay)
+import Control.Concurrent.Async (mapConcurrently)
+import Control.Concurrent.STM (atomically)
+import Control.Concurrent.STM.TQueue
+       (TQueue, flushTQueue, newTQueueIO, writeTQueue)
 import Control.Exception (IOException, catch, displayException)
-import Control.Monad (unless, when)
+import Control.Monad (replicateM_, unless, when)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Builder as BS
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
+import Data.List (permutations)
 import Data.Monoid (Sum(Sum))
 import Data.Time (diffUTCTime, getCurrentTime)
+import Data.Tree (Forest, Tree(Node))
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Debug.Trace (trace)
 import System.Directory
        (canonicalizePath, getTemporaryDirectory, removeFile)
 import System.IO (openTempFile)
+import System.Random (randomRIO)
 import System.Timeout (timeout)
 import Test.QuickCheck
 import Test.QuickCheck.Instances.ByteString ()
@@ -32,14 +40,10 @@ import Journal.Internal.Utils hiding (assert)
 
 ------------------------------------------------------------------------
 
-prop_alignment :: Positive Int -> Bool
-prop_alignment (Positive i) = align i fRAME_ALIGNMENT `mod` fRAME_ALIGNMENT == 0
-
 data FakeJournal' a = FakeJournal
   { fjJournal   :: Vector a
   , fjIndex     :: Int
   , fjTermCount :: Int
-  , fjTrace     :: Bool
   }
   deriving (Show, Functor)
 
@@ -48,19 +52,19 @@ type FakeJournal = FakeJournal' ByteString
 prettyFakeJournal :: FakeJournal -> String
 prettyFakeJournal = show . fmap (prettyRunLenEnc . encodeRunLength)
 
-startJournalFake :: FakeJournal
-startJournalFake = FakeJournal Vector.empty 0 1 False
+initModel :: FakeJournal
+initModel = FakeJournal Vector.empty 0 1
 
-startTracingJournalFake :: FakeJournal
-startTracingJournalFake = startJournalFake { fjTrace = True }
+eNABLE_TRACING :: Bool
+eNABLE_TRACING = False
 
-doTrace :: Bool -> String -> b -> b
-doTrace True = trace
-doTrace False = const id
+doTrace :: String -> a -> a
+doTrace | eNABLE_TRACING = trace
+        | otherwise      = const id
 
 appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Either AppendError ())
-appendBSFake bs fj@(FakeJournal bss ix termCount toTrace) =
-  doTrace toTrace
+appendBSFake bs fj@(FakeJournal bss ix termCount) =
+  doTrace
     (unlines [ "TRACE"
              , "ix: " ++ show ix
              , "termCount: " ++ show termCount
@@ -76,8 +80,8 @@ appendBSFake bs fj@(FakeJournal bss ix termCount toTrace) =
     then if journalLength' > termLen * termCount
          then (FakeJournal (if BS.length padding == 0
                             then bss
-                            else Vector.snoc bss padding) ix (termCount + 1) toTrace, Left Rotation)
-         else (FakeJournal (Vector.snoc bss bs) ix termCount toTrace, Right ())
+                            else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
+         else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
     else (fj, Left BackPressure)
   where
     journalLength :: Int
@@ -108,14 +112,14 @@ appendBSFake bs fj@(FakeJournal bss ix termCount toTrace) =
                       ]
 
 readJournalFake :: FakeJournal -> (FakeJournal, Maybe ByteString)
-readJournalFake fj@(FakeJournal jour ix termCount toTrace)
+readJournalFake fj@(FakeJournal jour ix termCount)
   -- Nothing to read:
   | Vector.length jour == ix = (fj, Nothing)
   -- Padding, skip:
   | BS.length (jour Vector.! ix) == 0 || BS.head (jour Vector.! ix) == '0' =
       readJournalFake (fj { fjIndex = ix + 1 })
   -- Normal read:
-  | otherwise =  (FakeJournal jour (ix + 1) termCount toTrace, Just (jour Vector.! ix))
+  | otherwise =  (FakeJournal jour (ix + 1) termCount, Just (jour Vector.! ix))
 
 ------------------------------------------------------------------------
 
@@ -177,7 +181,7 @@ data Response
   = Result (Either AppendError ())
   | ByteString (Maybe ByteString)
   | IOException IOException
-  deriving Eq
+  deriving (Eq, Show)
 
 prettyResponse :: Response -> String
 prettyResponse (Result eu) = "Result (" ++ show eu ++ ")"
@@ -254,14 +258,14 @@ validProgram = go True
     go valid m (cmd : cmds) = go (precondition m cmd) (fst (step cmd m)) cmds
 
 testOptions :: Options
-testOptions = defaultOptions
+testOptions = defaultOptions { oLogger = nullLogger }
 
 forAllCommands :: ([Command] -> Property) -> Property
 forAllCommands k =
   forAllShrinkShow (genCommands m) (shrinkCommands m) prettyCommands k
   where
     m :: Model
-    m = startJournalFake
+    m = initModel
 
 timeIt :: IO a -> IO (a, Double)
 timeIt io = do
@@ -270,16 +274,20 @@ timeIt io = do
   end <- getCurrentTime
   return (x, realToFrac (diffUTCTime end start * 1000 * 1000))
 
+initJournal :: IO (FilePath, Journal)
+initJournal = do
+  tmp <- canonicalizePath =<< getTemporaryDirectory
+  (fp, h) <- openTempFile tmp "JournalTest"
+  allocateJournal fp testOptions
+  jour <- startJournal fp testOptions
+  return (fp, jour)
+
 prop_journal :: Property
 prop_journal =
-  let m = startJournalFake
-      propOptions = testOptions { oLogger = nullLogger } in
+  let m = initModel in
   forAllCommands $ \cmds -> monadicIO $ do
     -- run (putStrLn ("Generated commands: " ++ show cmds))
-    tmp <- run (canonicalizePath =<< getTemporaryDirectory)
-    (fp, h) <- run (openTempFile tmp "JournalTest")
-    run (allocateJournal fp propOptions)
-    j <- run (startJournal fp propOptions)
+    (fp, j) <- run initJournal
     monitor (tabulate "Commands" (map constructorString cmds))
     monitor (classifyCommandsLength cmds)
     monitor (whenFail (dumpJournal j))
@@ -349,7 +357,7 @@ classifyBytesWritten bytes
 
 runCommands :: [Command] -> IO Bool
 runCommands cmds = do
-  let m = startTracingJournalFake
+  let m = initModel
   withTempFile "runCommands" $ \fp _handle -> do
     allocateJournal fp testOptions
     j <- startJournal fp testOptions
@@ -508,9 +516,138 @@ unit_bug14 = assertProgram ""
 alignedLength :: Int -> Int
 alignedLength n = align (hEADER_LENGTH + n) fRAME_ALIGNMENT
 
+prop_alignment :: Positive Int -> Bool
+prop_alignment (Positive i) = align i fRAME_ALIGNMENT `mod` fRAME_ALIGNMENT == 0
+
 ------------------------------------------------------------------------
 
 assertProgram :: String -> [Command] -> Assertion
 assertProgram msg cmds = do
   b <- runCommands cmds
   assertBool msg b
+
+------------------------------------------------------------------------
+
+newtype ConcProgram = ConcProgram [[Command]]
+  deriving Show
+
+forAllConcProgram :: (ConcProgram -> Property) -> Property
+forAllConcProgram k =
+  forAllShrinkShow (genConcProgram m) (shrinkConcProgram m) prettyConcProgram k
+  where
+    m = initModel
+
+genConcProgram :: Model -> Gen ConcProgram
+genConcProgram m = sized (go [])
+  where
+    go :: [[Command]] -> Int -> Gen ConcProgram
+    go acc sz | sz <= 0   = return (ConcProgram (reverse acc))
+              | otherwise = do
+                  n <- chooseInt (2, 5)
+                  cmds <- vectorOf n genCommand `suchThat` concSafe m
+                  go (cmds : acc) (sz - n)
+
+    concSafe :: Model -> [Command] -> Bool
+    concSafe m0 = all (go' m0 True) . permutations
+      where
+        go' :: Model -> Bool -> [Command] -> Bool
+        go' m False _            = False
+        go' m acc   []           = acc
+        go' m acc   (cmd : cmds) =
+          let
+            (m', _resp) = step cmd m
+          in
+            go' m' (precondition m cmd) cmds
+
+shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
+shrinkConcProgram m (ConcProgram cmds) =
+  map ConcProgram (shrinkList (shrinkCommands m) cmds)
+
+prettyConcProgram :: ConcProgram -> String
+prettyConcProgram = show
+
+newtype History = History [Operation]
+  deriving Show
+
+newtype Pid = Pid Int
+  deriving (Eq, Ord, Show)
+
+data Operation
+  = Invoke Pid Command
+  | Ok     Pid Response
+  deriving Show
+
+toPid :: ThreadId -> Pid
+toPid tid = Pid (read (drop (length ("ThreadId " :: String)) (show tid)))
+
+prettyHistory :: History -> String
+prettyHistory = show
+
+concExec :: TQueue Operation -> Journal -> Command -> IO ()
+concExec queue jour cmd = do
+  pid <- toPid <$> myThreadId
+  atomically (writeTQueue queue (Invoke pid cmd))
+  -- Adds some entropy to the possible interleavings.
+  sleep <- randomRIO (5, 200)
+  threadDelay sleep
+  resp <- exec cmd jour
+  atomically (writeTQueue queue (Ok pid resp))
+
+-- Generate all possible single-threaded executions from the concurrent history.
+interleavings :: History -> Forest (Command, Response)
+interleavings (History [])  = []
+interleavings (History ops) =
+  [ Node (cmd, resp) (interleavings (History ops'))
+  | (tid, cmd)   <- takeInvocations ops
+  , (resp, ops') <- findResponse tid
+                      (filter1 (not . matchInvocation tid) ops)
+  ]
+  where
+    takeInvocations :: [Operation] -> [(Pid, Command)]
+    takeInvocations []                         = []
+    takeInvocations ((Invoke pid cmd)   : ops) = (pid, cmd) : takeInvocations ops
+    takeInvocations ((Ok    _pid _resp) : _)   = []
+
+    findResponse :: Pid -> [Operation] -> [(Response, [Operation])]
+    findResponse _pid []                                   = []
+    findResponse  pid ((Ok pid' resp) : ops) | pid == pid' = [(resp, ops)]
+    findResponse  pid (op             : ops)               =
+      [ (resp, op : ops') | (resp, ops') <- findResponse pid ops ]
+
+    matchInvocation :: Pid -> Operation -> Bool
+    matchInvocation pid (Invoke pid' _cmd) = pid == pid'
+    matchInvocation _   _                  = False
+
+    filter1 :: (a -> Bool) -> [a] -> [a]
+    filter1 _ []                   = []
+    filter1 p (x : xs) | p x       = x : filter1 p xs
+                       | otherwise = xs
+
+
+-- If any one of the single-threaded executions respects the state machine
+-- model, then the concurrent execution is correct.
+linearisable :: Forest (Command, Response) -> Bool
+linearisable = any' (go initModel)
+  where
+    go :: Model -> Tree (Command, Response) -> Bool
+    go model (Node (cmd, resp) ts) =
+      let
+        (model', resp') = step cmd model
+      in
+        resp == resp' && any' (go model') ts
+
+    any' :: (a -> Bool) -> [a] -> Bool
+    any' _p [] = True
+    any'  p xs = any p xs
+
+prop_concurrent :: Property
+prop_concurrent = forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
+  -- Rerun a couple of times, to avoid being lucky with the interleavings.
+  replicateM_ 10 $ do
+    (fp, jour) <- run initJournal
+    queue <- run newTQueueIO
+    run (mapM_ (mapConcurrently (concExec queue jour)) cmdss)
+    hist <- History <$> run (atomically (flushTQueue queue))
+    monitor (whenFail (putStrLn (prettyHistory hist)))
+    run (removeFile fp)
+    assert (linearisable (interleavings hist))
