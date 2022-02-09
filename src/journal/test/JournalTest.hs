@@ -56,7 +56,7 @@ initModel :: FakeJournal
 initModel = FakeJournal Vector.empty 0 1
 
 eNABLE_TRACING :: Bool
-eNABLE_TRACING = True
+eNABLE_TRACING = False
 
 doTrace :: String -> a -> a
 doTrace | eNABLE_TRACING = trace
@@ -181,7 +181,7 @@ data Response
   = Result (Either AppendError ())
   | ByteString (Maybe ByteString)
   | IOException IOException
-  deriving Eq
+  deriving (Eq, Show)
 
 prettyResponse :: Response -> String
 prettyResponse (Result eu) = "Result (" ++ show eu ++ ")"
@@ -542,8 +542,9 @@ genConcProgram m = sized (go [])
   where
     go acc sz | sz <= 0   = return (ConcProgram (reverse acc))
               | otherwise = do
-                  cmds <- vectorOf 5 genCommand `suchThat` concSafe m
-                  go (cmds : acc) (sz - 5)
+                  n <- chooseInt (2, 5)
+                  cmds <- vectorOf n genCommand `suchThat` concSafe m
+                  go (cmds : acc) (sz - n)
 
     concSafe :: Model -> [Command] -> Bool
     concSafe m0 = all (go' m0 True) . permutations
@@ -557,28 +558,39 @@ genConcProgram m = sized (go [])
           in
             go' m' (precondition m cmd) cmds
 
-
 shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
-shrinkConcProgram _m = const []
+shrinkConcProgram m (ConcProgram cmds) =
+  map ConcProgram (shrinkList (shrinkCommands m) cmds)
 
 prettyConcProgram :: ConcProgram -> String
 prettyConcProgram = show
 
 newtype History = History [Operation]
+  deriving Show
+
+newtype Pid = Pid Int
+  deriving (Eq, Ord, Show)
 
 data Operation
-  = Invoke ThreadId Command
-  | Ok     ThreadId Response
+  = Invoke Pid Command
+  | Ok     Pid Response
+  deriving Show
+
+toPid :: ThreadId -> Pid
+toPid tid = Pid (read (drop (length ("ThreadId " :: String)) (show tid)))
+
+prettyHistory :: History -> String
+prettyHistory = show
 
 concExec :: TQueue Operation -> Journal -> Command -> IO ()
 concExec queue jour cmd = do
-  tid <- myThreadId
-  atomically (writeTQueue queue (Invoke tid cmd))
+  pid <- toPid <$> myThreadId
+  atomically (writeTQueue queue (Invoke pid cmd))
   -- Adds some entropy to the possible interleavings.
   sleep <- randomRIO (5, 200)
   threadDelay sleep
   resp <- exec cmd jour
-  atomically (writeTQueue queue (Ok tid resp))
+  atomically (writeTQueue queue (Ok pid resp))
 
 -- Generate all possible single-threaded executions from the concurrent history.
 interleavings :: History -> Forest (Command, Response)
@@ -590,19 +602,19 @@ interleavings (History ops) =
                       (filter1 (not . matchInvocation tid) ops)
   ]
   where
-    takeInvocations :: [Operation] -> [(ThreadId, Command)]
+    takeInvocations :: [Operation] -> [(Pid, Command)]
     takeInvocations []                         = []
-    takeInvocations ((Invoke tid cmd)   : ops) = (tid, cmd) : takeInvocations ops
-    takeInvocations ((Ok    _tid _resp) : _)   = []
+    takeInvocations ((Invoke pid cmd)   : ops) = (pid, cmd) : takeInvocations ops
+    takeInvocations ((Ok    _pid _resp) : _)   = []
 
-    findResponse :: ThreadId -> [Operation] -> [(Response, [Operation])]
-    findResponse _tid []                                   = []
-    findResponse  tid ((Ok tid' resp) : ops) | tid == tid' = [(resp, ops)]
-    findResponse  tid (op             : ops)               =
-      [ (resp, op : ops') | (resp, ops') <- findResponse tid ops ]
+    findResponse :: Pid -> [Operation] -> [(Response, [Operation])]
+    findResponse _pid []                                   = []
+    findResponse  pid ((Ok pid' resp) : ops) | pid == pid' = [(resp, ops)]
+    findResponse  pid (op             : ops)               =
+      [ (resp, op : ops') | (resp, ops') <- findResponse pid ops ]
 
-    matchInvocation :: ThreadId -> Operation -> Bool
-    matchInvocation tid (Invoke tid' _cmd) = tid == tid'
+    matchInvocation :: Pid -> Operation -> Bool
+    matchInvocation pid (Invoke pid' _cmd) = pid == pid'
     matchInvocation _   _                  = False
 
     filter1 :: (a -> Bool) -> [a] -> [a]
@@ -614,15 +626,18 @@ interleavings (History ops) =
 -- If any one of the single-threaded executions respects the state machine
 -- model, then the concurrent execution is correct.
 linearisable :: Forest (Command, Response) -> Bool
-linearisable [] = True
-linearisable ts = any (go initModel) ts
+linearisable = any' (go initModel)
   where
     go :: Model -> Tree (Command, Response) -> Bool
-    go model (Node (cmd, resp) ts') =
+    go model (Node (cmd, resp) ts) =
       let
         (model', resp') = step cmd model
       in
-        resp == resp' && any (go model') ts'
+        resp == resp' && any' (go model') ts
+
+    any' :: (a -> Bool) -> [a] -> Bool
+    any' _p [] = True
+    any'  p xs = any p xs
 
 prop_concurrent :: Property
 prop_concurrent = forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
@@ -632,5 +647,6 @@ prop_concurrent = forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
     queue <- run newTQueueIO
     run (mapM_ (mapConcurrently (concExec queue jour)) cmdss)
     hist <- History <$> run (atomically (flushTQueue queue))
+    monitor (whenFail (putStrLn (prettyHistory hist)))
     run (removeFile fp)
     assert (linearisable (interleavings hist))
