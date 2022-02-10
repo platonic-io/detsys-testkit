@@ -48,7 +48,7 @@ httpFrontend journal (FrontEndInfo c blocker) req respond = do
     Right cmd -> do
       Journal.appendBS journal (encode $ Envelope key cmd)
       resp <- blockUntil blocker key
-      Journal.dumpJournal journal
+      -- Journal.dumpJournal journal
       case resp of
         Left errMsg -> respond $ Wai.responseLBS status400 [] errMsg
         Right msg -> respond $ Wai.responseLBS status200 [] msg

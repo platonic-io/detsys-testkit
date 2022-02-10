@@ -48,6 +48,8 @@ library
       , binary
       , bytestring
       , containers
+      , directory
+      , filepath
       , http-types
       , journal
       , text
@@ -59,6 +61,7 @@ library
     , Codec
     , FrontEnd
     , Metrics
+    , Snapshot
     , StateMachine
     , Types
     , Worker

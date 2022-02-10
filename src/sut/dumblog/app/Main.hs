@@ -12,21 +12,36 @@ import Blocker (emptyBlocker)
 import Codec (Envelope(..), decode)
 import FrontEnd (runFrontEnd, FrontEndInfo(..))
 import Metrics (dumblogSchema)
+import Snapshot (Snapshot)
+import qualified Snapshot
 import StateMachine(InMemoryDumblog, initState, runCommand)
 import Types (Command)
 import Worker (worker, WorkerInfo(..))
 
-fetchJournal :: FilePath -> Journal.Options -> IO Journal
-fetchJournal fpj opts = do
+fetchJournal :: Maybe Snapshot -> FilePath -> Journal.Options -> IO Journal
+fetchJournal mSnapshot fpj opts = do
   Journal.allocateJournal fpj opts
-  Journal.startJournal fpj opts
+  journal <- Journal.startJournal fpj opts
+  case mSnapshot of
+    Nothing -> pure ()
+    Just snap -> do
+      let bytes = Snapshot.ssBytesInJournal snap
+      putStrLn $ "[journal] Found Snapshot! starting from bytes: "  <> show bytes
+      AtomicCounter.writeCounter
+        (Journal.jBytesConsumed journal)
+        bytes
+  pure journal
 
 -- this should be from snapshot/or replay journal
-fetchState :: Journal -> IO InMemoryDumblog
-fetchState jour = do
-  cmds <- collectAll jour -- the journal start from 0 -- we don't know where we were
-  replay cmds initState
+fetchState :: Maybe Snapshot -> Journal -> IO (InMemoryDumblog, Int)
+fetchState mSnapshot jour = do
+  cmds <- collectAll jour -- the journal has been set to be either 0, or from the last snapshot
+  s <- replay cmds startingState
+  pure (s, length cmds)
   where
+    startingState = case mSnapshot of
+      Nothing -> initState
+      Just snap -> Snapshot.ssState snap
     -- maybe better stream type than []?
     -- this is not the best performance, but it is only in startup and should be replaced
     -- later anyway..
@@ -70,14 +85,16 @@ main = do
 
   let fpj = "/tmp/dumblog.journal"
       fpm = "/tmp/dumblog.metrics"
+      fps = "/tmp/dumblog.snapshot"
       opts = Journal.defaultOptions { Journal.oLogger = Logger.nullLogger }
-
-  journal <- fetchJournal fpj opts
+      untilSnapshot = 10
+  mSnapshot <- Snapshot.readFile fps
+  journal <- fetchJournal mSnapshot fpj opts
   metrics <- Metrics.newMetrics dumblogSchema fpm
   blocker <- emptyBlocker
   counter <- AtomicCounter.newCounter 0 -- it is okay to start over
-  state <- fetchState journal
+  (state, events) <- fetchState mSnapshot journal
   let feInfo = FrontEndInfo counter blocker
-      wInfo = WorkerInfo blocker
+      wInfo = WorkerInfo blocker fps events untilSnapshot
   async $ worker journal metrics wInfo state
   runFrontEnd 8053 journal feInfo

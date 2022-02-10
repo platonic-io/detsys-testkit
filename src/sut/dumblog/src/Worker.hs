@@ -12,15 +12,20 @@ import Data.Time (getCurrentTime, diffUTCTime)
 import Journal (Journal)
 import qualified Journal
 import qualified Journal.Internal.Metrics as Metrics
+import qualified Journal.Types.AtomicCounter as AtomicCounter
 
 import Blocker
 import Codec
 import Metrics
+import qualified Snapshot
 import StateMachine
 import Types
 
 data WorkerInfo = WorkerInfo
   { wiBlockers :: Blocker (Either Response Response)
+  , wiSnapshotFile  :: FilePath
+  , wiEvents        :: Int -- how many events since last snapshot
+  , wiEventsInRound :: Int -- how many events in one snapshot
   }
 
 -- Currently always uses `ResponseTime`
@@ -40,12 +45,18 @@ wakeUpFrontend blocker key resp = do
     error $ "Frontend never added MVar"
 
 worker :: Journal -> DumblogMetrics -> WorkerInfo -> InMemoryDumblog -> IO ()
-worker journal metrics (WorkerInfo blocker) = go
+worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot) = go eventCount
   where
-    go s = do
+    go ev s
+      | ev >= untilSnapshot = do
+          putStrLn $ "[worker] Performing Snapshot"
+          bytes <- AtomicCounter.readCounter $ Journal.jBytesConsumed journal
+          Snapshot.toFile (Snapshot.Snapshot bytes s) snapshotFile
+          go 0 s
+    go ev s = do
       { val <- Journal.readJournal journal
-      ; s' <- case val of
-        { Nothing -> return s
+      ; (ev', s') <- case val of
+        { Nothing -> return (ev, s)
         ; Just entry -> timeIt metrics $ do
           let Envelope key cmd = decode entry
           {- // in case of decode error
@@ -54,8 +65,8 @@ worker journal metrics (WorkerInfo blocker) = go
 -}
           (s', r) <- runCommand s cmd
           wakeUpFrontend blocker key (Right r)
-          return s'
+          return (succ ev, s')
         }
       ; threadDelay 10
-      ; go s'
+      ; go ev' s'
       }
