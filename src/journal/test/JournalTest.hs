@@ -215,8 +215,8 @@ exec DumpJournal    j = Result . Right <$> dumpJournal j
 genRunLenEncoding :: Gen [(Int, Char)]
 genRunLenEncoding = sized $ \n -> do
   len <- elements [ max 1 n -- Disallow n == 0.
-                  , maxLen
-                  , maxLen - 1
+                  -- , maxLen
+                  -- , maxLen - 1
                   ]
   chr <- elements ['A'..'Z']
   return [(len, chr)]
@@ -258,7 +258,7 @@ validProgram = go True
     go valid m (cmd : cmds) = go (precondition m cmd) (fst (step cmd m)) cmds
 
 testOptions :: Options
-testOptions = defaultOptions { oLogger = nullLogger }
+testOptions = defaultOptions { oLogger = ioLogger }
 
 forAllCommands :: ([Command] -> Property) -> Property
 forAllCommands k =
@@ -308,11 +308,11 @@ prop_journal =
           prettyResponse resp ++ " /= " ++ prettyResponse resp'
         go cmds m' j ((resp, t) : hist)
 
-      assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
-      assertWithFail condition msg = do
-        unless condition $
-          monitor (counterexample ("Failed: " ++ msg))
-        assert condition
+assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
+assertWithFail condition msg = do
+  unless condition $
+    monitor (counterexample ("Failed: " ++ msg))
+  assert condition
 
 classifyLatencies :: [(Command, Double)] -> Property -> Property
 classifyLatencies []             = id
@@ -323,6 +323,20 @@ classifyLatencies ((c, t) : cts)
   . classify (20 < t && t <= 30) ("latency " ++ constructorString c ++ ": 21-30ns")
   . classify (t > 30)            ("latency " ++ constructorString c ++ ": >30ns")
   . classifyLatencies cts
+
+classifyLatencies' :: [(Command, Double)] -> Property -> Property
+classifyLatencies' cts =
+  classifyTable cts snd (buckets 0 30 5) (\(cmd, _) (lo, hi) ->
+    "latency " ++ constructorString cmd ++ ": " ++ show lo ++ "-" ++ show hi ++ "ns")
+
+buckets :: Num n => n -> n -> n -> [(n, n)]
+buckets lo hi step = undefined
+
+classifyTable :: Num n => [a] -> (a -> n) -> [(n, n)] -> (a -> (n, n) -> String)
+              -> Property -> Property
+classifyTable [] _ _ _ = id
+classifyTable (x : xs) f buckets g
+  = undefined
 
 classifyCommandsLength :: [Command] -> Property -> Property
 classifyCommandsLength cmds
@@ -528,7 +542,7 @@ assertProgram msg cmds = do
 
 ------------------------------------------------------------------------
 
-newtype ConcProgram = ConcProgram [[Command]]
+newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
   deriving Show
 
 forAllConcProgram :: (ConcProgram -> Property) -> Property
@@ -538,30 +552,35 @@ forAllConcProgram k =
     m = initModel
 
 genConcProgram :: Model -> Gen ConcProgram
-genConcProgram m = sized (go [])
+genConcProgram m0 = sized (go m0 [])
   where
-    go :: [[Command]] -> Int -> Gen ConcProgram
-    go acc sz | sz <= 0   = return (ConcProgram (reverse acc))
-              | otherwise = do
-                  n <- chooseInt (2, 5)
-                  cmds <- vectorOf n genCommand `suchThat` concSafe m
-                  go (cmds : acc) (sz - n)
+    go :: Model -> [[Command]] -> Int -> Gen ConcProgram
+    go m acc sz | sz <= 0   = return (ConcProgram (reverse acc))
+                | otherwise = do
+                    n <- chooseInt (2, 2)
+                    cmds <- vectorOf n genCommand `suchThat` concSafe m
+                    go (advanceModel m cmds) (cmds : acc) (sz - n)
 
-    concSafe :: Model -> [Command] -> Bool
-    concSafe m0 = all (go' m0 True) . permutations
-      where
-        go' :: Model -> Bool -> [Command] -> Bool
-        go' m False _            = False
-        go' m acc   []           = acc
-        go' m acc   (cmd : cmds) =
-          let
-            (m', _resp) = step cmd m
-          in
-            go' m' (precondition m cmd) cmds
+advanceModel :: Model -> [Command] -> Model
+advanceModel m cmds = foldl (\ih cmd -> fst (step cmd ih)) m cmds
+
+concSafe :: Model -> [Command] -> Bool
+concSafe m0 = all (validProgram m0) . permutations
+
+validConcProgram :: Model -> ConcProgram -> Bool
+validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
+  where
+    go :: Model -> Bool -> [[Command]] -> Bool
+    go m False _              = False
+    go m acc   []             = acc
+    go m acc   (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
 
 shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
-shrinkConcProgram m (ConcProgram cmds) =
-  map ConcProgram (shrinkList (shrinkCommands m) cmds)
+shrinkConcProgram m
+  = filter (validConcProgram m)
+  . map ConcProgram
+  . shrinkList (shrinkCommands m)
+  . unConcProgram
 
 prettyConcProgram :: ConcProgram -> String
 prettyConcProgram = show
@@ -588,7 +607,7 @@ concExec queue jour cmd = do
   pid <- toPid <$> myThreadId
   atomically (writeTQueue queue (Invoke pid cmd))
   -- Adds some entropy to the possible interleavings.
-  sleep <- randomRIO (5, 200)
+  sleep <- randomRIO (5, 20)
   threadDelay sleep
   resp <- exec cmd jour
   atomically (writeTQueue queue (Ok pid resp))
@@ -643,21 +662,23 @@ linearisable = any' (go initModel)
 prop_concurrent :: Property
 prop_concurrent = forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
   -- Rerun a couple of times, to avoid being lucky with the interleavings.
+  monitor (tabulate "Commands" (map constructorString (concat cmdss)))
   replicateM_ 10 $ do
     (fp, jour) <- run initJournal
     queue <- run newTQueueIO
     run (mapM_ (mapConcurrently (concExec queue jour)) cmdss)
     hist <- History <$> run (atomically (flushTQueue queue))
-    monitor (whenFail (putStrLn (prettyHistory hist)))
     run (removeFile fp)
-    assert (linearisable (interleavings hist))
+    assertWithFail (linearisable (interleavings hist)) (prettyHistory hist)
 
 data PidStatus
   = DoingNothing
   | MadeRequest Command
-  | CommittedRequest Command Response -- we don't support :INFO, or failures so we will always have response
+  | CommittedRequest Command Response -- we don't support :INFO, or failures so
+                                      -- we will always have response
 
--- `selectOne` will pick one element from the list, and return all other elements (in no specific order)
+-- `selectOne` will pick one element from the list, and return all other
+-- elements (in no specific order)
 selectOne :: [a] -> Gen (a,[a])
 selectOne = elements . gens []
   where
@@ -667,10 +688,12 @@ selectOne = elements . gens []
 
 -- generate a `History` and the linearised history `[Command]`
 genHistory :: [Pid] -> Model -> Gen (History, [Command])
-genHistory pids initModel = sized $ \s -> go (History []) [] initModel s $ zip pids (repeat DoingNothing)
+genHistory pids initModel = sized $ \s ->
+  go (History []) [] initModel s $ zip pids (repeat DoingNothing)
   where
     consH x (History xs) = History (x:xs)
-    go :: History -> [Command] -> Model -> Int -> [(Pid, PidStatus)] -> Gen (History, [Command])
+    go :: History -> [Command] -> Model -> Int -> [(Pid, PidStatus)]
+       -> Gen (History, [Command])
     go (History conc) linear model size [] = pure (History $ reverse conc, reverse linear)
     go conc linear model size pids = do
       ((pid, state), pids') <- selectOne pids
@@ -680,7 +703,8 @@ genHistory pids initModel = sized $ \s -> go (History []) [] initModel s $ zip p
             go conc linear model size pids'
           | otherwise -> do -- generate command
             cmd <- genCommand
-            go (consH (Invoke pid cmd) conc) linear model (pred size) ((pid, MadeRequest cmd):pids')
+            go (consH (Invoke pid cmd) conc) linear model (pred size)
+              ((pid, MadeRequest cmd):pids')
         MadeRequest cmd -> do -- request succeed, and response succeed
           let (model', resp) = step cmd model
           go conc (cmd:linear) model' size ((pid, CommittedRequest cmd resp):pids')

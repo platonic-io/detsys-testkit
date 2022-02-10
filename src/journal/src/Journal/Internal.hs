@@ -26,7 +26,6 @@ import Foreign.Storable (Storable, peekByteOff, pokeByteOff, sizeOf)
 import System.Directory
        (copyFile, doesFileExist, listDirectory, renameFile)
 import System.FilePath ((</>))
-import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
 import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBufferPtr
@@ -41,12 +40,13 @@ import Journal.Types.AtomicCounter
 offer :: Ptr Word8 -> Int -> Int -> IO Int
 offer buf offset len = undefined
 
-data AppendError = BackPressure | Rotation
+data AppendError = BackPressure | Rotation | AdminAction
   deriving (Eq, Show)
 
 tryClaim :: Journal -> Int -> IO (Either AppendError (Int64, BufferClaim))
 tryClaim jour len = do
-  -- checkPayloadLength len
+  -- XXX:
+  -- checkPayloadLength len -- This should use mdMTULength
   termCount <- activeTermCount (jMetadata jour)
   let index                = indexByTermCount termCount
       activePartitionIndex = index
@@ -73,7 +73,8 @@ tryClaim jour len = do
   jLog ("tryClaim, limit: " ++ show limit)
   if position < fromIntegral limit
   then do
-    mResult <- termAppenderClaim (jMetadata jour) termAppender termId termOffset len (jLogger jour)
+    mResult <- exclusiveTermAppenderClaim (jMetadata jour) termAppender termId
+                 termOffset len (jLogger jour)
     newPosition (jMetadata jour) mResult (jLogger jour)
   else
     backPressureStatus position len (jLogger jour)
@@ -93,7 +94,8 @@ calculatePositionLimit jour = do
     termWindowLength :: Metadata -> IO Int32
     termWindowLength meta = do
       termLen <- readTermLength meta
-      return (termLen `shiftR` 1) -- / 2
+      return (termLen `shiftR` 1)
+      -- ^ prop> \(Positive (Small i)) -> (2^i) `shiftR` 1 == 2^i `div` 2
 
 cleanBufferTo :: Journal -> Int -> IO ()
 cleanBufferTo _ _ = return ()
@@ -132,9 +134,9 @@ newPosition meta eResult logger =
 fRAME_ALIGNMENT :: Int
 fRAME_ALIGNMENT = hEADER_LENGTH
 
-termAppenderClaim :: Metadata -> ByteBuffer -> TermId -> TermOffset -> Int -> Logger
-                  -> IO (Either AppendError (TermOffset, BufferClaim))
-termAppenderClaim meta termBuffer termId termOffset len logger = do
+exclusiveTermAppenderClaim :: Metadata -> ByteBuffer -> TermId -> TermOffset -> Int -> Logger
+                           -> IO (Either AppendError (TermOffset, BufferClaim))
+exclusiveTermAppenderClaim meta termBuffer termId termOffset len logger = do
   let
     frameLength     = len + hEADER_LENGTH
     alignedLength   = align frameLength fRAME_ALIGNMENT

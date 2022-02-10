@@ -15,6 +15,7 @@ import GHC.Float (int2Double)
 import GHC.ForeignPtr
 
 import Journal.Internal.ByteBufferPtr
+import Journal.Internal.Utils (int2Int64)
 
 ------------------------------------------------------------------------
 
@@ -55,7 +56,7 @@ cleanMetrics (Metrics cbuf hbuf) = do
 
 incrCounter :: (Enum c) => Metrics c h -> c -> Int -> IO ()
 incrCounter (Metrics cbuf _) label value = do
-  fetchAddIntArray_ cbuf offset value
+  fetchAddInt64Array_ cbuf offset (int2Int64 value)
   where
     offset = sizeOfACounter * fromEnum label
 
@@ -74,9 +75,9 @@ measure (Metrics _ hbuf) label value = do
     offsetToBucket = offsetToHistogram +
       2 * sizeOf (8 :: Int) +
       compress value * sizeOf (8 :: Int)
-  fetchAddIntArray_ hbuf offsetToHistogramSum (round value)
-  fetchAddIntArray_ hbuf offsetToHistogramCount 1
-  fetchAddIntArray_ hbuf offsetToBucket 1
+  fetchAddInt64Array_ hbuf offsetToHistogramSum (round value)
+  fetchAddInt64Array_ hbuf offsetToHistogramCount 1
+  fetchAddInt64Array_ hbuf offsetToBucket 1
 
 ------------------------------------------------------------------------
 

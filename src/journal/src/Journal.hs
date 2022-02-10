@@ -36,6 +36,7 @@ import System.Directory
        , removeFile
        )
 import System.FilePath (takeDirectory, (</>))
+import System.Random (randomIO)
 
 import Journal.Internal
 import Journal.Internal.BufferClaim
@@ -73,8 +74,9 @@ allocateJournal fp (Options termBufferLen logger) = do
     meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
 
     writeTermLength meta (fromIntegral termBufferLen)
-    writeInitialTermId meta 4 -- XXX: should be random rather than 4.
-    initialiseTailWithTermId (Metadata meta) 0 4
+    initTermId <- TermId <$> randomIO
+    writeInitialTermId meta initTermId
+    initialiseTailWithTermId (Metadata meta) 0 initTermId
     pageSize <- sysconfPageSize
     writePageSize (Metadata meta) (int2Int32 pageSize)
 
@@ -189,18 +191,31 @@ readJournal jour = do
     if tag == Padding
     then do
       assertM (len >= 0)
-      incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
+      -- Single-threaded case:
+      -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
+      _success <- casCounter (jBytesConsumed jour) offset (offset + int322Int len)
       jLog "readJournal, skipping padding..."
+      -- If the CAS fails, it just means that some other process incremented the
+      -- counter already.
       readJournal jour
     else do
       assertM (len > 0)
       jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
-      bs <- getByteStringAt termBuffer
-              (int322Int relativeOffset + hEADER_LENGTH)
-              (int322Int len - hEADER_LENGTH)
-      assertM (BS.length bs == int322Int len - hEADER_LENGTH)
-      incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
-      return (Just bs)
+      success <- casCounter (jBytesConsumed jour) offset
+                   (offset + (align (int322Int len) fRAME_ALIGNMENT))
+      if success
+      then do
+        bs <- getByteStringAt termBuffer
+                (int322Int relativeOffset + hEADER_LENGTH)
+                (int322Int len - hEADER_LENGTH)
+        assertM (BS.length bs == int322Int len - hEADER_LENGTH)
+        -- Single-threaded case:
+        -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
+        return (Just bs)
+      else
+        -- If the CAS failed it means that another process read what we were
+        -- about to read, so we retry reading the next item instead.
+        readJournal jour
 
 ------------------------------------------------------------------------
 

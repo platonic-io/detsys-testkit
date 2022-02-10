@@ -148,6 +148,12 @@ casRawTail (Metadata meta) (PartitionIndex partitionIndex) expected new =
     (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
     (coerce expected) (coerce new)
 
+getAndAddRawTail :: Metadata -> PartitionIndex -> Int64 -> IO RawTail
+getAndAddRawTail (Metadata meta) (PartitionIndex partitionIndex) len = do
+  RawTail <$> fetchAddInt64Array meta
+    (tERM_TAIL_COUNTERS_OFFSET + (sizeOf (8 :: Int64) * partitionIndex))
+    len
+
 initialiseTailWithTermId :: Metadata -> PartitionIndex -> TermId -> IO ()
 initialiseTailWithTermId meta partitionIndex termId =
   writeRawTail meta termId 0 partitionIndex
