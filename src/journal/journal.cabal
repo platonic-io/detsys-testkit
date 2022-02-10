@@ -74,6 +74,7 @@ library
     Journal.Internal.Mmap
     Journal.Internal.Utils
     Journal.Types
+    Journal.MP
     Journal.Types.AtomicCounter
     Assert
 
