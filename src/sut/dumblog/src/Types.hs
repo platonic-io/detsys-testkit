@@ -9,7 +9,7 @@ import GHC.Generics (Generic)
 data Command
   = Write ByteString
   | Read Int
-  deriving Generic
+  deriving (Generic, Show)
 
 instance Binary Command where
 

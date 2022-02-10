@@ -36,6 +36,7 @@ executable dumblog
     build-depends:
       , async
       , base ^>=4.14.1.0
+      , directory
       , dumblog
       , journal
     hs-source-dirs:   app
@@ -47,6 +48,8 @@ library
       , binary
       , bytestring
       , containers
+      , directory
+      , filepath
       , http-types
       , journal
       , text
@@ -58,6 +61,7 @@ library
     , Codec
     , FrontEnd
     , Metrics
+    , Snapshot
     , StateMachine
     , Types
     , Worker

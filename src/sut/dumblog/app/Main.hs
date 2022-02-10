@@ -1,16 +1,73 @@
 module Main where
 
 import Control.Concurrent.Async (async)
+import Control.Monad (when)
+import Journal (Journal)
 import qualified Journal
 import qualified Journal.Types.AtomicCounter as AtomicCounter
 import qualified Journal.Internal.Metrics as Metrics
+import Journal.Internal.Logger as Logger
 
 import Blocker (emptyBlocker)
+import Codec (Envelope(..), decode)
 import FrontEnd (runFrontEnd, FrontEndInfo(..))
 import Metrics (dumblogSchema)
-import StateMachine(initState)
+import Snapshot (Snapshot)
+import qualified Snapshot
+import StateMachine(InMemoryDumblog, initState, runCommand)
+import Types (Command)
 import Worker (worker, WorkerInfo(..))
 
+fetchJournal :: Maybe Snapshot -> FilePath -> Journal.Options -> IO Journal
+fetchJournal mSnapshot fpj opts = do
+  Journal.allocateJournal fpj opts
+  journal <- Journal.startJournal fpj opts
+  case mSnapshot of
+    Nothing -> pure ()
+    Just snap -> do
+      let bytes = Snapshot.ssBytesInJournal snap
+      putStrLn $ "[journal] Found Snapshot! starting from bytes: "  <> show bytes
+      AtomicCounter.writeCounter
+        (Journal.jBytesConsumed journal)
+        bytes
+  pure journal
+
+-- this should be from snapshot/or replay journal
+fetchState :: Maybe Snapshot -> Journal -> IO (InMemoryDumblog, Int)
+fetchState mSnapshot jour = do
+  cmds <- collectAll jour -- the journal has been set to be either 0, or from the last snapshot
+  s <- replay cmds startingState
+  pure (s, length cmds)
+  where
+    startingState = case mSnapshot of
+      Nothing -> initState
+      Just snap -> Snapshot.ssState snap
+    -- maybe better stream type than []?
+    -- this is not the best performance, but it is only in startup and should be replaced
+    -- later anyway..
+    collectAll :: Journal -> IO [Command]
+    collectAll jour = do
+      putStrLn "[collect] Checking journal for old-entries"
+      val <- Journal.readJournal jour
+      case val of
+        Nothing -> do
+          putStrLn "[collect] No more entries"
+          pure []
+        Just entry -> do
+          putStrLn "[collect] Found an entry"
+          let Envelope _key cmd = decode entry
+          cmds <- collectAll jour
+          pure $ cmd : cmds
+
+    -- this can be pure when `runCommand` gets pure
+    replay :: [Command] -> InMemoryDumblog -> IO InMemoryDumblog
+    replay [] s = do
+      putStrLn "[REPLAY] finished!"
+      pure s
+    replay (cmd:cmds) s = do
+      putStrLn $ "[REPLAY] running: " <> show cmd
+      (s', _) <- runCommand s cmd
+      replay cmds s'
 
 {-
 Unclear how to:
@@ -28,14 +85,16 @@ main = do
 
   let fpj = "/tmp/dumblog.journal"
       fpm = "/tmp/dumblog.metrics"
-      opts = Journal.defaultOptions
-  Journal.allocateJournal fpj opts -- should we really allocate?
-  journal <- Journal.startJournal fpj opts
+      fps = "/tmp/dumblog.snapshot"
+      opts = Journal.defaultOptions { Journal.oLogger = Logger.nullLogger }
+      untilSnapshot = 10
+  mSnapshot <- Snapshot.readFile fps
+  journal <- fetchJournal mSnapshot fpj opts
   metrics <- Metrics.newMetrics dumblogSchema fpm
   blocker <- emptyBlocker
-  counter <- AtomicCounter.newCounter 0
-  let state = initState -- shis should be from snapshot/or replay journal
-      feInfo = FrontEndInfo counter blocker
-      wInfo = WorkerInfo blocker
+  counter <- AtomicCounter.newCounter 0 -- it is okay to start over
+  (state, events) <- fetchState mSnapshot journal
+  let feInfo = FrontEndInfo counter blocker
+      wInfo = WorkerInfo blocker fps events untilSnapshot
   async $ worker journal metrics wInfo state
   runFrontEnd 8053 journal feInfo
