@@ -1,9 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 module StateMachine where
 
+import Data.Binary (Binary)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as LBS8
+import GHC.Generics (Generic)
 
 import Types
 
@@ -11,7 +14,9 @@ import Types
 data InMemoryDumblog = InMemoryDumblog
   { theLog :: [ByteString] -- not very memory efficient, but not the point
   , nextIx :: Int
-  }
+  } deriving Generic
+
+instance Binary InMemoryDumblog where
 
 initState :: InMemoryDumblog
 initState = InMemoryDumblog [] 0
