@@ -26,7 +26,6 @@ import Foreign.Storable (Storable, peekByteOff, pokeByteOff, sizeOf)
 import System.Directory
        (copyFile, doesFileExist, listDirectory, renameFile)
 import System.FilePath ((</>))
-import System.IO.MMap (Mode(ReadWriteEx), mmapFilePtr, munmapFilePtr)
 
 import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBufferPtr

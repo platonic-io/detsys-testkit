@@ -55,7 +55,7 @@ library
     , unix
 
   build-depends:
-    , mmap
+    , random
     , network
     , vector
 

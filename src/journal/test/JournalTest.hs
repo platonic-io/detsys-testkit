@@ -258,7 +258,7 @@ validProgram = go True
     go valid m (cmd : cmds) = go (precondition m cmd) (fst (step cmd m)) cmds
 
 testOptions :: Options
-testOptions = defaultOptions { oLogger = nullLogger }
+testOptions = defaultOptions { oLogger = ioLogger }
 
 forAllCommands :: ([Command] -> Property) -> Property
 forAllCommands k =
@@ -323,6 +323,20 @@ classifyLatencies ((c, t) : cts)
   . classify (20 < t && t <= 30) ("latency " ++ constructorString c ++ ": 21-30ns")
   . classify (t > 30)            ("latency " ++ constructorString c ++ ": >30ns")
   . classifyLatencies cts
+
+classifyLatencies' :: [(Command, Double)] -> Property -> Property
+classifyLatencies' cts =
+  classifyTable cts snd (buckets 0 30 5) (\(cmd, _) (lo, hi) ->
+    "latency " ++ constructorString cmd ++ ": " ++ show lo ++ "-" ++ show hi ++ "ns")
+
+buckets :: Num n => n -> n -> n -> [(n, n)]
+buckets lo hi step = undefined
+
+classifyTable :: Num n => [a] -> (a -> n) -> [(n, n)] -> (a -> (n, n) -> String)
+              -> Property -> Property
+classifyTable [] _ _ _ = id
+classifyTable (x : xs) f buckets g
+  = undefined
 
 classifyCommandsLength :: [Command] -> Property -> Property
 classifyCommandsLength cmds
