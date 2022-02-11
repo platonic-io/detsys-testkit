@@ -33,7 +33,8 @@ import Test.QuickCheck.Instances.ByteString ()
 import Test.QuickCheck.Monadic
 import Test.Tasty.HUnit (Assertion, assertBool)
 
-import Journal
+import Journal hiding (appendBS, readJournal)
+import Journal.MP
 import Journal.Internal
 import Journal.Internal.Logger (ioLogger, nullLogger)
 import Journal.Internal.Utils hiding (assert)
@@ -557,7 +558,7 @@ genConcProgram m0 = sized (go m0 [])
     go :: Model -> [[Command]] -> Int -> Gen ConcProgram
     go m acc sz | sz <= 0   = return (ConcProgram (reverse acc))
                 | otherwise = do
-                    n <- chooseInt (2, 2)
+                    n <- chooseInt (2, 2) -- XXX: change back to (2, 5)
                     cmds <- vectorOf n genCommand `suchThat` concSafe m
                     go (advanceModel m cmds) (cmds : acc) (sz - n)
 
