@@ -61,7 +61,9 @@ allocateJournal fp (Options termBufferLen logger) = do
     -- XXX: check bounds
     error "allocateJournal: oTermBufferLength must be a power of 2"
   b <- doesFileExist fp
-  when (not b) $ do
+  size <- if b then getFileSize fp else return 0
+  if size == 0
+  then do
     logg logger ("allocateJournal, creating new journal: " ++ fp)
     let dir = takeDirectory fp
     dirExists <- doesDirectoryExist dir
@@ -79,6 +81,20 @@ allocateJournal fp (Options termBufferLen logger) = do
     initialiseTailWithTermId (Metadata meta) 0 initTermId
     pageSize <- sysconfPageSize
     writePageSize (Metadata meta) (int2Int32 pageSize)
+  else do
+    logg logger ("allocateJournal, journal exists: " ++ fp)
+    let logLength = termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH
+    unless (size == toInteger logLength) $
+      error "allocateJournal: file size doesn't match with log length"
+    bb <- mmapped fp logLength
+    meta <- Metadata <$> wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
+    termBufferLen' <- readTermLength meta
+    unless (int322Int termBufferLen' == termBufferLen) $
+      error "allocateJournal: oTermBufferLength doesn't match the metadata"
+    pageSize <- sysconfPageSize
+    pageSize' <- readPageSize meta
+    unless (int322Int pageSize' == pageSize) $
+      error "allocateJournal: pageSize doesn't match the metadata"
 
 startJournal :: FilePath -> Options -> IO Journal
 startJournal fp (Options termLength logger) = do
