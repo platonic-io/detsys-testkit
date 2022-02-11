@@ -34,6 +34,7 @@ import Test.QuickCheck.Monadic
 import Test.Tasty.HUnit (Assertion, assertBool)
 
 import Journal
+import qualified Journal.MP as MP
 import Journal.Internal
 import Journal.Internal.Logger (ioLogger, nullLogger)
 import Journal.Internal.Utils hiding (assert)
@@ -215,8 +216,8 @@ exec DumpJournal    j = Result . Right <$> dumpJournal j
 genRunLenEncoding :: Gen [(Int, Char)]
 genRunLenEncoding = sized $ \n -> do
   len <- elements [ max 1 n -- Disallow n == 0.
-                  -- , maxLen
-                  -- , maxLen - 1
+                  , maxLen
+                  , maxLen - 1
                   ]
   chr <- elements ['A'..'Z']
   return [(len, chr)]
@@ -258,7 +259,7 @@ validProgram = go True
     go valid m (cmd : cmds) = go (precondition m cmd) (fst (step cmd m)) cmds
 
 testOptions :: Options
-testOptions = defaultOptions { oLogger = ioLogger }
+testOptions = defaultOptions { oLogger = nullLogger }
 
 forAllCommands :: ([Command] -> Property) -> Property
 forAllCommands k =
@@ -557,7 +558,7 @@ genConcProgram m0 = sized (go m0 [])
     go :: Model -> [[Command]] -> Int -> Gen ConcProgram
     go m acc sz | sz <= 0   = return (ConcProgram (reverse acc))
                 | otherwise = do
-                    n <- chooseInt (2, 2)
+                    n <- chooseInt (2, 5)
                     cmds <- vectorOf n genCommand `suchThat` concSafe m
                     go (advanceModel m cmds) (cmds : acc) (sz - n)
 
@@ -609,8 +610,13 @@ concExec queue jour cmd = do
   -- Adds some entropy to the possible interleavings.
   sleep <- randomRIO (5, 20)
   threadDelay sleep
-  resp <- exec cmd jour
+  resp <- execMP cmd jour
   atomically (writeTQueue queue (Ok pid resp))
+
+execMP :: Command -> Journal -> IO Response
+execMP (AppendBS rle) j = Result <$> MP.appendBS j (decodeRunLength rle)
+execMP ReadJournal    j = ByteString <$> MP.readJournal j
+execMP DumpJournal    j = Result . Right <$> dumpJournal j
 
 -- Generate all possible single-threaded executions from the concurrent history.
 interleavings :: History -> Forest (Command, Response)
@@ -660,16 +666,22 @@ linearisable = any' (go initModel)
     any'  p xs = any p xs
 
 prop_concurrent :: Property
-prop_concurrent = forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
-  -- Rerun a couple of times, to avoid being lucky with the interleavings.
-  monitor (tabulate "Commands" (map constructorString (concat cmdss)))
-  replicateM_ 10 $ do
-    (fp, jour) <- run initJournal
-    queue <- run newTQueueIO
-    run (mapM_ (mapConcurrently (concExec queue jour)) cmdss)
-    hist <- History <$> run (atomically (flushTQueue queue))
-    run (removeFile fp)
-    assertWithFail (linearisable (interleavings hist)) (prettyHistory hist)
+prop_concurrent = mapSize (max 20) $
+  forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
+    monitor (classifyCommandsLength (concat cmdss))
+    -- Rerun a couple of times, to avoid being lucky with the interleavings.
+    monitor (tabulate "Commands" (map constructorString (concat cmdss)))
+    replicateM_ 10 $ do
+      (fp, jour) <- run initJournal
+      queue <- run newTQueueIO
+      run (mapM_ (mapConcurrently (concExec queue jour)) cmdss)
+      hist <- History <$> run (atomically (flushTQueue queue))
+      run (removeFile fp)
+      assertWithFail (linearisable (interleavings hist)) (prettyHistory hist)
+      written <- run (metricsBytesWritten jour)
+      monitor (classifyBytesWritten written)
+
+------------------------------------------------------------------------
 
 data PidStatus
   = DoingNothing
@@ -712,14 +724,9 @@ genHistory pids initModel = sized $ \s ->
           go (consH (Ok pid resp) conc) linear model size ((pid, DoingNothing):pids')
 
 prop_lineariseIsOkay :: Property
-prop_lineariseIsOkay =
-  -- above 30 it starts to take too much time to check
-  forAll (withMaxSize 30 $ genHistory pids initModel) $ \(history, _) ->
+prop_lineariseIsOkay = mapSize (max 20) $
+  -- ^ Above 20 it starts to take too much time to check.
+  forAll (genHistory pids initModel) $ \(history, _) ->
     linearisable (interleavings history)
   where
     pids = map Pid [0..5]
-    withMaxSize s g = do
-      n <- getSize
-      if n < s
-        then g
-        else resize s g

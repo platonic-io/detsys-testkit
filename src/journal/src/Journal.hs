@@ -207,31 +207,18 @@ readJournal jour = do
     if tag == Padding
     then do
       assertM (len >= 0)
-      -- Single-threaded case:
-      -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
-      _success <- casCounter (jBytesConsumed jour) offset (offset + int322Int len)
+      incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
       jLog "readJournal, skipping padding..."
-      -- If the CAS fails, it just means that some other process incremented the
-      -- counter already.
       readJournal jour
     else do
       assertM (len > 0)
       jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
-      success <- casCounter (jBytesConsumed jour) offset
-                   (offset + (align (int322Int len) fRAME_ALIGNMENT))
-      if success
-      then do
-        bs <- getByteStringAt termBuffer
-                (int322Int relativeOffset + hEADER_LENGTH)
-                (int322Int len - hEADER_LENGTH)
-        assertM (BS.length bs == int322Int len - hEADER_LENGTH)
-        -- Single-threaded case:
-        -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
-        return (Just bs)
-      else
-        -- If the CAS failed it means that another process read what we were
-        -- about to read, so we retry reading the next item instead.
-        readJournal jour
+      bs <- getByteStringAt termBuffer
+              (int322Int relativeOffset + hEADER_LENGTH)
+              (int322Int len - hEADER_LENGTH)
+      assertM (BS.length bs == int322Int len - hEADER_LENGTH)
+      incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
+      return (Just bs)
 
 ------------------------------------------------------------------------
 
@@ -281,15 +268,6 @@ dumpJournal jour = do
     return (rawTailTermOffset rawTail termLen)
   Vector.imapM_ dumpTermBuffer (jTermBuffers jour `Vector.zip` termOffsets)
   dumpMetadata (jMetadata jour)
-  {-
-  limit <- calculatePositionLimit jour
-  let termAppender = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
-      position     = termBeginPosition + fromIntegral termOffset
-
-  putStrLn $ "limit: " ++ show limit
-  putStrLn $ "termBeginPosition = " ++ show termBeginPosition
-  putStrLn $ "termOffset = " ++ show (unTermOffset termOffset)
--}
 
 ------------------------------------------------------------------------
 
@@ -306,42 +284,3 @@ metricsBytesWritten jour = do
   let termId     = rawTailTermId rawTail
       termOffset = rawTailTermOffset rawTail termLen
   return (computePosition termId termOffset (positionBitsToShift termLen) initTermId)
-
-------------------------------------------------------------------------
-
-tj :: IO ()
-tj = do
-  let fp   = "/tmp/journal.txt"
-      opts = defaultOptions
-      logger = oLogger opts
-  allocateJournal fp opts
-  jour <- startJournal fp opts
-
-  Right (offset, claimBuf) <- tryClaim jour 5
-  putStrLn ("offset: " ++ show offset)
-  putBS claimBuf hEADER_LENGTH (BSChar8.pack "hello")
-  commit claimBuf logger
-  Just bs <- readJournal jour
-  putStrLn ("read bytestring 1: '" ++ BSChar8.unpack bs ++ "'")
-
-  Right (offset', claimBuf') <- tryClaim jour 6
-  putStrLn ("offset': " ++ show offset')
-  putBS claimBuf' hEADER_LENGTH (BSChar8.pack "world!")
-  commit claimBuf' logger
-  Just bs' <- readJournal jour
-  putStrLn ("read bytestring 2: '" ++ BSChar8.unpack bs' ++ "'")
-
-  dumpMetadata (jMetadata jour)
-  return ()
-
-tbc :: IO ()
-tbc = do
-  bb <- allocate 16
-  bc <- newBufferClaim bb 0 5
-  putBS bc 0 (BSChar8.pack "hello")
-  bs <- getByteStringAt bb 0 5
-  putStrLn ("'" ++ BSChar8.unpack bs ++ "'")
-  bc' <- newBufferClaim bb 5 6
-  putBS bc' 0 (BSChar8.pack "world!")
-  bs' <- getByteStringAt bb 5 6
-  putStrLn ("'" ++ BSChar8.unpack bs' ++ "'")
