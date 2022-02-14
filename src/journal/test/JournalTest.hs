@@ -46,7 +46,7 @@ data FakeJournal' a = FakeJournal
   , fjIndex     :: Int
   , fjTermCount :: Int
   }
-  deriving (Show, Functor)
+  deriving (Eq, Show, Functor)
 
 type FakeJournal = FakeJournal' ByteString
 
@@ -63,7 +63,7 @@ doTrace :: String -> a -> a
 doTrace | eNABLE_TRACING = trace
         | otherwise      = const id
 
-appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Either AppendError ())
+appendBSFake :: ByteString -> FakeJournal -> [(FakeJournal, Either AppendError ())]
 appendBSFake bs fj@(FakeJournal bss ix termCount) =
   doTrace
     (unlines [ "TRACE"
@@ -78,13 +78,19 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
              , "termLen * termCount: " ++ show (termLen * termCount)
              ]) $
     if position < limit
-    then if journalLength' > termLen * termCount
-         then (FakeJournal (if BS.length padding == 0
-                            then bss
-                            else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
-         else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
-    else (fj, Left BackPressure)
+    then [noBackPressure]
+    else if position < hardLimit
+         then [backPressure, noBackPressure]
+         else [backPressure]
   where
+    backPressure = (fj, Left BackPressure)
+    noBackPressure =
+      if journalLength' > termLen * termCount
+      then (FakeJournal (if BS.length padding == 0
+                           then bss
+                           else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
+      else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
+
     journalLength :: Int
     journalLength = sum (Vector.map
                          (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT) bss)
@@ -101,6 +107,9 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
 
     limit :: Int
     limit = readBytes + termLen `div` 2
+
+    hardLimit :: Int
+    hardLimit = readBytes + termLen -- TODO: calculate this correctly
 
     readBytes :: Int
     readBytes = sum [ align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT
@@ -203,10 +212,20 @@ precondition m (AppendBS rle) = let bs = decodeRunLength rle in
   align (BS.length bs + hEADER_LENGTH) fRAME_ALIGNMENT <= oTermBufferLength testOptions `div` 2
 precondition m DumpJournal = True
 
+step' :: Command -> Model -> [(Model, Response)]
+step' (AppendBS rle) m = fmap Result <$> appendBSFake (decodeRunLength rle) m
+step' ReadJournal    m = pure $ ByteString <$> readJournalFake m
+step' DumpJournal    m = pure $ (m, Result (Right ()))
+
+-- step is like step' but gives only one answer, if step' gave multiple, then we pick the BackPressure one
 step :: Command -> Model -> (Model, Response)
-step (AppendBS rle) m = Result <$> appendBSFake (decodeRunLength rle) m
-step ReadJournal    m = ByteString <$> readJournalFake m
-step DumpJournal    m = (m, Result (Right ()))
+step cmd m = case step' cmd m of
+  [] -> error "Model didn't predict anything"
+  [r] -> r
+  xs -> let res = (m, Result (Left BackPressure)) in
+    if res `elem` xs
+    then res
+    else error $ "Model gave multiple results."
 
 exec :: Command -> Journal -> IO Response
 exec (AppendBS rle) j = Result <$> appendBS j (decodeRunLength rle)
@@ -656,10 +675,9 @@ linearisable = any' (go initModel)
   where
     go :: Model -> Tree (Command, Response) -> Bool
     go model (Node (cmd, resp) ts) =
-      let
-        (model', resp') = step cmd model
-      in
-        resp == resp' && any' (go model') ts
+      -- any because we want at least one to succeed here, `any'` would be wrong
+      any (\(model', resp') -> resp == resp' && any' (go model') ts)
+          (step' cmd model)
 
     any' :: (a -> Bool) -> [a] -> Bool
     any' _p [] = True
