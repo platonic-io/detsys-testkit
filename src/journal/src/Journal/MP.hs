@@ -149,6 +149,27 @@ newPosition meta termCount (TermOffset termOffset) termId position eResult =
   -- ^ XXX: when is this needed?
   -- | (position + termOffset) > maxPossiblePosition = return mAX_POSITION_EXCEEDED
 
+-- | Rotate the log and update the tail counter for the new term. This function
+-- is thread safe.
+rotateLog :: Metadata -> TermCount -> TermId -> IO Bool
+rotateLog meta termCount termId = do
+  go
+  casActiveTermCount meta termCount nextTermCount
+  where
+    nextTermId     = termId    + 1
+    nextTermCount  = termCount + 1
+    nextIndex      = indexByTermCount nextTermCount
+    expectedTermId = nextTermId - fromIntegral pARTITION_COUNT
+
+    go :: IO ()
+    go = do
+      rawTail <- readRawTail meta nextIndex
+      if expectedTermId /= rawTailTermId rawTail
+      then return ()
+      else do
+        b <- casRawTail meta nextIndex rawTail (packTail nextTermId 0)
+        if b then return () else go
+
 termAppenderClaim :: Journal -> Int -> TermId
                   -> IO (Either AppendError (TermOffset, BufferClaim))
 termAppenderClaim jour len activeTermId = do

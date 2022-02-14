@@ -276,26 +276,6 @@ computeLogLength termLen filePageSize
 align :: Int -> Int -> Int
 align value alignment = (value + (alignment - 1)) .&. (- alignment)
 
--- | Rotate the log and update the tail counter for the new term. This function
--- is thread safe.
-rotateLog :: Metadata -> TermCount -> TermId -> IO Bool
-rotateLog meta termCount termId = do
-  go
-  casActiveTermCount meta termCount nextTermCount
-  where
-    nextTermId     = termId    + 1
-    nextTermCount  = termCount + 1
-    nextIndex      = indexByTermCount nextTermCount
-    expectedTermId = nextTermId - fromIntegral pARTITION_COUNT
-
-    go = do
-      rawTail <- readRawTail meta nextIndex
-      if expectedTermId /= rawTailTermId rawTail
-      then return ()
-      else do
-        b <- casRawTail meta nextIndex rawTail (packTail nextTermId 0)
-        if b then return () else go
-
 ------------------------------------------------------------------------
 
 writeFrameType :: ByteBuffer -> TermOffset -> HeaderTag -> IO ()

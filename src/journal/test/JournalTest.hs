@@ -103,9 +103,6 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
     limit :: Int
     limit = readBytes + termLen `div` 2
 
-    hardLimit :: Int
-    hardLimit = readBytes + termLen -- TODO: calculate this correctly
-
     readBytes :: Int
     readBytes = Vector.sum
               . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
@@ -148,7 +145,7 @@ appendBSFake' bs fj@(FakeJournal bss ix termCount) =
            else [(FakeJournal bss ix (termCount + 1), Left Rotation)]
       else if journalLength' > termLen * (min 1 (termCount - 1))
            then [ (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
-                , (FakeJournal bss ix (termCount + 1), Left Rotation)
+                , (FakeJournal bss ix termCount, Left Rotation)
                 ]
            else [(FakeJournal (Vector.snoc bss bs) ix termCount, Right ())]
 
