@@ -63,8 +63,63 @@ doTrace :: String -> a -> a
 doTrace | eNABLE_TRACING = trace
         | otherwise      = const id
 
-appendBSFake :: ByteString -> FakeJournal -> [(FakeJournal, Either AppendError ())]
+appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Either AppendError ())
 appendBSFake bs fj@(FakeJournal bss ix termCount) =
+  doTrace
+    (unlines [ "TRACE"
+             , "ix: " ++ show ix
+             , "termCount: " ++ show termCount
+             , "bs: " ++ show (encodeRunLength bs)
+             , "readBytes: " ++ show readBytes
+             , "unreadBytes: " ++  show unreadBytes
+             , "position: " ++ show position
+             , "limit: " ++ show limit
+             , "journalLength': " ++ show journalLength'
+             , "termLen * termCount: " ++ show (termLen * termCount)
+             ]) $
+    if position < limit
+    then if journalLength' > termLen * termCount
+         then (FakeJournal (if BS.length padding == 0
+                            then bss
+                            else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
+         else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
+    else (fj, Left BackPressure)
+  where
+
+    journalLength :: Int
+    journalLength = sum (Vector.map
+                         (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT) bss)
+    journalLength' :: Int
+    journalLength' = journalLength + align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT
+
+    padding :: ByteString
+    padding = BS.replicate (termLen * termCount - journalLength - hEADER_LENGTH) '0'
+
+    termLen :: Int
+    termLen = oTermBufferLength testOptions
+
+    position = readBytes + unreadBytes
+
+    limit :: Int
+    limit = readBytes + termLen `div` 2
+
+    hardLimit :: Int
+    hardLimit = readBytes + termLen -- TODO: calculate this correctly
+
+    readBytes :: Int
+    readBytes = Vector.sum
+              . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
+              . Vector.take (ix - 1)
+              $ bss
+
+    unreadBytes :: Int
+    unreadBytes = Vector.sum
+                . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
+                . Vector.drop ix
+                $ bss
+
+appendBSFake' :: ByteString -> FakeJournal -> [(FakeJournal, Either AppendError ())]
+appendBSFake' bs fj@(FakeJournal bss ix termCount) =
   doTrace
     (unlines [ "TRACE"
              , "ix: " ++ show ix
@@ -221,19 +276,14 @@ precondition m (AppendBS rle) = let bs = decodeRunLength rle in
 precondition m DumpJournal = True
 
 step' :: Command -> Model -> [(Model, Response)]
-step' (AppendBS rle) m = fmap Result <$> appendBSFake (decodeRunLength rle) m
+step' (AppendBS rle) m = fmap Result <$> appendBSFake' (decodeRunLength rle) m
 step' ReadJournal    m = pure $ ByteString <$> readJournalFake m
 step' DumpJournal    m = pure $ (m, Result (Right ()))
 
--- step is like step' but gives only one answer, if step' gave multiple, then we pick the BackPressure one
 step :: Command -> Model -> (Model, Response)
-step cmd m = case step' cmd m of
-  [] -> error "Model didn't predict anything"
-  [r] -> r
-  xs -> let res = (m, Result (Left BackPressure)) in
-    if res `elem` xs
-    then res
-    else error $ "Model gave multiple results."
+step (AppendBS rle) m = Result <$> appendBSFake (decodeRunLength rle) m
+step ReadJournal    m = ByteString <$> readJournalFake m
+step DumpJournal    m = (m, Result (Right ()))
 
 exec :: Command -> Journal -> IO Response
 exec (AppendBS rle) j = Result <$> appendBS j (decodeRunLength rle)
