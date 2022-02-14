@@ -128,7 +128,7 @@ tryClaim jour len = do
 
   if unTermCount termCount /= unTermId (termId - initTermId)
   then return (Left AdminAction) -- XXX: what does this mean to end up here?
-  else if position < int2Int64 limit
+  else if position < limit
        then do
          eResult <- termAppenderClaim jour len termId
          newPosition (jMetadata jour) termCount termOffset termId position eResult

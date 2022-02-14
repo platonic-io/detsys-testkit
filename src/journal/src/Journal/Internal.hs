@@ -71,7 +71,7 @@ tryClaim jour len = do
 
   jLog ("tryClaim, position: " ++ show position)
   jLog ("tryClaim, limit: " ++ show limit)
-  if position < fromIntegral limit
+  if position < limit
   then do
     mResult <- exclusiveTermAppenderClaim (jMetadata jour) termAppender termId
                  termOffset len (jLogger jour)
@@ -81,7 +81,7 @@ tryClaim jour len = do
 
 -- XXX: Save the result in `producerLimit :: AtomicCounter` and update it in a
 -- separate process?
-calculatePositionLimit :: Journal -> IO Int
+calculatePositionLimit :: Journal -> IO Int64
 calculatePositionLimit jour = do
   minSubscriberPos <- readCounter (jBytesConsumed jour) -- XXX: only one subscriber so far.
   maxSubscriberPos <- readCounter (jBytesConsumed jour)
@@ -89,7 +89,7 @@ calculatePositionLimit jour = do
   let _consumerPos  = maxSubscriberPos
       proposedLimit = minSubscriberPos + fromIntegral termWindowLen
   cleanBufferTo jour minSubscriberPos
-  return proposedLimit
+  return (int2Int64 proposedLimit)
   where
     termWindowLength :: Metadata -> IO Int32
     termWindowLength meta = do
