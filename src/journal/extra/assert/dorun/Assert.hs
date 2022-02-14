@@ -1,4 +1,4 @@
-module Assert (assert, assertM, assertIO) where
+module Assert (assert, assertM, assertMMsg, assertIO) where
 
 import Control.Exception (throw, AssertionFailed(AssertionFailed))
 import GHC.Stack (HasCallStack, callStack, prettyCallStack)
@@ -18,8 +18,20 @@ assertM b = do
     then pure ()
     else throw (AssertionFailed errMsg)
   where
-    errMsg = concat
-      [ "Assertion failed\n"
+    errMsg = unlines
+      [ "Assertion failed"
+      , prettyCallStack callStack
+      ]
+
+assertMMsg :: (HasCallStack, Monad m) => String -> Bool -> m ()
+assertMMsg msg b = do
+  if b
+    then pure ()
+    else throw (AssertionFailed errMsg)
+  where
+    errMsg = unlines
+      [ "Assertion failed:"
+      , msg
       , prettyCallStack callStack
       ]
 
