@@ -114,13 +114,13 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
     readBytes :: Int
     readBytes = Vector.sum
               . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
-              . Vector.slice 0 (max 0 (ix - 1))
+              . Vector.take (ix - 1)
               $ bss
 
     unreadBytes :: Int
     unreadBytes = Vector.sum
                 . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
-                . Vector.slice ix (max 0 (Vector.length bss - 1 - ix))
+                . Vector.drop ix
                 $ bss
 
 readJournalFake :: FakeJournal -> (FakeJournal, Maybe ByteString)
