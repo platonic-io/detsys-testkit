@@ -78,18 +78,24 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
              , "termLen * termCount: " ++ show (termLen * termCount)
              ]) $
     if position < limit
-    then [noBackPressure]
+    then noBackPressure
     else if position < hardLimit
-         then [backPressure, noBackPressure]
+         then backPressure : noBackPressure
          else [backPressure]
   where
     backPressure = (fj, Left BackPressure)
     noBackPressure =
       if journalLength' > termLen * termCount
-      then (FakeJournal (if BS.length padding == 0
-                           then bss
-                           else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
-      else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
+      then if journalLength < termLen * termCount
+           then [(FakeJournal (if BS.length padding == 0
+                             then bss
+                             else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)]
+           else [(FakeJournal bss ix (termCount + 1), Left Rotation)]
+      else if journalLength' > termLen * (min 1 (termCount - 1))
+           then [ (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
+                , (FakeJournal bss ix (termCount + 1), Left Rotation)
+                ]
+           else [(FakeJournal (Vector.snoc bss bs) ix termCount, Right ())]
 
     journalLength :: Int
     journalLength = sum (Vector.map
