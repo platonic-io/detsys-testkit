@@ -169,6 +169,7 @@ rotateLog meta termCount termId = do
       if expectedTermId /= rawTailTermId rawTail
       then return ()
       else do
+        putStrLn "rotateLog: casRawTail"
         b <- casRawTail meta nextIndex rawTail (packTail nextTermId 0)
         if b then return () else go
 

@@ -16,7 +16,7 @@ module Journal
   ) where
 
 import Control.Exception (assert, bracket)
-import Control.Monad (unless, when)
+import Control.Monad (unless, when, forM_)
 import Data.Bits (popCount)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -78,7 +78,8 @@ allocateJournal fp (Options termBufferLen logger) = do
     writeTermLength meta (fromIntegral termBufferLen)
     initTermId <- TermId <$> randomIO
     writeInitialTermId meta initTermId
-    initialiseTailWithTermId (Metadata meta) 0 initTermId
+    forM_ [0 .. pARTITION_COUNT - 1] $ \ix ->
+      initialiseTailWithTermId (Metadata meta) (PartitionIndex ix) initTermId
     pageSize <- sysconfPageSize
     writePageSize (Metadata meta) (int2Int32 pageSize)
   else do
