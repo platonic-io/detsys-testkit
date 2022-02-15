@@ -78,8 +78,9 @@ allocateJournal fp (Options termBufferLen logger) = do
     writeTermLength meta (fromIntegral termBufferLen)
     initTermId <- TermId <$> randomIO
     writeInitialTermId meta initTermId
-    forM_ [0 .. pARTITION_COUNT - 1] $ \ix ->
-      initialiseTailWithTermId (Metadata meta) (PartitionIndex ix) initTermId
+    forM_ [0 .. pARTITION_COUNT - 1] $ \i ->
+      initialiseTailWithTermId (Metadata meta) (PartitionIndex i)
+        (initTermId + TermId (int2Int32 (i - if i == 0 then 0 else pARTITION_COUNT)))
     pageSize <- sysconfPageSize
     writePageSize (Metadata meta) (int2Int32 pageSize)
   else do

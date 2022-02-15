@@ -166,6 +166,8 @@ rotateLog meta termCount termId = do
     go :: IO ()
     go = do
       rawTail <- readRawTail meta nextIndex
+      putStrLn ("rotateLog, expectedTermId: " ++ show (unTermId expectedTermId) ++
+                         ", rawTailTermId: "  ++ show (unTermId (rawTailTermId rawTail)))
       if expectedTermId /= rawTailTermId rawTail
       then return ()
       else do
