@@ -510,14 +510,16 @@ writeWord64OffAddr = primitiveWord_ writeWord64OffAddr# (\(W64# w#) -> w#) (size
 casInt32Addr :: ByteBuffer -> Int -> Int32 -> Int32 -> IO Bool
 casInt32Addr bb offset expected desired = do
   boundCheck bb offset (sizeOf (4 :: Int32))
+  Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \ptr ->
-    casInt32Ptr (ptr `plusPtr` offset) expected desired
+    casInt32Ptr (ptr `plusPtr` (offset + slice)) expected desired
 
 casInt64Addr :: ByteBuffer -> Int -> Int64 -> Int64 -> IO Bool
 casInt64Addr bb offset expected desired = do
-  boundCheck bb offset (sizeOf (4 :: Int64))
+  boundCheck bb offset (sizeOf (8 :: Int64))
+  Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \ptr ->
-    casInt64Ptr (ptr `plusPtr` offset) expected desired
+    casInt64Ptr (ptr `plusPtr` (offset + slice)) expected desired
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Returns the value of the element
