@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module JournalTest where
@@ -260,6 +261,13 @@ prettyResponse (ByteString (Just bs)) =
 prettyResponse (ByteString Nothing) =
   "ByteString Nothing"
 prettyResponse (IOException e) = "IOException " ++ displayException e
+
+responseClassification :: Response -> String
+responseClassification (Result (Left err))     = "Write fail: " ++ show err
+responseClassification (Result (Right ()))     = "Write success"
+responseClassification (ByteString (Just _bs)) = "Read success"
+responseClassification (ByteString Nothing)    = "Read fail"
+responseClassification (IOException _err)      = "IOException"
 
 type Model = FakeJournal
 
@@ -676,16 +684,20 @@ shrinkConcProgram m
 prettyConcProgram :: ConcProgram -> String
 prettyConcProgram = show
 
-newtype History = History [Operation]
-  deriving Show
+newtype History' cmd resp = History [Operation' cmd resp]
+  deriving (Show, Functor, Foldable)
+
+type History = History' Command Response
 
 newtype Pid = Pid Int
   deriving (Eq, Ord, Show)
 
-data Operation
-  = Invoke Pid Command
-  | Ok     Pid Response
-  deriving Show
+data Operation' cmd resp
+  = Invoke Pid cmd
+  | Ok     Pid resp
+  deriving (Show, Functor, Foldable)
+
+type Operation = Operation' Command Response
 
 toPid :: ThreadId -> Pid
 toPid tid = Pid (read (drop (length ("ThreadId " :: String)) (show tid)))
@@ -752,7 +764,7 @@ linearisable = any' (go initModel)
     any'  p xs = any p xs
 
 prop_concurrent :: Property
-prop_concurrent = mapSize (min 20) $ noShrinking $
+prop_concurrent = mapSize (min 100) $ noShrinking $
   forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
     monitor (classifyCommandsLength (concat cmdss))
     -- Rerun a couple of times, to avoid being lucky with the interleavings.
@@ -762,6 +774,7 @@ prop_concurrent = mapSize (min 20) $ noShrinking $
       queue <- run newTQueueIO
       run (mapM_ (mapConcurrently (concExec queue jour)) cmdss)
       hist <- History <$> run (atomically (flushTQueue queue))
+      monitor (tabulate "Responses" (foldMap ((: []) . responseClassification) hist))
       run (removeFile fp)
       assertWithFail (linearisable (interleavings hist)) (prettyHistory hist)
       written <- run (metricsBytesWritten jour)
