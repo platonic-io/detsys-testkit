@@ -432,25 +432,37 @@ classifyCommandsLength cmds
   . classify (500 < length cmds)                       "length commands: >501"
 
 classifyBytesWritten :: Int64 -> Property -> Property
-classifyBytesWritten bytes
+classifyBytesWritten bytesInt64
   = classify (bytes == 0)
              "bytes written: 0"
-  . classify (0 < bytes && bytes <= termBufferLen)                     (msg 0 1)
-  . classify (1 * termBufferLen < bytes && bytes <= 2  * termBufferLen) (msg 1 2)
-  . classify (2 * termBufferLen < bytes && bytes <= 3  * termBufferLen) (msg 2 3)
-  . classify (3 * termBufferLen < bytes && bytes <= 4  * termBufferLen) (msg 3 4)
-  . classify (4 * termBufferLen < bytes && bytes <= 5  * termBufferLen) (msg 4 5)
-  . classify (5 * termBufferLen < bytes && bytes <= 6  * termBufferLen) (msg 5 6)
-  . classify (6 * termBufferLen < bytes && bytes <= 7  * termBufferLen) (msg 6 7)
-  . classify (7 * termBufferLen < bytes && bytes <= 8  * termBufferLen) (msg 7 8)
-  . classify (8 * termBufferLen < bytes && bytes <= 9  * termBufferLen) (msg 8 9)
-  . classify (9 * termBufferLen < bytes && bytes <= 10 * termBufferLen) (msg 9 10)
-  . classify (10 * termBufferLen < bytes)
+  . classify (0     * termBufferLen < bytes && bytes <= (1/3) * termBufferLen) (msg 0 (1/3))
+  . classify ((1/3) * termBufferLen < bytes && bytes <= (2/3) * termBufferLen) (msg (1/3)(2/3))
+  . classify ((2/3) * termBufferLen < bytes && bytes <= 1     * termBufferLen) (msg (2/3) 1)
+  . classify (1     * termBufferLen < bytes && bytes <= 2     * termBufferLen) (msg 1 2)
+  . classify (2     * termBufferLen < bytes && bytes <= 3     * termBufferLen) (msg 2 3)
+  . classify (3     * termBufferLen < bytes && bytes <= 4     * termBufferLen) (msg 3 4)
+  . classify (4     * termBufferLen < bytes && bytes <= 5     * termBufferLen) (msg 4 5)
+  . classify (5     * termBufferLen < bytes && bytes <= 6     * termBufferLen) (msg 5 6)
+  . classify (6     * termBufferLen < bytes && bytes <= 7     * termBufferLen) (msg 6 7)
+  . classify (7     * termBufferLen < bytes && bytes <= 8     * termBufferLen) (msg 7 8)
+  . classify (8     * termBufferLen < bytes && bytes <= 9     * termBufferLen) (msg 8 9)
+  . classify (9     * termBufferLen < bytes && bytes <= 10    * termBufferLen) (msg 9 10)
+  . classify (10    * termBufferLen < bytes)
              ("bytes written: >" ++ show (10 * termBufferLen))
   where
+    bytes :: Double
+    bytes = realToFrac bytesInt64
+
+    msg :: Double -> Double -> String
     msg low high = concat
-      ["bytes written: ", show (low * termBufferLen), "-", show (high * termBufferLen)]
-    termBufferLen = int2Int64 (oTermBufferLength testOptions)
+      [ "bytes written: "
+      , show (round (low * termBufferLen))
+      , "-"
+      , show (round (high * termBufferLen))
+      ]
+
+    termBufferLen :: Double
+    termBufferLen = realToFrac (oTermBufferLength testOptions)
 
 runCommands :: [Command] -> IO Bool
 runCommands cmds = do
