@@ -625,6 +625,25 @@ unit_bug15 :: Assertion
 unit_bug15 = assertConcProgram "" $ ConcProgram
   [[AppendBS [(1024,'Z')],AppendBS [(1024,'U')],AppendBS [(1024,'C')],AppendBS [(1024,'Q')]],[AppendBS [(1024,'B')],AppendBS [(1024,'E')],AppendBS [(1024,'P')],ReadJournal,ReadJournal],[ReadJournal,ReadJournal,ReadJournal,ReadJournal],[AppendBS [(1024,'P')],AppendBS [(1024,'I')],ReadJournal],[ReadJournal,AppendBS [(1024,'S')],ReadJournal,AppendBS [(1024,'X')]],[AppendBS [(1024,'V')],AppendBS [(1024,'N')],ReadJournal,AppendBS [(1024,'C')],AppendBS [(1024,'V')]],[AppendBS [(1024,'R')],ReadJournal],[ReadJournal,AppendBS [(1024,'V')]],[ReadJournal,ReadJournal,AppendBS [(1024,'E')]],[ReadJournal,ReadJournal,ReadJournal,ReadJournal],[AppendBS [(1024,'W')],AppendBS [(1024,'O')],AppendBS [(1024,'P')]],[AppendBS [(1024,'B')],AppendBS [(1024,'H')],ReadJournal,ReadJournal,ReadJournal], [ReadJournal,ReadJournal],[AppendBS [(1024,'E')],AppendBS [(1024,'B')],AppendBS [(1024,'I')],AppendBS [(1024,'F')],AppendBS [(1024,'P')]],[AppendBS [(1024,'Q')],ReadJournal,AppendBS [(1024,'C')],ReadJournal,ReadJournal],[ReadJournal,AppendBS [(1024,'H')],ReadJournal,AppendBS [(1024,'P')],AppendBS [(1024,'L')]],[AppendBS [(1024,'X')],ReadJournal,AppendBS [(1024,'Y')],ReadJournal,ReadJournal],[AppendBS [(1024,'H')],ReadJournal],[ReadJournal,ReadJournal,ReadJournal,ReadJournal,AppendBS [(1024,'Q')]],[AppendBS [(1024,'J')],AppendBS [(1024,'N')],AppendBS [(1024,'D')],ReadJournal,AppendBS [(1024,'S')]],[ReadJournal,ReadJournal,AppendBS [(1024,'S')]],[AppendBS [(1024,'Z')],ReadJournal,AppendBS [(1024,'W')],AppendBS [(1024,'E')]],[ReadJournal,ReadJournal,ReadJournal],[ReadJournal,ReadJournal,AppendBS [(1024,'I')],AppendBS [(1024,'W')],AppendBS [(1024,'M')]],[AppendBS [(1024,'F')],AppendBS [(1024,'L')]],[ReadJournal,AppendBS [(1024,'J')],ReadJournal,ReadJournal],[AppendBS [(1024,'R')],ReadJournal],[AppendBS [(1024 ,'A')],ReadJournal,AppendBS [(1024,'N')],AppendBS [(1024,'W')]],[ReadJournal,AppendBS [(1024,'N')],ReadJournal],[ReadJournal,AppendBS [(1024,'C')]],[AppendBS [(1024,'I')],ReadJournal,AppendBS [(1024,'F')] ,AppendBS [(1024,'O')]],[AppendBS [(1024,'A')],ReadJournal,ReadJournal],[AppendBS [(1024,'W')],AppendBS [(1024,'Y')],AppendBS [(1024,'P')]],[ReadJournal,ReadJournal],[AppendBS [(1024,'S')],ReadJournal],[AppendBS [(1024,'L')],ReadJournal],[AppendBS [(1024,'D')],ReadJournal,ReadJournal,ReadJournal,ReadJournal],[ReadJournal,AppendBS [(1024,'P')],AppendBS [(1024,'E')],AppendBS [(1024,'K')]]]
 
+
+unit_bug16 :: Assertion
+unit_bug16 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(32729,'V')],AppendBS [(17,'A')],AppendBS [(32753,'H')]]
+  , [AppendBS [(308,'R')],AppendBS [(15176,'A')]]
+  ]
+
+unit_bug16' :: Assertion
+unit_bug16' = assertHistory "" $
+  History [Invoke (Pid 170632) (AppendBS [(32729,'V')])
+          ,Invoke (Pid 170634) (AppendBS [(17,'A')])
+          ,Invoke (Pid 170636) (AppendBS [(32753,'H')])
+          ,Ok (Pid 170632) (Result (Right ())),Ok (Pid 170636) (Result (Right ())),Ok (Pid 170634) (Result (Left Rotation)),Invoke (Pid 170639) (AppendBS [(308,'R')]),Invoke (Pid 170641) (AppendBS [(15176,'A')]),Ok (Pid 170639) (Result (Left Rotation)),Ok (Pid 170641) (Result (Left Rotation))]
+
+unit_bug17 :: Assertion
+unit_bug17 = assertConcProgram "" $ ConcProgram
+  [[AppendBS [(32729,'X')],AppendBS [(20,'G')],AppendBS [(32753,'P')]],[AppendBS [(19,'X')],AppendBS [(32632,'V')]]]
+
+
 alignedLength :: Int -> Int
 alignedLength n = align (hEADER_LENGTH + n) fRAME_ALIGNMENT
 
@@ -639,17 +658,20 @@ assertProgram msg cmds = do
   assertBool msg b
 
 assertConcProgram :: String -> ConcProgram -> Assertion
-assertConcProgram msg (ConcProgram cmdss) = do
+assertConcProgram msg (ConcProgram cmdss) = replicateM_ 1000 $ do
   (fp, jour) <- initJournal
   queue <- newTQueueIO
   mapM_ (mapConcurrently (concExec queue jour)) cmdss
   hist <- History <$> atomically (flushTQueue queue)
   removeFile fp
-  let msg' = msg ++ "\nHistory:\n" ++ prettyHistory hist
-  assertBool msg' (linearisable (interleavings hist))
+  assertBool (prettyHistory hist) (linearisable (interleavings hist))
 
 prettyHistory :: History -> String
 prettyHistory = show
+
+assertHistory :: String -> History -> Assertion
+assertHistory msg hist =
+  assertBool (prettyHistory hist) (linearisable (interleavings hist))
 
 ------------------------------------------------------------------------
 
@@ -776,7 +798,7 @@ linearisable = any' (go initModel)
     any'  p xs = any p xs
 
 prop_concurrent :: Property
-prop_concurrent = mapSize (min 100) $ noShrinking $
+prop_concurrent = mapSize (min 20) $
   forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
     monitor (classifyCommandsLength (concat cmdss))
     -- Rerun a couple of times, to avoid being lucky with the interleavings.

@@ -59,7 +59,8 @@ readJournal jour = do
   jLog ("readJournal, initTermId: " ++ show (unTermId initTermId))
   let position =
         computePosition activeTermId termOffset (positionBitsToShift termLen) initTermId
-  assertM (int2Int64 offset <= position)
+  -- putStrLn ("readJournal, offset: " ++ show offset ++ ", position: " ++ show position)
+  -- assertM (int2Int64 offset <= position)
 
   let readTermCount =
         computeTermIdFromPosition (int2Int64 offset) (positionBitsToShift termLen) initTermId
@@ -70,7 +71,7 @@ readJournal jour = do
   if int2Int64 offset == position
   then return Nothing
   else do
-    assertM (int2Int64 offset < position)
+    -- assertM (int2Int64 offset < position)
 
     let relativeOffset = int2Int32 (align offset fRAME_ALIGNMENT) - readTermCount * termLen
     jLog ("readJournal, relativeOffset: " ++ show relativeOffset)
@@ -129,7 +130,7 @@ tryClaim jour len = do
           + int322Int64 (unTermOffset termOffset)
 
   if unTermCount termCount /= unTermId (termId - initTermId)
-  then return (Left AdminAction) -- XXX: what does this mean to end up here?
+  then return (Left Rotation) -- XXX: what does this mean to end up here?
   else if position < limit
        then do
          eResult <- termAppenderClaim jour len termId
@@ -166,12 +167,9 @@ rotateLog meta termCount termId = do
     go :: IO ()
     go = do
       rawTail <- readRawTail meta nextIndex
-      putStrLn ("rotateLog, expectedTermId: " ++ show (unTermId expectedTermId) ++
-                         ", rawTailTermId: "  ++ show (unTermId (rawTailTermId rawTail)))
       if expectedTermId /= rawTailTermId rawTail
       then return ()
       else do
-        putStrLn "rotateLog: casRawTail"
         b <- casRawTail meta nextIndex rawTail (packTail nextTermId 0)
         if b then return () else go
 
