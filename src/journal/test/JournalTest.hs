@@ -16,7 +16,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Builder as BS
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LBS
-import Data.Int (Int64)
+import Data.Int (Int32, Int64)
 import Data.List (permutations)
 import Data.Monoid (Sum(Sum))
 import Data.Time (diffUTCTime, getCurrentTime)
@@ -32,9 +32,10 @@ import System.Timeout (timeout)
 import Test.QuickCheck
 import Test.QuickCheck.Instances.ByteString ()
 import Test.QuickCheck.Monadic
-import Test.Tasty.HUnit (Assertion, assertBool)
+import Test.Tasty.HUnit (Assertion, assertBool, assertEqual)
 
 import Journal
+import Journal.Internal.ByteBufferPtr
 import Journal.Internal
 import Journal.Internal.Logger (ioLogger, nullLogger)
 import Journal.Internal.Utils hiding (assert)
@@ -863,3 +864,36 @@ prop_lineariseIsOkay = mapSize (min 20) $
     linearisable (interleavings history)
   where
     pids = map Pid [0..5]
+
+------------------------------------------------------------------------
+
+unit_casRawTail :: Assertion
+unit_casRawTail = do
+  bb' <- allocate 16
+  bb <- wrapPart bb' 8 8
+  let meta = Metadata bb'
+      index = 0
+      termId = TermId 42
+      termId' = TermId 43
+      termOffset = TermOffset 0
+      aE x y = assertEqual "" (unTermId x) (unTermId y)
+  writeRawTail meta termId termOffset index
+  fortyTwo <- readRawTail meta index
+  aE termId (rawTailTermId fortyTwo)
+  assertEqual "" (unRawTail (packTail termId termOffset)) (unRawTail fortyTwo)
+  success <- casRawTail meta index (packTail termId termOffset)
+                                   (packTail termId' termOffset)
+  assertBool "" success
+  term <- readRawTail meta index
+  aE termId' (rawTailTermId term)
+
+prop_packTail :: Int32 -> Positive Int32 -> Property
+prop_packTail termId' (Positive termOffset') =
+  let
+    termId     = TermId termId'
+    termOffset = TermOffset termOffset'
+    rawTail    = packTail termId termOffset
+    termLen    = maxBound -- ?
+  in
+    (unTermId termId, unTermOffset termOffset) ===
+    (unTermId (rawTailTermId rawTail), unTermOffset (rawTailTermOffset rawTail termLen))
