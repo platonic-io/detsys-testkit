@@ -1,7 +1,9 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE CApiFFI #-}
 
 module Journal.Internal.Atomics where
 
+import Data.Coerce (coerce)
 import Foreign
 import Foreign.C.Types
 
@@ -64,8 +66,11 @@ fetchAddInt64Ptr = c_atomic_fetch_add_int_8
 foreign import ccall unsafe "c_atomic_compare_exchange_strong"
   c_atomic_compare_exchange_strong_4 :: Ptr Int32 -> Int32 -> Int32 -> IO CBool
 
-foreign import ccall unsafe "c_atomic_compare_exchange_strong"
-  c_atomic_compare_exchange_strong_8 :: Ptr Int64 -> Int64 -> Int64 -> IO CBool
+newtype {-# CTYPE "atomic_llong" #-} AtomicLong = AtomicLong Int64
+
+foreign import capi "stdatomic.h atomic_compare_exchange_strong"
+  c_atomic_compare_exchange_strong_8 :: Ptr AtomicLong -> Ptr Int64 -> Int64 -> IO CBool
+
 
 casInt32Ptr :: Ptr Int32 -> Int32 -> Int32 -> IO Bool
 casInt32Ptr ptr expected desired = do
@@ -77,8 +82,9 @@ casInt32Ptr ptr expected desired = do
       error "casInt32Addr: impossible, c_atomic_compare_exchange_strong should return a _Bool"
 
 casInt64Ptr :: Ptr Int64 -> Int64 -> Int64 -> IO Bool
-casInt64Ptr ptr expected desired = do
-  result <- c_atomic_compare_exchange_strong_8 ptr expected desired
+casInt64Ptr ptr expected desired = alloca $ \ expected_ptr -> do
+  poke expected_ptr expected
+  result <- c_atomic_compare_exchange_strong_8 (coerce ptr) expected_ptr desired
   case result of
     0 -> return False
     1 -> return True
