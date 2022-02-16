@@ -679,6 +679,22 @@ unit_bug19'' = assertHistory "" $ History
   , Ok (Pid 834) (Result (Left BackPressure))
   ]
 
+unit_bug20 :: Assertion
+unit_bug20 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(32753,'V')],AppendBS [(379,'H')],AppendBS [(32753,'X')]]
+  , [AppendBS [(9961,'K')],ReadJournal]
+  , [AppendBS [(6856,'N')],AppendBS [(7431,'M')]]
+  , [AppendBS [(14,'E')],ReadJournal,AppendBS [(31950,'C')],AppendBS [(32759,'P')]]
+  ]
+
+unit_bug20' :: Assertion
+unit_bug20' = assertProgram "" $ concat
+  [ [AppendBS [(32753,'V')],AppendBS [(379,'H')],AppendBS [(32753,'X')]]
+  , [AppendBS [(9961,'K')],ReadJournal]
+  , [AppendBS [(6856,'N')],AppendBS [(7431,'M')]]
+  , [AppendBS [(14,'E')],ReadJournal,AppendBS [(31950,'C')],AppendBS [(32759,'P')]]
+  ]
+
 alignedLength :: Int -> Int
 alignedLength n = align (hEADER_LENGTH + n) fRAME_ALIGNMENT
 
