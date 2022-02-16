@@ -168,7 +168,10 @@ appendBSFake' bs fj@(FakeJournal rles ix termCount) =
     limit = readBytes + termLen `div` 2
 
     hardLimit :: Int
-    hardLimit = readBytes + termLen -- TODO: calculate this correctly
+    hardLimit = limit + maxLen * 5 -- Since we can have 5 concurrent appends
+                                   -- that sneak passed the backpressure limit.
+      where
+        maxLen = oTermBufferLength testOptions `div` 2 - hEADER_LENGTH
 
     readBytes :: Int
     readBytes = Vector.sum
@@ -299,8 +302,9 @@ exec DumpJournal    j = Result . Right <$> dumpJournal j
 genRunLenEncoding :: Gen [(Int, Char)]
 genRunLenEncoding = sized $ \n -> do
   len <- elements [ max 1 n -- Disallow n == 0.
-                  , maxLen
-                  , maxLen - 1
+                  -- , maxLen
+                  -- , maxLen - 1
+                  , 8 * 1024
                   ]
   chr <- elements ['A'..'Z']
   return [(len, chr)]
@@ -309,7 +313,7 @@ genRunLenEncoding = sized $ \n -> do
 
 genCommand :: Gen Command
 genCommand = frequency
-  [ (5, AppendBS <$> genRunLenEncoding)
+  [ (1, AppendBS <$> genRunLenEncoding)
   , (1, pure ReadJournal)
   ]
 
@@ -695,6 +699,23 @@ unit_bug20' = assertProgram "" $ concat
   , [AppendBS [(14,'E')],ReadJournal,AppendBS [(31950,'C')],AppendBS [(32759,'P')]]
   ]
 
+unit_bug21 :: Assertion
+unit_bug21 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(32759,'Q')],AppendBS [(26431,'F')],AppendBS [(32753,'B')]]
+  , [AppendBS [(32760,'T')],ReadJournal,AppendBS [(20,'T')],AppendBS [(32760,'E')]]
+  , [ReadJournal,AppendBS [(32759,'R')],AppendBS [(32759,'W')],AppendBS [(21,'C')],
+     AppendBS [(32760,'Y')]]
+  ]
+
+unit_bug22 :: Assertion
+unit_bug22 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(15880,'U')],AppendBS [(32753,'B')],AppendBS [(32759,'B')]]
+  , [AppendBS [(32759,'R')],ReadJournal]
+  , []
+  , [AppendBS [(30713,'C')],ReadJournal]
+  , [AppendBS [(32760,'E')],AppendBS [(32760,'R')],AppendBS [(32759,'J')]]
+  ]
+
 alignedLength :: Int -> Int
 alignedLength n = align (hEADER_LENGTH + n) fRAME_ALIGNMENT
 
@@ -792,7 +813,7 @@ concExec queue jour cmd = do
   pid <- toPid <$> myThreadId
   atomically (writeTQueue queue (Invoke pid cmd))
   -- Adds some entropy to the possible interleavings.
-  sleep <- randomRIO (5, 20)
+  sleep <- randomRIO (0, 5)
   threadDelay sleep
   resp <- execMP cmd jour
   atomically (writeTQueue queue (Ok pid resp))
