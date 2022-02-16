@@ -130,7 +130,7 @@ tryClaim jour len = do
           + int322Int64 (unTermOffset termOffset)
 
   if unTermCount termCount /= unTermId (termId - initTermId)
-  then return (Left Rotation) -- XXX: what does this mean to end up here?
+  then return (Left AdminAction) -- XXX: what does this mean to end up here?
   else if position < limit
        then do
          eResult <- termAppenderClaim jour len termId
