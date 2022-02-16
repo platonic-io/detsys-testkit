@@ -50,10 +50,10 @@ data FakeJournal' a = FakeJournal
   }
   deriving (Eq, Show, Functor)
 
-type FakeJournal = FakeJournal' ByteString
+type FakeJournal = FakeJournal' [(Int, Char)]
 
 prettyFakeJournal :: FakeJournal -> String
-prettyFakeJournal = show . fmap (prettyRunLenEnc . encodeRunLength)
+prettyFakeJournal = show . fmap prettyRunLenEnc
 
 initModel :: FakeJournal
 initModel = FakeJournal Vector.empty 0 1
@@ -66,7 +66,7 @@ doTrace | eNABLE_TRACING = trace
         | otherwise      = const id
 
 appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Either AppendError ())
-appendBSFake bs fj@(FakeJournal bss ix termCount) =
+appendBSFake bs fj@(FakeJournal rles ix termCount) =
   doTrace
     (unlines [ "TRACE"
              , "ix: " ++ show ix
@@ -81,21 +81,22 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
              ]) $
     if position < limit
     then if journalLength' > termLen * termCount
-         then (FakeJournal (if BS.length padding == 0
-                            then bss
-                            else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
-         else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
+         then (FakeJournal (if sum (map fst padding) == 0
+                            then rles
+                            else Vector.snoc rles padding) ix (termCount + 1), Left Rotation)
+         else (FakeJournal (Vector.snoc rles (encodeRunLength bs)) ix termCount, Right ())
     else (fj, Left BackPressure)
   where
 
     journalLength :: Int
     journalLength = sum (Vector.map
-                         (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT) bss)
+                         (\rle -> align (hEADER_LENGTH + sum (map fst rle))
+                                        fRAME_ALIGNMENT) rles)
     journalLength' :: Int
     journalLength' = journalLength + align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT
 
-    padding :: ByteString
-    padding = BS.replicate (termLen * termCount - journalLength - hEADER_LENGTH) '0'
+    padding :: [(Int, Char)]
+    padding = [(termLen * termCount - journalLength - hEADER_LENGTH, '0')]
 
     termLen :: Int
     termLen = oTermBufferLength testOptions
@@ -107,18 +108,19 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
 
     readBytes :: Int
     readBytes = Vector.sum
-              . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
+              . Vector.map (\rle -> align (hEADER_LENGTH + sum (map fst rle)) fRAME_ALIGNMENT)
               . Vector.take (ix - 1)
-              $ bss
+              $ rles
 
     unreadBytes :: Int
     unreadBytes = Vector.sum
-                . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
+                . Vector.map (\rle -> align (hEADER_LENGTH + sum (map fst rle))
+                                            fRAME_ALIGNMENT)
                 . Vector.drop ix
-                $ bss
+                $ rles
 
 appendBSFake' :: ByteString -> FakeJournal -> [(FakeJournal, Either AppendError ())]
-appendBSFake' bs fj@(FakeJournal bss ix termCount) =
+appendBSFake' bs fj@(FakeJournal rles ix termCount) =
   doTrace
     (unlines [ "TRACE"
              , "ix: " ++ show ix
@@ -141,24 +143,25 @@ appendBSFake' bs fj@(FakeJournal bss ix termCount) =
     noBackPressure =
       if journalLength' > termLen * termCount
       then if journalLength < termLen * termCount
-           then [(FakeJournal (if BS.length padding == 0
-                             then bss
-                             else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)]
-           else [(FakeJournal bss ix (termCount + 1), Left Rotation)]
+           then [(FakeJournal (if sum (map fst padding) == 0
+                             then rles
+                             else Vector.snoc rles padding) ix (termCount + 1), Left Rotation)]
+           else [(FakeJournal rles ix (termCount + 1), Left Rotation)]
       else if journalLength' > termLen * (min 1 (termCount - 1))
-           then [ (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
-                , (FakeJournal bss ix termCount, Left Rotation)
+           then [ (FakeJournal (Vector.snoc rles (encodeRunLength bs)) ix termCount, Right ())
+                , (FakeJournal rles ix termCount, Left Rotation)
                 ]
-           else [(FakeJournal (Vector.snoc bss bs) ix termCount, Right ())]
+           else [(FakeJournal (Vector.snoc rles (encodeRunLength bs)) ix termCount, Right ())]
 
     journalLength :: Int
     journalLength = sum (Vector.map
-                         (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT) bss)
+                         (\rle -> align (hEADER_LENGTH + sum (map fst rle))
+                                        fRAME_ALIGNMENT) rles)
     journalLength' :: Int
     journalLength' = journalLength + align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT
 
-    padding :: ByteString
-    padding = BS.replicate (termLen * termCount - journalLength - hEADER_LENGTH) '0'
+    padding :: [(Int, Char)]
+    padding = [(termLen * termCount - journalLength - hEADER_LENGTH, '0')]
 
     termLen :: Int
     termLen = oTermBufferLength testOptions
@@ -173,22 +176,23 @@ appendBSFake' bs fj@(FakeJournal bss ix termCount) =
 
     readBytes :: Int
     readBytes = Vector.sum
-              . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
+              . Vector.map (\rle -> align (hEADER_LENGTH + sum (map fst rle)) fRAME_ALIGNMENT)
               . Vector.take (ix - 1)
-              $ bss
+              $ rles
 
     unreadBytes :: Int
     unreadBytes = Vector.sum
-                . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
+                . Vector.map (\rle -> align (hEADER_LENGTH + sum (map fst rle))
+                                            fRAME_ALIGNMENT)
                 . Vector.drop ix
-                $ bss
+                $ rles
 
-readJournalFake :: FakeJournal -> (FakeJournal, Maybe ByteString)
+readJournalFake :: FakeJournal -> (FakeJournal, Maybe [(Int, Char)])
 readJournalFake fj@(FakeJournal jour ix termCount)
   -- Nothing to read:
   | Vector.length jour == ix = (fj, Nothing)
   -- Padding, skip:
-  | BS.length (jour Vector.! ix) == 0 || BS.head (jour Vector.! ix) == '0' =
+  | sum (map fst (jour Vector.! ix)) == 0 || snd (head (jour Vector.! ix)) == '0' =
       readJournalFake (fj { fjIndex = ix + 1 })
   -- Normal read:
   | otherwise =  (FakeJournal jour (ix + 1) termCount, Just (jour Vector.! ix))
@@ -251,14 +255,14 @@ prettyRunLenEnc ncs0 = case ncs0 of
 
 data Response
   = Result (Either AppendError ())
-  | ByteString (Maybe ByteString)
+  | ByteString (Maybe [(Int, Char)])
   | IOException IOException
   deriving (Eq, Show)
 
 prettyResponse :: Response -> String
 prettyResponse (Result eu) = "Result (" ++ show eu ++ ")"
-prettyResponse (ByteString (Just bs)) =
-  "ByteString \"" ++ prettyRunLenEnc (encodeRunLength bs) ++ "\""
+prettyResponse (ByteString (Just rle)) =
+  "ByteString \"" ++ prettyRunLenEnc rle ++ "\""
 prettyResponse (ByteString Nothing) =
   "ByteString Nothing"
 prettyResponse (IOException e) = "IOException " ++ displayException e
@@ -293,7 +297,7 @@ step DumpJournal    m = (m, Result (Right ()))
 
 exec :: Command -> Journal -> IO Response
 exec (AppendBS rle) j = Result <$> appendBS j (decodeRunLength rle)
-exec ReadJournal    j = ByteString <$> readJournal j
+exec ReadJournal    j = ByteString . fmap encodeRunLength <$> readJournal j
 exec DumpJournal    j = Result . Right <$> dumpJournal j
 
 genRunLenEncoding :: Gen [(Int, Char)]
@@ -644,6 +648,12 @@ unit_bug17 :: Assertion
 unit_bug17 = assertConcProgram "" $ ConcProgram
   [[AppendBS [(32729,'X')],AppendBS [(20,'G')],AppendBS [(32753,'P')]],[AppendBS [(19,'X')],AppendBS [(32632,'V')]]]
 
+unit_bug18 :: Assertion
+unit_bug18 = assertConcProgram "" $  ConcProgram
+  [ [AppendBS [(32729,'P')],AppendBS [(32753,'B')]]
+  , [AppendBS [(1,'X')], ReadJournal]
+  , [AppendBS [(6,'K')],AppendBS [(2589,'D')]]
+  ]
 
 alignedLength :: Int -> Int
 alignedLength n = align (hEADER_LENGTH + n) fRAME_ALIGNMENT
@@ -749,7 +759,7 @@ concExec queue jour cmd = do
 
 execMP :: Command -> Journal -> IO Response
 execMP (AppendBS rle) j = Result <$> MP.appendBS j (decodeRunLength rle)
-execMP ReadJournal    j = ByteString <$> MP.readJournal j
+execMP ReadJournal    j = ByteString . fmap encodeRunLength <$> MP.readJournal j
 execMP DumpJournal    j = Result . Right <$> dumpJournal j
 
 -- Generate all possible single-threaded executions from the concurrent history.
