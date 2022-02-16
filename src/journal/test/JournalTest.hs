@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module JournalTest where
@@ -15,7 +16,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Builder as BS
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LBS
-import Data.Int (Int64)
+import Data.Int (Int32, Int64)
 import Data.List (permutations)
 import Data.Monoid (Sum(Sum))
 import Data.Time (diffUTCTime, getCurrentTime)
@@ -31,9 +32,10 @@ import System.Timeout (timeout)
 import Test.QuickCheck
 import Test.QuickCheck.Instances.ByteString ()
 import Test.QuickCheck.Monadic
-import Test.Tasty.HUnit (Assertion, assertBool)
+import Test.Tasty.HUnit (Assertion, assertBool, assertEqual)
 
 import Journal
+import Journal.Internal.ByteBufferPtr
 import Journal.Internal
 import Journal.Internal.Logger (ioLogger, nullLogger)
 import Journal.Internal.Utils hiding (assert)
@@ -63,7 +65,7 @@ doTrace :: String -> a -> a
 doTrace | eNABLE_TRACING = trace
         | otherwise      = const id
 
-appendBSFake :: ByteString -> FakeJournal -> [(FakeJournal, Either AppendError ())]
+appendBSFake :: ByteString -> FakeJournal -> (FakeJournal, Either AppendError ())
 appendBSFake bs fj@(FakeJournal bss ix termCount) =
   doTrace
     (unlines [ "TRACE"
@@ -78,18 +80,76 @@ appendBSFake bs fj@(FakeJournal bss ix termCount) =
              , "termLen * termCount: " ++ show (termLen * termCount)
              ]) $
     if position < limit
-    then [noBackPressure]
+    then if journalLength' > termLen * termCount
+         then (FakeJournal (if BS.length padding == 0
+                            then bss
+                            else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
+         else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
+    else (fj, Left BackPressure)
+  where
+
+    journalLength :: Int
+    journalLength = sum (Vector.map
+                         (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT) bss)
+    journalLength' :: Int
+    journalLength' = journalLength + align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT
+
+    padding :: ByteString
+    padding = BS.replicate (termLen * termCount - journalLength - hEADER_LENGTH) '0'
+
+    termLen :: Int
+    termLen = oTermBufferLength testOptions
+
+    position = readBytes + unreadBytes
+
+    limit :: Int
+    limit = readBytes + termLen `div` 2
+
+    readBytes :: Int
+    readBytes = Vector.sum
+              . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
+              . Vector.take (ix - 1)
+              $ bss
+
+    unreadBytes :: Int
+    unreadBytes = Vector.sum
+                . Vector.map (\bs -> align (hEADER_LENGTH + BS.length bs) fRAME_ALIGNMENT)
+                . Vector.drop ix
+                $ bss
+
+appendBSFake' :: ByteString -> FakeJournal -> [(FakeJournal, Either AppendError ())]
+appendBSFake' bs fj@(FakeJournal bss ix termCount) =
+  doTrace
+    (unlines [ "TRACE"
+             , "ix: " ++ show ix
+             , "termCount: " ++ show termCount
+             , "bs: " ++ show (encodeRunLength bs)
+             , "readBytes: " ++ show readBytes
+             , "unreadBytes: " ++  show unreadBytes
+             , "position: " ++ show position
+             , "limit: " ++ show limit
+             , "journalLength': " ++ show journalLength'
+             , "termLen * termCount: " ++ show (termLen * termCount)
+             ]) $
+    if position < limit
+    then noBackPressure
     else if position < hardLimit
-         then [backPressure, noBackPressure]
+         then backPressure : noBackPressure
          else [backPressure]
   where
     backPressure = (fj, Left BackPressure)
     noBackPressure =
       if journalLength' > termLen * termCount
-      then (FakeJournal (if BS.length padding == 0
-                           then bss
-                           else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)
-      else (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
+      then if journalLength < termLen * termCount
+           then [(FakeJournal (if BS.length padding == 0
+                             then bss
+                             else Vector.snoc bss padding) ix (termCount + 1), Left Rotation)]
+           else [(FakeJournal bss ix (termCount + 1), Left Rotation)]
+      else if journalLength' > termLen * (min 1 (termCount - 1))
+           then [ (FakeJournal (Vector.snoc bss bs) ix termCount, Right ())
+                , (FakeJournal bss ix termCount, Left Rotation)
+                ]
+           else [(FakeJournal (Vector.snoc bss bs) ix termCount, Right ())]
 
     journalLength :: Int
     journalLength = sum (Vector.map
@@ -203,6 +263,13 @@ prettyResponse (ByteString Nothing) =
   "ByteString Nothing"
 prettyResponse (IOException e) = "IOException " ++ displayException e
 
+responseClassification :: Response -> String
+responseClassification (Result (Left err))     = "Write fail: " ++ show err
+responseClassification (Result (Right ()))     = "Write success"
+responseClassification (ByteString (Just _bs)) = "Read success"
+responseClassification (ByteString Nothing)    = "Read fail"
+responseClassification (IOException _err)      = "IOException"
+
 type Model = FakeJournal
 
 -- If there's nothing new to read, then don't generate reads (because they are
@@ -215,19 +282,14 @@ precondition m (AppendBS rle) = let bs = decodeRunLength rle in
 precondition m DumpJournal = True
 
 step' :: Command -> Model -> [(Model, Response)]
-step' (AppendBS rle) m = fmap Result <$> appendBSFake (decodeRunLength rle) m
+step' (AppendBS rle) m = fmap Result <$> appendBSFake' (decodeRunLength rle) m
 step' ReadJournal    m = pure $ ByteString <$> readJournalFake m
 step' DumpJournal    m = pure $ (m, Result (Right ()))
 
--- step is like step' but gives only one answer, if step' gave multiple, then we pick the BackPressure one
 step :: Command -> Model -> (Model, Response)
-step cmd m = case step' cmd m of
-  [] -> error "Model didn't predict anything"
-  [r] -> r
-  xs -> let res = (m, Result (Left BackPressure)) in
-    if res `elem` xs
-    then res
-    else error $ "Model gave multiple results."
+step (AppendBS rle) m = Result <$> appendBSFake (decodeRunLength rle) m
+step ReadJournal    m = ByteString <$> readJournalFake m
+step DumpJournal    m = (m, Result (Right ()))
 
 exec :: Command -> Journal -> IO Response
 exec (AppendBS rle) j = Result <$> appendBS j (decodeRunLength rle)
@@ -371,25 +433,37 @@ classifyCommandsLength cmds
   . classify (500 < length cmds)                       "length commands: >501"
 
 classifyBytesWritten :: Int64 -> Property -> Property
-classifyBytesWritten bytes
+classifyBytesWritten bytesInt64
   = classify (bytes == 0)
              "bytes written: 0"
-  . classify (0 < bytes && bytes <= termBufferLen)                     (msg 0 1)
-  . classify (1 * termBufferLen < bytes && bytes <= 2  * termBufferLen) (msg 1 2)
-  . classify (2 * termBufferLen < bytes && bytes <= 3  * termBufferLen) (msg 2 3)
-  . classify (3 * termBufferLen < bytes && bytes <= 4  * termBufferLen) (msg 3 4)
-  . classify (4 * termBufferLen < bytes && bytes <= 5  * termBufferLen) (msg 4 5)
-  . classify (5 * termBufferLen < bytes && bytes <= 6  * termBufferLen) (msg 5 6)
-  . classify (6 * termBufferLen < bytes && bytes <= 7  * termBufferLen) (msg 6 7)
-  . classify (7 * termBufferLen < bytes && bytes <= 8  * termBufferLen) (msg 7 8)
-  . classify (8 * termBufferLen < bytes && bytes <= 9  * termBufferLen) (msg 8 9)
-  . classify (9 * termBufferLen < bytes && bytes <= 10 * termBufferLen) (msg 9 10)
-  . classify (10 * termBufferLen < bytes)
+  . classify (0     * termBufferLen < bytes && bytes <= (1/3) * termBufferLen) (msg 0 (1/3))
+  . classify ((1/3) * termBufferLen < bytes && bytes <= (2/3) * termBufferLen) (msg (1/3)(2/3))
+  . classify ((2/3) * termBufferLen < bytes && bytes <= 1     * termBufferLen) (msg (2/3) 1)
+  . classify (1     * termBufferLen < bytes && bytes <= 2     * termBufferLen) (msg 1 2)
+  . classify (2     * termBufferLen < bytes && bytes <= 3     * termBufferLen) (msg 2 3)
+  . classify (3     * termBufferLen < bytes && bytes <= 4     * termBufferLen) (msg 3 4)
+  . classify (4     * termBufferLen < bytes && bytes <= 5     * termBufferLen) (msg 4 5)
+  . classify (5     * termBufferLen < bytes && bytes <= 6     * termBufferLen) (msg 5 6)
+  . classify (6     * termBufferLen < bytes && bytes <= 7     * termBufferLen) (msg 6 7)
+  . classify (7     * termBufferLen < bytes && bytes <= 8     * termBufferLen) (msg 7 8)
+  . classify (8     * termBufferLen < bytes && bytes <= 9     * termBufferLen) (msg 8 9)
+  . classify (9     * termBufferLen < bytes && bytes <= 10    * termBufferLen) (msg 9 10)
+  . classify (10    * termBufferLen < bytes)
              ("bytes written: >" ++ show (10 * termBufferLen))
   where
+    bytes :: Double
+    bytes = realToFrac bytesInt64
+
+    msg :: Double -> Double -> String
     msg low high = concat
-      ["bytes written: ", show (low * termBufferLen), "-", show (high * termBufferLen)]
-    termBufferLen = int2Int64 (oTermBufferLength testOptions)
+      [ "bytes written: "
+      , show (round (low * termBufferLen))
+      , "-"
+      , show (round (high * termBufferLen))
+      ]
+
+    termBufferLen :: Double
+    termBufferLen = realToFrac (oTermBufferLength testOptions)
 
 runCommands :: [Command] -> IO Bool
 runCommands cmds = do
@@ -552,6 +626,25 @@ unit_bug15 :: Assertion
 unit_bug15 = assertConcProgram "" $ ConcProgram
   [[AppendBS [(1024,'Z')],AppendBS [(1024,'U')],AppendBS [(1024,'C')],AppendBS [(1024,'Q')]],[AppendBS [(1024,'B')],AppendBS [(1024,'E')],AppendBS [(1024,'P')],ReadJournal,ReadJournal],[ReadJournal,ReadJournal,ReadJournal,ReadJournal],[AppendBS [(1024,'P')],AppendBS [(1024,'I')],ReadJournal],[ReadJournal,AppendBS [(1024,'S')],ReadJournal,AppendBS [(1024,'X')]],[AppendBS [(1024,'V')],AppendBS [(1024,'N')],ReadJournal,AppendBS [(1024,'C')],AppendBS [(1024,'V')]],[AppendBS [(1024,'R')],ReadJournal],[ReadJournal,AppendBS [(1024,'V')]],[ReadJournal,ReadJournal,AppendBS [(1024,'E')]],[ReadJournal,ReadJournal,ReadJournal,ReadJournal],[AppendBS [(1024,'W')],AppendBS [(1024,'O')],AppendBS [(1024,'P')]],[AppendBS [(1024,'B')],AppendBS [(1024,'H')],ReadJournal,ReadJournal,ReadJournal], [ReadJournal,ReadJournal],[AppendBS [(1024,'E')],AppendBS [(1024,'B')],AppendBS [(1024,'I')],AppendBS [(1024,'F')],AppendBS [(1024,'P')]],[AppendBS [(1024,'Q')],ReadJournal,AppendBS [(1024,'C')],ReadJournal,ReadJournal],[ReadJournal,AppendBS [(1024,'H')],ReadJournal,AppendBS [(1024,'P')],AppendBS [(1024,'L')]],[AppendBS [(1024,'X')],ReadJournal,AppendBS [(1024,'Y')],ReadJournal,ReadJournal],[AppendBS [(1024,'H')],ReadJournal],[ReadJournal,ReadJournal,ReadJournal,ReadJournal,AppendBS [(1024,'Q')]],[AppendBS [(1024,'J')],AppendBS [(1024,'N')],AppendBS [(1024,'D')],ReadJournal,AppendBS [(1024,'S')]],[ReadJournal,ReadJournal,AppendBS [(1024,'S')]],[AppendBS [(1024,'Z')],ReadJournal,AppendBS [(1024,'W')],AppendBS [(1024,'E')]],[ReadJournal,ReadJournal,ReadJournal],[ReadJournal,ReadJournal,AppendBS [(1024,'I')],AppendBS [(1024,'W')],AppendBS [(1024,'M')]],[AppendBS [(1024,'F')],AppendBS [(1024,'L')]],[ReadJournal,AppendBS [(1024,'J')],ReadJournal,ReadJournal],[AppendBS [(1024,'R')],ReadJournal],[AppendBS [(1024 ,'A')],ReadJournal,AppendBS [(1024,'N')],AppendBS [(1024,'W')]],[ReadJournal,AppendBS [(1024,'N')],ReadJournal],[ReadJournal,AppendBS [(1024,'C')]],[AppendBS [(1024,'I')],ReadJournal,AppendBS [(1024,'F')] ,AppendBS [(1024,'O')]],[AppendBS [(1024,'A')],ReadJournal,ReadJournal],[AppendBS [(1024,'W')],AppendBS [(1024,'Y')],AppendBS [(1024,'P')]],[ReadJournal,ReadJournal],[AppendBS [(1024,'S')],ReadJournal],[AppendBS [(1024,'L')],ReadJournal],[AppendBS [(1024,'D')],ReadJournal,ReadJournal,ReadJournal,ReadJournal],[ReadJournal,AppendBS [(1024,'P')],AppendBS [(1024,'E')],AppendBS [(1024,'K')]]]
 
+
+unit_bug16 :: Assertion
+unit_bug16 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(32729,'V')],AppendBS [(17,'A')],AppendBS [(32753,'H')]]
+  , [AppendBS [(308,'R')],AppendBS [(15176,'A')]]
+  ]
+
+unit_bug16' :: Assertion
+unit_bug16' = assertHistory "" $
+  History [Invoke (Pid 170632) (AppendBS [(32729,'V')])
+          ,Invoke (Pid 170634) (AppendBS [(17,'A')])
+          ,Invoke (Pid 170636) (AppendBS [(32753,'H')])
+          ,Ok (Pid 170632) (Result (Right ())),Ok (Pid 170636) (Result (Right ())),Ok (Pid 170634) (Result (Left Rotation)),Invoke (Pid 170639) (AppendBS [(308,'R')]),Invoke (Pid 170641) (AppendBS [(15176,'A')]),Ok (Pid 170639) (Result (Left Rotation)),Ok (Pid 170641) (Result (Left Rotation))]
+
+unit_bug17 :: Assertion
+unit_bug17 = assertConcProgram "" $ ConcProgram
+  [[AppendBS [(32729,'X')],AppendBS [(20,'G')],AppendBS [(32753,'P')]],[AppendBS [(19,'X')],AppendBS [(32632,'V')]]]
+
+
 alignedLength :: Int -> Int
 alignedLength n = align (hEADER_LENGTH + n) fRAME_ALIGNMENT
 
@@ -566,17 +659,20 @@ assertProgram msg cmds = do
   assertBool msg b
 
 assertConcProgram :: String -> ConcProgram -> Assertion
-assertConcProgram msg (ConcProgram cmdss) = do
+assertConcProgram msg (ConcProgram cmdss) = replicateM_ 1000 $ do
   (fp, jour) <- initJournal
   queue <- newTQueueIO
   mapM_ (mapConcurrently (concExec queue jour)) cmdss
   hist <- History <$> atomically (flushTQueue queue)
   removeFile fp
-  let msg' = msg ++ "\nHistory:\n" ++ prettyHistory hist
-  assertBool msg' (linearisable (interleavings hist))
+  assertBool (prettyHistory hist) (linearisable (interleavings hist))
 
 prettyHistory :: History -> String
 prettyHistory = show
+
+assertHistory :: String -> History -> Assertion
+assertHistory msg hist =
+  assertBool (prettyHistory hist) (linearisable (interleavings hist))
 
 ------------------------------------------------------------------------
 
@@ -623,16 +719,20 @@ shrinkConcProgram m
 prettyConcProgram :: ConcProgram -> String
 prettyConcProgram = show
 
-newtype History = History [Operation]
-  deriving Show
+newtype History' cmd resp = History [Operation' cmd resp]
+  deriving (Show, Functor, Foldable)
+
+type History = History' Command Response
 
 newtype Pid = Pid Int
   deriving (Eq, Ord, Show)
 
-data Operation
-  = Invoke Pid Command
-  | Ok     Pid Response
-  deriving Show
+data Operation' cmd resp
+  = Invoke Pid cmd
+  | Ok     Pid resp
+  deriving (Show, Functor, Foldable)
+
+type Operation = Operation' Command Response
 
 toPid :: ThreadId -> Pid
 toPid tid = Pid (read (drop (length ("ThreadId " :: String)) (show tid)))
@@ -699,7 +799,7 @@ linearisable = any' (go initModel)
     any'  p xs = any p xs
 
 prop_concurrent :: Property
-prop_concurrent = mapSize (min 20) $ noShrinking $
+prop_concurrent = mapSize (min 20) $
   forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
     monitor (classifyCommandsLength (concat cmdss))
     -- Rerun a couple of times, to avoid being lucky with the interleavings.
@@ -709,6 +809,7 @@ prop_concurrent = mapSize (min 20) $ noShrinking $
       queue <- run newTQueueIO
       run (mapM_ (mapConcurrently (concExec queue jour)) cmdss)
       hist <- History <$> run (atomically (flushTQueue queue))
+      monitor (tabulate "Responses" (foldMap ((: []) . responseClassification) hist))
       run (removeFile fp)
       assertWithFail (linearisable (interleavings hist)) (prettyHistory hist)
       written <- run (metricsBytesWritten jour)
@@ -763,3 +864,36 @@ prop_lineariseIsOkay = mapSize (min 20) $
     linearisable (interleavings history)
   where
     pids = map Pid [0..5]
+
+------------------------------------------------------------------------
+
+unit_casRawTail :: Assertion
+unit_casRawTail = do
+  bb' <- allocate 16
+  bb <- wrapPart bb' 8 8
+  let meta = Metadata bb'
+      index = 0
+      termId = TermId 42
+      termId' = TermId 43
+      termOffset = TermOffset 0
+      aE x y = assertEqual "" (unTermId x) (unTermId y)
+  writeRawTail meta termId termOffset index
+  fortyTwo <- readRawTail meta index
+  aE termId (rawTailTermId fortyTwo)
+  assertEqual "" (unRawTail (packTail termId termOffset)) (unRawTail fortyTwo)
+  success <- casRawTail meta index (packTail termId termOffset)
+                                   (packTail termId' termOffset)
+  assertBool "" success
+  term <- readRawTail meta index
+  aE termId' (rawTailTermId term)
+
+prop_packTail :: Int32 -> Positive Int32 -> Property
+prop_packTail termId' (Positive termOffset') =
+  let
+    termId     = TermId termId'
+    termOffset = TermOffset termOffset'
+    rawTail    = packTail termId termOffset
+    termLen    = maxBound -- ?
+  in
+    (unTermId termId, unTermOffset termOffset) ===
+    (unTermId (rawTailTermId rawTail), unTermOffset (rawTailTermOffset rawTail termLen))

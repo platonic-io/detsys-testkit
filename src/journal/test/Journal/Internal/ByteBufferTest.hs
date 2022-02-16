@@ -447,9 +447,33 @@ assertProgram msg cmds = do
 
 ------------------------------------------------------------------------
 
-unit_byteBufferByteString :: IO ()
+unit_byteBufferByteString :: Assertion
 unit_byteBufferByteString = do
   bb <- allocate 16
   putByteStringAt bb 0 (BSChar8.pack "helloooooooooooo")
   bs <- getByteStringAt bb 0 5
   assertEqual "" (BSChar8.pack "hello") bs
+
+unit_casInt64 :: Assertion
+unit_casInt64 = do
+  bb' <- allocate 16
+  bb <- wrapPart bb' 8 8
+  writeInt64OffAddr bb 0 42
+  fortyTwo <- readInt64OffAddr bb 0
+  assertEqual "" 42 fortyTwo
+  success <- casInt64Addr bb 0 42 1
+  assertBool "" success
+  one <- readInt64OffAddr bb 0
+  assertEqual "" 1 one
+
+unit_casInt64Big :: Assertion
+unit_casInt64Big = do
+  bb' <- allocate 16
+  bb <- wrapPart bb' 8 8
+  writeInt64OffAddr bb 0 (maxBound - 1)
+  i <- readInt64OffAddr bb 0
+  assertEqual "" (maxBound - 1) i
+  success <- casInt64Addr bb 0 (maxBound - 1) maxBound
+  assertBool "" success
+  j <- readInt64OffAddr bb 0
+  assertEqual "" maxBound j

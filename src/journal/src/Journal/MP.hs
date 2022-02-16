@@ -59,7 +59,8 @@ readJournal jour = do
   jLog ("readJournal, initTermId: " ++ show (unTermId initTermId))
   let position =
         computePosition activeTermId termOffset (positionBitsToShift termLen) initTermId
-  assertM (int2Int64 offset <= position)
+  -- putStrLn ("readJournal, offset: " ++ show offset ++ ", position: " ++ show position)
+  -- assertM (int2Int64 offset <= position)
 
   let readTermCount =
         computeTermIdFromPosition (int2Int64 offset) (positionBitsToShift termLen) initTermId
@@ -70,7 +71,7 @@ readJournal jour = do
   if int2Int64 offset == position
   then return Nothing
   else do
-    assertM (int2Int64 offset < position)
+    -- assertM (int2Int64 offset < position)
 
     let relativeOffset = int2Int32 (align offset fRAME_ALIGNMENT) - readTermCount * termLen
     jLog ("readJournal, relativeOffset: " ++ show relativeOffset)
@@ -88,24 +89,26 @@ readJournal jour = do
       -- If the CAS fails, it just means that some other process incremented the
       -- counter already.
       readJournal jour
-    else do
-      assertM (len > 0)
-      jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
-      success <- casCounter (jBytesConsumed jour) offset
-                   (offset + (align (int322Int len) fRAME_ALIGNMENT))
-      if success
-      then do
-        bs <- getByteStringAt termBuffer
-                (int322Int relativeOffset + hEADER_LENGTH)
-                (int322Int len - hEADER_LENGTH)
-        assertM (BS.length bs == int322Int len - hEADER_LENGTH)
-        -- Single-threaded case:
-        -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
-        return (Just bs)
-      else
-        -- If the CAS failed it means that another process read what we were
-        -- about to read, so we retry reading the next item instead.
-        readJournal jour
+    else if len <= 0
+         then return Nothing
+         else do
+           assertMMsg (show len) (len > 0)
+           jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
+           success <- casCounter (jBytesConsumed jour) offset
+                        (offset + (align (int322Int len) fRAME_ALIGNMENT))
+           if success
+           then do
+             bs <- getByteStringAt termBuffer
+                     (int322Int relativeOffset + hEADER_LENGTH)
+                     (int322Int len - hEADER_LENGTH)
+             assertM (BS.length bs == int322Int len - hEADER_LENGTH)
+             -- Single-threaded case:
+             -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
+             return (Just bs)
+           else
+             -- If the CAS failed it means that another process read what we were
+             -- about to read, so we retry reading the next item instead.
+             readJournal jour
 
 ------------------------------------------------------------------------
 
@@ -148,6 +151,27 @@ newPosition meta termCount (TermOffset termOffset) termId position eResult =
                      bufClaim))
   -- ^ XXX: when is this needed?
   -- | (position + termOffset) > maxPossiblePosition = return mAX_POSITION_EXCEEDED
+
+-- | Rotate the log and update the tail counter for the new term. This function
+-- is thread safe.
+rotateLog :: Metadata -> TermCount -> TermId -> IO Bool
+rotateLog meta termCount termId = do
+  go
+  casActiveTermCount meta termCount nextTermCount
+  where
+    nextTermId     = termId    + 1
+    nextTermCount  = termCount + 1
+    nextIndex      = indexByTermCount nextTermCount
+    expectedTermId = nextTermId - fromIntegral pARTITION_COUNT
+
+    go :: IO ()
+    go = do
+      rawTail <- readRawTail meta nextIndex
+      if expectedTermId /= rawTailTermId rawTail
+      then return ()
+      else do
+        b <- casRawTail meta nextIndex rawTail (packTail nextTermId 0)
+        if b then return () else go
 
 termAppenderClaim :: Journal -> Int -> TermId
                   -> IO (Either AppendError (TermOffset, BufferClaim))
