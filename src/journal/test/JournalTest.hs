@@ -81,9 +81,7 @@ appendBSFake bs fj@(FakeJournal rles ix termCount) =
              ]) $
     if position < limit
     then if journalLength' > termLen * termCount
-         then (FakeJournal (if sum (map fst padding) == 0
-                            then rles
-                            else Vector.snoc rles padding) ix (termCount + 1), Left Rotation)
+         then (FakeJournal (Vector.snoc rles padding) ix (termCount + 1), Left Rotation)
          else (FakeJournal (Vector.snoc rles (encodeRunLength bs)) ix termCount, Right ())
     else (fj, Left BackPressure)
   where
@@ -109,7 +107,7 @@ appendBSFake bs fj@(FakeJournal rles ix termCount) =
     readBytes :: Int
     readBytes = Vector.sum
               . Vector.map (\rle -> align (hEADER_LENGTH + sum (map fst rle)) fRAME_ALIGNMENT)
-              . Vector.take (ix - 1)
+              . Vector.take ix
               $ rles
 
     unreadBytes :: Int
@@ -143,9 +141,7 @@ appendBSFake' bs fj@(FakeJournal rles ix termCount) =
     noBackPressure =
       if journalLength' > termLen * termCount
       then if journalLength < termLen * termCount
-           then [(FakeJournal (if sum (map fst padding) == 0
-                             then rles
-                             else Vector.snoc rles padding) ix (termCount + 1), Left Rotation)]
+           then [(FakeJournal (Vector.snoc rles padding) ix (termCount + 1), Left Rotation)]
            else [(FakeJournal rles ix (termCount + 1), Left Rotation)]
       else if journalLength' > termLen * (min 1 (termCount - 1))
            then [ (FakeJournal (Vector.snoc rles (encodeRunLength bs)) ix termCount, Right ())
@@ -177,7 +173,7 @@ appendBSFake' bs fj@(FakeJournal rles ix termCount) =
     readBytes :: Int
     readBytes = Vector.sum
               . Vector.map (\rle -> align (hEADER_LENGTH + sum (map fst rle)) fRAME_ALIGNMENT)
-              . Vector.take (ix - 1)
+              . Vector.take ix
               $ rles
 
     unreadBytes :: Int
@@ -313,7 +309,7 @@ genRunLenEncoding = sized $ \n -> do
 
 genCommand :: Gen Command
 genCommand = frequency
-  [ (1, AppendBS <$> genRunLenEncoding)
+  [ (5, AppendBS <$> genRunLenEncoding)
   , (1, pure ReadJournal)
   ]
 
@@ -626,9 +622,9 @@ unit_bug14 = assertProgram ""
   [ AppendBS [(32737,'H')], ReadJournal, AppendBS [(9,'D')]
   , AppendBS [(32753,'F')], ReadJournal, AppendBS [(1,'Z')]]
 
-unit_bug15 :: Assertion
-unit_bug15 = assertConcProgram "" $ ConcProgram
-  [[AppendBS [(1024,'Z')],AppendBS [(1024,'U')],AppendBS [(1024,'C')],AppendBS [(1024,'Q')]],[AppendBS [(1024,'B')],AppendBS [(1024,'E')],AppendBS [(1024,'P')],ReadJournal,ReadJournal],[ReadJournal,ReadJournal,ReadJournal,ReadJournal],[AppendBS [(1024,'P')],AppendBS [(1024,'I')],ReadJournal],[ReadJournal,AppendBS [(1024,'S')],ReadJournal,AppendBS [(1024,'X')]],[AppendBS [(1024,'V')],AppendBS [(1024,'N')],ReadJournal,AppendBS [(1024,'C')],AppendBS [(1024,'V')]],[AppendBS [(1024,'R')],ReadJournal],[ReadJournal,AppendBS [(1024,'V')]],[ReadJournal,ReadJournal,AppendBS [(1024,'E')]],[ReadJournal,ReadJournal,ReadJournal,ReadJournal],[AppendBS [(1024,'W')],AppendBS [(1024,'O')],AppendBS [(1024,'P')]],[AppendBS [(1024,'B')],AppendBS [(1024,'H')],ReadJournal,ReadJournal,ReadJournal], [ReadJournal,ReadJournal],[AppendBS [(1024,'E')],AppendBS [(1024,'B')],AppendBS [(1024,'I')],AppendBS [(1024,'F')],AppendBS [(1024,'P')]],[AppendBS [(1024,'Q')],ReadJournal,AppendBS [(1024,'C')],ReadJournal,ReadJournal],[ReadJournal,AppendBS [(1024,'H')],ReadJournal,AppendBS [(1024,'P')],AppendBS [(1024,'L')]],[AppendBS [(1024,'X')],ReadJournal,AppendBS [(1024,'Y')],ReadJournal,ReadJournal],[AppendBS [(1024,'H')],ReadJournal],[ReadJournal,ReadJournal,ReadJournal,ReadJournal,AppendBS [(1024,'Q')]],[AppendBS [(1024,'J')],AppendBS [(1024,'N')],AppendBS [(1024,'D')],ReadJournal,AppendBS [(1024,'S')]],[ReadJournal,ReadJournal,AppendBS [(1024,'S')]],[AppendBS [(1024,'Z')],ReadJournal,AppendBS [(1024,'W')],AppendBS [(1024,'E')]],[ReadJournal,ReadJournal,ReadJournal],[ReadJournal,ReadJournal,AppendBS [(1024,'I')],AppendBS [(1024,'W')],AppendBS [(1024,'M')]],[AppendBS [(1024,'F')],AppendBS [(1024,'L')]],[ReadJournal,AppendBS [(1024,'J')],ReadJournal,ReadJournal],[AppendBS [(1024,'R')],ReadJournal],[AppendBS [(1024 ,'A')],ReadJournal,AppendBS [(1024,'N')],AppendBS [(1024,'W')]],[ReadJournal,AppendBS [(1024,'N')],ReadJournal],[ReadJournal,AppendBS [(1024,'C')]],[AppendBS [(1024,'I')],ReadJournal,AppendBS [(1024,'F')] ,AppendBS [(1024,'O')]],[AppendBS [(1024,'A')],ReadJournal,ReadJournal],[AppendBS [(1024,'W')],AppendBS [(1024,'Y')],AppendBS [(1024,'P')]],[ReadJournal,ReadJournal],[AppendBS [(1024,'S')],ReadJournal],[AppendBS [(1024,'L')],ReadJournal],[AppendBS [(1024,'D')],ReadJournal,ReadJournal,ReadJournal,ReadJournal],[ReadJournal,AppendBS [(1024,'P')],AppendBS [(1024,'E')],AppendBS [(1024,'K')]]]
+-- unit_bug15 :: Assertion
+-- unit_bug15 = assertConcProgram "" $ ConcProgram
+--   [[AppendBS [(1024,'Z')],AppendBS [(1024,'U')],AppendBS [(1024,'C')],AppendBS [(1024,'Q')]],[AppendBS [(1024,'B')],AppendBS [(1024,'E')],AppendBS [(1024,'P')],ReadJournal,ReadJournal],[ReadJournal,ReadJournal,ReadJournal,ReadJournal],[AppendBS [(1024,'P')],AppendBS [(1024,'I')],ReadJournal],[ReadJournal,AppendBS [(1024,'S')],ReadJournal,AppendBS [(1024,'X')]],[AppendBS [(1024,'V')],AppendBS [(1024,'N')],ReadJournal,AppendBS [(1024,'C')],AppendBS [(1024,'V')]],[AppendBS [(1024,'R')],ReadJournal],[ReadJournal,AppendBS [(1024,'V')]],[ReadJournal,ReadJournal,AppendBS [(1024,'E')]],[ReadJournal,ReadJournal,ReadJournal,ReadJournal],[AppendBS [(1024,'W')],AppendBS [(1024,'O')],AppendBS [(1024,'P')]],[AppendBS [(1024,'B')],AppendBS [(1024,'H')],ReadJournal,ReadJournal,ReadJournal], [ReadJournal,ReadJournal],[AppendBS [(1024,'E')],AppendBS [(1024,'B')],AppendBS [(1024,'I')],AppendBS [(1024,'F')],AppendBS [(1024,'P')]],[AppendBS [(1024,'Q')],ReadJournal,AppendBS [(1024,'C')],ReadJournal,ReadJournal],[ReadJournal,AppendBS [(1024,'H')],ReadJournal,AppendBS [(1024,'P')],AppendBS [(1024,'L')]],[AppendBS [(1024,'X')],ReadJournal,AppendBS [(1024,'Y')],ReadJournal,ReadJournal],[AppendBS [(1024,'H')],ReadJournal],[ReadJournal,ReadJournal,ReadJournal,ReadJournal,AppendBS [(1024,'Q')]],[AppendBS [(1024,'J')],AppendBS [(1024,'N')],AppendBS [(1024,'D')],ReadJournal,AppendBS [(1024,'S')]],[ReadJournal,ReadJournal,AppendBS [(1024,'S')]],[AppendBS [(1024,'Z')],ReadJournal,AppendBS [(1024,'W')],AppendBS [(1024,'E')]],[ReadJournal,ReadJournal,ReadJournal],[ReadJournal,ReadJournal,AppendBS [(1024,'I')],AppendBS [(1024,'W')],AppendBS [(1024,'M')]],[AppendBS [(1024,'F')],AppendBS [(1024,'L')]],[ReadJournal,AppendBS [(1024,'J')],ReadJournal,ReadJournal],[AppendBS [(1024,'R')],ReadJournal],[AppendBS [(1024 ,'A')],ReadJournal,AppendBS [(1024,'N')],AppendBS [(1024,'W')]],[ReadJournal,AppendBS [(1024,'N')],ReadJournal],[ReadJournal,AppendBS [(1024,'C')]],[AppendBS [(1024,'I')],ReadJournal,AppendBS [(1024,'F')] ,AppendBS [(1024,'O')]],[AppendBS [(1024,'A')],ReadJournal,ReadJournal],[AppendBS [(1024,'W')],AppendBS [(1024,'Y')],AppendBS [(1024,'P')]],[ReadJournal,ReadJournal],[AppendBS [(1024,'S')],ReadJournal],[AppendBS [(1024,'L')],ReadJournal],[AppendBS [(1024,'D')],ReadJournal,ReadJournal,ReadJournal,ReadJournal],[ReadJournal,AppendBS [(1024,'P')],AppendBS [(1024,'E')],AppendBS [(1024,'K')]]]
 
 
 unit_bug16 :: Assertion
@@ -636,13 +632,6 @@ unit_bug16 = assertConcProgram "" $ ConcProgram
   [ [AppendBS [(32729,'V')],AppendBS [(17,'A')],AppendBS [(32753,'H')]]
   , [AppendBS [(308,'R')],AppendBS [(15176,'A')]]
   ]
-
-unit_bug16' :: Assertion
-unit_bug16' = assertHistory "" $
-  History [Invoke (Pid 170632) (AppendBS [(32729,'V')])
-          ,Invoke (Pid 170634) (AppendBS [(17,'A')])
-          ,Invoke (Pid 170636) (AppendBS [(32753,'H')])
-          ,Ok (Pid 170632) (Result (Right ())),Ok (Pid 170636) (Result (Right ())),Ok (Pid 170634) (Result (Left Rotation)),Invoke (Pid 170639) (AppendBS [(308,'R')]),Invoke (Pid 170641) (AppendBS [(15176,'A')]),Ok (Pid 170639) (Result (Left Rotation)),Ok (Pid 170641) (Result (Left Rotation))]
 
 unit_bug17 :: Assertion
 unit_bug17 = assertConcProgram "" $ ConcProgram
@@ -653,6 +642,57 @@ unit_bug18 = assertConcProgram "" $  ConcProgram
   [ [AppendBS [(32729,'P')],AppendBS [(32753,'B')]]
   , [AppendBS [(1,'X')], ReadJournal]
   , [AppendBS [(6,'K')],AppendBS [(2589,'D')]]
+  ]
+
+unit_bug19 :: Assertion
+unit_bug19 = assertConcProgram "" $  ConcProgram
+  [ [AppendBS [(32729,'P')], AppendBS [(32753,'B')]]
+  , [ReadJournal]
+  , [AppendBS [(1,'X')]]
+  , [AppendBS [(6,'K')]]
+  , [AppendBS [(2589,'D')]]
+  ]
+
+unit_bug19' :: Assertion
+unit_bug19' = assertProgram "" $ concat
+  [ [AppendBS [(32753,'B')]]
+  , [ReadJournal]
+  , [AppendBS [(32729,'P')]]
+  , [AppendBS [(1,'X')]]
+  , [AppendBS [(6,'K')]]
+  , [AppendBS [(2589,'D')]]
+  ]
+
+unit_bug19'' :: Assertion
+unit_bug19'' = assertHistory "" $ History
+  [ Invoke (Pid 824) (AppendBS [(32729,'P')])
+  , Invoke (Pid 826) (AppendBS [(32753,'B')])
+  , Ok (Pid 826) (Result (Right ()))
+  , Ok (Pid 824) (Result (Right ()))
+  , Invoke (Pid 828) ReadJournal
+  , Ok (Pid 828) (ByteString (Just [(32753,'B')]))
+  , Invoke (Pid 830) (AppendBS [(1,'X')])
+  , Ok (Pid 830) (Result (Right ()))
+  , Invoke (Pid 832) (AppendBS [(6,'K')])
+  , Ok (Pid 832) (Result (Left Rotation))
+  , Invoke (Pid 834) (AppendBS [(2589,'D')])
+  , Ok (Pid 834) (Result (Left BackPressure))
+  ]
+
+unit_bug20 :: Assertion
+unit_bug20 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(32753,'V')],AppendBS [(379,'H')],AppendBS [(32753,'X')]]
+  , [AppendBS [(9961,'K')],ReadJournal]
+  , [AppendBS [(6856,'N')],AppendBS [(7431,'M')]]
+  , [AppendBS [(14,'E')],ReadJournal,AppendBS [(31950,'C')],AppendBS [(32759,'P')]]
+  ]
+
+unit_bug20' :: Assertion
+unit_bug20' = assertProgram "" $ concat
+  [ [AppendBS [(32753,'V')],AppendBS [(379,'H')],AppendBS [(32753,'X')]]
+  , [AppendBS [(9961,'K')],ReadJournal]
+  , [AppendBS [(6856,'N')],AppendBS [(7431,'M')]]
+  , [AppendBS [(14,'E')],ReadJournal,AppendBS [(31950,'C')],AppendBS [(32759,'P')]]
   ]
 
 alignedLength :: Int -> Int
