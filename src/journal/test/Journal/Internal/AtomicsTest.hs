@@ -2,11 +2,14 @@ module Journal.Internal.AtomicsTest where
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Monad(unless)
 import Data.IORef
 import Data.List (sort)
 import Data.Word
 import Foreign
 import Test.Tasty.HUnit (Assertion, assertBool, assertEqual)
+import Test.QuickCheck
+import Test.QuickCheck.Monadic
 
 import Journal.Internal.Atomics
 import Journal.Types.AtomicCounter
@@ -81,3 +84,43 @@ unit_atomicCASConcurrent = do
           if b
           then atomicModifyIORef' hist (\hist -> ((current : hist), ()))
           else go ticket
+
+prop_cas32Prop :: Int32 -> Int32 -> Property
+prop_cas32Prop old new = monadicIO $ do
+  p <- run malloc
+  run $ poke p old
+  v <- run $ peek p
+  assertEq v old
+  success <- run $ casInt32Ptr p old new
+  assertBool success "cas did not succeed"
+  v' <- run $ peek p
+  assertEq v' new
+  where
+    assertBool condition msg = do
+      unless condition $
+        monitor (counterexample $ "Failed: " <> msg)
+      assert condition
+    assertEq x y = do
+      unless (x == y) $
+        monitor (counterexample $ "Failed: " <> show x <> " is not equal to " <> show y)
+      assert (x == y)
+
+prop_cas64Prop :: Int64 -> Int64 -> Property
+prop_cas64Prop old new = monadicIO $ do
+  p <- run malloc
+  run $ poke p old
+  v <- run $ peek p
+  assertEq v old
+  success <- run $ casInt64Ptr p old new
+  assertBool success "cas did not succeed"
+  v' <- run $ peek p
+  assertEq v' new
+  where
+    assertBool condition msg = do
+      unless condition $
+        monitor (counterexample $ "Failed: " <> msg)
+      assert condition
+    assertEq x y = do
+      unless (x == y) $
+        monitor (counterexample $ "Failed: " <> show x <> " is not equal to " <> show y)
+      assert (x == y)
