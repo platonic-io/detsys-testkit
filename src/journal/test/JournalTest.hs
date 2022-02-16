@@ -644,6 +644,12 @@ unit_bug17 :: Assertion
 unit_bug17 = assertConcProgram "" $ ConcProgram
   [[AppendBS [(32729,'X')],AppendBS [(20,'G')],AppendBS [(32753,'P')]],[AppendBS [(19,'X')],AppendBS [(32632,'V')]]]
 
+unit_bug18 :: Assertion
+unit_bug18 = assertConcProgram "" $  ConcProgram
+  [ [AppendBS [(32729,'P')],AppendBS [(32753,'B')]]
+  , [AppendBS [(1,'X')], ReadJournal]
+  , [AppendBS [(6,'K')],AppendBS [(2589,'D')]]
+  ]
 
 alignedLength :: Int -> Int
 alignedLength n = align (hEADER_LENGTH + n) fRAME_ALIGNMENT
