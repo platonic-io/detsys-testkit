@@ -681,9 +681,18 @@ unit_bug22 = assertConcProgram "" $ ConcProgram
   [ [AppendBS [(32697,'Y')],AppendBS [(32759,'S')],AppendBS [(19,'E')]]
   , [ReadJournal,AppendBS [(16,'I')]]
   , [AppendBS [(32760,'X')],ReadJournal,AppendBS [(32760,'H')]]
-  , []
   , [AppendBS [(16,'N')],AppendBS [(16,'Z')],AppendBS [(16,'R')],AppendBS [(32760,'B')],
      ReadJournal]
+  ]
+
+unit_bugSimple22 :: Assertion
+unit_bugSimple22 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(19,'E')]]
+  , [AppendBS [(32759,'S')]]
+  , [ReadJournal]
+  , [ReadJournal]
+  , [AppendBS [(32760,'X')]]
+  , [AppendBS [(16,'N')], AppendBS [(16,'Z')], AppendBS [(32760,'B')], ReadJournal]
   ]
 
 unit_bug23 :: Assertion
@@ -703,6 +712,17 @@ unit_bug24 = assertConcProgram "" $ ConcProgram
   , [ReadJournal,AppendBS [(1,'Z')],AppendBS [(17,'T')]]
   , [ReadJournal,AppendBS [(32753,'X')],ReadJournal]
   , [AppendBS [(28,'K')],ReadJournal,AppendBS [(7682,'M')]]
+  ]
+
+unit_bug25 :: Assertion
+unit_bug25 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(32760,'X')],AppendBS [(32760,'J')],AppendBS [(32759,'I')],
+     AppendBS [(32759,'P')],AppendBS [(32760,'C')]]
+  , [AppendBS [(32760,'O')],ReadJournal,AppendBS [(32759,'S')],AppendBS [(32760,'J')]]
+  , [AppendBS [(32760,'A')],AppendBS [(22,'O')],ReadJournal,AppendBS [(32760,'C')]]
+  , [ReadJournal,AppendBS [(20,'I')]]
+  , [AppendBS [(20,'C')],AppendBS [(32759,'L')],AppendBS [(20,'S')]]
+  , [ReadJournal,ReadJournal,AppendBS [(21,'Z')],AppendBS [(32759,'T')],ReadJournal]
   ]
 
 alignedLength :: Int -> Int
