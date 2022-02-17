@@ -90,7 +90,7 @@ readJournal jour = do
         readJournal jour
       else readJournal jour -- If len is negative then the writer hasn't
                             -- finished writing the padding yet.
-    else if len <= 0
+    else if len <= 0 || tag == Empty
          then readJournal jour
          else do
            assertMMsg (show len) (len > 0)

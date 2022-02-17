@@ -31,6 +31,7 @@ commit :: BufferClaim -> Logger -> IO ()
 commit (BufferClaim bb) logger = do
   let Capacity frameLen = getCapacity bb
   logg logger ("commit, frameLen: " ++ show frameLen)
+  writeFrameType bb 0 Valid
   writeFrameLength bb 0 (HeaderLength (int2Int32 frameLen))
 
 abort :: BufferClaim -> IO ()
