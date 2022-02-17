@@ -88,10 +88,10 @@ readJournal jour = do
         -- If the CAS fails, it just means that some other process incremented the
         -- counter already.
         readJournal jour
-      else return Nothing -- If len is negative then the writer hasn't
-                          -- finished writing the padding yet.
+      else readJournal jour -- If len is negative then the writer hasn't
+                            -- finished writing the padding yet.
     else if len <= 0
-         then return Nothing
+         then readJournal jour
          else do
            assertMMsg (show len) (len > 0)
            jLog ("readJournal, termCount: " ++ show (unTermCount termCount))

@@ -681,9 +681,18 @@ unit_bug22 = assertConcProgram "" $ ConcProgram
   [ [AppendBS [(32697,'Y')],AppendBS [(32759,'S')],AppendBS [(19,'E')]]
   , [ReadJournal,AppendBS [(16,'I')]]
   , [AppendBS [(32760,'X')],ReadJournal,AppendBS [(32760,'H')]]
-  , []
   , [AppendBS [(16,'N')],AppendBS [(16,'Z')],AppendBS [(16,'R')],AppendBS [(32760,'B')],
      ReadJournal]
+  ]
+
+unit_bugSimple22 :: Assertion
+unit_bugSimple22 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(19,'E')]]
+  , [AppendBS [(32759,'S')]]
+  , [ReadJournal]
+  , [ReadJournal]
+  , [AppendBS [(32760,'X')]]
+  , [AppendBS [(16,'N')], AppendBS [(16,'Z')], AppendBS [(32760,'B')], ReadJournal]
   ]
 
 unit_bug23 :: Assertion
