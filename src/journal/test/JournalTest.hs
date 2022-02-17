@@ -765,6 +765,7 @@ shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
 shrinkConcProgram m
   = filter (validConcProgram m)
   . map ConcProgram
+  . filter (not . null)
   . shrinkList (shrinkCommands m)
   . unConcProgram
 
