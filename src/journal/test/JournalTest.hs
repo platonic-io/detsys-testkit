@@ -302,9 +302,8 @@ exec DumpJournal    j = Result . Right <$> dumpJournal j
 genRunLenEncoding :: Gen [(Int, Char)]
 genRunLenEncoding = sized $ \n -> do
   len <- elements [ max 1 n -- Disallow n == 0.
-                  -- , maxLen
-                  -- , maxLen - 1
-                  , 8 * 1024
+                  , maxLen
+                  , maxLen - 1
                   ]
   chr <- elements ['A'..'Z']
   return [(len, chr)]
@@ -626,30 +625,25 @@ unit_bug14 = assertProgram ""
   [ AppendBS [(32737,'H')], ReadJournal, AppendBS [(9,'D')]
   , AppendBS [(32753,'F')], ReadJournal, AppendBS [(1,'Z')]]
 
--- unit_bug15 :: Assertion
--- unit_bug15 = assertConcProgram "" $ ConcProgram
---   [[AppendBS [(1024,'Z')],AppendBS [(1024,'U')],AppendBS [(1024,'C')],AppendBS [(1024,'Q')]],[AppendBS [(1024,'B')],AppendBS [(1024,'E')],AppendBS [(1024,'P')],ReadJournal,ReadJournal],[ReadJournal,ReadJournal,ReadJournal,ReadJournal],[AppendBS [(1024,'P')],AppendBS [(1024,'I')],ReadJournal],[ReadJournal,AppendBS [(1024,'S')],ReadJournal,AppendBS [(1024,'X')]],[AppendBS [(1024,'V')],AppendBS [(1024,'N')],ReadJournal,AppendBS [(1024,'C')],AppendBS [(1024,'V')]],[AppendBS [(1024,'R')],ReadJournal],[ReadJournal,AppendBS [(1024,'V')]],[ReadJournal,ReadJournal,AppendBS [(1024,'E')]],[ReadJournal,ReadJournal,ReadJournal,ReadJournal],[AppendBS [(1024,'W')],AppendBS [(1024,'O')],AppendBS [(1024,'P')]],[AppendBS [(1024,'B')],AppendBS [(1024,'H')],ReadJournal,ReadJournal,ReadJournal], [ReadJournal,ReadJournal],[AppendBS [(1024,'E')],AppendBS [(1024,'B')],AppendBS [(1024,'I')],AppendBS [(1024,'F')],AppendBS [(1024,'P')]],[AppendBS [(1024,'Q')],ReadJournal,AppendBS [(1024,'C')],ReadJournal,ReadJournal],[ReadJournal,AppendBS [(1024,'H')],ReadJournal,AppendBS [(1024,'P')],AppendBS [(1024,'L')]],[AppendBS [(1024,'X')],ReadJournal,AppendBS [(1024,'Y')],ReadJournal,ReadJournal],[AppendBS [(1024,'H')],ReadJournal],[ReadJournal,ReadJournal,ReadJournal,ReadJournal,AppendBS [(1024,'Q')]],[AppendBS [(1024,'J')],AppendBS [(1024,'N')],AppendBS [(1024,'D')],ReadJournal,AppendBS [(1024,'S')]],[ReadJournal,ReadJournal,AppendBS [(1024,'S')]],[AppendBS [(1024,'Z')],ReadJournal,AppendBS [(1024,'W')],AppendBS [(1024,'E')]],[ReadJournal,ReadJournal,ReadJournal],[ReadJournal,ReadJournal,AppendBS [(1024,'I')],AppendBS [(1024,'W')],AppendBS [(1024,'M')]],[AppendBS [(1024,'F')],AppendBS [(1024,'L')]],[ReadJournal,AppendBS [(1024,'J')],ReadJournal,ReadJournal],[AppendBS [(1024,'R')],ReadJournal],[AppendBS [(1024 ,'A')],ReadJournal,AppendBS [(1024,'N')],AppendBS [(1024,'W')]],[ReadJournal,AppendBS [(1024,'N')],ReadJournal],[ReadJournal,AppendBS [(1024,'C')]],[AppendBS [(1024,'I')],ReadJournal,AppendBS [(1024,'F')] ,AppendBS [(1024,'O')]],[AppendBS [(1024,'A')],ReadJournal,ReadJournal],[AppendBS [(1024,'W')],AppendBS [(1024,'Y')],AppendBS [(1024,'P')]],[ReadJournal,ReadJournal],[AppendBS [(1024,'S')],ReadJournal],[AppendBS [(1024,'L')],ReadJournal],[AppendBS [(1024,'D')],ReadJournal,ReadJournal,ReadJournal,ReadJournal],[ReadJournal,AppendBS [(1024,'P')],AppendBS [(1024,'E')],AppendBS [(1024,'K')]]]
-
-
-unit_bug16 :: Assertion
-unit_bug16 = assertConcProgram "" $ ConcProgram
+unit_bug15 :: Assertion
+unit_bug15 = assertConcProgram "" $ ConcProgram
   [ [AppendBS [(32729,'V')],AppendBS [(17,'A')],AppendBS [(32753,'H')]]
   , [AppendBS [(308,'R')],AppendBS [(15176,'A')]]
   ]
 
-unit_bug17 :: Assertion
-unit_bug17 = assertConcProgram "" $ ConcProgram
+unit_bug16 :: Assertion
+unit_bug16 = assertConcProgram "" $ ConcProgram
   [[AppendBS [(32729,'X')],AppendBS [(20,'G')],AppendBS [(32753,'P')]],[AppendBS [(19,'X')],AppendBS [(32632,'V')]]]
 
-unit_bug18 :: Assertion
-unit_bug18 = assertConcProgram "" $  ConcProgram
+unit_bug17 :: Assertion
+unit_bug17 = assertConcProgram "" $  ConcProgram
   [ [AppendBS [(32729,'P')],AppendBS [(32753,'B')]]
   , [AppendBS [(1,'X')], ReadJournal]
   , [AppendBS [(6,'K')],AppendBS [(2589,'D')]]
   ]
 
-unit_bug19 :: Assertion
-unit_bug19 = assertConcProgram "" $  ConcProgram
+unit_bug18 :: Assertion
+unit_bug18 = assertConcProgram "" $  ConcProgram
   [ [AppendBS [(32729,'P')], AppendBS [(32753,'B')]]
   , [ReadJournal]
   , [AppendBS [(1,'X')]]
@@ -657,70 +651,57 @@ unit_bug19 = assertConcProgram "" $  ConcProgram
   , [AppendBS [(2589,'D')]]
   ]
 
-unit_bug19' :: Assertion
-unit_bug19' = assertProgram "" $ concat
-  [ [AppendBS [(32753,'B')]]
-  , [ReadJournal]
-  , [AppendBS [(32729,'P')]]
-  , [AppendBS [(1,'X')]]
-  , [AppendBS [(6,'K')]]
-  , [AppendBS [(2589,'D')]]
-  ]
-
-unit_bug19'' :: Assertion
-unit_bug19'' = assertHistory "" $ History
-  [ Invoke (Pid 824) (AppendBS [(32729,'P')])
-  , Invoke (Pid 826) (AppendBS [(32753,'B')])
-  , Ok (Pid 826) (Result (Right ()))
-  , Ok (Pid 824) (Result (Right ()))
-  , Invoke (Pid 828) ReadJournal
-  , Ok (Pid 828) (ByteString (Just [(32753,'B')]))
-  , Invoke (Pid 830) (AppendBS [(1,'X')])
-  , Ok (Pid 830) (Result (Right ()))
-  , Invoke (Pid 832) (AppendBS [(6,'K')])
-  , Ok (Pid 832) (Result (Left Rotation))
-  , Invoke (Pid 834) (AppendBS [(2589,'D')])
-  , Ok (Pid 834) (Result (Left BackPressure))
+unit_bug19 :: Assertion
+unit_bug19 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(32753,'V')],AppendBS [(379,'H')],AppendBS [(32753,'X')]]
+  , [AppendBS [(9961,'K')],ReadJournal]
+  , [AppendBS [(6856,'N')],AppendBS [(7431,'M')]]
+  , [AppendBS [(14,'E')],ReadJournal,AppendBS [(31950,'C')],AppendBS [(32759,'P')]]
   ]
 
 unit_bug20 :: Assertion
 unit_bug20 = assertConcProgram "" $ ConcProgram
-  [ [AppendBS [(32753,'V')],AppendBS [(379,'H')],AppendBS [(32753,'X')]]
-  , [AppendBS [(9961,'K')],ReadJournal]
-  , [AppendBS [(6856,'N')],AppendBS [(7431,'M')]]
-  , [AppendBS [(14,'E')],ReadJournal,AppendBS [(31950,'C')],AppendBS [(32759,'P')]]
-  ]
-
-unit_bug20' :: Assertion
-unit_bug20' = assertProgram "" $ concat
-  [ [AppendBS [(32753,'V')],AppendBS [(379,'H')],AppendBS [(32753,'X')]]
-  , [AppendBS [(9961,'K')],ReadJournal]
-  , [AppendBS [(6856,'N')],AppendBS [(7431,'M')]]
-  , [AppendBS [(14,'E')],ReadJournal,AppendBS [(31950,'C')],AppendBS [(32759,'P')]]
-  ]
-
-unit_bug21 :: Assertion
-unit_bug21 = assertConcProgram "" $ ConcProgram
   [ [AppendBS [(32759,'Q')],AppendBS [(26431,'F')],AppendBS [(32753,'B')]]
   , [AppendBS [(32760,'T')],ReadJournal,AppendBS [(20,'T')],AppendBS [(32760,'E')]]
   , [ReadJournal,AppendBS [(32759,'R')],AppendBS [(32759,'W')],AppendBS [(21,'C')],
      AppendBS [(32760,'Y')]]
   ]
 
-unit_bug22 :: Assertion
-unit_bug22 = assertConcProgram "" $ ConcProgram
+unit_bug21 :: Assertion
+unit_bug21 = assertConcProgram "" $ ConcProgram
   [ [AppendBS [(15880,'U')],AppendBS [(32753,'B')],AppendBS [(32759,'B')]]
   , [AppendBS [(32759,'R')],ReadJournal]
-  , []
+  , [] -- XXX: How did this get generated?
   , [AppendBS [(30713,'C')],ReadJournal]
   , [AppendBS [(32760,'E')],AppendBS [(32760,'R')],AppendBS [(32759,'J')]]
+  ]
+
+unit_bug22 :: Assertion
+unit_bug22 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(32697,'Y')],AppendBS [(32759,'S')],AppendBS [(19,'E')]]
+  , [ReadJournal,AppendBS [(16,'I')]]
+  , [AppendBS [(32760,'X')],ReadJournal,AppendBS [(32760,'H')]]
+  , []
+  , [AppendBS [(16,'N')],AppendBS [(16,'Z')],AppendBS [(16,'R')],AppendBS [(32760,'B')],
+     ReadJournal]
+  ]
+
+unit_bug23 :: Assertion
+unit_bug23 = assertConcProgram "" $ ConcProgram
+  [ [AppendBS [(32632,'K')],AppendBS [(34,'S')],AppendBS [(26,'I')],AppendBS [(32759,'Y')]]
+  , [ReadJournal,AppendBS [(20,'D')]]
+  , [AppendBS [(32744,'D')],AppendBS [(32759,'I')],AppendBS [(20,'X')],ReadJournal]
+  , [ReadJournal,AppendBS [(32760,'W')],AppendBS [(32760,'L')]]
+  , [ReadJournal,AppendBS [(32760,'Y')],AppendBS [(32760,'E')],AppendBS [(32759,'V')],
+     AppendBS [(32759,'I')]]
+  , [ReadJournal,AppendBS [(20,'X')]]
   ]
 
 alignedLength :: Int -> Int
 alignedLength n = align (hEADER_LENGTH + n) fRAME_ALIGNMENT
 
 prop_alignment :: Positive Int -> Bool
-prop_alignment (Positive i) = align i fRAME_ALIGNMENT `mod` fRAME_ALIGNMENT == 0
+prop_alignment (Positive i) = alignedLength i `mod` fRAME_ALIGNMENT == 0
 
 ------------------------------------------------------------------------
 
@@ -875,6 +856,7 @@ prop_concurrent = mapSize (min 20) $
     monitor (classifyCommandsLength (concat cmdss))
     -- Rerun a couple of times, to avoid being lucky with the interleavings.
     monitor (tabulate "Commands" (map constructorString (concat cmdss)))
+    monitor (tabulate "Number of concurrent commands" (map (show . length) cmdss))
     replicateM_ 10 $ do
       (fp, jour) <- run initJournal
       queue <- run newTQueueIO
