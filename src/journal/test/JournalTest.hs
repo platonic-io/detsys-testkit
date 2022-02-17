@@ -766,7 +766,7 @@ shrinkConcProgram m
   = filter (validConcProgram m)
   . map ConcProgram
   . filter (not . null)
-  . shrinkList (shrinkCommands m)
+  . shrinkList (shrinkList shrinkCommand)
   . unConcProgram
 
 prettyConcProgram :: ConcProgram -> String
