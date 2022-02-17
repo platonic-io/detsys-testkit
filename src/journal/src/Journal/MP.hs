@@ -81,14 +81,15 @@ readJournal jour = do
     jLog ("readJournal, len: " ++ show len)
     if tag == Padding
     then do
-      assertM (len >= 0)
-      -- Single-threaded case:
-      -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
-      _success <- casCounter (jBytesConsumed jour) offset (offset + int322Int len)
-      jLog "readJournal, skipping padding..."
-      -- If the CAS fails, it just means that some other process incremented the
-      -- counter already.
-      readJournal jour
+      if len >= 0
+      then do
+        _success <- casCounter (jBytesConsumed jour) offset (offset + int322Int len)
+        jLog "readJournal, skipping padding..."
+        -- If the CAS fails, it just means that some other process incremented the
+        -- counter already.
+        readJournal jour
+      else return Nothing -- If len is negative then the writer hasn't
+                          -- finished writing the padding yet.
     else if len <= 0
          then return Nothing
          else do
