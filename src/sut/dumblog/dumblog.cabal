@@ -25,6 +25,32 @@ extra-source-files:
   LICENSE
   README.md
 
+library
+  build-depends:
+      , base ^>=4.14.1.0
+      , binary
+      , bytestring
+      , containers
+      , directory
+      , filepath
+      , http-types
+      , journal
+      , text
+      , time
+      , wai
+      , warp
+  exposed-modules:
+      Dumblog.Journal.Blocker
+    , Dumblog.Journal.Codec
+    , Dumblog.Journal.FrontEnd
+    , Dumblog.Journal.Metrics
+    , Dumblog.Journal.Snapshot
+    , Dumblog.Journal.StateMachine
+    , Dumblog.Journal.Types
+    , Dumblog.Journal.Worker
+  hs-source-dirs: src
+  default-language: Haskell2010
+
 executable dumblog
     main-is:          Main.hs
 
@@ -41,29 +67,3 @@ executable dumblog
       , journal
     hs-source-dirs:   app
     default-language: Haskell2010
-
-library
-  build-depends:
-      , base ^>=4.14.1.0
-      , binary
-      , bytestring
-      , containers
-      , directory
-      , filepath
-      , http-types
-      , journal
-      , text
-      , time
-      , wai
-      , warp
-  exposed-modules:
-      Blocker
-    , Codec
-    , FrontEnd
-    , Metrics
-    , Snapshot
-    , StateMachine
-    , Types
-    , Worker
-  hs-source-dirs: src
-  default-language: Haskell2010

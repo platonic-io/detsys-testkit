@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
-module Types where
+module Dumblog.Journal.Types where
 
 import Data.Binary (Binary)
 import Data.ByteString (ByteString)

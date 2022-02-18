@@ -1,4 +1,4 @@
-module Blocker
+module Dumblog.Journal.Blocker
   (Blocker, emptyBlocker, blockUntil, wakeUp)
 where
 

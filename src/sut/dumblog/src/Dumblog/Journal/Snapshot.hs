@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
-module Snapshot where
+module Dumblog.Journal.Snapshot where
 
 import Data.Binary (Binary)
 import qualified Data.Binary as Binary
@@ -10,7 +10,7 @@ import qualified System.Directory as Dir
 import qualified System.FilePath as FP
 import System.IO (hClose, IOMode(ReadMode), openFile, openTempFile)
 
-import StateMachine
+import Dumblog.Journal.StateMachine
 
 data Snapshot = Snapshot
   { ssBytesInJournal :: Int

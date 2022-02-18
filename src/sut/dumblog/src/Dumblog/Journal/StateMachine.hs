@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
-module StateMachine where
+module Dumblog.Journal.StateMachine where
 
 import Data.Binary (Binary)
 import Data.ByteString (ByteString)
@@ -8,7 +8,7 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as LBS8
 import GHC.Generics (Generic)
 
-import Types
+import Dumblog.Journal.Types
 
 -- This is the main state of Dumblog, which is the result of applying all commands in the log
 data InMemoryDumblog = InMemoryDumblog

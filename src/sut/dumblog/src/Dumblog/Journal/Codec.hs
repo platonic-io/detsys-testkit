@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveGeneric, DeriveFunctor#-}
-module Codec where
+module Dumblog.Journal.Codec where
 
 import Data.Binary (Binary)
 import qualified Data.Binary as Binary
