@@ -55,8 +55,8 @@ library
     Dumblog.Journal.Types
     Dumblog.Journal.Worker
     Dumblog.SQLite.Command
-    Dumblog.SQLite.FrontEnd
     Dumblog.SQLite.DB
+    Dumblog.SQLite.FrontEnd
     Dumblog.SQLite.Main
     Dumblog.SQLite.Worker
 
@@ -89,3 +89,42 @@ executable dumblog-sqlite
 
   hs-source-dirs:   app/sqlite
   default-language: Haskell2010
+
+common bench-common
+  hs-source-dirs:   bench
+  build-depends:
+    , async
+    , base
+    , directory
+    , dumblog
+    , time
+
+  -- Some of these options are taking from:
+  --   https://wiki.haskell.org/Performance/GHC#Use_optimisation
+  -- XXX: try with -fllvm
+
+  -- To inspect core:
+  -- -fforce-recomp
+  -- -ddump-simpl
+  -- -dsuppress-all
+  -- -ddump-to-file
+  --
+  -- To produce event log:
+  -- -threaded -eventlog -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -O2 -fproc-alignment=64 -fexcess-precision -fasm -optc-O3
+    -optc-ffast-math -threaded -rtsopts -with-rtsopts=-N
+
+  default-language: Haskell2010
+
+benchmark dumblog-journal-bench
+  import:         bench-common
+  hs-source-dirs: bench/journal
+  main-is:        Main.hs
+  type:           exitcode-stdio-1.0
+
+benchmark dumblog-sqlite-bench
+  import:         bench-common
+  hs-source-dirs: bench/sqlite
+  main-is:        Main.hs
+  type:           exitcode-stdio-1.0
