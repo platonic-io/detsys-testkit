@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Dumblog.SQLite.FrontEnd where
 
 import Control.Concurrent.MVar (newEmptyMVar, takeMVar)
