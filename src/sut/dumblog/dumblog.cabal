@@ -36,6 +36,7 @@ library
     , containers
     , directory
     , filepath
+    , http-client
     , http-types
     , journal
     , sqlite-simple
@@ -46,6 +47,7 @@ library
     , warp
 
   exposed-modules:
+    Dumblog.Common.HttpClient
     Dumblog.Journal.Blocker
     Dumblog.Journal.Codec
     Dumblog.Journal.FrontEnd

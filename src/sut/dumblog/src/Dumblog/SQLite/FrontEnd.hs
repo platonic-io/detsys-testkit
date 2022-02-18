@@ -44,7 +44,7 @@ httpFrontend queue req respond =
     parseIndex :: Either ByteString Int
     parseIndex =
       case pathInfo req of
-        [t] -> case decimal t of
+        [txt] -> case decimal txt of
           Right (ix, _rest) -> Right ix
           _otherwise -> Left (BSChar8.pack "parseIndex: GET /:ix, :ix isn't an integer")
         _otherwise   -> Left (BSChar8.pack "parseIndex: GET /:ix, :ix missing")
