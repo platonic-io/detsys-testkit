@@ -1,30 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module DebuggerInternal where
+module Main where
 
 import Brick
 import Brick.Widgets.Border (borderWithLabel, vBorder, hBorder)
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center (center, hCenter)
 import qualified Brick.Widgets.List as L
-import Control.Concurrent.Async
-import qualified Control.Exception as E
 import Control.Monad
-import qualified Data.Aeson as Aeson
-import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Maybe (fromMaybe)
 import qualified Data.Vector as Vector
 import qualified Graphics.Vty as V
-import System.FilePath
-import System.IO
-import System.Posix.Files
 import Text.Wrap
-import Network.Socket
-import qualified Network.Socket.ByteString.Lazy as Socket
-
-import StuntDouble
-import qualified StuntDouble.Transport.UnixSocket as US
-import Scheduler.Executor (executorCodec)
 
 import qualified Debugger
 
