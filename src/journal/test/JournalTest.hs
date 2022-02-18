@@ -863,7 +863,6 @@ interleavings (History ops) =
     filter1 p (x : xs) | p x       = x : filter1 p xs
                        | otherwise = xs
 
-
 -- If any one of the single-threaded executions respects the state machine
 -- model, then the concurrent execution is correct.
 linearisable :: Forest (Command, Response) -> Bool

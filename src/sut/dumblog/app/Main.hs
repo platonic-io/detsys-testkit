@@ -8,15 +8,15 @@ import qualified Journal.Types.AtomicCounter as AtomicCounter
 import qualified Journal.Internal.Metrics as Metrics
 import Journal.Internal.Logger as Logger
 
-import Blocker (emptyBlocker)
-import Codec (Envelope(..), decode)
-import FrontEnd (runFrontEnd, FrontEndInfo(..))
-import Metrics (dumblogSchema)
-import Snapshot (Snapshot)
-import qualified Snapshot
-import StateMachine(InMemoryDumblog, initState, runCommand)
-import Types (Command)
-import Worker (worker, WorkerInfo(..))
+import Dumblog.Journal.Blocker (emptyBlocker)
+import Dumblog.Journal.Codec (Envelope(..), decode)
+import Dumblog.Journal.FrontEnd (runFrontEnd, FrontEndInfo(..))
+import Dumblog.Journal.Metrics (dumblogSchema)
+import Dumblog.Journal.Snapshot (Snapshot)
+import qualified Dumblog.Journal.Snapshot as Snapshot
+import Dumblog.Journal.StateMachine(InMemoryDumblog, initState, runCommand)
+import Dumblog.Journal.Types (Command)
+import Dumblog.Journal.Worker (worker, WorkerInfo(..))
 
 fetchJournal :: Maybe Snapshot -> FilePath -> Journal.Options -> IO Journal
 fetchJournal mSnapshot fpj opts = do

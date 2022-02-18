@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module FrontEnd where
+module Dumblog.Journal.FrontEnd where
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as LBS8
@@ -17,9 +17,9 @@ import qualified Journal
 import Journal.Types.AtomicCounter (AtomicCounter)
 import qualified Journal.Types.AtomicCounter as AtomicCounter
 
-import Blocker
-import Codec
-import Types
+import Dumblog.Journal.Blocker
+import Dumblog.Journal.Codec
+import Dumblog.Journal.Types
 
 data FrontEndInfo = FrontEndInfo
   { sequenceNumber :: AtomicCounter

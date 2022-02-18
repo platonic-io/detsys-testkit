@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Worker where
+module Dumblog.Journal.Worker where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
@@ -14,12 +14,12 @@ import qualified Journal
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.Types.AtomicCounter as AtomicCounter
 
-import Blocker
-import Codec
-import Metrics
-import qualified Snapshot
-import StateMachine
-import Types
+import Dumblog.Journal.Blocker
+import Dumblog.Journal.Codec
+import Dumblog.Journal.Metrics
+import qualified Dumblog.Journal.Snapshot as Snapshot
+import Dumblog.Journal.StateMachine
+import Dumblog.Journal.Types
 
 data WorkerInfo = WorkerInfo
   { wiBlockers :: Blocker (Either Response Response)
