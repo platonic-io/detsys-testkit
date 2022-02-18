@@ -38,6 +38,7 @@ library
     , http-types
     , journal
     , sqlite-simple
+    , stm
     , text
     , time
     , wai
@@ -52,6 +53,8 @@ library
     Dumblog.Journal.StateMachine
     Dumblog.Journal.Types
     Dumblog.Journal.Worker
+    Dumblog.SQLite.Command
+    Dumblog.SQLite.FrontEnd
     Dumblog.SQLite.DB
     Dumblog.SQLite.Main
 

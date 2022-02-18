@@ -53,5 +53,5 @@ httpFrontend journal (FrontEndInfo c blocker) req respond = do
         Left errMsg -> respond $ Wai.responseLBS status400 [] errMsg
         Right msg -> respond $ Wai.responseLBS status200 [] msg
 
-runFrontEnd :: Int -> Journal -> FrontEndInfo -> IO ()
+runFrontEnd :: Port -> Journal -> FrontEndInfo -> IO ()
 runFrontEnd port journal feInfo = run port (httpFrontend journal feInfo)
