@@ -11,6 +11,7 @@ import Database.SQLite.Simple
        , lastInsertRowId
        , open
        , query
+       , close
        )
 
 ------------------------------------------------------------------------
@@ -33,3 +34,6 @@ readDB :: Connection -> Int -> IO ByteString
 readDB conn ix = do
   [[bs]] <- query conn "SELECT value from dumblog WHERE ix = ?" (Only ix)
   return bs
+
+closeDB :: Connection -> IO ()
+closeDB = close
