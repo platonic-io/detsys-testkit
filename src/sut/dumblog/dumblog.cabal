@@ -29,7 +29,7 @@ extra-source-files:
 
 library
   build-depends:
-    , base        ^>=4.14.1.0
+    , base           ^>=4.14.1.0
     , binary
     , bytestring
     , containers
@@ -37,6 +37,7 @@ library
     , filepath
     , http-types
     , journal
+    , sqlite-simple
     , text
     , time
     , wai
@@ -51,6 +52,7 @@ library
     Dumblog.Journal.StateMachine
     Dumblog.Journal.Types
     Dumblog.Journal.Worker
+    Dumblog.SQLite.DB
     Dumblog.SQLite.Main
 
   hs-source-dirs:   src
