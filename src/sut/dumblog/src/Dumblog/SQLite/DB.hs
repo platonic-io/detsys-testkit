@@ -1,6 +1,8 @@
-module Dumblog.SQLite.DB where
+module Dumblog.SQLite.DB
+  (Connection, module Dumblog.SQLite.DB)
+  where
 
-import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (ByteString)
 import Database.SQLite.Simple
        ( Connection
        , Only(Only)
