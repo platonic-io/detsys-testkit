@@ -15,10 +15,12 @@ version:            0.1.0.0
 license:
 license-file:       LICENSE
 author:             Daniel Gustafsson, Stevan Andjelkovic
-maintainer:         daniel.gustafsson@symbiont.io,
-                    symbiont-stevan-andjelkovic@users.noreply.github.com
+maintainer:
+  daniel.gustafsson@symbiont.io,
+  symbiont-stevan-andjelkovic@users.noreply.github.com
 
 copyright:          Copyright (c) 2021-2022 Symbiont Inc
+
 -- category:
 extra-source-files:
   CHANGELOG.md
@@ -27,43 +29,56 @@ extra-source-files:
 
 library
   build-depends:
-      , base ^>=4.14.1.0
-      , binary
-      , bytestring
-      , containers
-      , directory
-      , filepath
-      , http-types
-      , journal
-      , text
-      , time
-      , wai
-      , warp
+    , base        ^>=4.14.1.0
+    , binary
+    , bytestring
+    , containers
+    , directory
+    , filepath
+    , http-types
+    , journal
+    , text
+    , time
+    , wai
+    , warp
+
   exposed-modules:
-      Dumblog.Journal.Blocker
-    , Dumblog.Journal.Codec
-    , Dumblog.Journal.FrontEnd
-    , Dumblog.Journal.Metrics
-    , Dumblog.Journal.Snapshot
-    , Dumblog.Journal.StateMachine
-    , Dumblog.Journal.Types
-    , Dumblog.Journal.Worker
-  hs-source-dirs: src
+    Dumblog.Journal.Blocker
+    Dumblog.Journal.Codec
+    Dumblog.Journal.FrontEnd
+    Dumblog.Journal.Metrics
+    Dumblog.Journal.Snapshot
+    Dumblog.Journal.StateMachine
+    Dumblog.Journal.Types
+    Dumblog.Journal.Worker
+    Dumblog.SQLite.Main
+
+  hs-source-dirs:   src
   default-language: Haskell2010
 
-executable dumblog
-    main-is:          Main.hs
+executable dumblog-journal
+  main-is:          Main.hs
 
-    -- Modules included in this executable, other than Main.
-    -- other-modules:
+  -- Modules included in this executable, other than Main.
+  -- other-modules:
 
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
-    build-depends:
-      , async
-      , base ^>=4.14.1.0
-      , directory
-      , dumblog
-      , journal
-    hs-source-dirs:   app
-    default-language: Haskell2010
+  -- LANGUAGE extensions used by modules in this package.
+  -- other-extensions:
+  build-depends:
+    , async
+    , base
+    , directory
+    , dumblog
+    , journal
+
+  hs-source-dirs:   app/journal
+  default-language: Haskell2010
+
+executable dumblog-sqlite
+  main-is:          Main.hs
+  build-depends:
+    , base
+    , dumblog
+
+  hs-source-dirs:   app/sqlite
+  default-language: Haskell2010
