@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Dumblog.SQLite.DB
   (Connection, module Dumblog.SQLite.DB)
   where
