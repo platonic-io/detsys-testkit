@@ -32,10 +32,12 @@ writeDB conn bs = do
   execute conn "INSERT INTO dumblog (value) VALUES (?)" (Only bs)
   fromIntegral <$> lastInsertRowId conn
 
-readDB :: Connection -> Int -> IO ByteString
+readDB :: Connection -> Int -> IO (Maybe ByteString)
 readDB conn ix = do
-  [[bs]] <- query conn "SELECT value from dumblog WHERE ix = ?" (Only ix)
-  return bs
+  result <- query conn "SELECT value from dumblog WHERE ix = ?" (Only ix)
+  case result of
+    [[bs]]     -> return (Just bs)
+    _otherwise -> return Nothing
 
 closeDB :: Connection -> IO ()
 closeDB = close

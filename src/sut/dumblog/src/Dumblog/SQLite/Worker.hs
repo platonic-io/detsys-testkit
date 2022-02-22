@@ -1,9 +1,11 @@
 module Dumblog.SQLite.Worker where
 
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (putMVar)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TBQueue
        (TBQueue, flushTBQueue, readTBQueue)
+import Control.Monad (when)
 
 import Dumblog.SQLite.Command
 import Dumblog.SQLite.DB
@@ -26,6 +28,7 @@ batchingWorker queue conn = go
     go = do
       cmds <- atomically (flushTBQueue queue)
       mapM_ (execute conn) cmds
+      when (null cmds) (threadDelay 0)
       go
 
 execute :: Connection -> Command -> IO ()
