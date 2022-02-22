@@ -2,13 +2,13 @@
 
 module Dumblog.SQLite.FrontEnd where
 
-import Control.Concurrent.MVar (newEmptyMVar, takeMVar)
+import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TBQueue (TBQueue, writeTBQueue)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSChar8
 import Data.Text.Read (decimal)
-import Network.HTTP.Types.Status (status200, status400)
+import Network.HTTP.Types.Status (status200, status400, status404)
 import Network.Wai
        ( Application
        , consumeRequestBodyStrict
@@ -16,7 +16,8 @@ import Network.Wai
        , requestMethod
        , responseLBS
        )
-import Network.Wai.Handler.Warp (Port, run)
+import Network.Wai.Handler.Warp
+       (Port, defaultSettings, runSettings, setBeforeMainLoop, setPort)
 
 import Dumblog.SQLite.Command
 
@@ -32,8 +33,10 @@ httpFrontend queue req respond =
         Right ix -> do
           response <- newEmptyMVar
           atomically (writeTBQueue queue (Read ix response))
-          bs <- takeMVar response
-          respond (responseLBS status200 [] bs)
+          mbs <- takeMVar response
+          case mbs of
+            Nothing -> respond (responseLBS status404 [] (BSChar8.pack "Not found"))
+            Just bs -> respond (responseLBS status200 [] bs)
     "POST" -> do
       bs <- consumeRequestBodyStrict req
       response <- newEmptyMVar
@@ -49,5 +52,10 @@ httpFrontend queue req respond =
           _otherwise -> Left (BSChar8.pack "parseIndex: GET /:ix, :ix isn't an integer")
         _otherwise   -> Left (BSChar8.pack "parseIndex: GET /:ix, :ix missing")
 
-runFrontEnd :: TBQueue Command -> Port -> IO ()
-runFrontEnd queue port = run port (httpFrontend queue)
+runFrontEnd :: TBQueue Command -> Port -> Maybe (MVar ()) -> IO ()
+runFrontEnd queue port mReady = runSettings settings (httpFrontend queue)
+  where
+    settings
+      = setPort port
+      $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
+      $ defaultSettings

@@ -97,9 +97,12 @@ common bench-common
   build-depends:
     , async
     , base
+    , bytestring
     , directory
     , dumblog
+    , random
     , time
+  other-modules: Common
 
   -- Some of these options are taking from:
   --   https://wiki.haskell.org/Performance/GHC#Use_optimisation
@@ -119,13 +122,13 @@ common bench-common
 
   default-language: Haskell2010
 
-benchmark dumblog-journal-bench
+benchmark bench-journal
   import:         bench-common
   hs-source-dirs: bench/journal
   main-is:        Main.hs
   type:           exitcode-stdio-1.0
 
-benchmark dumblog-sqlite-bench
+benchmark bench-sqlite
   import:         bench-common
   hs-source-dirs: bench/sqlite
   main-is:        Main.hs

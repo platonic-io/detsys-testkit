@@ -7,4 +7,4 @@ import Data.ByteString.Lazy.Char8
 
 data Command
   = Write ByteString (MVar Int)
-  | Read Int (MVar ByteString)
+  | Read Int (MVar (Maybe ByteString))

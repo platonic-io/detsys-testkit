@@ -19,7 +19,6 @@ import Journal.Internal.Utils (int2Int64)
 
 ------------------------------------------------------------------------
 
-
 data Metrics c h = Metrics
   { mCounterBuffer   :: ByteBuffer
   , mHistogramBuffer :: ByteBuffer
