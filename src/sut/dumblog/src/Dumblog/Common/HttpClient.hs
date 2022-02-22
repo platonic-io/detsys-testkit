@@ -64,17 +64,3 @@ readHttp hc ix = do
   when (responseStatus resp /= ok200) $
     return () -- XXX: increment hcErrors
   return (responseBody resp)
-
-writeHttp_ :: HttpClient -> ByteString -> IO ()
-writeHttp_ hc bs = do
-  resp <- httpNoBody (hcWriteReq hc bs) (hcManager hc)
-  when (responseStatus resp /= ok200) $
-    return () -- XXX: increment hcErrors
-  return ()
-
-readHttp_ :: HttpClient -> Int -> IO ()
-readHttp_ hc ix = do
-  resp <- httpNoBody (hcReadReq hc ix) (hcManager hc)
-  when (responseStatus resp /= ok200) $
-    return () -- XXX: increment hcErrors
-  return ()

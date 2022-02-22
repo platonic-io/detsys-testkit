@@ -19,4 +19,6 @@ sqliteDumblog capacity port mReady = do
       runFrontEnd queue port mReady
 
 main :: IO ()
-main = sqliteDumblog (64 * 1024) 8054 Nothing
+main = do
+  putStrLn "Starting Dumblog (SQLite)"
+  sqliteDumblog (64 * 1024) 8054 Nothing

@@ -23,6 +23,7 @@ main = bracket setup teardown benchmark
     setup :: IO (Async (), HttpClient)
     setup = do
       ready <- newEmptyMVar
+      putStrLn "Starting Dumblog (SQLite)"
       a <- async (sqliteDumblog bUFFER_CAPACITY pORT (Just ready))
       () <- takeMVar ready
       hc <- newHttpClient hOST pORT
@@ -69,7 +70,7 @@ main = bracket setup teardown benchmark
               let
                 (ix, gen'') = randomR (0, maxIndex) gen'
               in do
-                () <- readHttp_ hc ix
+                _mbs <- readHttp hc ix
                 go (n - 1) maxIndex gen''
 
 data Command = Write | Read

@@ -17,7 +17,13 @@ import Network.Wai
        , responseLBS
        )
 import Network.Wai.Handler.Warp
-       (Port, defaultSettings, runSettings, setBeforeMainLoop, setPort)
+       ( Port
+       , defaultSettings
+       , runSettings
+       , setBeforeMainLoop
+       , setOnClose
+       , setPort
+       )
 
 import Dumblog.SQLite.Command
 
@@ -58,4 +64,5 @@ runFrontEnd queue port mReady = runSettings settings (httpFrontend queue)
     settings
       = setPort port
       $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
+      $ setOnClose (\addr -> putStrLn ("closing: " ++ show addr))
       $ defaultSettings
