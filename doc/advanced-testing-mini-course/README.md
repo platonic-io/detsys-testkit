@@ -195,6 +195,38 @@ linearisable = undefined
     waaaay more rigorous than mine." -- Kyle
     ["aphyr"](https://twitter.com/aphyr/status/405017101804396546) Kingsbury
 
+* Idea:
+  + What interface does the event loop provide?
+    - Send/recv messages
+    - Timers
+    - File I/O
+  + Implement this interface twice:
+    1. Real implementation
+    2. Simulation, where outgoing messages are intercepted and scheduled at
+       random but deterministically using a seed (or dropped to simulate e.g.
+       network partitions)
+
+![simulation event loop](images/simulation-eventloop.svg)
+
+The following pseudo code implementation of the event loop works for both the
+"real" deployment and simulation:
+
+```
+while true {
+  msg := deliver()
+  out := recv(msg)
+  send(out)
+}
+```
+
+by switching out the implementation of `send` from sending messages over the
+network to merely adding the message to priority queue, and switching out the
+implementation of `deliever` from listning on a socket to merely popping
+messages off the priority queue, then we can switch between a "real" deployment
+and simulation by merely switching between different implementations of the
+event loops interface (`send` and `deliver`).
+
+
 ```haskell
 data Network = Network
   { deploy  :: Addr -> IO () -- bind and listen
