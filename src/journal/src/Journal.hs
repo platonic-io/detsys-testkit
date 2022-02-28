@@ -133,6 +133,7 @@ appendBS jour bs = do
   case eClaim of
     Left err -> return (Left err)
     Right (_offset, bufferClaim) -> do
+      -- putStrLn $ "appendBS, offset" ++ show (_offset)
       putBS bufferClaim hEADER_LENGTH bs
       Right <$> commit bufferClaim (jLogger jour)
 
@@ -194,6 +195,7 @@ readJournal jour = do
         - unTermId initTermId
 
   jLog ("readJournal, readTermCount: " ++ show readTermCount)
+  jLog ("readJournal, position: " ++ show position)
 
   if int2Int64 offset == position
   then return Nothing

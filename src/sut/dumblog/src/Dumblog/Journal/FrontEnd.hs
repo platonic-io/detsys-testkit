@@ -48,12 +48,16 @@ httpFrontend journal (FrontEndInfo c blocker) req respond = do
   case mmethod of
     Left err -> respond $ Wai.responseLBS status400 [] err
     Right cmd -> do
-      Journal.appendBS journal (encode $ Envelope key cmd)
-      resp <- blockUntil blocker key
-      -- Journal.dumpJournal journal
-      case resp of
-        Left errMsg -> respond $ Wai.responseLBS status400 [] errMsg
-        Right msg -> respond $ Wai.responseLBS status200 [] msg
+      res <- Journal.appendBS journal (encode $ Envelope key cmd)
+      case res of
+        Left err -> do
+          respond $ Wai.responseLBS status400 [] "Rotation?"
+        Right{} -> do
+          resp <- blockUntil blocker key
+          -- Journal.dumpJournal journal
+          case resp of
+            Left errMsg -> respond $ Wai.responseLBS status400 [] errMsg
+            Right msg -> respond $ Wai.responseLBS status200 [] msg
 
 runFrontEnd :: Port -> Journal -> FrontEndInfo -> Maybe (MVar ()) -> IO ()
 runFrontEnd port journal feInfo mReady =

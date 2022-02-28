@@ -90,7 +90,7 @@ journalDumblog _capacity port mReady = do
       fpm = "/tmp/dumblog.metrics"
       fps = "/tmp/dumblog.snapshot"
       opts = Journal.defaultOptions { Journal.oLogger = Logger.nullLogger }
-      untilSnapshot = 10
+      untilSnapshot = 1000
   mSnapshot <- Snapshot.readFile fps
   journal <- fetchJournal mSnapshot fpj opts
   metrics <- Metrics.newMetrics dumblogSchema fpm

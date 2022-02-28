@@ -11,6 +11,7 @@ import Data.Time (getCurrentTime, diffUTCTime)
 
 import Journal (Journal)
 import qualified Journal
+import qualified Journal.Internal.Logger as Logger
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.Types.AtomicCounter as AtomicCounter
 
@@ -54,9 +55,11 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
           Snapshot.toFile (Snapshot.Snapshot bytes s) snapshotFile
           go 0 s
     go ev s = do
-      { val <- Journal.readJournal journal
+      { val <- Journal.readJournal journal -- { Journal.jLogger = Logger.ioLogger }
       ; (ev', s') <- case val of
-        { Nothing -> return (ev, s)
+        { Nothing -> do
+            threadDelay 10000
+            return (ev, s)
         ; Just entry -> timeIt metrics $ do
           let Envelope key cmd = decode entry
           {- // in case of decode error
@@ -67,6 +70,6 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
           wakeUpFrontend blocker key (Right r)
           return (succ ev, s')
         }
-      ; threadDelay 10
+      ; threadDelay 100
       ; go ev' s'
       }
