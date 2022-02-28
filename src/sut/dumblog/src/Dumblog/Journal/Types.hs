@@ -11,6 +11,6 @@ data Command
   | Read Int
   deriving (Generic, Show)
 
-instance Binary Command where
+instance Binary Command
 
 type Response = LBS.ByteString

@@ -3,6 +3,7 @@
 module Dumblog.Common.HttpClient where
 
 import Control.Monad (when)
+import Control.Exception (try)
 import qualified Data.ByteString.Char8 as BSChar8
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBSChar8
@@ -10,6 +11,7 @@ import Network.HTTP.Client
        ( Manager
        , Request
        , RequestBody(RequestBodyLBS)
+       , HttpException(HttpExceptionRequest)
        , defaultManagerSettings
        , httpLbs
        , httpNoBody
@@ -53,14 +55,17 @@ newHttpClient host port = do
 
 writeHttp :: HttpClient -> ByteString -> IO Int
 writeHttp hc bs = do
-  resp <- httpLbs (hcWriteReq hc bs) (hcManager hc)
-  when (responseStatus resp /= ok200) $
-    return () -- XXX: increment hcErrors
-  return (read (LBSChar8.unpack (responseBody resp)))
+  eResp <- try (httpLbs (hcWriteReq hc bs) (hcManager hc))
+  case eResp of
+    Left (HttpExceptionRequest _req _exceptCtx) ->
+      -- XXX: increment hcErrors
+      return (-1)
+    Right resp -> return (read (LBSChar8.unpack (responseBody resp)))
 
 readHttp :: HttpClient -> Int -> IO ByteString
 readHttp hc ix = do
-  resp <- httpLbs (hcReadReq hc ix) (hcManager hc)
-  when (responseStatus resp /= ok200) $
-    return () -- XXX: increment hcErrors
-  return (responseBody resp)
+  eResp <- try (httpLbs (hcReadReq hc ix) (hcManager hc))
+  case eResp of
+    Left (HttpExceptionRequest _req _exceptCtx) ->
+      return "error" -- XXX: increment hcErrors
+    Right resp -> return (responseBody resp)
