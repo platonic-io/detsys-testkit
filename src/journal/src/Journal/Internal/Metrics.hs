@@ -1,11 +1,11 @@
 {-# LANGUAGE MagicHash #-}
-{-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE UnboxedTuples #-}
 
 module Journal.Internal.Metrics where
 
 import Control.Exception (assert)
-import Control.Monad (replicateM_, void, forM_)
+import Control.Monad (forM_, replicateM_, void, when)
 import Data.Vector.Unboxed (Vector)
 import qualified Data.Vector.Unboxed as Vector
 import Data.Word
@@ -13,9 +13,10 @@ import Foreign (sizeOf)
 import GHC.Exts
 import GHC.Float (int2Double)
 import GHC.ForeignPtr
+import System.Directory (doesFileExist)
 
 import Journal.Internal.ByteBufferPtr
-import Journal.Internal.Utils (int2Int64)
+import Journal.Internal.Utils (int2Int64, fallocate)
 
 ------------------------------------------------------------------------
 
@@ -38,8 +39,13 @@ metricSize :: forall c h. (Enum c, Bounded c, Enum h, Bounded h) => MetricsSchem
 metricSize schema = metricSizeOfCounters schema + metricSizeOfHistograms schema
 
 -- TODO have a header in the file and check that schema is the same as existing in file?
-newMetrics :: (Enum c, Bounded c, Enum h, Bounded h) => MetricsSchema c h -> FilePath -> IO (Metrics c h)
+newMetrics :: (Enum c, Bounded c, Enum h, Bounded h)
+           => MetricsSchema c h -> FilePath -> IO (Metrics c h)
 newMetrics schema fp = do
+  exists <- doesFileExist fp
+  when (not exists) $ do
+    -- XXX: should this be page aligned?
+    fallocate fp (sizeOfCounters + sizeOfHistograms)
   bb <- mmapped fp (metricSize schema)
   cbuf <- wrapPart bb 0 sizeOfCounters
   hbuf <- wrapPart bb sizeOfCounters sizeOfHistograms
