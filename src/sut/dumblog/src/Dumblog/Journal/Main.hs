@@ -1,6 +1,6 @@
 module Dumblog.Journal.Main where
 
-import Control.Concurrent.Async (withAsync)
+import Control.Concurrent.Async (withAsync, link)
 import Control.Concurrent.MVar (MVar)
 import Control.Monad (when)
 import Journal (Journal)
@@ -90,7 +90,7 @@ journalDumblog _capacity port mReady = do
       fpm = "/tmp/dumblog.metrics"
       fps = "/tmp/dumblog.snapshot"
       opts = Journal.defaultOptions { Journal.oLogger = Logger.nullLogger }
-      untilSnapshot = 10
+      untilSnapshot = 1000000
   mSnapshot <- Snapshot.readFile fps
   journal <- fetchJournal mSnapshot fpj opts
   metrics <- Metrics.newMetrics dumblogSchema fpm
@@ -99,5 +99,6 @@ journalDumblog _capacity port mReady = do
   (state, events) <- fetchState mSnapshot journal
   let feInfo = FrontEndInfo counter blocker
       wInfo = WorkerInfo blocker fps events untilSnapshot
-  withAsync (worker journal metrics wInfo state) $ \_async ->
+  withAsync (worker journal metrics wInfo state) $ \a -> do
+    link a
     runFrontEnd port journal feInfo mReady

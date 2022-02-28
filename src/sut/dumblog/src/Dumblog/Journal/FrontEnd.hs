@@ -2,6 +2,7 @@
 
 module Dumblog.Journal.FrontEnd where
 
+import Control.Monad (when)
 import Control.Concurrent.MVar (MVar, putMVar)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as LBS8
@@ -13,15 +14,18 @@ import Network.HTTP.Types.Method
 import Network.HTTP.Types.Status (status200, status400)
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
+import System.Timeout (timeout)
 
 import Journal (Journal)
-import qualified Journal
+import qualified Journal.MP as Journal
 import Journal.Types.AtomicCounter (AtomicCounter)
 import qualified Journal.Types.AtomicCounter as AtomicCounter
 
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
 import Dumblog.Journal.Types
+
+------------------------------------------------------------------------
 
 data FrontEndInfo = FrontEndInfo
   { sequenceNumber :: AtomicCounter
@@ -48,12 +52,23 @@ httpFrontend journal (FrontEndInfo c blocker) req respond = do
   case mmethod of
     Left err -> respond $ Wai.responseLBS status400 [] err
     Right cmd -> do
-      Journal.appendBS journal (encode $ Envelope key cmd)
-      resp <- blockUntil blocker key
-      -- Journal.dumpJournal journal
-      case resp of
-        Left errMsg -> respond $ Wai.responseLBS status400 [] errMsg
-        Right msg -> respond $ Wai.responseLBS status200 [] msg
+      res <- Journal.appendBS journal (encode $ Envelope key cmd)
+      res' <- case res of
+        Left err -> do
+          putStrLn ("httpFrontend, append error: " ++ show err)
+          Journal.appendBS journal (encode $ Envelope key cmd)
+        Right () -> return (Right ())
+      case res' of
+        Left err -> do
+          putStrLn ("httpFrontend, append error 2: " ++ show err)
+          respond $ Wai.responseLBS status400 [] (LBS8.pack (show err))
+        Right () -> do
+          mResp <- timeout (3*1000*1000) (blockUntil blocker key)
+          -- Journal.dumpJournal journal
+          case mResp of
+            Nothing -> respond $ Wai.responseLBS status400 [] "MVar timeout"
+            Just (Left errMsg) -> respond $ Wai.responseLBS status400 [] errMsg
+            Just (Right msg) -> respond $ Wai.responseLBS status200 [] msg
 
 runFrontEnd :: Port -> Journal -> FrontEndInfo -> Maybe (MVar ()) -> IO ()
 runFrontEnd port journal feInfo mReady =
@@ -61,5 +76,11 @@ runFrontEnd port journal feInfo mReady =
   where
     settings
       = setPort port
+      $ setLogger (\req status _mSize ->
+                      when (status /= status200) $ do
+                        putStrLn ("warp, request: " ++ show req)
+                        putStrLn ("warp, status: "  ++ show status)
+                        print =<< Wai.strictRequestBody req)
+
       $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
       $ defaultSettings

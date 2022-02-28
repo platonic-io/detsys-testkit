@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Dumblog.Journal.Worker where
 
 import Control.Concurrent (threadDelay)
@@ -10,7 +11,8 @@ import qualified Data.Char as Char
 import Data.Time (getCurrentTime, diffUTCTime)
 
 import Journal (Journal)
-import qualified Journal
+import Journal (jBytesConsumed)
+import qualified Journal.MP as Journal
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.Types.AtomicCounter as AtomicCounter
 
@@ -38,14 +40,16 @@ timeIt metrics action = do
   Metrics.measure metrics ResponseTime (realToFrac . (*1000) $ diffUTCTime endTime startTime)
   return result
 
-wakeUpFrontend :: Blocker (Either Response Response) -> Int -> Either Response Response -> IO ()
+wakeUpFrontend :: Blocker (Either Response Response) -> Int -> Either Response Response
+               -> IO ()
 wakeUpFrontend blocker key resp = do
   b <- wakeUp blocker key resp
   unless b $
     error $ "Frontend never added MVar"
 
 worker :: Journal -> DumblogMetrics -> WorkerInfo -> InMemoryDumblog -> IO ()
-worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot) = go eventCount
+worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot) =
+  go eventCount
   where
     go ev s
       | ev >= untilSnapshot = do
@@ -61,9 +65,12 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
           let Envelope key cmd = decode entry
           {- // in case of decode error
               Metrics.incrCounter metrics ErrorsEncountered 1
-              wakeUpFrontend blocker key $ Left "Couldn't parse request" -- should be better error message
--}
+              wakeUpFrontend blocker key $ Left "Couldn't parse request"
+              -- ^ should be better error message
+          -}
+          -- putStrLn ("worker: key: " ++ show key ++ ", cmd: " ++ show cmd)
           (s', r) <- runCommand s cmd
+          -- putStrLn ("worker: key: " ++ show key ++ ", response: " ++ show r)
           wakeUpFrontend blocker key (Right r)
           return (succ ev, s')
         }
