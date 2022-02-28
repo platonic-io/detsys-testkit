@@ -56,6 +56,7 @@ library
     Dumblog.Journal.StateMachine
     Dumblog.Journal.Types
     Dumblog.Journal.Worker
+    Dumblog.Journal.Main
     Dumblog.SQLite.Command
     Dumblog.SQLite.DB
     Dumblog.SQLite.FrontEnd

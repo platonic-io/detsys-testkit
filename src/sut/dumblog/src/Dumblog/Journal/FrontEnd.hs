@@ -1,14 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Dumblog.Journal.FrontEnd where
 
+import Control.Concurrent.MVar (MVar, putMVar)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as LBS8
 import qualified Data.Char as Char
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Text.Read as TextReader
-import Network.HTTP.Types.Status (status200, status400)
 import Network.HTTP.Types.Method
+import Network.HTTP.Types.Status (status200, status400)
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
 
@@ -53,5 +55,11 @@ httpFrontend journal (FrontEndInfo c blocker) req respond = do
         Left errMsg -> respond $ Wai.responseLBS status400 [] errMsg
         Right msg -> respond $ Wai.responseLBS status200 [] msg
 
-runFrontEnd :: Port -> Journal -> FrontEndInfo -> IO ()
-runFrontEnd port journal feInfo = run port (httpFrontend journal feInfo)
+runFrontEnd :: Port -> Journal -> FrontEndInfo -> Maybe (MVar ()) -> IO ()
+runFrontEnd port journal feInfo mReady =
+  runSettings settings (httpFrontend journal feInfo)
+  where
+    settings
+      = setPort port
+      $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
+      $ defaultSettings
