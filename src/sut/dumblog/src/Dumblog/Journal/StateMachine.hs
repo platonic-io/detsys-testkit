@@ -24,7 +24,7 @@ initState = InMemoryDumblog [] 0
 -- this could be pure?
 runCommand :: InMemoryDumblog -> Command -> IO (InMemoryDumblog, Response)
 runCommand state@(InMemoryDumblog log ix) cmd = case cmd of
-  Write bs -> pure (InMemoryDumblog (bs:log) (ix+1), "Appended to position: " <> LBS8.pack (show ix))
+  Write bs -> pure (InMemoryDumblog (bs:log) (ix+1), LBS8.pack (show ix))
   Read i
     | i < ix -> pure (state, LBS.fromStrict $ log !! (ix - 1 - i))
     | otherwise -> pure (state, "Transaction not in the store!") -- we probably should really signal failure
