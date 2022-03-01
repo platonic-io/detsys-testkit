@@ -309,7 +309,7 @@ dumpTermBuffer i (bb, termOffset) = do
     encodeRunLength = map (BSChar8.length &&& BSChar8.head) . BSChar8.group
 
     bodyLength :: (HeaderTag, HeaderLength) -> Int
-    bodyLength (_tag, HeaderLength len) = int322Int len - hEADER_LENGTH
+    bodyLength (_tag, HeaderLength len) = max 0 (int322Int len - hEADER_LENGTH)
 
 
 dumpMetadata :: Metadata -> IO ()
