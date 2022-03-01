@@ -21,9 +21,12 @@ import Database.SQLite.Simple
 sQLITE_DB_PATH :: FilePath
 sQLITE_DB_PATH = "/tmp/dumblog.sqlite3"
 
+sQLITE_FLAGS :: String
+sQLITE_FLAGS = "?fullfsync=true"
+
 initDB :: IO Connection
 initDB = do
-  conn <- open sQLITE_DB_PATH
+  conn <- open (sQLITE_DB_PATH ++ sQLITE_FLAGS)
   execute_ conn "CREATE TABLE IF NOT EXISTS dumblog (ix INTEGER PRIMARY KEY, value BLOB)"
   return conn
 
