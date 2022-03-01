@@ -98,7 +98,19 @@ calculatePositionLimit jour = do
       -- ^ prop> \(Positive (Small i)) -> (2^i) `shiftR` 1 == 2^i `div` 2
 
 cleanBufferTo :: Journal -> Int -> IO ()
-cleanBufferTo _ _ = return ()
+cleanBufferTo jour position = do
+  cleanPosition <- readCounter (jCleanPosition jour)
+  termBufferLen <- readTermLength (jMetadata jour)
+  when (position > cleanPosition) $ do
+    let index = indexByPosition (int2Int64 cleanPosition) (positionBitsToShift termBufferLen)
+        dirtyTerm = jTermBuffers jour Vector.! unPartitionIndex index
+        bytesForCleaning = position - cleanPosition
+        bufferCapacity = int322Int termBufferLen
+        termOffset = cleanPosition .&. (bufferCapacity - 1)
+        len = min bytesForCleaning (bufferCapacity - termOffset)
+    cleanAt dirtyTerm (termOffset + sizeOf (8 :: Int64)) (len - sizeOf (8 :: Int64))
+    writeInt64OffAddr dirtyTerm termOffset 0
+    incrCounter_ len (jCleanPosition jour)
 
 backPressureStatus :: Int64 -> Int -> Logger -> IO (Either AppendError (Int64, BufferClaim))
 backPressureStatus position len logger = do

@@ -63,6 +63,7 @@ data Journal = Journal
   , jMetadata      :: {-# UNPACK #-} !Metadata
   , jBytesConsumed :: {-# UNPACK #-} !AtomicCounter -- ???
   , jLogger        ::                !Logger
+  , jCleanPosition :: {-# UNPACK #-} !AtomicCounter
   }
 
 data JMetadata = JMetadata

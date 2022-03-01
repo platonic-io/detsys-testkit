@@ -242,6 +242,12 @@ clean bb = do
   Limit to <- readLimit bb
   fillBytes (unsafeForeignPtrToPtr (bbData bb) `plusPtr` from) 0 (to - from)
 
+cleanAt :: ByteBuffer -> Int -> Int -> IO ()
+cleanAt bb offset len = do
+  boundCheck bb offset len
+  Slice slice <- readIORef (bbSlice bb)
+  fillBytes (unsafeForeignPtrToPtr (bbData bb) `plusPtr` (slice + offset)) 0 len
+
 -- | Flips the byte buffer. The limit is set to the current position and then
 -- the position is set to zero. If the mark is defined then it is discarded.
 flipBB :: ByteBuffer -> IO ()
