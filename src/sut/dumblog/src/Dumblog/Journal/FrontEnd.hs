@@ -81,8 +81,5 @@ runFrontEnd port journal feInfo mReady =
                         putStrLn ("warp, request: " ++ show req)
                         putStrLn ("warp, status: "  ++ show status)
                         print =<< Wai.strictRequestBody req)
-      $ setOnException (\req ex ->
-                          putStrLn ("warp, exception: " ++ show ex ++ ", req: " ++ show req))
-      $ setOnClose (\addr -> putStrLn ("closing: " ++ show addr))
       $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
       $ defaultSettings

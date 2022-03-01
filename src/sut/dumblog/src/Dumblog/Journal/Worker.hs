@@ -66,9 +66,9 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
               wakeUpFrontend blocker key $ Left "Couldn't parse request"
               -- ^ should be better error message
           -}
-          putStrLn ("worker: key: " ++ show key ++ ", cmd: " ++ show cmd)
+          -- putStrLn ("worker: key: " ++ show key ++ ", cmd: " ++ show cmd)
           (s', r) <- runCommand s cmd
-          putStrLn ("worker: key: " ++ show key ++ ", response: " ++ show r)
+          -- putStrLn ("worker: key: " ++ show key ++ ", response: " ++ show r)
           wakeUpFrontend blocker key (Right r)
           return (succ ev, s')
         }
