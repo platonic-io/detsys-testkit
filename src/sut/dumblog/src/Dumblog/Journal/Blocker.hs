@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Dumblog.Journal.Blocker
   (Blocker, emptyBlocker, blockUntil, wakeUp)
 where
@@ -22,7 +24,7 @@ blockUntil (Blocker b) key = do
   atomicModifyIORef' b $ \m -> (IntMap.insert key mv m, ())
   takeMVar mv
 
-wakeUp :: Blocker x -> Int -> x -> IO Bool
+wakeUp :: forall a. Blocker a -> Int -> a -> IO Bool
 wakeUp (Blocker b) key response = do
   mmv <- go 10
   case mmv of
@@ -31,6 +33,7 @@ wakeUp (Blocker b) key response = do
       putMVar mv response
       pure True
   where
+    go :: Int -> IO (Maybe (MVar a))
     go 0 = pure Nothing
     go n = do
       m <- atomicModifyIORef' b $ swap . IntMap.updateLookupWithKey (const $ const Nothing) key
@@ -38,4 +41,4 @@ wakeUp (Blocker b) key response = do
         Nothing -> do
           threadDelay 10
           go (n-1)
-        Just x -> pure m
+        Just _x -> pure m

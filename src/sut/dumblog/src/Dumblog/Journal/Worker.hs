@@ -4,13 +4,9 @@ module Dumblog.Journal.Worker where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
-import qualified Data.Binary as Binary
-import Data.ByteString (ByteString, uncons)
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Char as Char
 import Data.Time (getCurrentTime, diffUTCTime)
 
-import Journal (Journal)
+import Journal.Types (Journal)
 import Journal (jBytesConsumed)
 import qualified Journal.MP as Journal
 import qualified Journal.Internal.Metrics as Metrics
@@ -22,6 +18,8 @@ import Dumblog.Journal.Metrics
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine
 import Dumblog.Journal.Types
+
+------------------------------------------------------------------------
 
 data WorkerInfo = WorkerInfo
   { wiBlockers :: Blocker (Either Response Response)
@@ -68,9 +66,9 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
               wakeUpFrontend blocker key $ Left "Couldn't parse request"
               -- ^ should be better error message
           -}
-          -- putStrLn ("worker: key: " ++ show key ++ ", cmd: " ++ show cmd)
+          putStrLn ("worker: key: " ++ show key ++ ", cmd: " ++ show cmd)
           (s', r) <- runCommand s cmd
-          -- putStrLn ("worker: key: " ++ show key ++ ", response: " ++ show r)
+          putStrLn ("worker: key: " ++ show key ++ ", response: " ++ show r)
           wakeUpFrontend blocker key (Right r)
           return (succ ev, s')
         }

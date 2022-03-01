@@ -8,7 +8,7 @@ import GHC.Generics (Generic)
 
 import qualified System.Directory as Dir
 import qualified System.FilePath as FP
-import System.IO (hClose, IOMode(ReadMode), openFile, openTempFile)
+import System.IO (hClose, openTempFile)
 
 import Dumblog.Journal.StateMachine
 
@@ -17,11 +17,11 @@ data Snapshot = Snapshot
   , ssState :: InMemoryDumblog
   } deriving Generic
 
-instance Binary Snapshot where
+instance Binary Snapshot
 
 toFile :: Snapshot -> FilePath -> IO ()
-toFile imd fp = do
-  fp <- Dir.canonicalizePath fp
+toFile imd fp0 = do
+  fp <- Dir.canonicalizePath fp0
   let dir = FP.takeDirectory fp
   (fpt, h) <- openTempFile dir "SnapshotTemp"
   LBS.hPut h (Binary.encode imd)

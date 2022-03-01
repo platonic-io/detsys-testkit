@@ -39,6 +39,7 @@ library
     , http-client
     , http-types
     , journal
+    , network
     , sqlite-simple
     , stm
     , text
@@ -51,47 +52,51 @@ library
     Dumblog.Journal.Blocker
     Dumblog.Journal.Codec
     Dumblog.Journal.FrontEnd
+    Dumblog.Journal.Main
     Dumblog.Journal.Metrics
     Dumblog.Journal.Snapshot
     Dumblog.Journal.StateMachine
     Dumblog.Journal.Types
     Dumblog.Journal.Worker
-    Dumblog.Journal.Main
     Dumblog.SQLite.Command
     Dumblog.SQLite.DB
     Dumblog.SQLite.FrontEnd
     Dumblog.SQLite.Main
     Dumblog.SQLite.Worker
+    Dumblog.ZeroCopy.HttpServer
+    Dumblog.ZeroCopy.Main
 
   hs-source-dirs:   src
   default-language: Haskell2010
+  ghc-options:      -Wall -O2
+
+common executable-common
+  build-depends:
+    , base
+    , dumblog
+
+  default-language: Haskell2010
+  ghc-options:      -O2 -threaded -rtsopts -with-rtsopts=-N
 
 executable dumblog-journal
-  main-is:          Main.hs
-
-  -- Modules included in this executable, other than Main.
-  -- other-modules:
-
-  -- LANGUAGE extensions used by modules in this package.
-  -- other-extensions:
+  import:         executable-common
   build-depends:
     , async
-    , base
     , directory
-    , dumblog
     , journal
 
-  hs-source-dirs:   app/journal
-  default-language: Haskell2010
+  hs-source-dirs: app/journal
+  main-is:        Main.hs
 
 executable dumblog-sqlite
-  main-is:          Main.hs
-  build-depends:
-    , base
-    , dumblog
+  import:         executable-common
+  hs-source-dirs: app/sqlite
+  main-is:        Main.hs
 
-  hs-source-dirs:   app/sqlite
-  default-language: Haskell2010
+executable dumblog-zero-copy
+  import:         executable-common
+  hs-source-dirs: app/zero-copy
+  main-is:        Main.hs
 
 common bench-common
   hs-source-dirs:   bench
@@ -103,7 +108,8 @@ common bench-common
     , dumblog
     , random
     , time
-  other-modules: Common
+
+  other-modules:    Common
 
   -- Some of these options are taking from:
   --   https://wiki.haskell.org/Performance/GHC#Use_optimisation
