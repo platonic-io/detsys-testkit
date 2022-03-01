@@ -87,7 +87,8 @@ calculatePositionLimit jour = do
   maxSubscriberPos <- readCounter (jBytesConsumed jour)
   termWindowLen    <- termWindowLength (jMetadata jour)
   let _consumerPos  = maxSubscriberPos
-      proposedLimit = minSubscriberPos + fromIntegral termWindowLen
+      proposedLimit = minSubscriberPos + int322Int termWindowLen
+
   cleanBufferTo jour minSubscriberPos
   return (int2Int64 proposedLimit)
   where
@@ -110,7 +111,9 @@ cleanBufferTo jour position = do
         len = min bytesForCleaning (bufferCapacity - termOffset)
     cleanAt dirtyTerm (termOffset + sizeOf (8 :: Int64)) (len - sizeOf (8 :: Int64))
     writeInt64OffAddr dirtyTerm termOffset 0
-    incrCounter_ len (jCleanPosition jour)
+    -- incrCounter_ len (jCleanPosition jour)
+    _success <- casCounter (jCleanPosition jour) cleanPosition (cleanPosition + len)
+    return ()
 
 backPressureStatus :: Int64 -> Int -> Logger -> IO (Either AppendError (Int64, BufferClaim))
 backPressureStatus position len logger = do
@@ -283,11 +286,12 @@ dumpTermBuffer i (bb, termOffset) = do
       | offset >  termOffset = __IMPOSSIBLE__
       | offset <  termOffset = do
         h <- readHeader offset
-        dumpHeader h
-        dumpBody offset (bodyLength h)
-        dumpEntries (offset +
-                     TermOffset (int2Int32 (align (hEADER_LENGTH + bodyLength h)
-                                            fRAME_ALIGNMENT)))
+        when (bodyLength h /= 0) $ do
+          dumpHeader h
+          dumpBody offset (bodyLength h)
+          dumpEntries (offset +
+                       TermOffset (int2Int32 (align (hEADER_LENGTH + bodyLength h)
+                                              fRAME_ALIGNMENT)))
 
     readHeader :: TermOffset -> IO (HeaderTag, HeaderLength)
     readHeader offset = (,) <$> readFrameType bb offset <*> readFrameLength bb offset
