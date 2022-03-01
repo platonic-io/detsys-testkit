@@ -725,6 +725,24 @@ unit_bug25 = assertConcProgram "" $ ConcProgram
   , [ReadJournal,ReadJournal,AppendBS [(21,'Z')],AppendBS [(32759,'T')],ReadJournal]
   ]
 
+unit_bug26 :: Assertion
+unit_bug26 = assertConcProgram "" $ ConcProgram
+  [[AppendBS [(32760,'Z')]]
+  ,[ReadJournal]
+  ,[AppendBS [(32759,'F')]]
+  ,[ReadJournal]
+  ,[AppendBS [(20,'G')]]
+  ,[AppendBS [(32759,'O')]]
+  ,[ReadJournal]
+  ,[AppendBS [(20,'A')]]
+  ,[ReadJournal]
+  ,[AppendBS [(32505,'S')],AppendBS [(32759,'C')]]
+  ,[ReadJournal]
+  ,[AppendBS [(32759,'W')]]
+  ,[ReadJournal]
+  ,[AppendBS [(32760,'D')],ReadJournal,AppendBS [(32759,'O')]]
+  ]
+
 alignedLength :: Int -> Int
 alignedLength n = align (hEADER_LENGTH + n) fRAME_ALIGNMENT
 
