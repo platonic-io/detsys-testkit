@@ -2,9 +2,9 @@ module Dumblog.Journal.Main where
 
 import Control.Concurrent.Async (withAsync, link)
 import Control.Concurrent.MVar (MVar)
-import Control.Monad (when)
-import Journal (Journal)
-import qualified Journal
+import Journal (defaultOptions, allocateJournal, startJournal)
+import Journal.Types (Journal, Options, oLogger, jBytesConsumed)
+import qualified Journal.MP as Journal
 import Journal.Internal.Logger as Logger
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.Types.AtomicCounter as AtomicCounter
@@ -22,24 +22,25 @@ import Dumblog.Journal.Worker (WorkerInfo(..), worker)
 
 ------------------------------------------------------------------------
 
-fetchJournal :: Maybe Snapshot -> FilePath -> Journal.Options -> IO Journal
+fetchJournal :: Maybe Snapshot -> FilePath -> Options -> IO Journal
 fetchJournal mSnapshot fpj opts = do
-  Journal.allocateJournal fpj opts
-  journal <- Journal.startJournal fpj opts
+  allocateJournal fpj opts
+  journal <- startJournal fpj opts
   case mSnapshot of
     Nothing -> pure ()
     Just snap -> do
       let bytes = Snapshot.ssBytesInJournal snap
       putStrLn $ "[journal] Found Snapshot! starting from bytes: "  <> show bytes
       AtomicCounter.writeCounter
-        (Journal.jBytesConsumed journal)
+        (jBytesConsumed journal)
         bytes
   pure journal
 
 -- this should be from snapshot/or replay journal
 fetchState :: Maybe Snapshot -> Journal -> IO (InMemoryDumblog, Int)
-fetchState mSnapshot jour = do
-  cmds <- collectAll jour -- the journal has been set to be either 0, or from the last snapshot
+fetchState mSnapshot jour0 = do
+  cmds <- collectAll jour0 -- the journal has been set to be either 0, or from
+                           -- the last snapshot
   s <- replay cmds startingState
   pure (s, length cmds)
   where
@@ -89,7 +90,7 @@ journalDumblog _capacity port mReady = do
   let fpj = "/tmp/dumblog.journal"
       fpm = "/tmp/dumblog.metrics"
       fps = "/tmp/dumblog.snapshot"
-      opts = Journal.defaultOptions { Journal.oLogger = Logger.nullLogger }
+      opts = defaultOptions { oLogger = Logger.nullLogger }
       untilSnapshot = 1000000
   mSnapshot <- Snapshot.readFile fps
   journal <- fetchJournal mSnapshot fpj opts

@@ -49,6 +49,7 @@ httpFrontend queue req respond =
       atomically (writeTBQueue queue (Write bs response))
       ix <- takeMVar response
       respond (responseLBS status200 [] (BSChar8.pack (show ix)))
+    _otherwise -> respond (responseLBS status400 [] "Invalid method")
   where
     parseIndex :: Either ByteString Int
     parseIndex =

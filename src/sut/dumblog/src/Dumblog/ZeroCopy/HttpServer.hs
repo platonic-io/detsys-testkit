@@ -1,5 +1,6 @@
 module Dumblog.ZeroCopy.HttpServer where
 
+import Data.Maybe (fromJust)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS8
 import Control.Exception (bracketOnError)
@@ -12,10 +13,12 @@ import Control.Concurrent
 
 httpServer :: Int -> IO ()
 httpServer port = withSocketsDo $ do
-  putStrLn "Starting http server on port 5002"
+  numCapabilities <- getNumCapabilities
+  putStrLn ("Starting http server on port: " ++ show port)
+  putStrLn ("Capabilities: : " ++ show numCapabilities)
   sock <- listenOn port
-  Just mgr <- getSystemEventManager
-  key <- withFdSocket sock $ \fd ->
+  mgr <- fromJust (error "Compile with -threaded") <$> getSystemEventManager
+  _key <- withFdSocket sock $ \fd ->
     registerFd mgr (client sock) (fromIntegral fd) evtRead MultiShot
   loop
   where

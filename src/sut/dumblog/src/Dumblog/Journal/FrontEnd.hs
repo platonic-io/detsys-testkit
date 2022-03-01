@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Dumblog.Journal.FrontEnd where
 
-import Control.Monad (when)
 import Control.Concurrent.MVar (MVar, putMVar)
+import Control.Monad (when)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as LBS8
-import qualified Data.Char as Char
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Text.Read as TextReader
@@ -16,7 +16,7 @@ import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
 
-import Journal (Journal)
+import Journal.Types (Journal)
 import qualified Journal.MP as Journal
 import Journal.Types.AtomicCounter (AtomicCounter)
 import qualified Journal.Types.AtomicCounter as AtomicCounter
@@ -81,6 +81,8 @@ runFrontEnd port journal feInfo mReady =
                         putStrLn ("warp, request: " ++ show req)
                         putStrLn ("warp, status: "  ++ show status)
                         print =<< Wai.strictRequestBody req)
-
+      $ setOnException (\req ex ->
+                          putStrLn ("warp, exception: " ++ show ex ++ ", req: " ++ show req))
+      $ setOnClose (\addr -> putStrLn ("closing: " ++ show addr))
       $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
       $ defaultSettings

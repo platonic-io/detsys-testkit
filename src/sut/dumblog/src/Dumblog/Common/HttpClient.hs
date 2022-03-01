@@ -2,7 +2,6 @@
 
 module Dumblog.Common.HttpClient where
 
-import Control.Monad (when)
 import Control.Exception (try)
 import qualified Data.ByteString.Char8 as BSChar8
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -11,19 +10,16 @@ import Network.HTTP.Client
        ( Manager
        , Request
        , RequestBody(RequestBodyLBS)
-       , HttpException(HttpExceptionRequest)
+       , HttpException(HttpExceptionRequest, InvalidUrlException)
        , defaultManagerSettings
        , httpLbs
-       , httpNoBody
        , method
        , newManager
        , parseRequest
        , path
        , requestBody
        , responseBody
-       , responseStatus
        )
-import Network.HTTP.Types.Status (ok200)
 import Network.Wai.Handler.Warp (Port)
 
 ------------------------------------------------------------------------
@@ -57,15 +53,19 @@ writeHttp :: HttpClient -> ByteString -> IO Int
 writeHttp hc bs = do
   eResp <- try (httpLbs (hcWriteReq hc bs) (hcManager hc))
   case eResp of
-    Left (HttpExceptionRequest _req _exceptCtx) ->
+    Left (HttpExceptionRequest _req exceptCtx) -> do
       -- XXX: increment hcErrors
+      putStrLn ("writeHttp, exception context: " ++ show exceptCtx)
       return (-1)
+    Left InvalidUrlException {} -> error "writeHttp, impossible: invalid url"
     Right resp -> return (read (LBSChar8.unpack (responseBody resp)))
 
 readHttp :: HttpClient -> Int -> IO ByteString
 readHttp hc ix = do
   eResp <- try (httpLbs (hcReadReq hc ix) (hcManager hc))
   case eResp of
-    Left (HttpExceptionRequest _req _exceptCtx) ->
+    Left (HttpExceptionRequest _req exceptCtx) -> do
+      putStrLn ("readHttp, exception context: " ++ show exceptCtx)
       return "error" -- XXX: increment hcErrors
+    Left InvalidUrlException {} -> error "readHttp, impossible: invalid url"
     Right resp -> return (responseBody resp)

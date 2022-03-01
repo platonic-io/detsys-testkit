@@ -33,7 +33,7 @@ nUM_OF_CLIENTS :: Int
 nUM_OF_CLIENTS = 3
 
 iTERATIONS :: Int
-iTERATIONS = 10_000
+iTERATIONS = 3000
 
 vALUE_TO_WRITE :: ByteString
 vALUE_TO_WRITE = LBS.pack "Dumblog"
