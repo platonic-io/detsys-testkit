@@ -11,17 +11,22 @@ import Network.Socket.ByteString (sendAll, recv)
 import GHC.Event
 import Control.Concurrent
 
+import Journal.Types (Journal, jLogger, hEADER_LENGTH)
+import Journal.MP
+import Journal.Internal.BufferClaim
+import Journal.Internal.ByteBufferPtr
+
 ------------------------------------------------------------------------
 
-httpServer :: Int -> IO ()
-httpServer port = withSocketsDo $ do
+httpServer :: Journal -> Int -> IO ()
+httpServer jour port = withSocketsDo $ do
   numCapabilities <- getNumCapabilities
   putStrLn ("Starting http server on port: " ++ show port)
   putStrLn ("Capabilities: : " ++ show numCapabilities)
   sock <- listenOn port
   mgr <- fromMaybe (error "Compile with -threaded") <$> getSystemEventManager
   _key <- withFdSocket sock $ \fd ->
-    registerFd mgr (client sock) (fromIntegral fd) evtRead MultiShot
+    registerFd mgr (client jour sock) (fromIntegral fd) evtRead MultiShot
   loop
   where
     loop = do
@@ -52,18 +57,31 @@ parseOffsetLength bs = do
   let (headers, _match) = BS.breakSubstring "\r\n\r\n" bs
   return (BS.length headers + BS.length "POST" + BS.length "\r\n\r\n", len)
 
-client :: Socket -> FdKey -> Event -> IO ()
-client sock _ _ = do
-  (conn, _) <- accept sock
-  req <- recv conn 4096
-  print (parseCommand req)
-  case parseCommand req of
-    Just (Write offset len) ->
-      putStrLn ("BODY: " ++ BS.unpack (BS.take len (BS.drop offset req)))
-    Just (Read _ix) -> return ()
-    Nothing -> return ()
-  sendAll conn msg
-  close conn
+client :: Journal -> Socket -> FdKey -> Event -> IO ()
+client jour sock fdKey event = do
+  eRes <- tryClaim jour 4096
+  case eRes of
+    Left err -> do
+      putStrLn ("client, err: " ++ show err)
+      client jour sock fdKey event
+    Right (offset, bufferClaim) -> do
+      (conn, _) <- accept sock
+      bytesRecv <- recvBytes bufferClaim conn 4096
+      putStrLn ("client, bytes received: " ++ show bytesRecv)
+      commit bufferClaim (jLogger jour)
+
+      -- NOTE: The following copies bytes. It would be better to do the parsing at
+      -- the `ByteBuffer` level rather than `ByteString` level...
+      req <- getByteStringAt (bcByteBuffer bufferClaim) hEADER_LENGTH bytesRecv
+
+      print req
+      case parseCommand req of
+        Just (Write offset len) ->
+          putStrLn ("BODY: " ++ BS.unpack (BS.take len (BS.drop offset req)))
+        Just (Read _ix) -> return ()
+        Nothing -> return ()
+      sendAll conn msg
+      close conn
 
 msg :: ByteString
 msg = BS.pack "HTTP/1.0 200 OK\r\nContent-Length: 5\r\n\r\nPong!\r\n"
@@ -91,3 +109,6 @@ listenOn port = do
 
 openSocket :: AddrInfo -> IO Socket
 openSocket addr = socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+
+-- foreign import ccall unsafe "sys/sendfile.h sendfile"
+--   c_sendfile :: Fd -> Fd -> Ptr Int64 -> Word64 -> IO Int64

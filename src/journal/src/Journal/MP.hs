@@ -5,6 +5,8 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Int (Int64)
 import qualified Data.Vector as Vector
+import Network.Socket (Socket, recvBuf)
+import Foreign (plusPtr)
 
 import Journal.Internal
        ( AppendError(..)
@@ -36,6 +38,9 @@ appendBS jour bs = do
     Right (_offset, bufferClaim) -> do
       putBS bufferClaim hEADER_LENGTH bs
       Right <$> commit bufferClaim (jLogger jour)
+
+recvBytes :: BufferClaim -> Socket -> Int -> IO Int
+recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock (ptr `plusPtr` hEADER_LENGTH) len
 
 readJournal :: Journal -> IO (Maybe ByteString)
 readJournal jour = do
