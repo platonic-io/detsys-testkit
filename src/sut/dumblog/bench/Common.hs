@@ -1,4 +1,5 @@
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Common where
 
@@ -69,15 +70,15 @@ commonBenchmark (_a, hc) = do
 
   performMajorGC
 
-  start <- getCurrentTime
+  !start <- getCurrentTime
   mapConcurrently_ (commonClient hc) gens
-  end <- getCurrentTime
+  !end <- getCurrentTime
 
   let duration :: Double
-      duration = realToFrac (diffUTCTime end start)
+      !duration = realToFrac (diffUTCTime end start)
 
       throughput :: Double
-      throughput = realToFrac iTERATIONS / duration
+      !throughput = realToFrac iTERATIONS / duration
 
   printf "%-25.25s%10.2f ops/s\n" "Throughput" throughput
   printf "%-25.25s%10.2f s\n"     "Duration"   duration

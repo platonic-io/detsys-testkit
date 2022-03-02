@@ -564,8 +564,13 @@ fetchAddWordAddr' bb offset@(I# offset#) (W# incr#) = do
 -- | Calls `msync` which forces the data in memory to be synced to disk.
 force :: ByteBuffer -> IO ()
 force bb =
-  withForeignPtr (bbData bb) $ \ ptr ->
+  withForeignPtr (bbData bb) $ \ptr ->
     msync ptr (fromIntegral (bbCapacity bb)) mS_SYNC False
+
+forceAt :: ByteBuffer -> Int -> Int -> IO ()
+forceAt bb offset len =
+  withForeignPtr (bbData bb) $ \ptr ->
+    msync (ptr `plusPtr` offset) (fromIntegral len) mS_SYNC False
 
 ------------------------------------------------------------------------
 

@@ -27,6 +27,11 @@ extra-source-files:
   LICENSE
   README.md
 
+flag persistent-sqlite
+    Description: Enable compilation of the (slower) persitent-sqlite db module
+    Manual: True
+    Default: False
+
 library
   build-depends:
     , async
@@ -41,13 +46,14 @@ library
     , journal
     , network
     , sqlite-simple
-    , persistent
-    , persistent-sqlite
     , stm
     , text
     , time
     , wai
     , warp
+  if flag(persistent-sqlite)
+    build-depends:  persistent
+                  , persistent-sqlite
 
   exposed-modules:
     Dumblog.Common.HttpClient
@@ -62,12 +68,13 @@ library
     Dumblog.Journal.Worker
     Dumblog.SQLite.Command
     Dumblog.SQLite.DB
-    Dumblog.SQLite.DBPersistent
     Dumblog.SQLite.FrontEnd
     Dumblog.SQLite.Main
     Dumblog.SQLite.Worker
     Dumblog.ZeroCopy.HttpServer
     Dumblog.ZeroCopy.Main
+  if flag(persistent-sqlite)
+    exposed-modules: Dumblog.SQLite.DBPersistent
 
   hs-source-dirs:   src
   default-language: Haskell2010
