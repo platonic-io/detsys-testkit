@@ -95,14 +95,20 @@ readJournal jour = do
          else do
            assertMMsg (show len) (len > 0)
            jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
+           -- NOTE: We need to read the bytestring before the CAS, otherwise the
+           -- bytes can be cleaned away before read. In case the CAS fails this
+           -- causes us to do unnecessary work, as we have to throw away the
+           -- bytestring we just read. A potentially better solution would be to
+           -- do cleaning asynchronously and somehow account there being a
+           -- buffer between the last reader and the cleaner...
+           bs <- getByteStringAt termBuffer
+                   (int322Int relativeOffset + hEADER_LENGTH)
+                   (int322Int len - hEADER_LENGTH)
+           assertM (BS.length bs == int322Int len - hEADER_LENGTH)
            success <- casCounter (jBytesConsumed jour) offset
                         (offset + (align (int322Int len) fRAME_ALIGNMENT))
            if success
            then do
-             bs <- getByteStringAt termBuffer
-                     (int322Int relativeOffset + hEADER_LENGTH)
-                     (int322Int len - hEADER_LENGTH)
-             assertM (BS.length bs == int322Int len - hEADER_LENGTH)
              -- Single-threaded case:
              -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
              return (Just bs)

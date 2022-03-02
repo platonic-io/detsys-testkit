@@ -41,6 +41,8 @@ library
     , journal
     , network
     , sqlite-simple
+    , persistent
+    , persistent-sqlite
     , stm
     , text
     , time
@@ -60,6 +62,7 @@ library
     Dumblog.Journal.Worker
     Dumblog.SQLite.Command
     Dumblog.SQLite.DB
+    Dumblog.SQLite.DBPersistent
     Dumblog.SQLite.FrontEnd
     Dumblog.SQLite.Main
     Dumblog.SQLite.Worker

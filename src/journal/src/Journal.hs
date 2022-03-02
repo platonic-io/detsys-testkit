@@ -116,7 +116,8 @@ startJournal fp (Options termLength logger) = do
   -- XXX: This counter needs to be persisted somehow (mmapped?) in order to be
   -- able to recover from restarts.
   bytesConsumedCounter <- newCounter 0
-  return (Journal termBuffers (Metadata meta) bytesConsumedCounter logger)
+  cleanPosition <- newCounter 0 -- should be set to whatever bytesConsumedCounter is.
+  return (Journal termBuffers (Metadata meta) bytesConsumedCounter logger cleanPosition)
 
 ------------------------------------------------------------------------
 

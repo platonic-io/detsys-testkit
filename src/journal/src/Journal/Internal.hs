@@ -87,7 +87,8 @@ calculatePositionLimit jour = do
   maxSubscriberPos <- readCounter (jBytesConsumed jour)
   termWindowLen    <- termWindowLength (jMetadata jour)
   let _consumerPos  = maxSubscriberPos
-      proposedLimit = minSubscriberPos + fromIntegral termWindowLen
+      proposedLimit = minSubscriberPos + int322Int termWindowLen
+
   cleanBufferTo jour minSubscriberPos
   return (int2Int64 proposedLimit)
   where
@@ -98,7 +99,21 @@ calculatePositionLimit jour = do
       -- ^ prop> \(Positive (Small i)) -> (2^i) `shiftR` 1 == 2^i `div` 2
 
 cleanBufferTo :: Journal -> Int -> IO ()
-cleanBufferTo _ _ = return ()
+cleanBufferTo jour position = do
+  cleanPosition <- readCounter (jCleanPosition jour)
+  termBufferLen <- readTermLength (jMetadata jour)
+  when (position > cleanPosition) $ do
+    let index = indexByPosition (int2Int64 cleanPosition) (positionBitsToShift termBufferLen)
+        dirtyTerm = jTermBuffers jour Vector.! unPartitionIndex index
+        bytesForCleaning = position - cleanPosition
+        bufferCapacity = int322Int termBufferLen
+        termOffset = cleanPosition .&. (bufferCapacity - 1)
+        len = min bytesForCleaning (bufferCapacity - termOffset)
+    cleanAt dirtyTerm (termOffset + sizeOf (8 :: Int64)) (len - sizeOf (8 :: Int64))
+    writeInt64OffAddr dirtyTerm termOffset 0
+    -- incrCounter_ len (jCleanPosition jour)
+    _success <- casCounter (jCleanPosition jour) cleanPosition (cleanPosition + len)
+    return ()
 
 backPressureStatus :: Int64 -> Int -> Logger -> IO (Either AppendError (Int64, BufferClaim))
 backPressureStatus position len logger = do
@@ -271,11 +286,12 @@ dumpTermBuffer i (bb, termOffset) = do
       | offset >  termOffset = __IMPOSSIBLE__
       | offset <  termOffset = do
         h <- readHeader offset
-        dumpHeader h
-        dumpBody offset (bodyLength h)
-        dumpEntries (offset +
-                     TermOffset (int2Int32 (align (hEADER_LENGTH + bodyLength h)
-                                            fRAME_ALIGNMENT)))
+        when (bodyLength h /= 0) $ do
+          dumpHeader h
+          dumpBody offset (bodyLength h)
+          dumpEntries (offset +
+                       TermOffset (int2Int32 (align (hEADER_LENGTH + bodyLength h)
+                                              fRAME_ALIGNMENT)))
 
     readHeader :: TermOffset -> IO (HeaderTag, HeaderLength)
     readHeader offset = (,) <$> readFrameType bb offset <*> readFrameLength bb offset
@@ -297,7 +313,7 @@ dumpTermBuffer i (bb, termOffset) = do
     encodeRunLength = map (BSChar8.length &&& BSChar8.head) . BSChar8.group
 
     bodyLength :: (HeaderTag, HeaderLength) -> Int
-    bodyLength (_tag, HeaderLength len) = int322Int len - hEADER_LENGTH
+    bodyLength (_tag, HeaderLength len) = max 0 (int322Int len - hEADER_LENGTH)
 
 
 dumpMetadata :: Metadata -> IO ()
