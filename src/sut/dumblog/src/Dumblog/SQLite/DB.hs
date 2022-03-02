@@ -4,29 +4,34 @@ module Dumblog.SQLite.DB
   (Connection, module Dumblog.SQLite.DB)
   where
 
+import Control.Monad (forM_)
 import Data.ByteString.Lazy (ByteString)
+import Data.String (fromString)
 import Database.SQLite.Simple
        ( Connection
        , Only(Only)
+       , close
        , execute
        , execute_
        , lastInsertRowId
        , open
        , query
-       , close
        )
 
 ------------------------------------------------------------------------
 
 sQLITE_DB_PATH :: FilePath
-sQLITE_DB_PATH = "/tmp/dumblog.sqlite3"
+sQLITE_DB_PATH = "file:///tmp/dumblog.sqlite3"
 
-sQLITE_FLAGS :: String
-sQLITE_FLAGS = "?fullfsync=true"
+sQLITE_FLAGS :: [String]
+sQLITE_FLAGS = ["fullfsync=1", "journal_mode=WAL", "synchronous=NORMAL"]
 
 initDB :: IO Connection
 initDB = do
-  conn <- open (sQLITE_DB_PATH ++ sQLITE_FLAGS)
+  let flags = map (++ ";") sQLITE_FLAGS
+  conn <- open (sQLITE_DB_PATH ++ "?" ++ concat flags)
+  forM_ flags $ \flag -> do
+    execute_ conn ("PRAGMA " <> fromString flag)
   execute_ conn "CREATE TABLE IF NOT EXISTS dumblog (ix INTEGER PRIMARY KEY, value BLOB)"
   return conn
 
