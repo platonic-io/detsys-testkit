@@ -12,7 +12,7 @@ import Journal.Internal.Utils
 
 ------------------------------------------------------------------------
 
-newtype BufferClaim = BufferClaim ByteBuffer
+newtype BufferClaim = BufferClaim { bcByteBuffer :: ByteBuffer }
 
 newBufferClaim :: ByteBuffer -> TermOffset -> Int -> IO BufferClaim
 newBufferClaim src (TermOffset offset) len = BufferClaim <$>
@@ -23,9 +23,9 @@ putBS (BufferClaim bb) offset bs = putByteStringAt bb offset bs
 
 withPtr :: BufferClaim -> (Ptr Word8 -> IO a) -> IO a
 withPtr (BufferClaim bb) k = do
-  Position offset <- readPosition bb
+  Slice slice <- readSlice bb
   -- XXX: boundcheck?
-  withForeignPtr (bbData bb `plusForeignPtr` offset) k
+  withForeignPtr (bbData bb `plusForeignPtr` slice) k
 
 commit :: BufferClaim -> Logger -> IO ()
 commit (BufferClaim bb) logger = do
