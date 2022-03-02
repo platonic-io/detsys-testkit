@@ -1,0 +1,81 @@
+cabal-version:      2.4
+name:               simple-http-servers
+version:            0.1.0.0
+
+-- A short (one-line) description of the package.
+-- synopsis:
+
+-- A longer description of the package.
+-- description:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+
+-- The license under which the package is released.
+-- license:
+author:             Stevan Andjelkovic
+maintainer:         symbiont-stevan-andjelkovic@users.noreply.github.com
+
+-- A copyright notice.
+-- copyright:
+-- category:
+extra-source-files: CHANGELOG.md
+
+library
+  hs-source-dirs:  src
+  build-depends:
+    , base     ^>=4.14.1.0
+    , bytestring
+    , network
+
+  exposed-modules: TCPServer, GHCEvent
+
+executable network-bytestring
+  main-is:          Main.hs
+  build-depends:
+    , base
+    , bytestring
+    , network
+    , simple-http-servers
+
+  hs-source-dirs:   app/network-bytestring
+  default-language: Haskell2010
+  ghc-options:      -O2
+
+executable ghc-event
+  main-is:          Main.hs
+  build-depends:
+    , base
+    , bytestring
+    , network
+    , simple-http-servers
+
+  hs-source-dirs:   app/ghc-event
+  default-language: Haskell2010
+  ghc-options:      -O2 -threaded -with-rtsopts=-N
+
+executable ghc-event-mp
+  main-is:          Main.hs
+  build-depends:
+    , base
+    , bytestring
+    , mtl
+    , network
+    , simple-http-servers
+
+  hs-source-dirs:   app/ghc-event-mp
+  default-language: Haskell2010
+  ghc-options:      -O2 -threaded -with-rtsopts=-N
+
+executable warp
+  main-is:          Main.hs
+  build-depends:
+    , base
+    , bytestring
+    , http-types
+    , wai
+    , warp
+
+  hs-source-dirs:   app/warp
+  default-language: Haskell2010
+  ghc-options:      -O2 -threaded -with-rtsopts=-N

@@ -1,0 +1,5 @@
+packages: .
+
+with-compiler: ghc-8.10.4
+
+package simple-http-servers
