@@ -20,8 +20,8 @@ import Dumblog.ZeroCopy.State
 
 ------------------------------------------------------------------------
 
-httpServer :: Journal -> Int -> IO ()
-httpServer jour port = withSocketsDo $ do
+httpServer :: Journal -> Int -> Maybe (MVar ()) -> IO ()
+httpServer jour port mReady = withSocketsDo $ do
   numCapabilities <- getNumCapabilities
   putStrLn ("Starting http server on port: " ++ show port)
   putStrLn ("Capabilities: : " ++ show numCapabilities)
@@ -30,6 +30,7 @@ httpServer jour port = withSocketsDo $ do
   mgr <- fromMaybe (error "Compile with -threaded") <$> getSystemEventManager
   _key <- withFdSocket sock $ \fd ->
     registerFd mgr (client jour state sock) (fromIntegral fd) evtRead MultiShot
+  maybe (return ()) (flip putMVar ()) mReady
   loop
   where
     loop = do

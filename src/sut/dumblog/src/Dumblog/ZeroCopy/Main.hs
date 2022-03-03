@@ -1,19 +1,20 @@
 module Dumblog.ZeroCopy.Main where
 
-import Journal.Types (Journal)
+import Control.Concurrent (MVar)
+import Journal.Types (oTermBufferLength)
 import Journal (defaultOptions, allocateJournal, startJournal)
 
 import Dumblog.ZeroCopy.HttpServer
 
 ------------------------------------------------------------------------
 
-zeroCopyDumblog :: Journal -> Int -> IO ()
-zeroCopyDumblog jour port = httpServer jour port
-
-main :: IO ()
-main = do
+zeroCopyDumblog :: Int -> Int -> Maybe (MVar ()) -> IO ()
+zeroCopyDumblog capacity port mReady = do
   let fp   = "/tmp/dumblog-zero-copy.journal"
-      opts = defaultOptions
+      opts = defaultOptions { oTermBufferLength = capacity }
   allocateJournal fp opts
   jour <- startJournal fp opts
-  zeroCopyDumblog jour 8054
+  httpServer jour port mReady
+
+main :: IO ()
+main = zeroCopyDumblog (64 * 1024) 8054 Nothing
