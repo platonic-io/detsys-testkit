@@ -8,10 +8,9 @@ import qualified Data.Vector.Mutable as Vector
 import Data.Word (Word16, Word64)
 import Network.Socket (Socket)
 import Network.Socket.ByteString (sendAll)
-import System.Posix.IO (OpenMode(ReadOnly), defaultFileFlags, openFd)
-import System.Posix.Types (Fd)
+import Network.Socket.SendFile.Handle (sendFile')
+import System.IO (Handle, openFile, IOMode(ReadMode))
 
-import Dumblog.ZeroCopy.Sendfile
 import Journal.Types (hEADER_LENGTH)
 import Journal.Types.AtomicCounter
 
@@ -20,7 +19,7 @@ import Journal.Types.AtomicCounter
 data State = State
   { sLocations :: !(IOVector Location)
   , sIndex     :: !AtomicCounter
-  , sFd        :: !Fd
+  , sFd        :: !Handle
   }
 
 initState :: Int -> FilePath -> IO State
@@ -28,7 +27,7 @@ initState size fp
   = State
   <$> Vector.replicate size uninitialisedLocation
   <*> newCounter 0
-  <*> openFd fp ReadOnly Nothing defaultFileFlags
+  <*> openFile fp ReadMode
 
 data Location = Location
   { lOffset :: !Word64
@@ -60,7 +59,7 @@ readSendfile s sock ix = do
     Nothing  -> sendAll sock notFound
     Just loc -> do
       sendAll sock (httpHeader (lLength loc))
-      _bytesSent <- sendfile sock (sFd s)
+      _bytesSent <- sendFile' sock (sFd s)
                       (fromIntegral (lOffset loc) + fromIntegral hEADER_LENGTH)
                       (fromIntegral (lLength loc))
       return ()

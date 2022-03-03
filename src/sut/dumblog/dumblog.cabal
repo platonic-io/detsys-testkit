@@ -46,6 +46,7 @@ library
     , journal
     , network
     , unix
+    , sendfile
     , sqlite-simple
     , stm
     , text
@@ -75,7 +76,6 @@ library
     Dumblog.SQLite.Worker
     Dumblog.ZeroCopy.HttpServer
     Dumblog.ZeroCopy.Main
-    Dumblog.ZeroCopy.Sendfile
     Dumblog.ZeroCopy.State
   if flag(persistent-sqlite)
     exposed-modules: Dumblog.SQLite.DBPersistent
