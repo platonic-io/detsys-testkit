@@ -50,6 +50,7 @@ library
     , stm
     , text
     , time
+    , vector
     , wai
     , warp
   if flag(persistent-sqlite)
@@ -75,6 +76,7 @@ library
     Dumblog.ZeroCopy.HttpServer
     Dumblog.ZeroCopy.Main
     Dumblog.ZeroCopy.Sendfile
+    Dumblog.ZeroCopy.State
   if flag(persistent-sqlite)
     exposed-modules: Dumblog.SQLite.DBPersistent
 
