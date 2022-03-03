@@ -3,7 +3,7 @@ module Dumblog.Journal.Main where
 import Control.Concurrent.Async (withAsync, link)
 import Control.Concurrent.MVar (MVar)
 import Journal (defaultOptions, allocateJournal, startJournal)
-import Journal.Types (Journal, Options, oLogger, jBytesConsumed)
+import Journal.Types (Journal, Options, oLogger, writeBytesConsumed, jMetadata)
 import qualified Journal.MP as Journal
 import Journal.Internal.Logger as Logger
 import qualified Journal.Internal.Metrics as Metrics
@@ -31,9 +31,7 @@ fetchJournal mSnapshot fpj opts = do
     Just snap -> do
       let bytes = Snapshot.ssBytesInJournal snap
       putStrLn $ "[journal] Found Snapshot! starting from bytes: "  <> show bytes
-      AtomicCounter.writeCounter
-        (jBytesConsumed journal)
-        bytes
+      writeBytesConsumed (jMetadata journal) bytes
   pure journal
 
 -- this should be from snapshot/or replay journal
