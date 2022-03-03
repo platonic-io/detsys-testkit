@@ -100,7 +100,6 @@ allocateJournal fp (Options termBufferLen logger) = do
 
 startJournal :: FilePath -> Options -> IO Journal
 startJournal fp (Options termLength logger) = do
-
   logLength <- fromIntegral <$> getFileSize fp
   bb <- mmapped fp logLength
   meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
@@ -113,11 +112,7 @@ startJournal fp (Options termLength logger) = do
         writePosition bb (Position offset)
         writeLimit bb (Limit (offset + termLength))
         slice bb
-  -- XXX: This counter needs to be persisted somehow (mmapped?) in order to be
-  -- able to recover from restarts.
-  bytesConsumedCounter <- newCounter 0
-  cleanPosition <- newCounter 0 -- should be set to whatever bytesConsumedCounter is.
-  return (Journal termBuffers (Metadata meta) bytesConsumedCounter logger cleanPosition)
+  return (Journal termBuffers (Metadata meta) logger)
 
 ------------------------------------------------------------------------
 
@@ -168,7 +163,7 @@ recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock ptr len
 
 readJournal :: Journal -> IO (Maybe ByteString)
 readJournal jour = do
-  offset <- readCounter (jBytesConsumed jour)
+  offset <- readBytesConsumed (jMetadata jour)
   let jLog = logg (jLogger jour)
   jLog ("readJournal, offset: " ++ show offset)
 
@@ -210,7 +205,7 @@ readJournal jour = do
     if tag == Padding
     then do
       assertM (len >= 0)
-      incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
+      incrBytesConsumed_ (jMetadata jour) (align (int322Int len) fRAME_ALIGNMENT)
       jLog "readJournal, skipping padding..."
       readJournal jour
     else do
@@ -220,7 +215,7 @@ readJournal jour = do
               (int322Int relativeOffset + hEADER_LENGTH)
               (int322Int len - hEADER_LENGTH)
       assertM (BS.length bs == int322Int len - hEADER_LENGTH)
-      incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
+      incrBytesConsumed_ (jMetadata jour) (align (int322Int len) fRAME_ALIGNMENT)
       return (Just bs)
 
 ------------------------------------------------------------------------
