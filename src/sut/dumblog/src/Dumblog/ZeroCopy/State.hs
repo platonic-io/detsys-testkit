@@ -26,7 +26,7 @@ data State = State
 initState :: Int -> FilePath -> IO State
 initState size fp
   = State
-  <$> Vector.new size
+  <$> Vector.replicate size uninitialisedLocation
   <*> newCounter 0
   <*> openFd fp ReadOnly Nothing defaultFileFlags
 
@@ -34,6 +34,10 @@ data Location = Location
   { lOffset :: !Word64
   , lLength :: !Word16
   }
+  deriving Eq
+
+uninitialisedLocation :: Location
+uninitialisedLocation = Location 0 0
 
 writeLocation :: State -> Int64 -> Location -> IO Int
 writeLocation s offset loc = do
@@ -42,17 +46,24 @@ writeLocation s offset loc = do
     (loc { lOffset = fromIntegral (offset - 4096) + lOffset loc })
   return ix
 
-readLocation :: State -> Int -> IO Location
-readLocation s ix = Vector.read (sLocations s) ix
+readLocation :: State -> Int -> IO (Maybe Location)
+readLocation s ix = do
+  loc <- Vector.read (sLocations s) ix
+  if loc == uninitialisedLocation
+  then return Nothing
+  else return (Just loc)
 
 readSendfile :: State -> Socket -> Int -> IO ()
 readSendfile s sock ix = do
-  loc <- readLocation s ix
-  sendAll sock (httpHeader (lLength loc))
-  _bytesSent <- sendfile sock (sFd s)
-                  (fromIntegral (lOffset loc) + fromIntegral hEADER_LENGTH)
-                  (fromIntegral (lLength loc))
-  return ()
+  mLoc <- readLocation s ix
+  case mLoc of
+    Nothing  -> sendAll sock (BS.pack "HTTP/1.0 404 Not found")
+    Just loc -> do
+      sendAll sock (httpHeader (lLength loc))
+      _bytesSent <- sendfile sock (sFd s)
+                      (fromIntegral (lOffset loc) + fromIntegral hEADER_LENGTH)
+                      (fromIntegral (lLength loc))
+      return ()
 
 httpHeader :: Word16 -> ByteString
 httpHeader len =

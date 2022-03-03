@@ -17,4 +17,4 @@ zeroCopyDumblog capacity port mReady = do
   httpServer jour port mReady
 
 main :: IO ()
-main = zeroCopyDumblog (64 * 1024) 8054 Nothing
+main = zeroCopyDumblog (512 * 1024 * 1024) 8054 Nothing

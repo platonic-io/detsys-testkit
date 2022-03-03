@@ -7,4 +7,4 @@ import Common
 ------------------------------------------------------------------------
 
 main :: IO ()
-main = commonMain "ZeroCopy" (zeroCopyDumblog bUFFER_CAPACITY pORT . Just)
+main = commonMain "ZeroCopy" (zeroCopyDumblog (512 * 1024 * 1024) pORT . Just)
