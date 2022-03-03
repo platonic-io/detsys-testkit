@@ -9,10 +9,9 @@ import Dumblog.ZeroCopy.HttpServer
 
 ------------------------------------------------------------------------
 
-zeroCopyDumblog :: Int -> Int -> Maybe (MVar ()) -> IO ()
-zeroCopyDumblog capacity port mReady = do
-  let fp   = "/tmp/dumblog-zero-copy.journal"
-      opts = defaultOptions { oTermBufferLength = capacity
+zeroCopyDumblog :: Int -> Int -> FilePath -> Maybe (MVar ()) -> IO ()
+zeroCopyDumblog capacity port fp mReady = do
+  let opts = defaultOptions { oTermBufferLength = capacity
                             , oLogger = nullLogger
                             }
   allocateJournal fp opts
@@ -20,4 +19,6 @@ zeroCopyDumblog capacity port mReady = do
   httpServer jour port mReady
 
 main :: IO ()
-main = zeroCopyDumblog (512 * 1024 * 1024) 8054 Nothing
+main = do
+  let fp = "/tmp/dumblog-zero-copy.journal"
+  zeroCopyDumblog (512 * 1024 * 1024) 8054 fp Nothing
