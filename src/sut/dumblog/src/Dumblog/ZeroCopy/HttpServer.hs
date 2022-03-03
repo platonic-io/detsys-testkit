@@ -7,14 +7,18 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Control.Exception (bracketOnError)
 import Network.Socket
-import Network.Socket.ByteString (sendAll, recv)
+import Network.Socket.ByteString (sendAll)
+import GHC.IO.Device (SeekMode(AbsoluteSeek))
 import GHC.Event
 import Control.Concurrent
+import System.Posix.IO
 
 import Journal.Types (Journal, jLogger, hEADER_LENGTH)
 import Journal.MP
 import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBufferPtr
+
+import Dumblog.ZeroCopy.Sendfile
 
 ------------------------------------------------------------------------
 
@@ -76,15 +80,29 @@ client jour sock fdKey event = do
 
       print req
       case parseCommand req of
-        Just (Write offset len) ->
-          putStrLn ("BODY: " ++ BS.unpack (BS.take len (BS.drop offset req)))
-        Just (Read _ix) -> return ()
+        Just (Write offset' len) -> do
+          putStrLn ("BODY: " ++ BS.unpack (BS.take len (BS.drop offset' req)))
+          fd <- openFd "/tmp/dumblog-zero-copy.journal" ReadOnly Nothing defaultFileFlags
+          -- fdSeek fd AbsoluteSeek
+            -- (fromIntegral offset' + fromIntegral hEADER_LENGTH)
+          -- (s, _readBytes) <- fdRead fd (fromIntegral len)
+          sendAll conn (httpHeader len)
+          -- NOTE: For subsequent requests we need to take `offset` into account also.
+          _sentBytes <- sendfile conn fd (fromIntegral (offset' + hEADER_LENGTH))
+            (fromIntegral len)
+          return ()
+
+        Just (Read _ix) -> do
+          sendAll conn msg
         Nothing -> return ()
-      sendAll conn msg
       close conn
 
 msg :: ByteString
 msg = BS.pack "HTTP/1.0 200 OK\r\nContent-Length: 5\r\n\r\nPong!\r\n"
+
+httpHeader :: Int -> ByteString
+httpHeader len =
+  BS.pack "HTTP/1.0 200 OK\r\nContent-Length: " <> BS.pack (show len) <> "\r\n\r\n"
 
 
 listenOn :: Int -> IO Socket
@@ -109,6 +127,3 @@ listenOn port = do
 
 openSocket :: AddrInfo -> IO Socket
 openSocket addr = socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
-
--- foreign import ccall unsafe "sys/sendfile.h sendfile"
---   c_sendfile :: Fd -> Fd -> Ptr Int64 -> Word64 -> IO Int64
