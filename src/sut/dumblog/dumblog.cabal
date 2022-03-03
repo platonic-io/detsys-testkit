@@ -154,3 +154,9 @@ benchmark bench-sqlite
   hs-source-dirs: bench/sqlite
   main-is:        Main.hs
   type:           exitcode-stdio-1.0
+
+benchmark bench-zero-copy
+  import:         bench-common
+  hs-source-dirs: bench/zero-copy
+  main-is:        Main.hs
+  type:           exitcode-stdio-1.0
