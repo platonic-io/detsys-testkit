@@ -6,11 +6,9 @@ import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
 import Data.Time (getCurrentTime, diffUTCTime)
 
-import Journal.Types (Journal)
-import Journal (jBytesConsumed)
+import Journal.Types (Journal, readBytesConsumed, jMetadata)
 import qualified Journal.MP as Journal
 import qualified Journal.Internal.Metrics as Metrics
-import qualified Journal.Types.AtomicCounter as AtomicCounter
 
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
@@ -52,7 +50,7 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
     go ev s
       | ev >= untilSnapshot = do
           putStrLn $ "[worker] Performing Snapshot"
-          bytes <- AtomicCounter.readCounter $ Journal.jBytesConsumed journal
+          bytes <- readBytesConsumed (jMetadata journal)
           Snapshot.toFile (Snapshot.Snapshot bytes s) snapshotFile
           go 0 s
     go ev s = do
