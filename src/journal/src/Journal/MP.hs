@@ -44,7 +44,7 @@ recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock (ptr `plusPtr` hEADER_
 
 readJournal :: Journal -> IO (Maybe ByteString)
 readJournal jour = do
-  offset <- readCounter (jBytesConsumed jour)
+  offset <- readBytesConsumed (jMetadata jour)
   let jLog = logg (jLogger jour)
   jLog ("readJournal, offset: " ++ show offset)
 
@@ -88,7 +88,7 @@ readJournal jour = do
     then do
       if len >= 0
       then do
-        _success <- casCounter (jBytesConsumed jour) offset (offset + int322Int len)
+        _success <- casBytesConsumed (jMetadata jour) offset (offset + int322Int len)
         jLog "readJournal, skipping padding..."
         -- If the CAS fails, it just means that some other process incremented the
         -- counter already.
@@ -110,7 +110,7 @@ readJournal jour = do
                    (int322Int relativeOffset + hEADER_LENGTH)
                    (int322Int len - hEADER_LENGTH)
            assertM (BS.length bs == int322Int len - hEADER_LENGTH)
-           success <- casCounter (jBytesConsumed jour) offset
+           success <- casBytesConsumed (jMetadata jour) offset
                         (offset + (align (int322Int len) fRAME_ALIGNMENT))
            if success
            then do

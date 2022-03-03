@@ -83,8 +83,8 @@ tryClaim jour len = do
 -- separate process?
 calculatePositionLimit :: Journal -> IO Int64
 calculatePositionLimit jour = do
-  minSubscriberPos <- readCounter (jBytesConsumed jour) -- XXX: only one subscriber so far.
-  maxSubscriberPos <- readCounter (jBytesConsumed jour)
+  minSubscriberPos <- readBytesConsumed (jMetadata jour) -- XXX: only one subscriber so far.
+  maxSubscriberPos <- readCleanPosition (jMetadata jour)
   termWindowLen    <- termWindowLength (jMetadata jour)
   let _consumerPos  = maxSubscriberPos
       proposedLimit = minSubscriberPos + int322Int termWindowLen
@@ -100,7 +100,7 @@ calculatePositionLimit jour = do
 
 cleanBufferTo :: Journal -> Int -> IO ()
 cleanBufferTo jour position = do
-  cleanPosition <- readCounter (jCleanPosition jour)
+  cleanPosition <- readCleanPosition (jMetadata jour)
   termBufferLen <- readTermLength (jMetadata jour)
   when (position > cleanPosition) $ do
     let index = indexByPosition (int2Int64 cleanPosition) (positionBitsToShift termBufferLen)
@@ -112,7 +112,7 @@ cleanBufferTo jour position = do
     cleanAt dirtyTerm (termOffset + sizeOf (8 :: Int64)) (len - sizeOf (8 :: Int64))
     writeInt64OffAddr dirtyTerm termOffset 0
     -- incrCounter_ len (jCleanPosition jour)
-    _success <- casCounter (jCleanPosition jour) cleanPosition (cleanPosition + len)
+    _success <- casCleanPosition (jMetadata jour) cleanPosition (cleanPosition + len)
     return ()
 
 backPressureStatus :: Int64 -> Int -> Logger -> IO (Either AppendError (Int64, BufferClaim))
