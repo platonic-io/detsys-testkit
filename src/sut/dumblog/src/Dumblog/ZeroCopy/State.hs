@@ -57,14 +57,17 @@ readSendfile :: State -> Socket -> Int -> IO ()
 readSendfile s sock ix = do
   mLoc <- readLocation s ix
   case mLoc of
-    Nothing  -> sendAll sock (BS.pack "HTTP/1.0 404 Not found")
+    Nothing  -> sendAll sock notFound
     Just loc -> do
       sendAll sock (httpHeader (lLength loc))
       _bytesSent <- sendfile sock (sFd s)
                       (fromIntegral (lOffset loc) + fromIntegral hEADER_LENGTH)
                       (fromIntegral (lLength loc))
       return ()
+  where
+    notFound :: ByteString
+    notFound = BS.pack "HTTP/1.0 404 Not Found\r\n\r\n"
 
-httpHeader :: Word16 -> ByteString
-httpHeader len =
-  BS.pack "HTTP/1.0 200 OK\r\nContent-Length: " <> BS.pack (show len) <> BS.pack "\r\n\r\n"
+    httpHeader :: Word16 -> ByteString
+    httpHeader len =
+      BS.pack "HTTP/1.0 200 OK\r\nContent-Length: " <> BS.pack (show len) <> BS.pack "\r\n\r\n"
