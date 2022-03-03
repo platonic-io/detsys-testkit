@@ -64,7 +64,7 @@ commonBenchmark :: (Async (), HttpClient) -> IO ()
 commonBenchmark (_a, hc) = do
   n <- getNumCapabilities
   printf "%-25.25s%10d\n" "CPU capabilities" n
-  printf "%-25.25s%10d\n" "Total number of ops" iTERATIONS
+  printf "%-25.25s%10d\n" "Total number of ops" (iTERATIONS * nUM_OF_CLIENTS)
 
   let gens = map mkStdGen [0 .. nUM_OF_CLIENTS - 1]
 
@@ -78,7 +78,7 @@ commonBenchmark (_a, hc) = do
       !duration = realToFrac (diffUTCTime end start)
 
       throughput :: Double
-      !throughput = realToFrac iTERATIONS / duration
+      !throughput = realToFrac (iTERATIONS * nUM_OF_CLIENTS) / duration
 
   printf "%-25.25s%10.2f ops/s\n" "Throughput" throughput
   printf "%-25.25s%10.2f s\n"     "Duration"   duration

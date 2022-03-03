@@ -2,19 +2,20 @@
 
 module Dumblog.ZeroCopy.HttpServer where
 
-import Data.Maybe (fromMaybe)
+import Control.Concurrent
+import Control.Exception (bracketOnError)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import Control.Exception (bracketOnError)
+import Data.Maybe (fromMaybe)
+import Data.Int (Int64)
+import GHC.Event
 import Network.Socket
 import Network.Socket.ByteString (sendAll)
-import GHC.Event
-import Control.Concurrent
 
-import Journal.Types (Journal, jLogger, hEADER_LENGTH)
-import Journal.MP
 import Journal.Internal.BufferClaim
 import Journal.Internal.ByteBufferPtr
+import Journal.MP
+import Journal.Types (Journal, hEADER_LENGTH, jLogger)
 
 import Dumblog.ZeroCopy.State
 
@@ -29,7 +30,8 @@ httpServer jour port mReady = withSocketsDo $ do
   sock <- listenOn port
   mgr <- fromMaybe (error "Compile with -threaded") <$> getSystemEventManager
   _key <- withFdSocket sock $ \fd ->
-    registerFd mgr (client jour state sock) (fromIntegral fd) evtRead MultiShot
+    registerFd mgr (client mgr jour state sock) (fromIntegral fd) evtRead MultiShot
+  threadDelay (1000 * 1000)
   maybe (return ()) (flip putMVar ()) mReady
   loop
   where
@@ -61,29 +63,38 @@ parseOffsetLength bs = do
   let (headers, _match) = BS.breakSubstring "\r\n\r\n" bs
   return (BS.length headers + BS.length "POST" + BS.length "\r\n\r\n", len)
 
-client :: Journal -> State -> Socket -> FdKey -> Event -> IO ()
-client jour state sock fdKey event = do
-  let bufSize = 4096 - hEADER_LENGTH
-  eRes <- tryClaim jour bufSize
+bUFFER_SIZE :: Int
+bUFFER_SIZE = 4096 - hEADER_LENGTH
+
+client :: EventManager -> Journal -> State -> Socket -> FdKey -> Event -> IO ()
+client mgr jour state sock fdKey event = do
+  eRes <- tryClaim jour bUFFER_SIZE
   case eRes of
     Left err -> do
       putStrLn ("client, err: " ++ show err)
-      client jour state sock fdKey event
+      client mgr jour state sock fdKey event
     Right (offset, bufferClaim) -> do
       (conn, _) <- accept sock
-      bytesRecv <- recvBytes bufferClaim conn bufSize
-      commit bufferClaim (jLogger jour)
+      _key <- withFdSocket conn $ \fd ->
+        registerFd mgr
+          (client' jour state conn offset bufferClaim) (fromIntegral fd) evtRead OneShot
+      return ()
 
-      -- NOTE: The following copies bytes. It would be better to do the parsing at
-      -- the `ByteBuffer` level rather than `ByteString` level...
-      req <- getByteStringAt (bcByteBuffer bufferClaim) hEADER_LENGTH bytesRecv
-      case parseCommand req of
-        Just (Write offset' len) -> do
-          ix <- writeLocation state offset (Location (fromIntegral offset') (fromIntegral len))
-          sendAll conn (response (BS.pack (show ix)))
-        Just (Read ix) -> readSendfile state conn ix
-        Nothing -> return ()
-      close conn
+client' :: Journal -> State -> Socket -> Int64 -> BufferClaim -> FdKey -> Event -> IO ()
+client' jour state conn offset bufferClaim _fdKey _event = do
+  bytesRecv <- recvBytes bufferClaim conn bUFFER_SIZE
+  commit bufferClaim (jLogger jour)
+
+  -- NOTE: The following copies bytes. It would be better to do the parsing at
+  -- the `ByteBuffer` level rather than `ByteString` level...
+  req <- getByteStringAt (bcByteBuffer bufferClaim) hEADER_LENGTH bytesRecv
+  case parseCommand req of
+    Just (Write offset' len) -> do
+      ix <- writeLocation state offset (Location (fromIntegral offset') (fromIntegral len))
+      sendAll conn (response (BS.pack (show ix)))
+    Just (Read ix) -> readSendfile state conn ix
+    Nothing -> return ()
+  close conn
 
 response :: ByteString -> ByteString
 response body =
