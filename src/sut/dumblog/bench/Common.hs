@@ -5,7 +5,7 @@ module Common where
 
 import Control.Concurrent (getNumCapabilities)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, takeMVar)
-import Control.Concurrent.Async (Async, async, cancel, mapConcurrently_)
+import Control.Concurrent.Async (Async, async, cancel, mapConcurrently_, link)
 import Control.Exception (assert, bracket)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -53,6 +53,7 @@ commonSetup msg io = do
   ready <- newEmptyMVar
   putStrLn ("Starting Dumblog (" ++ msg ++ ")")
   a <- async (io ready)
+  link a
   () <- takeMVar ready
   hc <- newHttpClient hOST pORT
   return (a, hc)
