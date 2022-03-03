@@ -61,9 +61,7 @@ newtype Metadata = Metadata { unMetadata :: ByteBuffer }
 data Journal = Journal
   { jTermBuffers   :: {-# UNPACK #-} !(Vector ByteBuffer)
   , jMetadata      :: {-# UNPACK #-} !Metadata
-  , jBytesConsumed :: {-# UNPACK #-} !AtomicCounter -- ???
   , jLogger        ::                !Logger
-  , jCleanPosition :: {-# UNPACK #-} !AtomicCounter
   }
 
 data JMetadata = JMetadata
@@ -77,6 +75,8 @@ data JMetadata = JMetadata
   -- mdMTULength :: Int32, only needed if we want to fragment large messages...
   , mdTermLength    :: Int32
   , mdPageSize      :: Int32
+  , mdBytesConsumed :: Int64
+  , mdCleanPosition :: Int64
   -- padding
   -- , mdDefaultFrameHeader :: Bytestring???
   }
@@ -100,8 +100,14 @@ lOG_PAGE_SIZE_OFFSET :: Int
 lOG_PAGE_SIZE_OFFSET = lOG_TERM_LENGTH_OFFSET +
   sizeOf (4 :: Int32)
 
+lOG_BYTES_CONSUMED_OFFSET :: Int
+lOG_BYTES_CONSUMED_OFFSET = lOG_PAGE_SIZE_OFFSET + sizeOf (4 :: Int32)
+
+lOG_CLEAN_POSITION_OFFSET :: Int
+lOG_CLEAN_POSITION_OFFSET = lOG_BYTES_CONSUMED_OFFSET + sizeOf (8 :: Int)
+
 lOG_META_DATA_LENGTH :: Int
-lOG_META_DATA_LENGTH = lOG_PAGE_SIZE_OFFSET + sizeOf (4 :: Int32) -- is this correct?
+lOG_META_DATA_LENGTH = lOG_CLEAN_POSITION_OFFSET + sizeOf (8 :: Int) -- is this correct?
 
 ------------------------------------------------------------------------
 
@@ -190,6 +196,27 @@ readPageSize (Metadata meta) = readInt32OffAddr meta lOG_PAGE_SIZE_OFFSET
 
 writePageSize :: Metadata -> Int32 -> IO ()
 writePageSize (Metadata meta) = writeInt32OffAddr meta lOG_PAGE_SIZE_OFFSET
+
+readBytesConsumed :: Metadata -> IO Int
+readBytesConsumed (Metadata meta) = readIntOffArrayIx meta lOG_BYTES_CONSUMED_OFFSET
+
+writeBytesConsumed :: Metadata -> Int -> IO ()
+writeBytesConsumed (Metadata meta) = writeIntOffAddr meta lOG_BYTES_CONSUMED_OFFSET
+
+incrBytesConsumed_ :: Metadata -> Int -> IO ()
+incrBytesConsumed_ (Metadata meta) = fetchAddIntArray_ meta lOG_BYTES_CONSUMED_OFFSET
+
+casBytesConsumed :: Metadata -> Int -> Int -> IO Bool
+casBytesConsumed (Metadata meta) = casIntAddr meta lOG_BYTES_CONSUMED_OFFSET
+
+readCleanPosition :: Metadata -> IO Int
+readCleanPosition (Metadata meta) = readIntOffArrayIx meta lOG_CLEAN_POSITION_OFFSET
+
+writeCleanPosition :: Metadata -> Int -> IO ()
+writeCleanPosition (Metadata meta) = writeIntOffAddr meta lOG_CLEAN_POSITION_OFFSET
+
+casCleanPosition :: Metadata -> Int -> Int -> IO Bool
+casCleanPosition (Metadata meta) = casIntAddr meta lOG_CLEAN_POSITION_OFFSET
 
 -- | The number of bits to shift when multiplying or dividing by the term buffer
 -- length.
