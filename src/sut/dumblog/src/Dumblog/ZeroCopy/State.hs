@@ -6,10 +6,10 @@ import Data.Int (Int64)
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
 import Data.Word (Word16, Word64)
-import Network.Socket (Socket)
+import Network.Socket (SocketOption(Cork), Socket, setSocketOption)
 import Network.Socket.ByteString (sendAll)
 import Network.Socket.SendFile.Handle (sendFile')
-import System.IO (Handle, openFile, IOMode(ReadMode))
+import System.IO (Handle, IOMode(ReadMode), openFile)
 
 import Journal.Types (hEADER_LENGTH)
 import Journal.Types.AtomicCounter
@@ -58,10 +58,12 @@ readSendfile s sock ix = do
   case mLoc of
     Nothing  -> sendAll sock notFound
     Just loc -> do
+      -- setSocketOption sock Cork 1
       sendAll sock (httpHeader (lLength loc))
       _bytesSent <- sendFile' sock (sFd s)
                       (fromIntegral (lOffset loc) + fromIntegral hEADER_LENGTH)
                       (fromIntegral (lLength loc))
+      -- setSocketOption sock Cork 0
       return ()
   where
     notFound :: ByteString

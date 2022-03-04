@@ -10,12 +10,13 @@ import Control.Monad
 import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
+import qualified Data.ByteString.Unsafe as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Internal as LBS
 import Data.IORef
 import Data.Int
 import Data.Word
-import Foreign (copyBytes, fillBytes, plusPtr, withForeignPtr)
+import Foreign (copyBytes, fillBytes, plusPtr, withForeignPtr, castPtr)
 import Foreign.Concurrent
 import Foreign.Storable
 import GHC.Exts
@@ -341,6 +342,13 @@ getByteStringAt bb offset len = do
   withForeignPtr (bbData bb) $ \sptr ->
     BS.create len $ \dptr ->
       copyBytes dptr (sptr `plusPtr` (slice + offset)) len
+
+unsafeGetByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
+unsafeGetByteStringAt bb offset len = do
+  boundCheck bb offset len -- XXX???
+  Slice slice <- readIORef (bbSlice bb)
+  withForeignPtr (bbData bb) $ \sptr ->
+    BS.unsafePackCStringLen (castPtr (sptr `plusPtr` (slice + offset)), len)
 
 ------------------------------------------------------------------------
 -- * Relative operations on `Storable` elements
