@@ -1,0 +1,334 @@
+[
+  {
+    "state": "state of A",
+    "sent": [
+      {
+        "event": "snd",
+        "to": "A",
+        "from": "B",
+        "receivedLogical": 1,
+        "message": "This is the second message"
+      }
+    ],
+    "logs": [
+      "first log of A",
+      "second log of A"
+    ],
+    "currentEvent": {
+      "event": "fst",
+      "to": "B",
+      "from": "A",
+      "receivedLogical": 0,
+      "message": "This is the first message"
+    }
+  },
+  {
+    "state": "state of B",
+    "sent": [],
+    "logs": [
+      "Log for B"
+    ],
+    "currentEvent": {
+      "event": "snd",
+      "to": "A",
+      "from": "B",
+      "receivedLogical": 1,
+      "message": "This is the second message"
+    }
+  },
+  {
+    "state": "state of A",
+    "sent": [
+      {
+        "event": "snd",
+        "to": "A",
+        "from": "B",
+        "receivedLogical": 1,
+        "message": "This is the second message"
+      }
+    ],
+    "logs": [
+      "first log of A",
+      "second log of A"
+    ],
+    "currentEvent": {
+      "event": "fst",
+      "to": "B",
+      "from": "A",
+      "receivedLogical": 0,
+      "message": "This is the first message"
+    }
+  },
+  {
+    "state": "state of A",
+    "sent": [
+      {
+        "event": "snd",
+        "to": "A",
+        "from": "B",
+        "receivedLogical": 1,
+        "message": "This is the second message"
+      }
+    ],
+    "logs": [
+      "first log of A",
+      "second log of A"
+    ],
+    "currentEvent": {
+      "event": "fst",
+      "to": "B",
+      "from": "A",
+      "receivedLogical": 0,
+      "message": "This is the first message"
+    }
+  },
+  {
+    "state": "state of B",
+    "sent": [],
+    "logs": [
+      "Log for B"
+    ],
+    "currentEvent": {
+      "event": "snd",
+      "to": "A",
+      "from": "B",
+      "receivedLogical": 1,
+      "message": "This is the second message"
+    }
+  },
+  {
+    "state": "state of B",
+    "sent": [],
+    "logs": [
+      "Log for B"
+    ],
+    "currentEvent": {
+      "event": "snd",
+      "to": "A",
+      "from": "B",
+      "receivedLogical": 1,
+      "message": "This is the second message"
+    }
+  },
+  {
+    "state": "state of B",
+    "sent": [
+      {
+        "event": "fst",
+        "to": "B",
+        "from": "A",
+        "receivedLogical": 0,
+        "message": "This is the first message"
+      },
+      {
+        "event": "snd",
+        "to": "A",
+        "from": "B",
+        "receivedLogical": 1,
+        "message": "This is the second message"
+      },
+      {
+        "event": "fst",
+        "to": "B",
+        "from": "A",
+        "receivedLogical": 0,
+        "message": "This is the first message"
+      },
+      {
+        "event": "fst",
+        "to": "B",
+        "from": "A",
+        "receivedLogical": 0,
+        "message": "This is the first message"
+      },
+      {
+        "event": "fst",
+        "to": "B",
+        "from": "A",
+        "receivedLogical": 0,
+        "message": "This is the first message"
+      }
+    ],
+    "logs": [
+      "Log for B"
+    ],
+    "currentEvent": {
+      "event": "snd",
+      "to": "A",
+      "from": "B",
+      "receivedLogical": 1,
+      "message": "This is the second message"
+    }
+  },
+  {
+    "state": "state of A",
+    "sent": [
+      {
+        "event": "snd",
+        "to": "A",
+        "from": "B",
+        "receivedLogical": 1,
+        "message": "This is the second message"
+      }
+    ],
+    "logs": [
+      "first log of A",
+      "second log of A"
+    ],
+    "currentEvent": {
+      "event": "fst",
+      "to": "B",
+      "from": "A",
+      "receivedLogical": 0,
+      "message": "This is the first message"
+    }
+  },
+  {
+    "state": "state of A",
+    "sent": [
+      {
+        "event": "snd",
+        "to": "A",
+        "from": "B",
+        "receivedLogical": 1,
+        "message": "This is the second message"
+      }
+    ],
+    "logs": [
+      "first log of A",
+      "second log of A"
+    ],
+    "currentEvent": {
+      "event": "fst",
+      "to": "B",
+      "from": "A",
+      "receivedLogical": 0,
+      "message": "This is the first message"
+    }
+  },
+  {
+    "state": "state of B",
+    "sent": [],
+    "logs": [
+      "Log for B"
+    ],
+    "currentEvent": {
+      "event": "snd",
+      "to": "A",
+      "from": "B",
+      "receivedLogical": 1,
+      "message": "This is the second message"
+    }
+  },
+  {
+    "state": "state of B",
+    "sent": [],
+    "logs": [
+      "Log for B"
+    ],
+    "currentEvent": {
+      "event": "snd",
+      "to": "A",
+      "from": "B",
+      "receivedLogical": 1,
+      "message": "This is the second message"
+    }
+  },
+  {
+    "state": "state of B",
+    "sent": [],
+    "logs": [
+      "Log for B"
+    ],
+    "currentEvent": {
+      "event": "snd",
+      "to": "A",
+      "from": "B",
+      "receivedLogical": 1,
+      "message": "This is the second message"
+    }
+  },
+  {
+    "state": "state of A",
+    "sent": [
+      {
+        "event": "snd",
+        "to": "A",
+        "from": "B",
+        "receivedLogical": 1,
+        "message": "This is the second message"
+      }
+    ],
+    "logs": [
+      "first log of A",
+      "second log of A"
+    ],
+    "currentEvent": {
+      "event": "fst",
+      "to": "B",
+      "from": "A",
+      "receivedLogical": 0,
+      "message": "This is the first message"
+    }
+  },
+  {
+    "state": "state of A",
+    "sent": [
+      {
+        "event": "snd",
+        "to": "A",
+        "from": "B",
+        "receivedLogical": 1,
+        "message": "This is the second message"
+      }
+    ],
+    "logs": [
+      "first log of A",
+      "second log of A"
+    ],
+    "currentEvent": {
+      "event": "fst",
+      "to": "B",
+      "from": "A",
+      "receivedLogical": 0,
+      "message": "This is the first message"
+    }
+  },
+  {
+    "state": "state of A",
+    "sent": [
+      {
+        "event": "snd",
+        "to": "A",
+        "from": "B",
+        "receivedLogical": 1,
+        "message": "This is the second message"
+      }
+    ],
+    "logs": [
+      "first log of A",
+      "second log of A"
+    ],
+    "currentEvent": {
+      "event": "fst",
+      "to": "B",
+      "from": "A",
+      "receivedLogical": 0,
+      "message": "This is the first message"
+    }
+  },
+  {
+    "state": "state of B",
+    "sent": [],
+    "logs": [
+      "Log for B"
+    ],
+    "currentEvent": {
+      "event": "snd",
+      "to": "A",
+      "from": "B",
+      "receivedLogical": 1,
+      "message": "This is the second message"
+    }
+  }
+]

@@ -47,26 +47,26 @@ wrapSettings = defaultWrapSettings
   { preserveIndentation = False, breakLongWords = True }
 
 renderReactorState :: AppState -> Widget ()
-renderReactorState as = renderToString as state
+renderReactorState as = renderToString as isState
 
 renderEvents :: AppState -> Widget ()
 renderEvents as =
   center $ L.renderList listDrawElement True $ asLog as
 
 renderSeqDia :: AppState -> Widget ()
-renderSeqDia as = renderToString as seqDia
+renderSeqDia as = renderToString as isSeqDia
 
 renderMessage :: AppState -> Widget ()
-renderMessage as = renderToString as (message . currentEvent)
+renderMessage as = renderToString as (message . isCurrentEvent)
 
 renderSentMessage :: AppState -> Widget ()
-renderSentMessage as = renderToString as (addEmpty . unlines . map renderEvent . sent)
+renderSentMessage as = renderToString as (addEmpty . unlines . map renderEvent . isSent)
   where
     addEmpty [] = "\n"
     addEmpty xs = xs
 
 renderLogs :: AppState -> Widget ()
-renderLogs as = renderToString as (addEmpty . unlines . logs)
+renderLogs as = renderToString as (addEmpty . unlines . isLogs)
   where
     addEmpty [] = "\n"
     addEmpty xs = xs
@@ -76,7 +76,7 @@ listDrawElement sel is =
   let selStr s = if sel
                  then withAttr customAttr (str $ ">" <> s)
                  else str $ " " <> s
-  in selStr $ renderEvent $ currentEvent is
+  in selStr $ renderEvent $ isCurrentEvent is
 
 customAttr :: AttrName
 customAttr = L.listSelectedAttr <> "custom"

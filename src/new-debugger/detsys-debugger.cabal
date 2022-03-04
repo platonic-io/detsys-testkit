@@ -26,6 +26,7 @@ library
   -- GHC boot library dependencies:
   -- (https://gitlab.haskell.org/ghc/ghc/-/blob/master/packages)
   build-depends:
+    , aeson
     , base        ^>=4.14
     , brick
     , vector
