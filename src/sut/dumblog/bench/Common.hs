@@ -12,6 +12,12 @@ import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Maybe (fromMaybe)
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
+import Data.Word (Word64)
+import GHC.Float (castWord64ToDouble)
+import GHC.Stats
+       ( RTSStats(allocated_bytes, copied_bytes, max_mem_in_use_bytes)
+       , getRTSStats
+       )
 import System.Mem (performMajorGC)
 import System.Random (StdGen, mkStdGen, randomR)
 import Text.Printf (printf)
@@ -74,8 +80,10 @@ commonBenchmark (_a, hc) = do
   performMajorGC
 
   !start <- getCurrentTime
+  (startAllocs, startCopied, startMaxMemInUse) <- getAllocsAndCopied
   mapConcurrently_ (commonClient hc) gens
   !end <- getCurrentTime
+  (endAllocs, endCopied, endMaxMemInUse) <- getAllocsAndCopied
 
   let duration :: Double
       !duration = realToFrac (diffUTCTime end start)
@@ -83,8 +91,33 @@ commonBenchmark (_a, hc) = do
       throughput :: Double
       !throughput = realToFrac (iTERATIONS * nUM_OF_CLIENTS) / duration
 
-  printf "%-25.25s%10.2f ops/s\n" "Throughput" throughput
-  printf "%-25.25s%10.2f s\n"     "Duration"   duration
+  printf "%-25.25s%10.2f ops/s\n" "Throughput"     throughput
+  printf "%-25.25s%10.2f s\n"     "Duration"       duration
+  printf "%-25.25s%10s\n"         "Allocated mem"  (showBytes (endAllocs - startAllocs))
+  printf "%-25.25s%10s\n"         "Copied mem"     (showBytes (endCopied - startCopied))
+  printf "%-25.25s%10s\n"         "Max mem"        (showBytes
+                                                     (max endMaxMemInUse startMaxMemInUse))
+
+showBytes :: Word64 -> String
+showBytes i
+  | t < 1000                 = printf "%3.0f B " t
+  | t < 10189                = printf "%3.1f KB" (t / 1024)
+  | t < 1023488              = printf "%3.0f KB" (t / 1024)
+  | t < 10433332             = printf "%3.1f MB" (t / 1048576)
+  | t < 1048051712           = printf "%3.0f MB" (t / 1048576)
+  | t < 10683731149          = printf "%3.1f GB" (t / 1073741824)
+  | t < 1073204953088        = printf "%3.0f GB" (t / 1073741824)
+  | t < 10940140696372       = printf "%3.1f TB" (t / 1099511627776)
+  | t < 1098961871962112     = printf "%3.0f TB" (t / 1099511627776)
+  | t < 11202704073084108    = printf "%3.1f PB" (t / 1125899906842624)
+  | t < 1125336956889202624  = printf "%3.0f PB" (t / 1125899906842624)
+  | t < 11471568970838126592 = printf "%3.1f EB" (t / 1152921504606846976)
+  | otherwise                = printf "%3.0f EB" (t / 1152921504606846976)
+  where
+    t = word64ToDouble i
+
+    word64ToDouble :: Word64 -> Double
+    word64ToDouble = fromIntegral
 
 commonClient :: HttpClient -> StdGen -> IO ()
 commonClient hc gen = go iTERATIONS 0 gen
@@ -116,3 +149,10 @@ genCommand gen writeFreq readFreq =
                                    i <= writeFreq + readFreq) Read
   in
     (cmd, gen')
+
+------------------------------------------------------------------------
+
+getAllocsAndCopied :: IO (Word64, Word64, Word64)
+getAllocsAndCopied = do
+  s <- getRTSStats
+  return (allocated_bytes s, copied_bytes s, max_mem_in_use_bytes s)
