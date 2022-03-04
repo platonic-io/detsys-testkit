@@ -7,10 +7,10 @@ import qualified Data.ByteString.Char8 as BSChar8
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBSChar8
 import Network.HTTP.Client
-       ( Manager
+       ( HttpException(HttpExceptionRequest, InvalidUrlException)
+       , Manager
        , Request
        , RequestBody(RequestBodyLBS)
-       , HttpException(HttpExceptionRequest, InvalidUrlException)
        , defaultManagerSettings
        , httpLbs
        , method
@@ -21,6 +21,7 @@ import Network.HTTP.Client
        , responseBody
        )
 import Network.Wai.Handler.Warp (Port)
+import Text.Read (readMaybe)
 
 ------------------------------------------------------------------------
 
@@ -49,23 +50,23 @@ newHttpClient host port = do
 
   return (HttpClient mgr writeReq readReq)
 
-writeHttp :: HttpClient -> ByteString -> IO Int
+writeHttp :: HttpClient -> ByteString -> IO (Maybe Int)
 writeHttp hc bs = do
   eResp <- try (httpLbs (hcWriteReq hc bs) (hcManager hc))
   case eResp of
     Left (HttpExceptionRequest _req exceptCtx) -> do
       -- XXX: increment hcErrors
       putStrLn ("writeHttp, exception context: " ++ show exceptCtx)
-      return (-1)
+      return Nothing
     Left InvalidUrlException {} -> error "writeHttp, impossible: invalid url"
-    Right resp -> return (read (LBSChar8.unpack (responseBody resp)))
+    Right resp -> return (readMaybe (LBSChar8.unpack (responseBody resp)))
 
-readHttp :: HttpClient -> Int -> IO ByteString
+readHttp :: HttpClient -> Int -> IO (Maybe ByteString)
 readHttp hc ix = do
   eResp <- try (httpLbs (hcReadReq hc ix) (hcManager hc))
   case eResp of
     Left (HttpExceptionRequest _req exceptCtx) -> do
       putStrLn ("readHttp, exception context: " ++ show exceptCtx)
-      return "error" -- XXX: increment hcErrors
+      return Nothing -- XXX: increment hcErrors
     Left InvalidUrlException {} -> error "readHttp, impossible: invalid url"
-    Right resp -> return (responseBody resp)
+    Right resp -> return (Just (responseBody resp))

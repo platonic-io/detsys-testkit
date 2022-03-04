@@ -1,17 +1,19 @@
-{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE NumericUnderscores #-}
 
 module Common where
 
 import Control.Concurrent (getNumCapabilities)
+import Control.Concurrent.Async
+       (Async, async, cancel, link, mapConcurrently_)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, takeMVar)
-import Control.Concurrent.Async (Async, async, cancel, mapConcurrently_, link)
 import Control.Exception (assert, bracket)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
+import Data.Maybe (fromMaybe)
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
 import System.Mem (performMajorGC)
-import System.Random (StdGen, randomR, mkStdGen)
+import System.Random (StdGen, mkStdGen, randomR)
 import Text.Printf (printf)
 
 import Dumblog.Common.HttpClient
@@ -93,8 +95,8 @@ commonClient hc gen = go iTERATIONS 0 gen
       let (cmd, gen') = genCommand gen wRITE_FREQUENCY rEAD_FREQUENCY
       case cmd of
         Write -> do
-          maxIndex' <- writeHttp hc vALUE_TO_WRITE
-          go (n - 1) maxIndex' gen'
+          mMaxIndex' <- writeHttp hc vALUE_TO_WRITE
+          go (n - 1) (fromMaybe maxIndex mMaxIndex') gen'
         Read  ->
           let
             (ix, gen'') = randomR (0, maxIndex) gen'
