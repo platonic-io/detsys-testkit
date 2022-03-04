@@ -1,130 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Debugger.Main where
 
-import Brick
-import Brick.Widgets.Border (borderWithLabel, vBorder, hBorder)
-import Brick.Widgets.Border.Style (unicode)
-import Brick.Widgets.Center (center, hCenter)
-import qualified Brick.Widgets.List as L
-import Control.Monad
-import Data.Maybe (fromMaybe)
 import qualified Data.Vector as Vector
-import qualified Graphics.Vty as V
-import Text.Wrap
+
+import Debugger.UI (AppState, mkAppState, runApp)
+import Debugger.State
 
 ------------------------------------------------------------------------
 
-drawUI :: AppState -> [Widget ()]
-drawUI as = [ui]
-  where
-    ui = withBorderStyle unicode
-       -- $ borderWithLabel (str "Debugger")
-       $ vBox
-         [ hBox
-           [ vBox
-             [ borderWithLabel (str "Reactor State") $ renderReactorState as
-             , vLimitPercent 33 $ borderWithLabel (str "Events") $ renderEvents as
-             ]
-           , borderWithLabel (str "Sequence Diagram") $ renderSeqDia as
-           ]
-         , vLimit 7 $ hBox
-           [ borderWithLabel (str "Current Message") $ renderMessage as
-           , borderWithLabel (str "Sent Messages") $ renderSentMessage as
-           ]
-         , vLimit 7 $ borderWithLabel (str "Reactor Log") $ renderLogs as
-         ]
-
-renderEvent :: DebEvent -> String
-renderEvent (DebEvent from to event receivedLogical _) =
-  event <> ": " <> from <> " -> " <> to <> " @ " <> show receivedLogical
-
-renderToString :: AppState -> (InstanceState -> String) -> Widget ()
-renderToString as f = center$ strWrapWith wrapSettings (fromMaybe "?" . fmap (f . snd) $ L.listSelectedElement $ asLog as)
-
-wrapSettings = defaultWrapSettings
-  { preserveIndentation = False, breakLongWords = True }
-
-renderReactorState :: AppState -> Widget ()
-renderReactorState as = renderToString as state
-
-renderEvents :: AppState -> Widget ()
-renderEvents as =
-  center $ L.renderList listDrawElement True $ asLog as
-
-renderSeqDia :: AppState -> Widget ()
-renderSeqDia as = renderToString as seqDia
-
-renderMessage :: AppState -> Widget ()
-renderMessage as = renderToString as (message . currentEvent)
-
-renderSentMessage :: AppState -> Widget ()
-renderSentMessage as = renderToString as (addEmpty . unlines . map renderEvent . sent)
-  where
-    addEmpty [] = "\n"
-    addEmpty xs = xs
-
-renderLogs :: AppState -> Widget ()
-renderLogs as = renderToString as (addEmpty . unlines . logs)
-  where
-    addEmpty [] = "\n"
-    addEmpty xs = xs
-
-listDrawElement :: Bool -> InstanceState -> Widget ()
-listDrawElement sel is =
-  let selStr s = if sel
-                 then withAttr customAttr (str $ ">" <> s)
-                 else str $ " " <> s
-  in selStr $ renderEvent $ currentEvent is
-
-customAttr :: AttrName
-customAttr = L.listSelectedAttr <> "custom"
-
-brickApp :: App AppState e ()
-brickApp = App
-  { appDraw = drawUI
-  , appHandleEvent = appEvent
-  , appStartEvent = return
-  , appAttrMap = const theMap
-  , appChooseCursor = neverShowCursor
-  }
-
-appEvent :: AppState -> BrickEvent () e -> EventM () (Next AppState)
-appEvent as (VtyEvent e) =
-  case e of
-    V.EvKey (V.KChar 'q') [] -> halt as
-    ev -> continue =<< fmap AppState (L.handleListEventVi L.handleListEvent ev (asLog as))
-appEvent as _ = continue as
-
-theMap :: AttrMap
-theMap = attrMap V.defAttr
-    [ (customAttr, fg V.cyan)
-    ]
-
-data DebEvent = DebEvent
-  { from :: String
-  , to :: String
-  , event :: String
-  , receivedLogical :: Int
-  -- , receivedSimulated :: Time
-  , message :: String
-  } deriving Show
-
-data InstanceState = InstanceState
- { state :: String -- Should probably be per reactor
- , currentEvent :: DebEvent
- , seqDia :: String
- , logs :: [String]
- , sent :: [DebEvent]
- }
-
-data AppState = AppState
-  { asLog :: L.List () InstanceState
-  }
-
 fakeState :: AppState
-fakeState = AppState
-  { asLog = L.list () (Vector.fromList [f1, f2,f1,f1,f2,f2,f3,f1,f1,f2,f2,f2,f1,f1,f1,f2]) 1
-  }
+fakeState = mkAppState (Vector.fromList [f1, f2,f1,f1,f2,f2,f3,f1,f1,f2,f2,f2,f1,f1,f1,f2])
   where
     e1 = DebEvent
       { from = "A"
@@ -163,5 +48,4 @@ fakeState = AppState
       }
 
 debugMain :: IO ()
-debugMain = do
-  void (defaultMain brickApp fakeState)
+debugMain = runApp fakeState
