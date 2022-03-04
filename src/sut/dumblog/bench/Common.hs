@@ -13,10 +13,10 @@ import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Maybe (fromMaybe)
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
 import Data.Word (Word64)
-import GHC.Float (castWord64ToDouble)
 import GHC.Stats
        ( RTSStats(allocated_bytes, copied_bytes, max_mem_in_use_bytes)
        , getRTSStats
+       , getRTSStatsEnabled
        )
 import System.Mem (performMajorGC)
 import System.Random (StdGen, mkStdGen, randomR)
@@ -154,5 +154,9 @@ genCommand gen writeFreq readFreq =
 
 getAllocsAndCopied :: IO (Word64, Word64, Word64)
 getAllocsAndCopied = do
-  s <- getRTSStats
-  return (allocated_bytes s, copied_bytes s, max_mem_in_use_bytes s)
+  b <- getRTSStatsEnabled
+  if b
+  then do
+    s <- getRTSStats
+    return (allocated_bytes s, copied_bytes s, max_mem_in_use_bytes s)
+  else return (0, 0, 0)
