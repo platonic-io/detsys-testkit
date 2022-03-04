@@ -75,26 +75,41 @@ client mgr jour state sock fdKey event = do
       client mgr jour state sock fdKey event
     Right (offset, bufferClaim) -> do
       (conn, _) <- accept sock
+      -- setSocketOption conn NoDelay 1
       _key <- withFdSocket conn $ \fd ->
         registerFd mgr
-          (client' jour state conn offset bufferClaim) (fromIntegral fd) evtRead OneShot
+          (client' mgr jour state conn offset bufferClaim) (fromIntegral fd) evtRead OneShot
       return ()
 
-client' :: Journal -> State -> Socket -> Int64 -> BufferClaim -> FdKey -> Event -> IO ()
-client' jour state conn offset bufferClaim _fdKey _event = do
+client' :: EventManager -> Journal -> State -> Socket -> Int64 -> BufferClaim -> FdKey
+        -> Event -> IO ()
+client' _mgr jour state conn offset bufferClaim _fdKey _event = do
   bytesRecv <- recvBytes bufferClaim conn bUFFER_SIZE
+  -- XXX: commit after parsing?!
   commit bufferClaim (jLogger jour)
-
-  -- NOTE: The following copies bytes. It would be better to do the parsing at
-  -- the `ByteBuffer` level rather than `ByteString` level...
-  req <- getByteStringAt (bcByteBuffer bufferClaim) hEADER_LENGTH bytesRecv
+  req <- unsafeGetByteStringAt (bcByteBuffer bufferClaim) hEADER_LENGTH bytesRecv
   case parseCommand req of
     Just (Write offset' len) -> do
       ix <- writeLocation state offset (Location (fromIntegral offset') (fromIntegral len))
       sendAll conn (response (BS.pack (show ix)))
     Just (Read ix) -> readSendfile state conn ix
     Nothing -> return ()
+  -- _key <- withFdSocket conn $ \fd ->
+  --   registerFd mgr (client'' mgr jour state conn) (fromIntegral fd) evtRead OneShot
+  -- return ()
   close conn
+
+-- client'' :: EventManager -> Journal -> State -> Socket -> FdKey -> Event -> IO ()
+-- client'' mgr jour state conn fdKey event = do
+--   eRes <- tryClaim jour bUFFER_SIZE
+--   case eRes of
+--     Left err -> do
+--       putStrLn ("client'', err: " ++ show err)
+--       client'' mgr jour state conn fdKey event
+--     Right (offset, bufferClaim) -> do
+--       putStrLn "client'': before"
+--       client' mgr jour state conn offset bufferClaim fdKey event
+--       putStrLn "client'': after"
 
 response :: ByteString -> ByteString
 response body =
@@ -116,6 +131,7 @@ listenOn port = do
     open addr = bracketOnError (openSocket addr) (const (return ())) $ \sock -> do
       -- close $ \sock -> do
       setSocketOption sock ReuseAddr 1
+      -- setSocketOption sock NoDelay 1
       withFdSocket sock setCloseOnExecIfNeeded
       bind sock (addrAddress addr)
       listen sock 1024
