@@ -97,6 +97,7 @@ client' _mgr jour state conn offset bufferClaim _fdKey _event = do
   -- _key <- withFdSocket conn $ \fd ->
   --   registerFd mgr (client'' mgr jour state conn) (fromIntegral fd) evtRead OneShot
   -- return ()
+  -- XXX: implement keep-alive...
   close conn
 
 -- client'' :: EventManager -> Journal -> State -> Socket -> FdKey -> Event -> IO ()

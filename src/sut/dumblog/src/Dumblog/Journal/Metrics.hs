@@ -11,7 +11,7 @@ data DumblogCounters
   deriving (Eq, Show, Enum, Bounded)
 
 data DumblogHistograms
-  = ResponseTime
+  = ServiceTime
   deriving (Eq, Show, Enum, Bounded)
 
 type DumblogMetrics = Metrics DumblogCounters DumblogHistograms

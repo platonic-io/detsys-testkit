@@ -33,16 +33,13 @@ This document tries to answer the following questions:
   + Little's law:
     - the mean number of jobs in the system = arrival rate * mean waiting time in the system;
 
-    - or, mean response time = mean number in system / mean throughput (aka
-      bandwidth);
+    - or, mean response time = mean number of jobs in system (concurrent
+      connections) / mean throughput (aka bandwidth / arrival rate);
 
     - or, the average queue length equals the average arrival rate times the
       average waiting time;
 
-    - or, average waiting time = average queue length * average time between two arrivals;
-
-    - or, latency (mean waiting time) = concurrent connections (mean number of jobs in
-      system) / throughput (arrival rate).
+    - or, average waiting time = average queue length * average time between two arrivals.
 
 ## Scalability
 
