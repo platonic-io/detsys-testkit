@@ -40,6 +40,11 @@ uninitialisedLocation = Location 0 0
 
 writeLocation :: State -> Int64 -> Location -> IO Int
 writeLocation s offset loc = do
+  -- XXX: This will break reply, because the order of the transactions in the
+  -- journal don't necessarily end up in the same relation to the counter's
+  -- ix... Instead do like we do in the other journal variant: serialise `fd` of
+  -- client to journal, have a separate worker thread that reads the journal
+  -- sequentially, assigns index and responds to the client.
   ix <- getAndIncrCounter 1 (sIndex s)
   Vector.write (sLocations s) ix
     (loc { lOffset = fromIntegral (offset - 4096) + lOffset loc })

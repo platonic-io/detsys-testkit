@@ -1,14 +1,15 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Dumblog.Journal.Worker where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
-import Data.Time (getCurrentTime, diffUTCTime)
+import Data.Time (diffUTCTime, getCurrentTime)
 
-import Journal.Types (Journal, readBytesConsumed, jMetadata)
-import qualified Journal.MP as Journal
 import qualified Journal.Internal.Metrics as Metrics
+import qualified Journal.MP as Journal
+import Journal.Types (Journal, jMetadata, readBytesConsumed)
 
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
@@ -29,11 +30,11 @@ data WorkerInfo = WorkerInfo
 -- Currently always uses `ResponseTime`
 timeIt :: DumblogMetrics -> IO a -> IO a
 timeIt metrics action = do
-  startTime <- getCurrentTime
+  !startTime <- getCurrentTime
   result <- action
-  endTime <- getCurrentTime
+  !endTime <- getCurrentTime
   -- dunno what timescale we are measuring
-  Metrics.measure metrics ResponseTime (realToFrac . (*1000) $ diffUTCTime endTime startTime)
+  Metrics.measure metrics ServiceTime (realToFrac . (*1000) $ diffUTCTime endTime startTime)
   return result
 
 wakeUpFrontend :: Blocker (Either Response Response) -> Int -> Either Response Response

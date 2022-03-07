@@ -98,6 +98,7 @@ commonBenchmark (_a, hc) = do
   printf "%-25.25s%10s\n"         "Max mem"        (showBytes
                                                      (max endMaxMemInUse startMaxMemInUse))
 
+-- Stolen from `tasty-bench`.
 showBytes :: Word64 -> String
 showBytes i
   | t < 1000                 = printf "%3.0f B " t
