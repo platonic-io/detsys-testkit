@@ -75,13 +75,6 @@ fetchState mSnapshot jour0 = do
 {-
 Unclear how to:
 * How to archive the journal
-* How to read from journal in a blocking way?
-  - The journal should be the thing that decides order
-  - But we seem to only have one reader, should that be the worker or some archiver?
-* How to properly use the files?
-  - If the files don't exists we should create them
-  - If they exists we should not allocate (unless explicitly asked to)
-* How do snapshots work?
 -}
 journalDumblog :: Int -> Int -> Maybe (MVar ()) -> IO ()
 journalDumblog _capacity port mReady = do
