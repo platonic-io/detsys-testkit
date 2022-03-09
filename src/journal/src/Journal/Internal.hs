@@ -83,7 +83,7 @@ tryClaim jour len = do
 -- separate process?
 calculatePositionLimit :: Journal -> IO Int64
 calculatePositionLimit jour = do
-  minSubscriberPos <- readBytesConsumed (jMetadata jour) -- XXX: only one subscriber so far.
+  minSubscriberPos <- readMinBytesConsumed (jMetadata jour)
   maxSubscriberPos <- readCleanPosition (jMetadata jour)
   termWindowLen    <- termWindowLength (jMetadata jour)
   let _consumerPos  = maxSubscriberPos

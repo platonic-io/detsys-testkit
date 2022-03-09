@@ -9,7 +9,7 @@ import Data.Time (diffUTCTime, getCurrentTime)
 
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.MP as Journal
-import Journal.Types (Journal, jMetadata, readBytesConsumed)
+import Journal.Types (Journal, Subscriber(..), jMetadata, readBytesConsumed, writeBytesConsumed)
 
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
@@ -51,11 +51,12 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
     go ev s
       | ev >= untilSnapshot = do
           putStrLn $ "[worker] Performing Snapshot"
-          bytes <- readBytesConsumed (jMetadata journal)
+          bytes <- readBytesConsumed (jMetadata journal) Sub1
           Snapshot.toFile (Snapshot.Snapshot bytes s) snapshotFile
+          writeBytesConsumed (jMetadata journal) Sub2 bytes
           go 0 s
     go ev s = do
-      { val <- Journal.readJournal journal
+      { val <- Journal.readJournal journal Sub1
       ; (ev', s') <- case val of
         { Nothing -> return (ev, s)
         ; Just entry -> timeIt metrics $ do

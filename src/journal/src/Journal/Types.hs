@@ -75,8 +75,9 @@ data JMetadata = JMetadata
   -- mdMTULength :: Int32, only needed if we want to fragment large messages...
   , mdTermLength    :: Int32
   , mdPageSize      :: Int32
-  , mdBytesConsumed :: Int64
   , mdCleanPosition :: Int64
+  , mdBytesConsumed1 :: Int64
+  , mdBytesConsumed2 :: Int64
   -- padding
   -- , mdDefaultFrameHeader :: Bytestring???
   }
@@ -100,14 +101,27 @@ lOG_PAGE_SIZE_OFFSET :: Int
 lOG_PAGE_SIZE_OFFSET = lOG_TERM_LENGTH_OFFSET +
   sizeOf (4 :: Int32)
 
-lOG_BYTES_CONSUMED_OFFSET :: Int
-lOG_BYTES_CONSUMED_OFFSET = lOG_PAGE_SIZE_OFFSET + sizeOf (4 :: Int32)
-
 lOG_CLEAN_POSITION_OFFSET :: Int
-lOG_CLEAN_POSITION_OFFSET = lOG_BYTES_CONSUMED_OFFSET + sizeOf (8 :: Int)
+lOG_CLEAN_POSITION_OFFSET = lOG_PAGE_SIZE_OFFSET + sizeOf (4 :: Int32)
+
+lOG_BYTES_CONSUMED1_OFFSET :: Int
+lOG_BYTES_CONSUMED1_OFFSET = lOG_CLEAN_POSITION_OFFSET + sizeOf (8 :: Int)
+
+lOG_BYTES_CONSUMED2_OFFSET :: Int
+lOG_BYTES_CONSUMED2_OFFSET = lOG_BYTES_CONSUMED1_OFFSET + sizeOf (8 :: Int)
 
 lOG_META_DATA_LENGTH :: Int
-lOG_META_DATA_LENGTH = lOG_CLEAN_POSITION_OFFSET + sizeOf (8 :: Int) -- is this correct?
+lOG_META_DATA_LENGTH = lOG_BYTES_CONSUMED2_OFFSET + sizeOf (8 :: Int) -- is this correct?
+
+data Subscriber = Sub1 | Sub2
+  deriving (Bounded, Enum, Show)
+
+subscriberOffset :: Subscriber -> Int
+subscriberOffset Sub1 = lOG_BYTES_CONSUMED1_OFFSET
+subscriberOffset Sub2 = lOG_BYTES_CONSUMED2_OFFSET
+
+tombStone :: Int
+tombStone = maxBound
 
 ------------------------------------------------------------------------
 
@@ -197,17 +211,23 @@ readPageSize (Metadata meta) = readInt32OffAddr meta lOG_PAGE_SIZE_OFFSET
 writePageSize :: Metadata -> Int32 -> IO ()
 writePageSize (Metadata meta) = writeInt32OffAddr meta lOG_PAGE_SIZE_OFFSET
 
-readBytesConsumed :: Metadata -> IO Int
-readBytesConsumed (Metadata meta) = readIntOffArrayIx meta lOG_BYTES_CONSUMED_OFFSET
+readBytesConsumed :: Metadata -> Subscriber -> IO Int
+readBytesConsumed (Metadata meta) sub = readIntOffArrayIx meta (subscriberOffset sub)
 
-writeBytesConsumed :: Metadata -> Int -> IO ()
-writeBytesConsumed (Metadata meta) = writeIntOffAddr meta lOG_BYTES_CONSUMED_OFFSET
+writeBytesConsumed :: Metadata -> Subscriber -> Int -> IO ()
+writeBytesConsumed (Metadata meta) sub = writeIntOffAddr meta (subscriberOffset sub)
 
-incrBytesConsumed_ :: Metadata -> Int -> IO ()
-incrBytesConsumed_ (Metadata meta) = fetchAddIntArray_ meta lOG_BYTES_CONSUMED_OFFSET
+incrBytesConsumed_ :: Metadata -> Subscriber -> Int -> IO ()
+incrBytesConsumed_ (Metadata meta) sub = fetchAddIntArray_ meta (subscriberOffset sub)
 
-casBytesConsumed :: Metadata -> Int -> Int -> IO Bool
-casBytesConsumed (Metadata meta) = casIntAddr meta lOG_BYTES_CONSUMED_OFFSET
+casBytesConsumed :: Metadata -> Subscriber -> Int -> Int -> IO Bool
+casBytesConsumed (Metadata meta) sub = casIntAddr meta (subscriberOffset sub)
+
+readMinBytesConsumed :: Metadata -> IO Int
+readMinBytesConsumed meta = do
+  minSub1 <- readBytesConsumed meta Sub1
+  minSub2 <- readBytesConsumed meta Sub2
+  pure (min minSub1 minSub2)
 
 readCleanPosition :: Metadata -> IO Int
 readCleanPosition (Metadata meta) = readIntOffArrayIx meta lOG_CLEAN_POSITION_OFFSET
@@ -387,6 +407,7 @@ emptyMetrics = Metrics 0 0
 data Options = Options
   { oTermBufferLength :: !Int
   , oLogger :: !Logger
+  , oMaxSubscriber :: Subscriber
   }
   -- archive
   -- buffer and fsync every ms?
