@@ -1,5 +1,6 @@
 packages: .
   , ../../journal/journal.cabal
+  , ../../new-debugger/detsys-debugger.cabal
   , ../../runtime-prototype/stunt-double.cabal
 
 with-compiler: ghc-8.10.4
