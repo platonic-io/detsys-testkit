@@ -75,8 +75,8 @@ data JMetadata = JMetadata
   -- mdMTULength :: Int32, only needed if we want to fragment large messages...
   , mdTermLength    :: Int32
   , mdPageSize      :: Int32
-  , mdBytesConsumed :: Int64
   , mdCleanPosition :: Int64
+  , mdBytesConsumed :: Int64
   -- padding
   -- , mdDefaultFrameHeader :: Bytestring???
   }
@@ -100,14 +100,14 @@ lOG_PAGE_SIZE_OFFSET :: Int
 lOG_PAGE_SIZE_OFFSET = lOG_TERM_LENGTH_OFFSET +
   sizeOf (4 :: Int32)
 
-lOG_BYTES_CONSUMED_OFFSET :: Int
-lOG_BYTES_CONSUMED_OFFSET = lOG_PAGE_SIZE_OFFSET + sizeOf (4 :: Int32)
-
 lOG_CLEAN_POSITION_OFFSET :: Int
-lOG_CLEAN_POSITION_OFFSET = lOG_BYTES_CONSUMED_OFFSET + sizeOf (8 :: Int)
+lOG_CLEAN_POSITION_OFFSET = lOG_PAGE_SIZE_OFFSET + sizeOf (4 :: Int32)
+
+lOG_BYTES_CONSUMED_OFFSET :: Int
+lOG_BYTES_CONSUMED_OFFSET = lOG_CLEAN_POSITION_OFFSET + sizeOf (8 :: Int)
 
 lOG_META_DATA_LENGTH :: Int
-lOG_META_DATA_LENGTH = lOG_CLEAN_POSITION_OFFSET + sizeOf (8 :: Int) -- is this correct?
+lOG_META_DATA_LENGTH = lOG_BYTES_CONSUMED_OFFSET + sizeOf (8 :: Int) -- is this correct?
 
 ------------------------------------------------------------------------
 
