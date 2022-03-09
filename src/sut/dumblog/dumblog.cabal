@@ -34,23 +34,26 @@ flag persistent-sqlite
 
 library
   build-depends:
+    , aeson
     , async
     , base           ^>=4.14.1.0
     , binary
     , bytestring
     , containers
+    , detsys-debugger
     , directory
     , filepath
     , http-client
     , http-types
     , journal
     , network
-    , unix
+    , optparse-generic
     , sendfile
     , sqlite-simple
     , stm
     , text
     , time
+    , unix
     , vector
     , wai
     , warp
@@ -98,6 +101,7 @@ executable dumblog-journal
     , async
     , directory
     , journal
+    , optparse-generic
 
   hs-source-dirs: app/journal
   main-is:        Main.hs
