@@ -10,7 +10,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Debugger.State (InstanceStateRepr(..), DebEvent(..))
 import Journal (defaultOptions, allocateJournal, startJournal)
-import Journal.Types (Journal, Options, oLogger, readBytesConsumed, writeBytesConsumed, jMetadata)
+import Journal.Types (Journal, Options, Subscriber(..), oLogger, oMaxSubscriber, readBytesConsumed, writeBytesConsumed, jMetadata)
 import qualified Journal.MP as Journal
 import Journal.Internal.Logger as Logger
 import qualified Journal.Internal.Metrics as Metrics
@@ -39,9 +39,9 @@ fetchJournal mSnapshot fpj opts = do
     Nothing -> pure ()
     Just snap -> do
       let bytes = Snapshot.ssBytesInJournal snap
-      before <- readBytesConsumed (jMetadata journal)
+      before <- readBytesConsumed (jMetadata journal) Sub1
       putStrLn $ "[journal] Found Snapshot! starting from bytes: "  <> show bytes <> " to: " <> show before
-      writeBytesConsumed (jMetadata journal) bytes
+      writeBytesConsumed (jMetadata journal) Sub1 bytes
   pure journal
 
 -- this can be pure when `runCommand` gets pure
@@ -85,7 +85,7 @@ replayDebug = go 0 mempty
 collectAll :: Journal -> IO [Command]
 collectAll jour = do
   putStrLn "[collect] Checking journal for old-entries"
-  val <- Journal.readJournal jour
+  val <- Journal.readJournal jour Sub1
   case val of
     Nothing -> do
       putStrLn "[collect] No more entries"
@@ -118,7 +118,9 @@ journalDumblog cfg _capacity port mReady = do
   let fpj = "/tmp/dumblog.journal"
       fpm = "/tmp/dumblog.metrics"
       fps = "/tmp/dumblog.snapshot"
-      opts = defaultOptions { oLogger = Logger.nullLogger }
+      opts = defaultOptions { oLogger = Logger.nullLogger
+                            , oMaxSubscriber = Sub2
+                            }
       untilSnapshot = 1000
   case cfg of
     Run -> do
