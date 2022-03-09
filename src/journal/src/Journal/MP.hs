@@ -42,9 +42,9 @@ appendBS jour bs = do
 recvBytes :: BufferClaim -> Socket -> Int -> IO Int
 recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock (ptr `plusPtr` hEADER_LENGTH) len
 
-readJournal :: Journal -> IO (Maybe ByteString)
-readJournal jour = do
-  offset <- readBytesConsumed (jMetadata jour)
+readJournal :: Journal -> Subscriber -> IO (Maybe ByteString)
+readJournal jour sub = do
+  offset <- readBytesConsumed (jMetadata jour) sub
   let jLog = logg (jLogger jour)
   jLog ("readJournal, offset: " ++ show offset)
 
@@ -88,15 +88,15 @@ readJournal jour = do
     then do
       if len >= 0
       then do
-        _success <- casBytesConsumed (jMetadata jour) offset (offset + int322Int len)
+        _success <- casBytesConsumed (jMetadata jour) sub offset (offset + int322Int len)
         jLog "readJournal, skipping padding..."
         -- If the CAS fails, it just means that some other process incremented the
         -- counter already.
-        readJournal jour
-      else readJournal jour -- If len is negative then the writer hasn't
-                            -- finished writing the padding yet.
+        readJournal jour sub
+      else readJournal jour sub -- If len is negative then the writer hasn't
+                                -- finished writing the padding yet.
     else if len <= 0 || tag == Empty
-         then readJournal jour
+         then readJournal jour sub
          else do
            assertMMsg (show len) (len > 0)
            jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
@@ -110,7 +110,7 @@ readJournal jour = do
                    (int322Int relativeOffset + hEADER_LENGTH)
                    (int322Int len - hEADER_LENGTH)
            assertM (BS.length bs == int322Int len - hEADER_LENGTH)
-           success <- casBytesConsumed (jMetadata jour) offset
+           success <- casBytesConsumed (jMetadata jour) sub offset
                         (offset + (align (int322Int len) fRAME_ALIGNMENT))
            if success
            then do
@@ -120,7 +120,7 @@ readJournal jour = do
            else
              -- If the CAS failed it means that another process read what we were
              -- about to read, so we retry reading the next item instead.
-             readJournal jour
+             readJournal jour sub
 
 ------------------------------------------------------------------------
 

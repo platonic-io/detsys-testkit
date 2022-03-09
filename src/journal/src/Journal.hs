@@ -53,10 +53,10 @@ import Journal.Types.AtomicCounter
 -- * Initialisation and shutdown
 
 defaultOptions :: Options
-defaultOptions = Options (64 * 1024) ioLogger
+defaultOptions = Options (64 * 1024) ioLogger Sub1
 
 allocateJournal :: FilePath -> Options -> IO ()
-allocateJournal fp (Options termBufferLen logger) = do
+allocateJournal fp (Options termBufferLen logger maxSub) = do
   unless (popCount termBufferLen == 1) $
     -- XXX: check bounds
     error "allocateJournal: oTermBufferLength must be a power of 2"
@@ -83,6 +83,9 @@ allocateJournal fp (Options termBufferLen logger) = do
         (initTermId + TermId (int2Int32 (i - if i == 0 then 0 else pARTITION_COUNT)))
     pageSize <- sysconfPageSize
     writePageSize (Metadata meta) (int2Int32 pageSize)
+    -- Set tombstones for all subscribers *above* `maxSub`
+    forM_ (drop 1 [maxSub..]) $ \sub ->
+      writeBytesConsumed (Metadata meta) sub tombStone
   else do
     logg logger ("allocateJournal, journal exists: " ++ fp)
     let logLength = termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH
@@ -99,7 +102,7 @@ allocateJournal fp (Options termBufferLen logger) = do
       error "allocateJournal: pageSize doesn't match the metadata"
 
 startJournal :: FilePath -> Options -> IO Journal
-startJournal fp (Options termLength logger) = do
+startJournal fp (Options termLength logger _maxSub) = do
   logLength <- fromIntegral <$> getFileSize fp
   bb <- mmapped fp logLength
   meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
@@ -161,9 +164,9 @@ recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock ptr len
 
 -- * Consumption
 
-readJournal :: Journal -> IO (Maybe ByteString)
-readJournal jour = do
-  offset <- readBytesConsumed (jMetadata jour)
+readJournal :: Journal -> Subscriber -> IO (Maybe ByteString)
+readJournal jour sub = do
+  offset <- readBytesConsumed (jMetadata jour) sub
   let jLog = logg (jLogger jour)
   jLog ("readJournal, offset: " ++ show offset)
 
@@ -205,9 +208,9 @@ readJournal jour = do
     if tag == Padding
     then do
       assertM (len >= 0)
-      incrBytesConsumed_ (jMetadata jour) (align (int322Int len) fRAME_ALIGNMENT)
+      incrBytesConsumed_ (jMetadata jour) sub (align (int322Int len) fRAME_ALIGNMENT)
       jLog "readJournal, skipping padding..."
-      readJournal jour
+      readJournal jour sub
     else do
       assertM (len > 0)
       jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
@@ -215,7 +218,7 @@ readJournal jour = do
               (int322Int relativeOffset + hEADER_LENGTH)
               (int322Int len - hEADER_LENGTH)
       assertM (BS.length bs == int322Int len - hEADER_LENGTH)
-      incrBytesConsumed_ (jMetadata jour) (align (int322Int len) fRAME_ALIGNMENT)
+      incrBytesConsumed_ (jMetadata jour) sub (align (int322Int len) fRAME_ALIGNMENT)
       return (Just bs)
 
 ------------------------------------------------------------------------

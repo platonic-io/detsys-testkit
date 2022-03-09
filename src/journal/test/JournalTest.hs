@@ -296,7 +296,7 @@ step DumpJournal    m = (m, Result (Right ()))
 
 exec :: Command -> Journal -> IO Response
 exec (AppendBS rle) j = Result <$> appendBS j (decodeRunLength rle)
-exec ReadJournal    j = ByteString . fmap encodeRunLength <$> readJournal j
+exec ReadJournal    j = ByteString . fmap encodeRunLength <$> readJournal j Sub1
 exec DumpJournal    j = Result . Right <$> dumpJournal j
 
 genRunLenEncoding :: Gen [(Int, Char)]
@@ -848,7 +848,7 @@ concExec queue jour cmd = do
 
 execMP :: Command -> Journal -> IO Response
 execMP (AppendBS rle) j = Result <$> MP.appendBS j (decodeRunLength rle)
-execMP ReadJournal    j = ByteString . fmap encodeRunLength <$> MP.readJournal j
+execMP ReadJournal    j = ByteString . fmap encodeRunLength <$> MP.readJournal j Sub1
 execMP DumpJournal    j = Result . Right <$> dumpJournal j
 
 -- Generate all possible single-threaded executions from the concurrent history.
