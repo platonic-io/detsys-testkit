@@ -33,23 +33,35 @@ ansiClearScreen = "\ESC[2J"
 
 displayServiceTime :: DumblogMetrics -> IO ()
 displayServiceTime metrics = do
-  mMin  <- percentile metrics ServiceTime 0
-  mMed  <- percentile metrics ServiceTime 50
-  m90   <- percentile metrics ServiceTime 90
-  m99   <- percentile metrics ServiceTime 99
-  m999  <- percentile metrics ServiceTime 99.9
-  m9999 <- percentile metrics ServiceTime 99.99
-  mMax  <- percentile metrics ServiceTime 100
-  putStrLn "Service time:"
-  printf "  min   %10.2f µs\n" (fromMaybe 0 mMin)
-  printf "  med   %10.2f µs\n" (fromMaybe 0 mMed)
-  printf "  90    %10.2f µs\n" (fromMaybe 0 m90)
-  printf "  99    %10.2f µs\n" (fromMaybe 0 m99)
-  printf "  99.9  %10.2f µs\n" (fromMaybe 0 m999)
-  printf "  99.99 %10.2f µs\n" (fromMaybe 0 m9999)
-  printf "  max   %10.2f µs\n" (fromMaybe 0 mMax)
-  cnt <- count metrics ServiceTime
-  putStrLn (printf "  count %10d" cnt)
+  mMin  <- percentile metrics ServiceTimeWrites 0
+  mMed  <- percentile metrics ServiceTimeWrites 50
+  m90   <- percentile metrics ServiceTimeWrites 90
+  m99   <- percentile metrics ServiceTimeWrites 99
+  m999  <- percentile metrics ServiceTimeWrites 99.9
+  m9999 <- percentile metrics ServiceTimeWrites 99.99
+  mMax  <- percentile metrics ServiceTimeWrites 100
+  mMin'  <- percentile metrics ServiceTimeReads 0
+  mMed'  <- percentile metrics ServiceTimeReads 50
+  m90'   <- percentile metrics ServiceTimeReads 90
+  m99'   <- percentile metrics ServiceTimeReads 99
+  m999'  <- percentile metrics ServiceTimeReads 99.9
+  m9999' <- percentile metrics ServiceTimeReads 99.99
+  mMax'  <- percentile metrics ServiceTimeReads 100
+  printf "%-25.25s%-70.25s\n" "Service time (writes):" "Service time (reads):"
+  printf "  min   %10.2f µs%15.2fµs\n" (fromMaybe 0 mMin)  (fromMaybe 0 mMin')
+  printf "  med   %10.2f µs%15.2fµs\n" (fromMaybe 0 mMed)  (fromMaybe 0 mMed')
+  printf "  90    %10.2f µs%15.2fµs\n" (fromMaybe 0 m90)   (fromMaybe 0 m90')
+  printf "  99    %10.2f µs%15.2fµs\n" (fromMaybe 0 m99)   (fromMaybe 0 m99')
+  printf "  99.9  %10.2f µs%15.2fµs\n" (fromMaybe 0 m999)  (fromMaybe 0 m999')
+  printf "  99.99 %10.2f µs%15.2fµs\n" (fromMaybe 0 m9999) (fromMaybe 0 m9999')
+  printf "  max   %10.2f µs%15.2fµs\n" (fromMaybe 0 mMax)  (fromMaybe 0 mMax')
+  writeCnt <- count metrics ServiceTimeWrites
+  readCnt  <- count metrics ServiceTimeReads
+  let totalCnt :: Double
+      totalCnt = realToFrac (writeCnt + readCnt)
+  printf "  count %7d (%2.0f%%) %10d (%2.0f%%)\n"
+    writeCnt (realToFrac writeCnt / totalCnt * 100)
+    readCnt (realToFrac readCnt / totalCnt * 100)
 
 displayJournalMetadata :: Either IOException Metadata -> IO ()
 displayJournalMetadata (Left _err) = do
@@ -78,6 +90,6 @@ displayJournalMetadata (Right meta) = do
 
 displayConcurrentConnections :: DumblogMetrics -> IO ()
 displayConcurrentConnections metrics = do
-  putStrLn "\nConcurrent number of transactions:"
+  putStr "\nConcurrent number of transactions:"
   cnt <- getCounter metrics CurrentNumberTransactions
-  printf "  %d\n" cnt
+  printf " %d\n" cnt

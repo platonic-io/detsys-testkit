@@ -5,13 +5,12 @@ import qualified Journal.Internal.Metrics as Metrics
 
 data DumblogCounters
   = CurrentNumberTransactions
-  | NumberOfWrites
-  | NumberOfReads
   | ErrorsEncountered
   deriving (Eq, Show, Enum, Bounded)
 
 data DumblogHistograms
-  = ServiceTime
+  = ServiceTimeReads
+  | ServiceTimeWrites
   deriving (Eq, Show, Enum, Bounded)
 
 type DumblogMetrics = Metrics DumblogCounters DumblogHistograms
