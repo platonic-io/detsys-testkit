@@ -112,19 +112,29 @@ instance ParseRecord DumblogConfig
 Unclear how to:
 * How to archive the journal
 -}
+
+dumblogOptions :: Options
+dumblogOptions = defaultOptions
+  { oLogger = Logger.nullLogger
+  , oMaxSubscriber = Sub2
+  }
+
+dUMBLOG_JOURNAL :: FilePath
+dUMBLOG_JOURNAL = "/tmp/dumblog.journal"
+
+dUMBLOG_METRICS :: FilePath
+dUMBLOG_METRICS = "/tmp/dumblog.metrics"
+
 journalDumblog :: DumblogConfig -> Int -> Int -> Maybe (MVar ()) -> IO ()
 journalDumblog cfg _capacity port mReady = do
-  let fpj = "/tmp/dumblog.journal"
-      fpm = "/tmp/dumblog.metrics"
+  let fpj = dUMBLOG_JOURNAL
+      fpm = dUMBLOG_METRICS
       fps = "/tmp/dumblog.snapshot"
-      opts = defaultOptions { oLogger = Logger.nullLogger
-                            , oMaxSubscriber = Sub2
-                            }
       untilSnapshot = 1000
   case cfg of
     Run -> do
       mSnapshot <- Snapshot.readFile fps
-      journal <- fetchJournal mSnapshot fpj opts
+      journal <- fetchJournal mSnapshot fpj dumblogOptions
       metrics <- Metrics.newMetrics dumblogSchema fpm
       blocker <- emptyBlocker 0 -- it is okay to start over
       cmds <- collectAll journal
@@ -138,7 +148,7 @@ journalDumblog cfg _capacity port mReady = do
         runFrontEnd port journal feInfo mReady
     DebugFile fp -> do
       mSnapshot <- Snapshot.readFile fps
-      journal <- fetchJournal mSnapshot fpj opts
+      journal <- fetchJournal mSnapshot fpj dumblogOptions
       cmds <- collectAll journal
       debugFileContents <- replayDebug cmds (startingState mSnapshot)
       Aeson.encodeFile (unHelpful fp) debugFileContents

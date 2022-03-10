@@ -2,6 +2,7 @@ module Journal
   ( module Journal.Types
   , defaultOptions
   , allocateJournal
+  , journalMetadata
   , startJournal
   , appendBS
   -- , tee
@@ -15,8 +16,8 @@ module Journal
   , metricsBytesWritten
   ) where
 
-import Control.Exception (assert, bracket)
-import Control.Monad (unless, when, forM_)
+import Control.Exception (IOException, assert, bracket, try)
+import Control.Monad (forM_, unless, when)
 import Data.Bits (popCount)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -100,6 +101,16 @@ allocateJournal fp (Options termBufferLen logger maxSub) = do
     pageSize' <- readPageSize meta
     unless (int322Int pageSize' == pageSize) $
       error "allocateJournal: pageSize doesn't match the metadata"
+
+journalMetadata :: FilePath -> Options -> IO (Either IOException Metadata)
+journalMetadata fp opts = do
+  let logLength = oTermBufferLength opts * pARTITION_COUNT + lOG_META_DATA_LENGTH
+  ebb <- try (mmapped fp logLength)
+  case ebb of
+    Right bb -> do
+      meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
+      return (Right (Metadata meta))
+    Left err -> return (Left err)
 
 startJournal :: FilePath -> Options -> IO Journal
 startJournal fp (Options termLength logger _maxSub) = do
