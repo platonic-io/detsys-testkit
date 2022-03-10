@@ -35,7 +35,10 @@ fetchJournal mSnapshot fpj opts = do
   allocateJournal fpj opts
   journal <- startJournal fpj opts
   case mSnapshot of
-    Nothing -> pure ()
+    Nothing -> do
+      before <- readBytesConsumed (jMetadata journal) Sub1
+      putStrLn $ "[journal] Didn't Find a Snapshot! starting beginning to: " <> show before
+      writeBytesConsumed (jMetadata journal) Sub1 0
     Just snap -> do
       let bytes = Snapshot.ssBytesInJournal snap
       before <- readBytesConsumed (jMetadata journal) Sub1
