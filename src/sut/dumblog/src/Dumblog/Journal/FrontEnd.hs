@@ -18,8 +18,6 @@ import System.Timeout (timeout)
 
 import Journal.Types (Journal)
 import qualified Journal.MP as Journal
-import Journal.Types.AtomicCounter (AtomicCounter)
-import qualified Journal.Types.AtomicCounter as AtomicCounter
 
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
@@ -28,14 +26,12 @@ import Dumblog.Journal.Types
 ------------------------------------------------------------------------
 
 data FrontEndInfo = FrontEndInfo
-  { sequenceNumber :: AtomicCounter
-  , blockers :: Blocker (Either Response Response)
+  { blockers :: Blocker (Either Response Response)
   }
 
 httpFrontend :: Journal -> FrontEndInfo -> Wai.Application
-httpFrontend journal (FrontEndInfo c blocker) req respond = do
+httpFrontend journal (FrontEndInfo blocker) req respond = do
   body <- Wai.strictRequestBody req
-  key <- AtomicCounter.incrCounter 1 c
   let mmethod = case parseMethod $ Wai.requestMethod req of
         Left err -> Left $ LBS.fromStrict err
         Right GET -> case Wai.pathInfo req of
@@ -52,21 +48,26 @@ httpFrontend journal (FrontEndInfo c blocker) req respond = do
   case mmethod of
     Left err -> respond $ Wai.responseLBS status400 [] err
     Right cmd -> do
-      res <- Journal.appendBS journal (encode $ Envelope key cmd)
+      key <- newKey blocker
+      let env = encode (Envelope (sequenceNumber key) cmd)
+      res <- Journal.appendBS journal env
       res' <- case res of
         Left err -> do
           putStrLn ("httpFrontend, append error: " ++ show err)
-          Journal.appendBS journal (encode $ Envelope key cmd)
+          Journal.appendBS journal env
         Right () -> return (Right ())
       case res' of
         Left err -> do
           putStrLn ("httpFrontend, append error 2: " ++ show err)
+          cancel blocker key
           respond $ Wai.responseLBS status400 [] (LBS8.pack (show err))
         Right () -> do
-          mResp <- timeout (3*1000*1000) (blockUntil blocker key)
+          mResp <- timeout (3*1000*1000) (blockUntil key)
           -- Journal.dumpJournal journal
           case mResp of
-            Nothing -> respond $ Wai.responseLBS status400 [] "MVar timeout"
+            Nothing -> do
+              cancel blocker key
+              respond $ Wai.responseLBS status400 [] "MVar timeout"
             Just (Left errMsg) -> respond $ Wai.responseLBS status400 [] errMsg
             Just (Right msg) -> respond $ Wai.responseLBS status200 [] msg
 
