@@ -6,6 +6,10 @@ module Dumblog.Journal.Main where
 import Control.Concurrent.Async (withAsync, link)
 import Control.Concurrent.MVar (MVar)
 import qualified Data.Aeson as Aeson
+import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LText
+import Data.Text.Encoding (decodeUtf8)
+import qualified Data.Text.Lazy.Encoding as LEncoding
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Debugger.State (InstanceStateRepr(..), DebEvent(..))
@@ -14,6 +18,7 @@ import Journal.Types (Journal, Options, Subscriber(..), oLogger, oMaxSubscriber,
 import qualified Journal.MP as Journal
 import Journal.Internal.Logger as Logger
 import qualified Journal.Internal.Metrics as Metrics
+import Ltl.Json (mergePatch)
 import Options.Generic
 
 import Dumblog.Journal.Blocker (emptyBlocker)
@@ -24,7 +29,7 @@ import Dumblog.Journal.Snapshot (Snapshot)
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine
        (InMemoryDumblog, initState, runCommand)
-import Dumblog.Journal.Types (Command)
+import Dumblog.Journal.Types (Command(..))
 import Dumblog.Journal.Worker (WorkerInfo(..), worker)
 
 ------------------------------------------------------------------------
@@ -35,7 +40,10 @@ fetchJournal mSnapshot fpj opts = do
   allocateJournal fpj opts
   journal <- startJournal fpj opts
   case mSnapshot of
-    Nothing -> pure ()
+    Nothing -> do
+      before <- readBytesConsumed (jMetadata journal) Sub1
+      putStrLn $ "[journal] Didn't Find a Snapshot! starting beginning to: " <> show before
+      writeBytesConsumed (jMetadata journal) Sub1 0
     Just snap -> do
       let bytes = Snapshot.ssBytesInJournal snap
       before <- readBytesConsumed (jMetadata journal) Sub1
@@ -66,15 +74,18 @@ replayDebug = go 0 mempty
       putStrLn $ "[REPLAY-DEBUG] running: " <> show cmd
       (s', _) <- runCommand s cmd
       let
+        (ev, msg) = case cmd of
+          Read i -> ("read", show i)
+          Write logMsg -> ("write", Text.unpack (decodeUtf8 logMsg))
         ce = DebEvent
           { from = "client"
           , to = "dumblog"
-          , event = "event?"
+          , event = ev
           , receivedLogical = logTime
-          , message = "message?"
+          , message = msg
           }
         is = InstanceStateRepr
-             { state = "diff"
+             { state = LText.unpack (LEncoding.decodeUtf8 (Aeson.encode (mergePatch (Aeson.toJSON s) (Aeson.toJSON s'))))
              , currentEvent = ce
              , logs = []
              , sent = []

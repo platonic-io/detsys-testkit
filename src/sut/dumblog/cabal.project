@@ -1,5 +1,6 @@
 packages: .
   , ../../journal/journal.cabal
+  , ../../ltl/ltl.cabal
   , ../../new-debugger/detsys-debugger.cabal
   , ../../runtime-prototype/stunt-double.cabal
 
