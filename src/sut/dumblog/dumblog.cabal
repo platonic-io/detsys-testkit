@@ -46,6 +46,7 @@ library
     , http-client
     , http-types
     , journal
+    , ltl
     , network
     , optparse-generic
     , sendfile
