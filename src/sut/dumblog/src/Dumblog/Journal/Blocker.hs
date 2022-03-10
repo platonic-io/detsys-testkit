@@ -26,7 +26,7 @@ blockUntil (Blocker b) key = do
 
 wakeUp :: forall a. Blocker a -> Int -> a -> IO Bool
 wakeUp (Blocker b) key response = do
-  mmv <- go 10
+  mmv <- go 100
   case mmv of
     Nothing -> pure False
     Just mv -> do
