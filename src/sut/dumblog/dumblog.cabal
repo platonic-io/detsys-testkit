@@ -77,6 +77,7 @@ library
     Dumblog.ZeroCopy.HttpServer
     Dumblog.ZeroCopy.Main
     Dumblog.ZeroCopy.State
+    Dumblog.Metrics.Main
   if flag(persistent-sqlite)
     exposed-modules: Dumblog.SQLite.DBPersistent
 
@@ -110,6 +111,11 @@ executable dumblog-sqlite
 executable dumblog-zero-copy
   import:         executable-common
   hs-source-dirs: app/zero-copy
+  main-is:        Main.hs
+
+executable metrics
+  import:         executable-common
+  hs-source-dirs: app/metrics
   main-is:        Main.hs
 
 common bench-common

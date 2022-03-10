@@ -33,8 +33,10 @@ timeIt metrics action = do
   !startTime <- getCurrentTime
   result <- action
   !endTime <- getCurrentTime
-  -- dunno what timescale we are measuring
-  Metrics.measure metrics ServiceTime (realToFrac . (*1000) $ diffUTCTime endTime startTime)
+  Metrics.measure metrics ServiceTime
+    -- `diffUTCTime` has a precision of 10^-12 s, so after multiplying with 10^9
+    -- we get milliseconds.
+    (realToFrac (diffUTCTime endTime startTime * 1e9))
   return result
 
 wakeUpFrontend :: Blocker (Either Response Response) -> Int -> Either Response Response

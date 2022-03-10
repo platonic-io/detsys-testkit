@@ -130,8 +130,8 @@ percentile (Metrics _ hbuf) label p
       then return Nothing
       else do
         let d = realToFrac count * (p * 0.01)
-        let target :: Double
-            target | d == 0.0 = 1.0
+            target :: Double
+            target | d == 0.0  = 1.0
                    | otherwise = d
         go offsetBucket target
       where
@@ -149,6 +149,12 @@ percentile (Metrics _ hbuf) label p
                   if sum' >= target
                   then return (Just (decompress idx))
                   else go' (succ idx) sum'
+
+count :: Enum h => Metrics c h -> h -> IO Int
+count (Metrics _cbuf hbuf) label = do
+  let offsetHistogram = sizeOfAHistogram * fromEnum label
+      offsetHistogramCount = offsetHistogram + sizeOf (8 :: Int)
+  readIntOffArrayIx hbuf offsetHistogramCount
 
 -- * Example
 
