@@ -27,13 +27,14 @@ data WorkerInfo = WorkerInfo
   , wiEventsInRound :: Int -- how many events in one snapshot
   }
 
--- Currently always uses `ResponseTime`
-timeIt :: DumblogMetrics -> IO a -> IO a
-timeIt metrics action = do
+timeIt :: DumblogMetrics -> Command -> IO a -> IO a
+timeIt metrics cmd action = do
   !startTime <- getCurrentTime
   result <- action
   !endTime <- getCurrentTime
-  Metrics.measure metrics ServiceTime
+  Metrics.measure metrics (case cmd of
+                             Write {} -> ServiceTimeWrites
+                             Read {}  -> ServiceTimeReads)
     (realToFrac (diffUTCTime endTime startTime * 1e6)) -- µs.
   return result
 
@@ -59,18 +60,19 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
       { val <- Journal.readJournal journal Sub1
       ; (ev', s') <- case val of
         { Nothing -> return (ev, s)
-        ; Just entry -> timeIt metrics $ do
-          let Envelope key cmd = decode entry
-          {- // in case of decode error
-              Metrics.incrCounter metrics ErrorsEncountered 1
-              wakeUpFrontend blocker key $ Left "Couldn't parse request"
-              -- ^ should be better error message
-          -}
-          -- putStrLn ("worker: key: " ++ show key ++ ", cmd: " ++ show cmd)
-          (s', r) <- runCommand s cmd
-          -- putStrLn ("worker: key: " ++ show key ++ ", response: " ++ show r)
-          wakeUpFrontend blocker key (Right r)
-          return (succ ev, s')
+        ; Just entry -> do
+            let Envelope key cmd = decode entry
+            timeIt metrics cmd $ do
+              {- // in case of decode error
+                  Metrics.incrCounter metrics ErrorsEncountered 1
+                  wakeUpFrontend blocker key $ Left "Couldn't parse request"
+                  -- ^ should be better error message
+              -}
+              -- putStrLn ("worker: key: " ++ show key ++ ", cmd: " ++ show cmd)
+              (s', r) <- runCommand s cmd
+              -- putStrLn ("worker: key: " ++ show key ++ ", response: " ++ show r)
+              wakeUpFrontend blocker key (Right r)
+              return (succ ev, s')
         }
       ; threadDelay 10
       ; go ev' s'
