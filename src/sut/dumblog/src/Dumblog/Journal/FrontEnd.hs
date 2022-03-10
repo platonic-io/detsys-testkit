@@ -31,8 +31,8 @@ data FrontEndInfo = FrontEndInfo
   { blockers :: Blocker (Either Response Response)
   }
 
-httpFrontend :: Journal -> FrontEndInfo -> Wai.Application
-httpFrontend journal (FrontEndInfo blocker) req respond = do
+httpFrontend :: Journal -> DumblogMetrics -> FrontEndInfo -> Wai.Application
+httpFrontend journal metrics (FrontEndInfo blocker) req respond = do
   body <- Wai.strictRequestBody req
   let mmethod = case parseMethod $ Wai.requestMethod req of
         Left err -> Left $ LBS.fromStrict err
@@ -48,7 +48,9 @@ httpFrontend journal (FrontEndInfo blocker) req respond = do
         Right POST -> Right $ Write (LBS.toStrict body)
         _ -> Left $ "Unknown method type require GET/POST"
   case mmethod of
-    Left err -> respond $ Wai.responseLBS status400 [] err
+    Left err -> do
+      incrCounter metrics ErrorsEncountered 1
+      respond $ Wai.responseLBS status400 [] err
     Right cmd -> do
       key <- newKey blocker
       let env = encode (Envelope (sequenceNumber key) cmd)
@@ -62,29 +64,34 @@ httpFrontend journal (FrontEndInfo blocker) req respond = do
         Left err -> do
           putStrLn ("httpFrontend, append error 2: " ++ show err)
           cancel blocker key
+          incrCounter metrics ErrorsEncountered 1
           respond $ Wai.responseLBS status400 [] (LBS8.pack (show err))
         Right () -> do
+          incrCounter metrics QueueDepth 1
           mResp <- timeout (3*1000*1000) (blockUntil key)
           -- Journal.dumpJournal journal
           case mResp of
             Nothing -> do
               cancel blocker key
+              incrCounter metrics ErrorsEncountered 1
               respond $ Wai.responseLBS status400 [] "MVar timeout"
-            Just (Left errMsg) -> respond $ Wai.responseLBS status400 [] errMsg
+            Just (Left errMsg) -> do
+              incrCounter metrics ErrorsEncountered 1
+              respond $ Wai.responseLBS status400 [] errMsg
             Just (Right msg) -> respond $ Wai.responseLBS status200 [] msg
 
 runFrontEnd :: Port -> Journal -> DumblogMetrics -> FrontEndInfo -> Maybe (MVar ()) -> IO ()
 runFrontEnd port journal metrics feInfo mReady =
-  runSettings settings (httpFrontend journal feInfo)
+  runSettings settings (httpFrontend journal metrics feInfo)
   where
     settings
       = setPort port
       $ setOnOpen  (\_addr -> incrCounter metrics CurrentNumberTransactions 1 >> return True)
       $ setOnClose (\_addr -> incrCounter metrics CurrentNumberTransactions (-1))
-      $ setLogger (\req status _mSize ->
-                      when (status /= status200) $ do
-                        putStrLn ("warp, request: " ++ show req)
-                        putStrLn ("warp, status: "  ++ show status)
-                        print =<< Wai.strictRequestBody req)
+      -- $ setLogger (\req status _mSize ->
+      --                 when (status /= status200) $ do
+      --                   putStrLn ("warp, request: " ++ show req)
+      --                   putStrLn ("warp, status: "  ++ show status)
+      --                   print =<< Wai.strictRequestBody req)
       $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
       $ defaultSettings
