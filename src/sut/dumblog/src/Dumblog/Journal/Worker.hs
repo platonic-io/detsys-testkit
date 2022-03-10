@@ -61,6 +61,7 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
       ; (ev', s') <- case val of
         { Nothing -> return (ev, s)
         ; Just entry -> do
+            Metrics.decrCounter_ metrics QueueDepth 1
             let Envelope key cmd = decode entry
             timeIt metrics cmd $ do
               {- // in case of decode error

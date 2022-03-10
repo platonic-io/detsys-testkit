@@ -27,9 +27,11 @@ metricsMain = do
     eMeta <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
     putStrLn ansiClearScreen
     displayServiceTime metrics
+    displayQueueDepth metrics
     displayThroughput metrics startTime
     displayJournalMetadata eMeta
     displayConcurrentConnections metrics
+    displayErrors metrics
     threadDelay 1_000_000
 
 ansiClearScreen :: String
@@ -66,6 +68,12 @@ displayServiceTime metrics = do
   printf "  count %7d (%2.0f%%) %10d (%2.0f%%)\n"
     writeCnt (realToFrac writeCnt / totalCnt * 100)
     readCnt  (realToFrac readCnt  / totalCnt * 100)
+
+displayQueueDepth :: DumblogMetrics -> IO ()
+displayQueueDepth metrics = do
+  putStr "\nSaturation (queue depth):"
+  depth <- getCounter metrics QueueDepth
+  printf " %d\n" depth
 
 displayThroughput :: DumblogMetrics -> UTCTime -> IO ()
 displayThroughput metrics startTime = do
@@ -106,3 +114,9 @@ displayConcurrentConnections metrics = do
   putStr "\nConcurrent number of transactions:"
   cnt <- getCounter metrics CurrentNumberTransactions
   printf " %d\n" cnt
+
+displayErrors :: DumblogMetrics -> IO ()
+displayErrors metrics = do
+  putStr "\nErrors:"
+  errors <- getCounter metrics ErrorsEncountered
+  printf " %d\n" errors

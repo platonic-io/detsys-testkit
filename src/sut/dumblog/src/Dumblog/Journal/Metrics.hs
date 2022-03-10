@@ -5,6 +5,7 @@ import qualified Journal.Internal.Metrics as Metrics
 
 data DumblogCounters
   = CurrentNumberTransactions
+  | QueueDepth
   | ErrorsEncountered
   deriving (Eq, Show, Enum, Bounded)
 

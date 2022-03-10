@@ -65,6 +65,9 @@ incrCounter (Metrics cbuf _) label value = do
   where
     offset = sizeOfACounter * fromEnum label
 
+decrCounter_ :: (Enum c) => Metrics c h -> c -> Int -> IO ()
+decrCounter_ metrics label i = incrCounter metrics label (-i)
+
 getCounter :: (Enum c) => Metrics c h -> c -> IO Int
 getCounter (Metrics cbuf _) label = do
   readIntOffArrayIx cbuf offset
