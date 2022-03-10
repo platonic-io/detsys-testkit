@@ -17,11 +17,13 @@ import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
 
 import Journal.Types (Journal)
+import Journal.Internal.Metrics (incrCounter)
 import qualified Journal.MP as Journal
 
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
 import Dumblog.Journal.Types
+import Dumblog.Journal.Metrics
 
 ------------------------------------------------------------------------
 
@@ -71,12 +73,14 @@ httpFrontend journal (FrontEndInfo blocker) req respond = do
             Just (Left errMsg) -> respond $ Wai.responseLBS status400 [] errMsg
             Just (Right msg) -> respond $ Wai.responseLBS status200 [] msg
 
-runFrontEnd :: Port -> Journal -> FrontEndInfo -> Maybe (MVar ()) -> IO ()
-runFrontEnd port journal feInfo mReady =
+runFrontEnd :: Port -> Journal -> DumblogMetrics -> FrontEndInfo -> Maybe (MVar ()) -> IO ()
+runFrontEnd port journal metrics feInfo mReady =
   runSettings settings (httpFrontend journal feInfo)
   where
     settings
       = setPort port
+      $ setOnOpen  (\_addr -> incrCounter metrics CurrentNumberTransactions 1 >> return True)
+      $ setOnClose (\_addr -> incrCounter metrics CurrentNumberTransactions (-1))
       $ setLogger (\req status _mSize ->
                       when (status /= status200) $ do
                         putStrLn ("warp, request: " ++ show req)
