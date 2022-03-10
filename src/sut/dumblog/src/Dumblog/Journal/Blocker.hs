@@ -1,44 +1,49 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Dumblog.Journal.Blocker
-  (Blocker, emptyBlocker, blockUntil, wakeUp)
+  (Blocker, Key, sequenceNumber, cancel, newKey, emptyBlocker, blockUntil, wakeUp)
 where
-
-import Control.Concurrent (threadDelay)
 
 import Control.Concurrent.MVar (MVar, newEmptyMVar, takeMVar, putMVar)
 import Data.IORef
+import Journal.Types.AtomicCounter (AtomicCounter)
+import qualified Journal.Types.AtomicCounter as AtomicCounter
 
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Tuple (swap)
 
-newtype Blocker x = Blocker (IORef (IntMap (MVar x)))
+data Blocker x = Blocker (IORef (IntMap (MVar x))) AtomicCounter
 
-emptyBlocker :: IO (Blocker x)
-emptyBlocker = Blocker <$> newIORef IntMap.empty
+data Key x = Key
+  { sequenceNumber :: Int
+  , mVar :: MVar x
+  }
 
-blockUntil :: Blocker x -> Int -> IO x
-blockUntil (Blocker b) key = do
+emptyBlocker :: Int -> IO (Blocker x)
+emptyBlocker startingSequence = Blocker
+  <$> newIORef IntMap.empty
+  <*> AtomicCounter.newCounter startingSequence
+
+newKey :: Blocker x -> IO (Key x)
+newKey (Blocker b c) = do
+  key <- AtomicCounter.incrCounter 1 c
   mv <- newEmptyMVar
   atomicModifyIORef' b $ \m -> (IntMap.insert key mv m, ())
-  takeMVar mv
+  pure (Key key mv)
+
+cancel :: Blocker x -> Key x -> IO ()
+cancel (Blocker b _) key =
+  atomicModifyIORef' b $ \m -> (IntMap.delete (sequenceNumber key) m, ())
+
+blockUntil :: Key x -> IO x
+blockUntil key = takeMVar (mVar key)
 
 wakeUp :: forall a. Blocker a -> Int -> a -> IO Bool
-wakeUp (Blocker b) key response = do
-  mmv <- go 100
+wakeUp (Blocker b _) key response = do
+  mmv <- atomicModifyIORef' b $ swap . IntMap.updateLookupWithKey (const $ const Nothing) key
   case mmv of
     Nothing -> pure False
     Just mv -> do
       putMVar mv response
       pure True
-  where
-    go :: Int -> IO (Maybe (MVar a))
-    go 0 = pure Nothing
-    go n = do
-      m <- atomicModifyIORef' b $ swap . IntMap.updateLookupWithKey (const $ const Nothing) key
-      case m of
-        Nothing -> do
-          threadDelay 10
-          go (n-1)
-        Just _x -> pure m

@@ -14,7 +14,6 @@ import Journal.Types (Journal, Options, Subscriber(..), oLogger, oMaxSubscriber,
 import qualified Journal.MP as Journal
 import Journal.Internal.Logger as Logger
 import qualified Journal.Internal.Metrics as Metrics
-import qualified Journal.Types.AtomicCounter as AtomicCounter
 import Options.Generic
 
 import Dumblog.Journal.Blocker (emptyBlocker)
@@ -127,13 +126,12 @@ journalDumblog cfg _capacity port mReady = do
       mSnapshot <- Snapshot.readFile fps
       journal <- fetchJournal mSnapshot fpj opts
       metrics <- Metrics.newMetrics dumblogSchema fpm
-      blocker <- emptyBlocker
-      counter <- AtomicCounter.newCounter 0 -- it is okay to start over
+      blocker <- emptyBlocker 0 -- it is okay to start over
       cmds <- collectAll journal
       workerState <- replay cmds (startingState mSnapshot)
       let
         events = length cmds
-        feInfo = FrontEndInfo counter blocker
+        feInfo = FrontEndInfo blocker
         wInfo = WorkerInfo blocker fps events untilSnapshot
       withAsync (worker journal metrics wInfo workerState) $ \a -> do
         link a
