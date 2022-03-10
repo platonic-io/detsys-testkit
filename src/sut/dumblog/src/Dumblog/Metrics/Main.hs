@@ -24,7 +24,8 @@ metricsMain = forever $ do
   eMeta <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
   putStrLn ansiClearScreen
   displayServiceTime metrics
-  displayQueueDepth eMeta
+  displayJournalMetadata eMeta
+  displayConcurrentConnections metrics
   threadDelay 1_000_000
 
 ansiClearScreen :: String
@@ -50,13 +51,14 @@ displayServiceTime metrics = do
   cnt <- count metrics ServiceTime
   putStrLn (printf "  count %10d" cnt)
 
-displayQueueDepth :: Either IOException Metadata -> IO ()
-displayQueueDepth (Left _err) = do
-  putStrLn "Journal metadata:"
+displayJournalMetadata :: Either IOException Metadata -> IO ()
+displayJournalMetadata (Left _err) = do
+  putStrLn "\nJournal metadata:"
   printf "  0 bytes produced\n"
   printf "  0 bytes consumed\n"
-displayQueueDepth (Right meta) = do
-  putStrLn "Journal metadata:"
+  printf "  0 bytes difference\n"
+displayJournalMetadata (Right meta) = do
+  putStrLn "\nJournal metadata:"
   termCount <- activeTermCount meta
   let index = indexByTermCount termCount
   rt <- readRawTail meta index
@@ -73,3 +75,9 @@ displayQueueDepth (Right meta) = do
   printf "  %d bytes produced\n" produced
   printf "  %d bytes consumed\n" consumed
   printf "  %d bytes difference\n" (produced - fromIntegral consumed)
+
+displayConcurrentConnections :: DumblogMetrics -> IO ()
+displayConcurrentConnections metrics = do
+  putStrLn "\nConcurrent number of transactions:"
+  cnt <- getCounter metrics CurrentNumberTransactions
+  printf "  %d\n" cnt

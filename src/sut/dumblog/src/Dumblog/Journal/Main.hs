@@ -145,7 +145,7 @@ journalDumblog cfg _capacity port mReady = do
         wInfo = WorkerInfo blocker fps events untilSnapshot
       withAsync (worker journal metrics wInfo workerState) $ \a -> do
         link a
-        runFrontEnd port journal feInfo mReady
+        runFrontEnd port journal metrics feInfo mReady
     DebugFile fp -> do
       mSnapshot <- Snapshot.readFile fps
       journal <- fetchJournal mSnapshot fpj dumblogOptions
