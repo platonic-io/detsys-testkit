@@ -343,6 +343,9 @@ readFrameLength :: ByteBuffer -> TermOffset -> IO HeaderLength
 readFrameLength termBuffer termOffset = HeaderLength <$>
   readInt32OffAddr termBuffer (fromIntegral termOffset + fRAME_LENGTH_FIELD_OFFSET)
 
+msyncMetadata :: Metadata -> IO ()
+msyncMetadata (Metadata meta) = force meta
+
 ------------------------------------------------------------------------
 
 newtype HeaderTag = HeaderTag { unHeaderTag :: Word8 }

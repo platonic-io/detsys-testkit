@@ -145,19 +145,37 @@ percentile (Metrics _ hbuf) label p
           where
             go' :: Int -> Double -> IO (Maybe Double)
             go' idx acc
-              | idx >= len  = return Nothing
-              | idx < len = do
+              | idx >= len = return Nothing
+              | idx <  len = do
                   v <- readIntOffArrayIx hbuf (idx * sizeOf (8 :: Int) + offsetBucket)
                   let sum' = realToFrac v + acc
                   if sum' >= target
                   then return (Just (decompress idx))
                   else go' (succ idx) sum'
 
+metricsSum :: Enum h => Metrics c h -> h -> IO Int
+metricsSum (Metrics _cbuf hbuf) label = do
+  let offsetHistogramSum = sizeOfAHistogram * fromEnum label
+  readIntOffArrayIx hbuf offsetHistogramSum
+
 count :: Enum h => Metrics c h -> h -> IO Int
 count (Metrics _cbuf hbuf) label = do
   let offsetHistogram = sizeOfAHistogram * fromEnum label
       offsetHistogramCount = offsetHistogram + sizeOf (8 :: Int)
   readIntOffArrayIx hbuf offsetHistogramCount
+
+metricsAvg :: Enum h => Metrics c h -> h -> IO Double
+metricsAvg metrics label = do
+  s <- metricsSum metrics label
+  c <- count metrics label
+  return (realToFrac s / realToFrac c)
+
+msyncMetrics :: Metrics c h -> IO ()
+msyncMetrics (Metrics cbuf hbuf) = do
+  force cbuf
+  force hbuf
+
+------------------------------------------------------------------------
 
 -- * Example
 

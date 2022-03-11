@@ -1,14 +1,15 @@
+{-# LANGUAGE NoOverloadedStrings #-}
 {-# LANGUAGE NumericUnderscores #-}
 
 module Dumblog.Metrics.Main where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (IOException)
-import Control.Monad (forever)
 import Data.Maybe (fromMaybe)
+import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
+import System.Directory (removePathForcibly)
 import Text.Printf (printf)
-import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 
 import Dumblog.Journal.Main
 import Dumblog.Journal.Metrics
@@ -18,21 +19,47 @@ import Journal.Types
 
 ------------------------------------------------------------------------
 
+data ThroughputState = ThroughputState
+  { tsLastTotalCount :: !Int
+  , tsLastTime       :: !UTCTime
+  , tsIterations     :: !Int
+  , tsSum            :: !Double
+  }
+
+initThroughputState :: IO ThroughputState
+initThroughputState = do
+  now <- getCurrentTime
+  return (ThroughputState 0 now 0 0.0)
+
+throughputAvg :: ThroughputState -> Double
+throughputAvg ts = tsSum ts / realToFrac (tsIterations ts)
+
 metricsMain :: IO ()
 metricsMain = do
-  startTime <- getCurrentTime
-  forever $ do
-    setLocaleEncoding utf8 -- Otherwise we can't print µ...
-    metrics <- newMetrics dumblogSchema dUMBLOG_METRICS
-    eMeta <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
-    putStrLn ansiClearScreen
-    displayServiceTime metrics
-    displayQueueDepth metrics
-    displayThroughput metrics startTime
-    displayJournalMetadata eMeta
-    displayConcurrentConnections metrics
-    displayErrors metrics
-    threadDelay 1_000_000
+  setLocaleEncoding utf8 -- Otherwise we can't print µ...
+  removePathForcibly dUMBLOG_METRICS
+  ts <- initThroughputState
+  go ts
+  where
+    go :: ThroughputState -> IO ()
+    go ts = do
+      metrics <- newMetrics dumblogSchema dUMBLOG_METRICS
+      eMeta   <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
+
+      msyncMetrics metrics
+      either (const (return ())) msyncMetadata eMeta
+
+      putStrLn ansiClearScreen
+      displayServiceTime metrics
+      displayQueueDepth metrics
+      ts' <- displayThroughput metrics ts
+      displayUtilisation metrics ts'
+      displayJournalMetadata eMeta
+      displayConcurrentConnections metrics
+      displayErrors metrics
+
+      threadDelay 1_000_000
+      go ts'
 
 ansiClearScreen :: String
 ansiClearScreen = "\ESC[2J"
@@ -61,8 +88,11 @@ displayServiceTime metrics = do
   printf "  99.9  %10.2f µs%15.2fµs\n" (fromMaybe 0 m999)  (fromMaybe 0 m999')
   printf "  99.99 %10.2f µs%15.2fµs\n" (fromMaybe 0 m9999) (fromMaybe 0 m9999')
   printf "  max   %10.2f µs%15.2fµs\n" (fromMaybe 0 mMax)  (fromMaybe 0 mMax')
+  writeSum <- realToFrac <$> metricsSum metrics ServiceTimeWrites :: IO Double
+  readSum  <- realToFrac <$> metricsSum metrics ServiceTimeReads  :: IO Double
   writeCnt <- count metrics ServiceTimeWrites
   readCnt  <- count metrics ServiceTimeReads
+  printf "  sum %10.2f s%15.2fs\n" (writeSum / 1e6) (readSum / 1e6)
   let totalCnt :: Double
       totalCnt = realToFrac (writeCnt + readCnt)
   printf "  count %7d (%2.0f%%) %10d (%2.0f%%)\n"
@@ -75,14 +105,25 @@ displayQueueDepth metrics = do
   depth <- getCounter metrics QueueDepth
   printf " %d\n" depth
 
-displayThroughput :: DumblogMetrics -> UTCTime -> IO ()
-displayThroughput metrics startTime = do
+displayThroughput :: DumblogMetrics -> ThroughputState -> IO ThroughputState
+displayThroughput metrics ts = do
   now <- getCurrentTime
   writeCnt <- count metrics ServiceTimeWrites
   readCnt  <- count metrics ServiceTimeReads
-  let totalCnt :: Double
-      totalCnt = realToFrac (writeCnt + readCnt)
-  printf "\nThroughput: %.2f ops/s\n" (totalCnt / realToFrac (diffUTCTime now startTime))
+
+  let totalCnt :: Int
+      totalCnt = writeCnt + readCnt
+
+      throughput :: Double
+      throughput = realToFrac (totalCnt - tsLastTotalCount ts)
+                 / realToFrac (diffUTCTime now (tsLastTime ts))
+
+      ts' :: ThroughputState
+      ts' = ThroughputState totalCnt now (tsIterations ts + 1) (tsSum ts + throughput)
+
+  printf "\nThroughput: %.2f ops/s\n" throughput
+  printf "Throughput (avg): %.2f ops/s\n" (throughputAvg ts')
+  return ts'
 
 displayJournalMetadata :: Either IOException Metadata -> IO ()
 displayJournalMetadata (Left _err) = do
@@ -120,3 +161,8 @@ displayErrors metrics = do
   putStr "\nErrors:"
   errors <- getCounter metrics ErrorsEncountered
   printf " %d\n" errors
+
+displayUtilisation :: DumblogMetrics -> ThroughputState -> IO ()
+displayUtilisation metrics ts = do
+  serviceTimeAvg <- metricsAvg metrics ServiceTimeWrites -- XXX: what about reads?
+  printf "\nUtilisation: %.2f\n" (throughputAvg ts * serviceTimeAvg * 1e-6)
