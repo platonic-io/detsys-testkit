@@ -46,6 +46,9 @@ metricsMain = do
       metrics <- newMetrics dumblogSchema dUMBLOG_METRICS
       eMeta   <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
 
+      msyncMetrics metrics
+      either (const (return ())) msyncMetadata eMeta
+
       putStrLn ansiClearScreen
       displayServiceTime metrics
       displayQueueDepth metrics
@@ -85,8 +88,11 @@ displayServiceTime metrics = do
   printf "  99.9  %10.2f µs%15.2fµs\n" (fromMaybe 0 m999)  (fromMaybe 0 m999')
   printf "  99.99 %10.2f µs%15.2fµs\n" (fromMaybe 0 m9999) (fromMaybe 0 m9999')
   printf "  max   %10.2f µs%15.2fµs\n" (fromMaybe 0 mMax)  (fromMaybe 0 mMax')
+  writeSum <- realToFrac <$> metricsSum metrics ServiceTimeWrites :: IO Double
+  readSum  <- realToFrac <$> metricsSum metrics ServiceTimeReads  :: IO Double
   writeCnt <- count metrics ServiceTimeWrites
   readCnt  <- count metrics ServiceTimeReads
+  printf "  sum %10.2f s%15.2fs\n" (writeSum / 1e6) (readSum / 1e6)
   let totalCnt :: Double
       totalCnt = realToFrac (writeCnt + readCnt)
   printf "  count %7d (%2.0f%%) %10d (%2.0f%%)\n"
@@ -159,4 +165,4 @@ displayErrors metrics = do
 displayUtilisation :: DumblogMetrics -> ThroughputState -> IO ()
 displayUtilisation metrics ts = do
   serviceTimeAvg <- metricsAvg metrics ServiceTimeWrites -- XXX: what about reads?
-  printf "\nUtilisation: %.2f\n" (throughputAvg ts * serviceTimeAvg)
+  printf "\nUtilisation: %.2f\n" (throughputAvg ts * serviceTimeAvg * 1e-6)

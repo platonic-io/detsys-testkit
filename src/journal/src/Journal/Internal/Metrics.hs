@@ -170,6 +170,13 @@ metricsAvg metrics label = do
   c <- count metrics label
   return (realToFrac s / realToFrac c)
 
+msyncMetrics :: Metrics c h -> IO ()
+msyncMetrics (Metrics cbuf hbuf) = do
+  force cbuf
+  force hbuf
+
+------------------------------------------------------------------------
+
 -- * Example
 
 data MyMetricsCounter = Connections
