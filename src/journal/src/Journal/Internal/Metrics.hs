@@ -145,8 +145,8 @@ percentile (Metrics _ hbuf) label p
           where
             go' :: Int -> Double -> IO (Maybe Double)
             go' idx acc
-              | idx >= len  = return Nothing
-              | idx < len = do
+              | idx >= len = return Nothing
+              | idx <  len = do
                   v <- readIntOffArrayIx hbuf (idx * sizeOf (8 :: Int) + offsetBucket)
                   let sum' = realToFrac v + acc
                   if sum' >= target

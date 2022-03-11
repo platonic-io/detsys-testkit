@@ -4,7 +4,6 @@ module Dumblog.Metrics.Main where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (IOException)
-import Control.Monad (forever)
 import Data.Maybe (fromMaybe)
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
 import Text.Printf (printf)
@@ -18,21 +17,32 @@ import Journal.Types
 
 ------------------------------------------------------------------------
 
+data ThroughputState = ThroughputState
+  { tsLastTotalCount :: !Int
+  , tsLastTime       :: !UTCTime
+  }
+
 metricsMain :: IO ()
 metricsMain = do
-  startTime <- getCurrentTime
-  forever $ do
-    setLocaleEncoding utf8 -- Otherwise we can't print µ...
-    metrics <- newMetrics dumblogSchema dUMBLOG_METRICS
-    eMeta <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
-    putStrLn ansiClearScreen
-    displayServiceTime metrics
-    displayQueueDepth metrics
-    displayThroughput metrics startTime
-    displayJournalMetadata eMeta
-    displayConcurrentConnections metrics
-    displayErrors metrics
-    threadDelay 1_000_000
+  setLocaleEncoding utf8 -- Otherwise we can't print µ...
+  now <- getCurrentTime
+  go (ThroughputState 0 now)
+  where
+    go :: ThroughputState -> IO ()
+    go ts = do
+      metrics <- newMetrics dumblogSchema dUMBLOG_METRICS
+      eMeta   <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
+
+      putStrLn ansiClearScreen
+      displayServiceTime metrics
+      displayQueueDepth metrics
+      ts' <- displayThroughput metrics ts
+      displayJournalMetadata eMeta
+      displayConcurrentConnections metrics
+      displayErrors metrics
+
+      threadDelay 1_000_000
+      go ts'
 
 ansiClearScreen :: String
 ansiClearScreen = "\ESC[2J"
@@ -75,14 +85,17 @@ displayQueueDepth metrics = do
   depth <- getCounter metrics QueueDepth
   printf " %d\n" depth
 
-displayThroughput :: DumblogMetrics -> UTCTime -> IO ()
-displayThroughput metrics startTime = do
+displayThroughput :: DumblogMetrics -> ThroughputState -> IO ThroughputState
+displayThroughput metrics ts = do
   now <- getCurrentTime
   writeCnt <- count metrics ServiceTimeWrites
   readCnt  <- count metrics ServiceTimeReads
-  let totalCnt :: Double
-      totalCnt = realToFrac (writeCnt + readCnt)
-  printf "\nThroughput: %.2f ops/s\n" (totalCnt / realToFrac (diffUTCTime now startTime))
+  let totalCnt :: Int
+      totalCnt = writeCnt + readCnt
+  printf "\nThroughput: %.2f ops/s\n"
+    (realToFrac (totalCnt - tsLastTotalCount ts) /
+     realToFrac (diffUTCTime now (tsLastTime ts)) :: Double)
+  return (ThroughputState totalCnt now)
 
 displayJournalMetadata :: Either IOException Metadata -> IO ()
 displayJournalMetadata (Left _err) = do
