@@ -1,23 +1,34 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeOperators #-}
+
 module Dumblog.Journal.Main where
 
-import Control.Concurrent.Async (withAsync, link)
+import Control.Concurrent.Async (link, withAsync)
 import Control.Concurrent.MVar (MVar)
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy as LText
 import Data.Text.Encoding (decodeUtf8)
+import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.Encoding as LEncoding
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
-import Debugger.State (InstanceStateRepr(..), DebEvent(..))
-import Journal (defaultOptions, allocateJournal, startJournal)
-import Journal.Types (Journal, Options, Subscriber(..), oLogger, oMaxSubscriber, readBytesConsumed, writeBytesConsumed, jMetadata)
-import qualified Journal.MP as Journal
+import Debugger.State (DebEvent(..), InstanceStateRepr(..))
+import Journal (allocateJournal, defaultOptions, startJournal)
 import Journal.Internal.Logger as Logger
 import qualified Journal.Internal.Metrics as Metrics
+import qualified Journal.MP as Journal
+import Journal.Types
+       ( Journal
+       , Options
+       , Subscriber(..)
+       , jMetadata
+       , oLogger
+       , oMaxSubscriber
+       , oTermBufferLength
+       , readBytesConsumed
+       , writeBytesConsumed
+       )
 import Ltl.Json (mergePatch)
 import Options.Generic
 
@@ -128,6 +139,7 @@ dumblogOptions :: Options
 dumblogOptions = defaultOptions
   { oLogger = Logger.nullLogger
   , oMaxSubscriber = Sub2
+  , oTermBufferLength = 512 * 1024 * 1024
   }
 
 dUMBLOG_JOURNAL :: FilePath
