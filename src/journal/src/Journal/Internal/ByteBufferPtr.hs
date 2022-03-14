@@ -68,8 +68,9 @@ newByteBuffer fptr capa lim pos mSli
   <*> newIORef (-1)
   <*> maybe (newIORef 0) return mSli
 
-fromBS :: BS.ByteString -> IO ByteBuffer
-fromBS bs
+-- This is a hack, don't use.
+unsafefromBS :: BS.ByteString -> IO ByteBuffer
+unsafeFromBS bs
   = ByteBuffer fptr (Capacity len)
   <$> newIORef (Limit len)
   <*> newIORef 0
