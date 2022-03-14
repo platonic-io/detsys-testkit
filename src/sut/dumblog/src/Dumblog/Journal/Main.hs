@@ -148,11 +148,14 @@ dUMBLOG_JOURNAL = "/tmp/dumblog.journal"
 dUMBLOG_METRICS :: FilePath
 dUMBLOG_METRICS = "/tmp/dumblog.metrics"
 
+dUMBLOG_SNAPSHOT :: FilePath
+dUMBLOG_SNAPSHOT = "/tmp/dumblog.snapshot"
+
 journalDumblog :: DumblogConfig -> Int -> Int -> Maybe (MVar ()) -> IO ()
 journalDumblog cfg _capacity port mReady = do
   let fpj = dUMBLOG_JOURNAL
       fpm = dUMBLOG_METRICS
-      fps = "/tmp/dumblog.snapshot"
+      fps = dUMBLOG_SNAPSHOT
       untilSnapshot = 1000
   case cfg of
     Run -> do

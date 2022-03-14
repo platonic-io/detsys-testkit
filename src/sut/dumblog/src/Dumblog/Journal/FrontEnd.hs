@@ -53,7 +53,7 @@ httpFrontend journal metrics (FrontEndInfo blocker) req respond = do
       respond $ Wai.responseLBS status400 [] err
     Right cmd -> do
       key <- newKey blocker
-      now <- return 0 -- getCurrentNanosSinceEpoch
+      now <- getCurrentNanosSinceEpoch
       let env = encode (Envelope (sequenceNumber key) cmd now)
       res <- Journal.appendBS journal env
       res' <- case res of

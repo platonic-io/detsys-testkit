@@ -63,9 +63,9 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
         ; Just entry -> do
             Metrics.decrCounter_ metrics QueueDepth 1
             let Envelope key cmd arrivalTime = decode entry
-            -- now <- getCurrentNanosSinceEpoch
-            -- Convert from nano s to µs with `* 10^3`.
-            -- Metrics.measure metrics Latency (realToFrac ((now - arrivalTime) * 1000))
+            now <- getCurrentNanosSinceEpoch
+            -- Convert from nano s to µs with `* 10^-3`.
+            Metrics.measure metrics Latency (realToFrac ((now - arrivalTime)) * 0.001)
             timeIt metrics cmd $ do
               {- // in case of decode error
                   Metrics.incrCounter metrics ErrorsEncountered 1
