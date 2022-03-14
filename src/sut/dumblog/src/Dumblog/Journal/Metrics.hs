@@ -1,7 +1,9 @@
 module Dumblog.Journal.Metrics where
 
-import Journal.Internal.Metrics (MetricsSchema, Metrics) -- should maybe be moved to separate package
+import Journal.Internal.Metrics (Metrics, MetricsSchema)
 import qualified Journal.Internal.Metrics as Metrics
+
+------------------------------------------------------------------------
 
 data DumblogCounters
   = CurrentNumberTransactions
@@ -10,7 +12,8 @@ data DumblogCounters
   deriving (Eq, Show, Enum, Bounded)
 
 data DumblogHistograms
-  = ServiceTimeReads
+  = Latency
+  | ServiceTimeReads
   | ServiceTimeWrites
   deriving (Eq, Show, Enum, Bounded)
 

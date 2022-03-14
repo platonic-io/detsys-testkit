@@ -102,7 +102,7 @@ collectAll jour = do
       pure []
     Just entry -> do
       putStrLn "[collect] Found an entry"
-      let Envelope _key cmd = decode entry
+      let Envelope _key cmd _arrivalTime = decode entry
       cmds <- collectAll jour
       pure $ cmd : cmds
 
