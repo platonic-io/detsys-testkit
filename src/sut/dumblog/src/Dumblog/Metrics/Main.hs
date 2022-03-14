@@ -51,7 +51,7 @@ metricsMain = do
       either (const (return ())) msyncMetadata eMeta
 
       putStr (ansiClearScreen ++ ansiGoto 1 1)
-      displayLatencyAndServiceTime metrics
+      displayTimings metrics
       displayQueueDepth metrics
       ts' <- displayThroughput metrics ts
       displayUtilisation metrics ts'
@@ -68,8 +68,8 @@ ansiClearScreen = "\ESC[2J"
 ansiGoto :: Int -> Int -> String
 ansiGoto x y    = "\ESC[" ++ show y ++ ";" ++ show x ++ "H"
 
-displayLatencyAndServiceTime :: DumblogMetrics -> IO ()
-displayLatencyAndServiceTime metrics = do
+displayTimings :: DumblogMetrics -> IO ()
+displayTimings metrics = do
   mMinL  <- percentile metrics Latency 0
   mMedL  <- percentile metrics Latency 50
   m90L   <- percentile metrics Latency 90
@@ -91,37 +91,48 @@ displayLatencyAndServiceTime metrics = do
   m999'  <- percentile metrics ServiceTimeReads 99.9
   m9999' <- percentile metrics ServiceTimeReads 99.99
   mMax'  <- percentile metrics ServiceTimeReads 100
-  printf "%-25.25s%-25.25s%-25.25s\n" "\nLatency:"
+  mMinRT  <- percentile metrics ResponseTime 0
+  mMedRT  <- percentile metrics ResponseTime 50
+  m90RT   <- percentile metrics ResponseTime 90
+  m99RT   <- percentile metrics ResponseTime 99
+  m999RT  <- percentile metrics ResponseTime 99.9
+  m9999RT <- percentile metrics ResponseTime 99.99
+  mMaxRT  <- percentile metrics ResponseTime 100
+  printf "%-25.25s%-25.25s%-25.25s%-25.25s\n" "\nLatency:"
                                        "Service time (writes):"
                                        "Service time (reads):"
-  printf "  min   %10.2f µs%15.2f µs%20.2f µs\n"
-    (fromMaybe 0 mMinL) (fromMaybe 0 mMin)  (fromMaybe 0 mMin')
-  printf "  med   %10.2f µs%15.2f µs%20.2f µs\n"
-    (fromMaybe 0 mMedL) (fromMaybe 0 mMed)  (fromMaybe 0 mMed')
-  printf "  90    %10.2f µs%15.2f µs%20.2f µs\n"
-    (fromMaybe 0 m90L) (fromMaybe 0 m90)   (fromMaybe 0 m90')
-  printf "  99    %10.2f µs%15.2f µs%20.2f µs\n"
-    (fromMaybe 0 m99L) (fromMaybe 0 m99)   (fromMaybe 0 m99')
-  printf "  99.9  %10.2f µs%15.2f µs%20.2f µs\n"
-    (fromMaybe 0 m999L) (fromMaybe 0 m999)  (fromMaybe 0 m999')
-  printf "  99.99 %10.2f µs%15.2f µs%20.2f µs\n"
-    (fromMaybe 0 m9999L) (fromMaybe 0 m9999) (fromMaybe 0 m9999')
-  printf "  max   %10.2f µs%15.2f µs%20.2f µs\n"
-    (fromMaybe 0 mMaxL) (fromMaybe 0 mMax)  (fromMaybe 0 mMax')
+                                       "Response time:"
+  printf "  min   %10.2f µs%15.2f µs%20.2f µs%25.2f µs\n"
+    (fromMaybe 0 mMinL) (fromMaybe 0 mMin)  (fromMaybe 0 mMin') (fromMaybe 0 mMinRT)
+  printf "  med   %10.2f µs%15.2f µs%20.2f µs%25.2f µs\n"
+    (fromMaybe 0 mMedL) (fromMaybe 0 mMed)  (fromMaybe 0 mMed') (fromMaybe 0 mMedRT)
+  printf "  90    %10.2f µs%15.2f µs%20.2f µs%25.2f µs\n"
+    (fromMaybe 0 m90L) (fromMaybe 0 m90)   (fromMaybe 0 m90') (fromMaybe 0 m90RT)
+  printf "  99    %10.2f µs%15.2f µs%20.2f µs%25.2f µs\n"
+    (fromMaybe 0 m99L) (fromMaybe 0 m99)   (fromMaybe 0 m99') (fromMaybe 0 m99RT)
+  printf "  99.9  %10.2f µs%15.2f µs%20.2f µs%25.2f µs\n"
+    (fromMaybe 0 m999L) (fromMaybe 0 m999)  (fromMaybe 0 m999') (fromMaybe 0 m999RT)
+  printf "  99.99 %10.2f µs%15.2f µs%20.2f µs%25.2f µs\n"
+    (fromMaybe 0 m9999L) (fromMaybe 0 m9999) (fromMaybe 0 m9999') (fromMaybe 0 m9999RT)
+  printf "  max   %10.2f µs%15.2f µs%20.2f µs%25.2f µs\n"
+    (fromMaybe 0 mMaxL) (fromMaybe 0 mMax)  (fromMaybe 0 mMax') (fromMaybe 0 mMaxRT)
   latencySum <- realToFrac <$> metricsSum metrics Latency :: IO Double
   writeSum <- realToFrac <$> metricsSum metrics ServiceTimeWrites :: IO Double
   readSum  <- realToFrac <$> metricsSum metrics ServiceTimeReads  :: IO Double
+  respTimeSum  <- realToFrac <$> metricsSum metrics ResponseTime  :: IO Double
   latencyCnt <- count metrics Latency
   writeCnt <- count metrics ServiceTimeWrites
   readCnt  <- count metrics ServiceTimeReads
-  printf "  sum   %10.2f s %15.2f s %20.2f s\n"
-    (latencySum / 1e6) (writeSum / 1e6) (readSum / 1e6)
+  respTimeCnt  <- count metrics ResponseTime
+  printf "  sum   %10.2f s %15.2f s %20.2f s %25.2f s\n"
+    (latencySum / 1e6) (writeSum / 1e6) (readSum / 1e6) (respTimeSum / 1e6)
   let totalCnt :: Double
       totalCnt = realToFrac (writeCnt + readCnt)
-  printf "  count %7d %17d (%2.0f%%) %15d (%2.0f%%)\n"
+  printf "  count %7d %17d (%2.0f%%) %17d (%2.0f%%) %21d\n"
     latencyCnt
     writeCnt (realToFrac writeCnt / totalCnt * 100)
     readCnt  (realToFrac readCnt  / totalCnt * 100)
+    respTimeCnt
 
 displayQueueDepth :: DumblogMetrics -> IO ()
 displayQueueDepth metrics = do

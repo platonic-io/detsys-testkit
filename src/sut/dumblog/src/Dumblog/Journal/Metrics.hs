@@ -15,6 +15,7 @@ data DumblogHistograms
   = Latency
   | ServiceTimeReads
   | ServiceTimeWrites
+  | ResponseTime
   deriving (Eq, Show, Enum, Bounded)
 
 type DumblogMetrics = Metrics DumblogCounters DumblogHistograms
