@@ -65,5 +65,5 @@ runFrontEnd queue port mReady = runSettings settings (httpFrontend queue)
     settings
       = setPort port
       $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
-      $ setOnClose (\addr -> putStrLn ("closing: " ++ show addr))
+      -- $ setOnClose (\addr -> putStrLn ("closing: " ++ show addr))
       $ defaultSettings

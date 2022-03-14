@@ -104,7 +104,7 @@ nocite: |
 
 # Design of the journal
 
-* Heavily inspired by Martin "LMAX" Thompson et al's Aeron
+* Heavily inspired by Martin "LMAX" Thompson et al's Aeron log buffer
 * Three (virtual) files (clean, active, dirty)
 * Circular buffer implemented on top of `mmap`ed byte array
 * `recv` zero-copied straight to byte array (and persisted)

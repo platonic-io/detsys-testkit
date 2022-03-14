@@ -14,7 +14,7 @@ import Text.Printf (printf)
 import Dumblog.Journal.Main
 import Dumblog.Journal.Metrics
 import Journal (journalMetadata)
-import Journal.Internal.Metrics
+import Journal.Internal.Metrics hiding (Latency)
 import Journal.Types
 
 ------------------------------------------------------------------------
@@ -46,10 +46,12 @@ metricsMain = do
       metrics <- newMetrics dumblogSchema dUMBLOG_METRICS
       eMeta   <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
 
+      -- Only needed on MacOS it seems.
       msyncMetrics metrics
       either (const (return ())) msyncMetadata eMeta
 
-      putStrLn ansiClearScreen
+      putStr (ansiClearScreen ++ ansiGoto 1 1)
+      -- displayLatency metrics
       displayServiceTime metrics
       displayQueueDepth metrics
       ts' <- displayThroughput metrics ts
@@ -63,6 +65,27 @@ metricsMain = do
 
 ansiClearScreen :: String
 ansiClearScreen = "\ESC[2J"
+
+ansiGoto :: Int -> Int -> String
+ansiGoto x y    = "\ESC[" ++ show y ++ ";" ++ show x ++ "H"
+
+displayLatency :: DumblogMetrics -> IO ()
+displayLatency metrics = do
+  mMin  <- percentile metrics Latency 0
+  mMed  <- percentile metrics Latency 50
+  m90   <- percentile metrics Latency 90
+  m99   <- percentile metrics Latency 99
+  m999  <- percentile metrics Latency 99.9
+  m9999 <- percentile metrics Latency 99.99
+  mMax  <- percentile metrics Latency 100
+  printf "%-25.25s\n" "Latency"
+  printf "  min   %10.2f µs\n" (fromMaybe 0 mMin)
+  printf "  med   %10.2f µs\n" (fromMaybe 0 mMed)
+  printf "  90    %10.2f µs\n" (fromMaybe 0 m90)
+  printf "  99    %10.2f µs\n" (fromMaybe 0 m99)
+  printf "  99.9  %10.2f µs\n" (fromMaybe 0 m999)
+  printf "  99.99 %10.2f µs\n" (fromMaybe 0 m9999)
+  printf "  max   %10.2f µs\n" (fromMaybe 0 mMax)
 
 displayServiceTime :: DumblogMetrics -> IO ()
 displayServiceTime metrics = do
@@ -92,7 +115,7 @@ displayServiceTime metrics = do
   readSum  <- realToFrac <$> metricsSum metrics ServiceTimeReads  :: IO Double
   writeCnt <- count metrics ServiceTimeWrites
   readCnt  <- count metrics ServiceTimeReads
-  printf "  sum %10.2f s%15.2fs\n" (writeSum / 1e6) (readSum / 1e6)
+  printf "  sum   %10.2f s %15.2fs\n" (writeSum / 1e6) (readSum / 1e6)
   let totalCnt :: Double
       totalCnt = realToFrac (writeCnt + readCnt)
   printf "  count %7d (%2.0f%%) %10d (%2.0f%%)\n"
@@ -164,5 +187,8 @@ displayErrors metrics = do
 
 displayUtilisation :: DumblogMetrics -> ThroughputState -> IO ()
 displayUtilisation metrics ts = do
-  serviceTimeAvg <- metricsAvg metrics ServiceTimeWrites -- XXX: what about reads?
-  printf "\nUtilisation: %.2f\n" (throughputAvg ts * serviceTimeAvg * 1e-6)
+  serviceTimeWAvg <- metricsAvg metrics ServiceTimeWrites
+  serviceTimeRAvg <- metricsAvg metrics ServiceTimeReads
+  printf "\nUtilisation: %.2f\n"
+    -- Throughput uses seconds and service time uses µs, hence the `* 10^-6`.
+    (throughputAvg ts * (serviceTimeWAvg + serviceTimeRAvg) * 1e-6)

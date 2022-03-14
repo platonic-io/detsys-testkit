@@ -16,14 +16,14 @@ import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
 
-import Journal.Types (Journal)
 import Journal.Internal.Metrics (incrCounter)
 import qualified Journal.MP as Journal
+import Journal.Types (Journal)
 
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
-import Dumblog.Journal.Types
 import Dumblog.Journal.Metrics
+import Dumblog.Journal.Types
 
 ------------------------------------------------------------------------
 
@@ -53,7 +53,8 @@ httpFrontend journal metrics (FrontEndInfo blocker) req respond = do
       respond $ Wai.responseLBS status400 [] err
     Right cmd -> do
       key <- newKey blocker
-      let env = encode (Envelope (sequenceNumber key) cmd)
+      now <- return 0 -- getCurrentNanosSinceEpoch
+      let env = encode (Envelope (sequenceNumber key) cmd now)
       res <- Journal.appendBS journal env
       res' <- case res of
         Left err -> do
