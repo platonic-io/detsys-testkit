@@ -8,7 +8,6 @@ import Control.Exception (IOException)
 import Data.Maybe (fromMaybe)
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
-import System.Directory (removePathForcibly)
 import Text.Printf (printf)
 
 import Dumblog.Journal.Main
@@ -37,7 +36,6 @@ throughputAvg ts = tsSum ts / realToFrac (tsIterations ts)
 metricsMain :: IO ()
 metricsMain = do
   setLocaleEncoding utf8 -- Otherwise we can't print µ...
-  removePathForcibly dUMBLOG_METRICS
   ts <- initThroughputState
   go ts
   where
