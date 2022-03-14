@@ -68,6 +68,16 @@ newByteBuffer fptr capa lim pos mSli
   <*> newIORef (-1)
   <*> maybe (newIORef 0) return mSli
 
+fromBS :: BS.ByteString -> IO ByteBuffer
+fromBS bs
+  = ByteBuffer fptr (Capacity len)
+  <$> newIORef (Limit len)
+  <*> newIORef 0
+  <*> newIORef (-1)
+  <*> newIORef (Slice offset)
+  where
+    (fptr, offset, len) = BS.toForeignPtr bs
+
 getCapacity :: ByteBuffer -> Capacity
 getCapacity = bbCapacity
 {-# INLINE getCapacity #-}

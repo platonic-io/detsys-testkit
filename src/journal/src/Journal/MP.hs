@@ -39,8 +39,12 @@ appendBS jour bs = do
       putBS bufferClaim hEADER_LENGTH bs
       Right <$> commit bufferClaim (jLogger jour)
 
+recvBytesOffset :: BufferClaim -> Socket -> Int -> Int -> IO Int
+recvBytesOffset bc sock offset len = withPtr bc $ \ptr ->
+  recvBuf sock (ptr `plusPtr` offset) len
+
 recvBytes :: BufferClaim -> Socket -> Int -> IO Int
-recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock (ptr `plusPtr` hEADER_LENGTH) len
+recvBytes bc sock len = recvBytesOffset bc sock hEADER_LENGTH len
 
 readJournal :: Journal -> Subscriber -> IO (Maybe ByteString)
 readJournal jour sub = do
@@ -113,10 +117,7 @@ readJournal jour sub = do
            success <- casBytesConsumed (jMetadata jour) sub offset
                         (offset + (align (int322Int len) fRAME_ALIGNMENT))
            if success
-           then do
-             -- Single-threaded case:
-             -- incrCounter_ (align (int322Int len) fRAME_ALIGNMENT) (jBytesConsumed jour)
-             return (Just bs)
+           then return (Just bs)
            else
              -- If the CAS failed it means that another process read what we were
              -- about to read, so we retry reading the next item instead.
