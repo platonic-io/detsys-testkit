@@ -145,8 +145,9 @@ displayThroughput metrics ts = do
       ts' :: ThroughputState
       ts' = ThroughputState totalCnt now (tsIterations ts + 1) (tsSum ts + throughput)
 
-  printf "\nThroughput: %.2f ops/s\n" throughput
-  printf "Throughput (avg): %.2f ops/s\n" (throughputAvg ts')
+  printf "\nThroughput: %.2f ops/s (%.2f avg ops/s)\n"
+    throughput (throughputAvg ts')
+
   return ts'
 
 displayJournalMetadata :: Either IOException Metadata -> IO ()
@@ -162,17 +163,19 @@ displayJournalMetadata (Right meta) = do
   rt <- readRawTail meta index
   initTermId <- readInitialTermId meta
   termLen <- readTermLength meta
+  if termLen == 0
+  then return ()
+  else do
+    let termId            = rawTailTermId rt
+        termOffset        = rawTailTermOffset rt termLen
+        termBeginPosition =
+          computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
 
-  let termId            = rawTailTermId rt
-      termOffset        = rawTailTermOffset rt termLen
-      termBeginPosition =
-        computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
-
-      produced = termBeginPosition + fromIntegral termOffset
-  consumed <- readBytesConsumed meta Sub1
-  printf "  %d bytes produced\n" produced
-  printf "  %d bytes consumed\n" consumed
-  printf "  %d bytes difference\n" (produced - fromIntegral consumed)
+        produced = termBeginPosition + fromIntegral termOffset
+    consumed <- readBytesConsumed meta Sub1
+    printf "  %d bytes produced\n" produced
+    printf "  %d bytes consumed\n" consumed
+    printf "  %d bytes difference\n" (produced - fromIntegral consumed)
 
 displayConcurrentConnections :: DumblogMetrics -> IO ()
 displayConcurrentConnections metrics = do
