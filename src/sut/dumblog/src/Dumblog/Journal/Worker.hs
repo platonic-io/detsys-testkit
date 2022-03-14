@@ -5,11 +5,16 @@ module Dumblog.Journal.Worker where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
-import Data.Time (diffUTCTime, getCurrentTime)
 
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.MP as Journal
-import Journal.Types (Journal, Subscriber(..), jMetadata, readBytesConsumed, writeBytesConsumed)
+import Journal.Types
+       ( Journal
+       , Subscriber(..)
+       , jMetadata
+       , readBytesConsumed
+       , writeBytesConsumed
+       )
 
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
@@ -26,17 +31,6 @@ data WorkerInfo = WorkerInfo
   , wiEvents        :: Int -- how many events since last snapshot
   , wiEventsInRound :: Int -- how many events in one snapshot
   }
-
-timeIt :: DumblogMetrics -> Command -> IO a -> IO a
-timeIt metrics cmd action = do
-  !startTime <- getCurrentTime
-  result <- action
-  !endTime <- getCurrentTime
-  Metrics.measure metrics (case cmd of
-                             Write {} -> ServiceTimeWrites
-                             Read {}  -> ServiceTimeReads)
-    (realToFrac (diffUTCTime endTime startTime * 1e6)) -- µs.
-  return result
 
 wakeUpFrontend :: Blocker (Either Response Response) -> Int -> Either Response Response
                -> IO ()
@@ -63,20 +57,23 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
         ; Just entry -> do
             Metrics.decrCounter_ metrics QueueDepth 1
             let Envelope key cmd arrivalTime = decode entry
-            now <- getCurrentNanosSinceEpoch
+            -- XXX: In case of decode error:
+            --  Metrics.incrCounter metrics ErrorsEncountered 1
+            --  wakeUpFrontend blocker key $ Left "Couldn't parse request"
+            --  -- ^ should be better error message
+            --
+            !startTime <- getCurrentNanosSinceEpoch
+            (s', r) <- runCommand s cmd
+            wakeUpFrontend blocker key (Right r)
+            !endTime <- getCurrentNanosSinceEpoch
             -- Convert from nano s to µs with `* 10^-3`.
-            Metrics.measure metrics Latency (realToFrac ((now - arrivalTime)) * 0.001)
-            timeIt metrics cmd $ do
-              {- // in case of decode error
-                  Metrics.incrCounter metrics ErrorsEncountered 1
-                  wakeUpFrontend blocker key $ Left "Couldn't parse request"
-                  -- ^ should be better error message
-              -}
-              -- putStrLn ("worker: key: " ++ show key ++ ", cmd: " ++ show cmd)
-              (s', r) <- runCommand s cmd
-              -- putStrLn ("worker: key: " ++ show key ++ ", response: " ++ show r)
-              wakeUpFrontend blocker key (Right r)
-              return (succ ev, s')
+            Metrics.measure metrics Latency (realToFrac ((startTime - arrivalTime)) * 0.001)
+            Metrics.measure metrics (case cmd of
+                                       Write {} -> ServiceTimeWrites
+                                       Read {}  -> ServiceTimeReads)
+              (realToFrac ((endTime - startTime)) * 0.001) -- µs.
+            return (succ ev, s')
+
         }
       ; threadDelay 10
       ; go ev' s'

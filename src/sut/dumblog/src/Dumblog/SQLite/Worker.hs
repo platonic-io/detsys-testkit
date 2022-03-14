@@ -21,8 +21,8 @@ worker queue conn = go
       execute conn cmd
       go
 
-batchingWorker :: TBQueue Command -> Connection -> IO ()
-batchingWorker queue conn = go
+_batchingWorker :: TBQueue Command -> Connection -> IO ()
+_batchingWorker queue conn = go
   where
     go :: IO ()
     go = do
