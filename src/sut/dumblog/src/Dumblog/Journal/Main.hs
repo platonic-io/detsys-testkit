@@ -35,6 +35,7 @@ import Options.Generic
 import Dumblog.Journal.Blocker (emptyBlocker)
 import Dumblog.Journal.Codec (Envelope(..), decode)
 import Dumblog.Journal.FrontEnd (FrontEndInfo(..), runFrontEnd)
+import qualified Dumblog.Journal.Logger as DLogger
 import Dumblog.Journal.Metrics (dumblogSchema)
 import Dumblog.Journal.Snapshot (Snapshot)
 import qualified Dumblog.Journal.Snapshot as Snapshot
@@ -69,21 +70,24 @@ replay [] s = do
   pure s
 replay (cmd:cmds) s = do
   putStrLn $ "[REPLAY] running: " <> show cmd
-  (s', _) <- runCommand s cmd
+  (s', _) <- runCommand DLogger.ioLogger s cmd
   replay cmds s'
 
 type DebugFile = Vector InstanceStateRepr
 
 -- TODO: merge with `replay`
 replayDebug :: [Command] -> InMemoryDumblog -> IO DebugFile
-replayDebug = go 0 mempty
+replayDebug originCommands originState = do
+  queueLogger <- DLogger.newQueueLogger
+  go queueLogger 0 mempty originCommands originState
   where
-    go _logTime dfile [] _s = do
+    go _ _logTime dfile [] _s = do
       putStrLn "[REPLAY-DEBUG] finished!"
       pure dfile
-    go logTime dfile (cmd:cmds) s = do
+    go logger logTime dfile (cmd:cmds) s = do
       putStrLn $ "[REPLAY-DEBUG] running: " <> show cmd
-      (s', _) <- runCommand s cmd
+      (s', _) <- runCommand (DLogger.queueLogger logger) s cmd
+      logLines <- DLogger.flushQueue logger
       let
         (ev, msg) = case cmd of
           Read i -> ("read", show i)
@@ -98,10 +102,10 @@ replayDebug = go 0 mempty
         is = InstanceStateRepr
              { state = LText.unpack (LEncoding.decodeUtf8 (Aeson.encode (mergePatch (Aeson.toJSON s) (Aeson.toJSON s'))))
              , currentEvent = ce
-             , logs = []
+             , logs = logLines
              , sent = []
              }
-      go (succ logTime) (Vector.snoc dfile is) cmds s'
+      go logger (succ logTime) (Vector.snoc dfile is) cmds s'
 
 collectAll :: Journal -> IO [Command]
 collectAll jour = do
@@ -123,12 +127,16 @@ startingState (Just snap) = Snapshot.ssState snap
 
 data DumblogConfig
   = Run
+    { quiet :: Bool <?> "Should we suppress program log messages"}
   | DebugFile
     { output :: FilePath <?> "Where to output the debug file"
     }
   deriving (Generic, Show)
 
 instance ParseRecord DumblogConfig
+
+quietRun :: DumblogConfig
+quietRun = Run (Helpful True)
 
 {-
 Unclear how to:
@@ -158,7 +166,7 @@ journalDumblog cfg _capacity port mReady = do
       fps = dUMBLOG_SNAPSHOT
       untilSnapshot = 1000
   case cfg of
-    Run -> do
+    Run q -> do
       mSnapshot <- Snapshot.readFile fps
       journal <- fetchJournal mSnapshot fpj dumblogOptions
       metrics <- Metrics.newMetrics dumblogSchema fpm
@@ -168,7 +176,9 @@ journalDumblog cfg _capacity port mReady = do
       let
         events = length cmds
         feInfo = FrontEndInfo blocker
-        wInfo = WorkerInfo blocker fps events untilSnapshot
+        logger | unHelpful q = DLogger.nullLogger
+               | otherwise = DLogger.ioLogger
+        wInfo = WorkerInfo blocker logger fps events untilSnapshot
       withAsync (worker journal metrics wInfo workerState) $ \a -> do
         link a
         runFrontEnd port journal metrics feInfo mReady

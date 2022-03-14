@@ -67,6 +67,7 @@ library
     Dumblog.Journal.Blocker
     Dumblog.Journal.Codec
     Dumblog.Journal.FrontEnd
+    Dumblog.Journal.Logger
     Dumblog.Journal.Main
     Dumblog.Journal.Metrics
     Dumblog.Journal.Snapshot
