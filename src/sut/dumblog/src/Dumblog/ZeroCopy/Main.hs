@@ -1,11 +1,14 @@
 module Dumblog.ZeroCopy.Main where
 
 import Control.Concurrent (MVar)
-import Journal.Types (oTermBufferLength, oLogger)
+import Control.Concurrent.Async (link, withAsync)
+import Journal (allocateJournal, defaultOptions, startJournal)
 import Journal.Internal.Logger (nullLogger)
-import Journal (defaultOptions, allocateJournal, startJournal)
+import Journal.Types (oLogger, oTermBufferLength)
 
 import Dumblog.ZeroCopy.HttpServer
+import Dumblog.ZeroCopy.State
+import Dumblog.ZeroCopy.Worker
 
 ------------------------------------------------------------------------
 
@@ -16,7 +19,10 @@ zeroCopyDumblog capacity port fp mReady = do
                             }
   allocateJournal fp opts
   jour <- startJournal fp opts
-  httpServer jour port mReady
+  state <- initState 40000 fp
+  withAsync (worker jour state) $ \a -> do
+    link a
+    httpServer jour port mReady
 
 main :: IO ()
 main = do

@@ -81,6 +81,7 @@ library
     Dumblog.ZeroCopy.HttpServer
     Dumblog.ZeroCopy.Main
     Dumblog.ZeroCopy.State
+    Dumblog.ZeroCopy.Worker
     Dumblog.Metrics.Main
   if flag(persistent-sqlite)
     exposed-modules: Dumblog.SQLite.DBPersistent

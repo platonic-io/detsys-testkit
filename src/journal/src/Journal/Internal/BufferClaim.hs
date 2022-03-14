@@ -1,14 +1,15 @@
 module Journal.Internal.BufferClaim where
 
 import Data.ByteString (ByteString)
+import Data.Int (Int32, Int64)
 import Data.Word (Word8)
 import Foreign.ForeignPtr (ForeignPtr, plusForeignPtr, withForeignPtr)
 import Foreign.Ptr (Ptr)
 
 import Journal.Internal.ByteBufferPtr
 import Journal.Internal.Logger (Logger, logg)
-import Journal.Types
 import Journal.Internal.Utils
+import Journal.Types
 
 ------------------------------------------------------------------------
 
@@ -20,6 +21,12 @@ newBufferClaim src (TermOffset offset) len = BufferClaim <$>
 
 putBS :: BufferClaim -> Int -> ByteString -> IO ()
 putBS (BufferClaim bb) offset bs = putByteStringAt bb offset bs
+
+putInt32At :: BufferClaim -> Int -> Int32 -> IO ()
+putInt32At (BufferClaim bb) offset i32 = writeInt32OffAddr bb offset i32
+
+putInt64At :: BufferClaim -> Int -> Int64 -> IO ()
+putInt64At (BufferClaim bb) offset i64 = writeInt64OffAddr bb offset i64
 
 withPtr :: BufferClaim -> (Ptr Word8 -> IO a) -> IO a
 withPtr (BufferClaim bb) k = do
