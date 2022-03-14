@@ -21,15 +21,22 @@ import Database.SQLite.Simple
 ------------------------------------------------------------------------
 
 sQLITE_DB_PATH :: FilePath
-sQLITE_DB_PATH = "file:///tmp/dumblog.sqlite3"
+sQLITE_DB_PATH = "/tmp/dumblog.sqlite3"
 
 sQLITE_FLAGS :: [String]
 sQLITE_FLAGS = ["fullfsync=1", "journal_mode=WAL", "synchronous=NORMAL"]
 
+sqlitePath :: String
+sqlitePath =
+  let
+    flags = map (++ ";") sQLITE_FLAGS
+  in
+    sQLITE_DB_PATH ++ "?" ++ concat flags
+
 initDB :: IO Connection
 initDB = do
+  conn <- open sqlitePath
   let flags = map (++ ";") sQLITE_FLAGS
-  conn <- open (sQLITE_DB_PATH ++ "?" ++ concat flags)
   forM_ flags $ \flag -> do
     execute_ conn ("PRAGMA " <> fromString flag)
   execute_ conn "CREATE TABLE IF NOT EXISTS dumblog (ix INTEGER PRIMARY KEY, value BLOB)"
