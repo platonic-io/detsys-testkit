@@ -69,11 +69,13 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile eventCount untilS
             wakeUpFrontend blocker key (Right r)
             !endTime <- getCurrentNanosSinceEpoch
             -- Convert from nano s to µs with `* 10^-3`.
-            Metrics.measure metrics Latency (realToFrac ((startTime - arrivalTime)) * 0.001)
+            let latency     = realToFrac ((startTime - arrivalTime)) * 0.001 -- µs.
+                serviceTime = realToFrac ((endTime   - startTime))   * 0.001
+            Metrics.measure metrics Latency latency
             Metrics.measure metrics (case cmd of
                                        Write {} -> ServiceTimeWrites
-                                       Read {}  -> ServiceTimeReads)
-              (realToFrac ((endTime - startTime)) * 0.001) -- µs.
+                                       Read {}  -> ServiceTimeReads) serviceTime
+            Metrics.measure metrics ResponseTime (latency + serviceTime)
             return (succ ev, s')
 
         }
