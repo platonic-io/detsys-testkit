@@ -18,6 +18,7 @@ import Journal.Types
 
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
+import Dumblog.Journal.Logger
 import Dumblog.Journal.Metrics
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine
@@ -27,6 +28,7 @@ import Dumblog.Journal.Types
 
 data WorkerInfo = WorkerInfo
   { wiBlockers :: Blocker (Either Response Response)
+  , wiLogger :: Logger
   , wiSnapshotFile  :: FilePath
   , wiEvents        :: Int -- how many events since last snapshot
   , wiEventsInRound :: Int -- how many events in one snapshot
@@ -40,12 +42,12 @@ wakeUpFrontend blocker key resp = do
     error $ "Frontend never added MVar"
 
 worker :: Journal -> DumblogMetrics -> WorkerInfo -> InMemoryDumblog -> IO ()
-worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot) =
+worker journal metrics (WorkerInfo blocker logger snapshotFile eventCount untilSnapshot) =
   go eventCount
   where
     go ev s
       | ev >= untilSnapshot = do
-          putStrLn $ "[worker] Performing Snapshot"
+          logger "[worker] Performing Snapshot"
           bytes <- readBytesConsumed (jMetadata journal) Sub1
           Snapshot.toFile (Snapshot.Snapshot bytes s) snapshotFile
           writeBytesConsumed (jMetadata journal) Sub2 bytes
@@ -63,7 +65,7 @@ worker journal metrics (WorkerInfo blocker snapshotFile eventCount untilSnapshot
             --  -- ^ should be better error message
             --
             !startTime <- getCurrentNanosSinceEpoch
-            (s', r) <- runCommand s cmd
+            (s', r) <- runCommand logger s cmd
             wakeUpFrontend blocker key (Right r)
             !endTime <- getCurrentNanosSinceEpoch
             -- Convert from nano s to µs with `* 10^-3`.
