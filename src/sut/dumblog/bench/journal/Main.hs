@@ -1,10 +1,15 @@
 module Main where
 
-import Dumblog.Journal.Main (DumblogConfig(Run), journalDumblog)
+import System.Directory (removePathForcibly)
+
+import Dumblog.Journal.Main
 
 import Common
 
 ------------------------------------------------------------------------
 
 main :: IO ()
-main = commonMain "Journal" (journalDumblog Run bUFFER_CAPACITY pORT . Just)
+main = do
+  removePathForcibly dUMBLOG_JOURNAL
+  removePathForcibly dUMBLOG_SNAPSHOT
+  commonMain "Journal" (journalDumblog Run bUFFER_CAPACITY pORT . Just)
