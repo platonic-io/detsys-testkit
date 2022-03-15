@@ -64,6 +64,7 @@ library
 
   exposed-modules:
     Dumblog.Common.HttpClient
+    Dumblog.Common.Utils
     Dumblog.Journal.Blocker
     Dumblog.Journal.Codec
     Dumblog.Journal.FrontEnd

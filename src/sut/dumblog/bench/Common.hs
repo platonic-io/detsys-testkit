@@ -23,6 +23,7 @@ import System.Random (StdGen, mkStdGen, randomR)
 import Text.Printf (printf)
 
 import Dumblog.Common.HttpClient
+import Dumblog.Common.Utils (showBytes)
 
 ------------------------------------------------------------------------
 
@@ -39,10 +40,10 @@ rEAD_FREQUENCY :: Int
 rEAD_FREQUENCY = 80
 
 nUM_OF_CLIENTS :: Int
-nUM_OF_CLIENTS = 512
+nUM_OF_CLIENTS = 5000
 
 iTERATIONS :: Int
-iTERATIONS = 200
+iTERATIONS = 50
 
 vALUE_TO_WRITE :: ByteString
 vALUE_TO_WRITE = LBS.pack "Dumblog"
@@ -97,28 +98,6 @@ commonBenchmark (_a, hc) = do
   printf "%-25.25s%10s\n"         "Copied mem"     (showBytes (endCopied - startCopied))
   printf "%-25.25s%10s\n"         "Max mem"        (showBytes
                                                      (max endMaxMemInUse startMaxMemInUse))
-
--- Stolen from `tasty-bench`.
-showBytes :: Word64 -> String
-showBytes i
-  | t < 1000                 = printf "%3.0f B " t
-  | t < 10189                = printf "%3.1f KB" (t / 1024)
-  | t < 1023488              = printf "%3.0f KB" (t / 1024)
-  | t < 10433332             = printf "%3.1f MB" (t / 1048576)
-  | t < 1048051712           = printf "%3.0f MB" (t / 1048576)
-  | t < 10683731149          = printf "%3.1f GB" (t / 1073741824)
-  | t < 1073204953088        = printf "%3.0f GB" (t / 1073741824)
-  | t < 10940140696372       = printf "%3.1f TB" (t / 1099511627776)
-  | t < 1098961871962112     = printf "%3.0f TB" (t / 1099511627776)
-  | t < 11202704073084108    = printf "%3.1f PB" (t / 1125899906842624)
-  | t < 1125336956889202624  = printf "%3.0f PB" (t / 1125899906842624)
-  | t < 11471568970838126592 = printf "%3.1f EB" (t / 1152921504606846976)
-  | otherwise                = printf "%3.0f EB" (t / 1152921504606846976)
-  where
-    t = word64ToDouble i
-
-    word64ToDouble :: Word64 -> Double
-    word64ToDouble = fromIntegral
 
 commonClient :: HttpClient -> StdGen -> IO ()
 commonClient hc gen = go iTERATIONS 0 gen

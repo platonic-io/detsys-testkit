@@ -69,7 +69,7 @@ httpFrontend journal metrics (FrontEndInfo blocker) req respond = do
           respond $ Wai.responseLBS status400 [] (LBS8.pack (show err))
         Right () -> do
           incrCounter metrics QueueDepth 1
-          mResp <- timeout (3*1000*1000) (blockUntil key)
+          mResp <- timeout (30*1000*1000) (blockUntil key)
           -- Journal.dumpJournal journal
           case mResp of
             Nothing -> do

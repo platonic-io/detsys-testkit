@@ -16,6 +16,7 @@ data DumblogHistograms
   | ServiceTimeReads
   | ServiceTimeWrites
   | ResponseTime
+  | WriteSize
   deriving (Eq, Show, Enum, Bounded)
 
 type DumblogMetrics = Metrics DumblogCounters DumblogHistograms
