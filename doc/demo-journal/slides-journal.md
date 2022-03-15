@@ -185,13 +185,7 @@ nocite: |
   the in-memory log. Snapshots of the journal can be taken and recovered from.
 
 * The two implementations are benchmarked and compared. Metrics are collected
-  via built-in profilers in both versions. In addition we show:
-
-  - How to calculate latency from metrics in said profiler, using Little’s law
-    from queuing theory;
-
-  - How metrics can be viewed from a different processes while the service is
-    still running and that metrics persist in case of service crashes.
+  via built-in profilers in both versions.
 
 * For the journaled version we also show how it can be debugged via the snapshot
   and journal using deterministic replay to show how the state machines change
