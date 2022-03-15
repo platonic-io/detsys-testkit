@@ -44,10 +44,6 @@ worker jour = go
               go state'
             Just (Read ix) -> do
               conn <- mkSocket (CInt fd)
-              -- XXX: We need to not do `cleanBufferTo` otherwise it will clean
-              -- away the journal before can reply to it. I guess we could also
-              -- try to have subscriber `Sub2` never advance its consumed bytes
-              -- counter to disable cleaning...
               readSendfile state conn ix
               go state
             Nothing -> go state
