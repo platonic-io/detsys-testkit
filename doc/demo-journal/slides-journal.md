@@ -1,7 +1,7 @@
 ---
 title: Towards conveniently debuggable distributed systems
 author: Stevan Andjelkovic \and Daniel Gustafsson
-date: 31th Jan, 2022
+date: 24th Mar, 2022
 header-includes:
   - \definecolor{links}{HTML}{2A1B81}
   - \hypersetup{colorlinks,linkcolor=,urlcolor=links}
@@ -108,16 +108,70 @@ nocite: |
 * Three (virtual) files (clean, active, dirty)
 * Circular buffer implemented on top of `mmap`ed byte array
 * `recv` zero-copied straight to byte array (and persisted)
+* Lock- and wait-free concurrency
 
-# Built-in profiler/metrics
+# Design of the journal
 
-* Idea due to Tyler "sled" Neely
-* Counters
-* Histograms
+![Journal](./images/journal_0.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_1.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_2.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_3.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_4.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_5.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_6.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_7.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_8.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_9.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_10.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_11.png){ height=90% }
+
+# Design of the journal
+
+![Journal](./images/journal_12.png){ height=90% }
 
 # Design of the event loop
 
-* TODO
+1. Fork a webserver where the request handlers have concurrent write access to a
+   shared journal;
+
+2. Request handlers merely write the entire request into the journal (this gives
+   us a linearised sequence of requests);
+
+3. A separate "worker" thread reads the journal entires and updates the state of
+   the database.
 
 # Demo
 
@@ -142,6 +196,25 @@ nocite: |
 * For the journaled version we also show how it can be debugged via the snapshot
   and journal using deterministic replay to show how the state machines change
   over time (whether the server is running or not).
+
+# Amdahl's law vs the Universal scalability law
+
+* *C(N) = N / (1 + a(N - 1) + ((b \* N) \* (N - 1)))*
+  + *C* = capacity or throughput
+  + *N* = number of processors
+  + *a* = contention penality (time under some kind of lock)
+  + *b* = coherence penality (time to agree, e.g. load the cache line with the shared reference)
+
+![USL](./images/amdahl_vs_usl.jpg){ width=60% }
+
+# Built-in profiler/metrics
+
+* Ideas due to Tyler "sled" Neely and Thompson et al
+* (Atomic) counters (an 64-bit signed integer)
+* Histograms (2 + 2^16 counters) uses `log` and `exp` for
+  compression/decompression
+* `mmap`ed bytearray (8 bytes per counter) allows for atomic update (`lock xadd`
+  in x86 asm) and access for different processes
 
 # Summary
 
