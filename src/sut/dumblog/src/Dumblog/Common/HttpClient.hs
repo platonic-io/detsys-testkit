@@ -13,12 +13,14 @@ import Network.HTTP.Client
        , RequestBody(RequestBodyLBS)
        , defaultManagerSettings
        , httpLbs
+       , managerResponseTimeout
        , method
        , newManager
        , parseRequest
        , path
        , requestBody
        , responseBody
+       , responseTimeoutMicro
        )
 import Network.Wai.Handler.Warp (Port)
 import Text.Read (readMaybe)
@@ -36,6 +38,7 @@ data HttpClient = HttpClient
 newHttpClient :: String -> Port -> IO HttpClient
 newHttpClient host port = do
   mgr <- newManager defaultManagerSettings
+                      { managerResponseTimeout = responseTimeoutMicro (30 * 1000 * 1000) }
   initReq <- parseRequest ("http://" ++ host ++ ":" ++ show port)
 
   let writeReq :: ByteString -> Request
@@ -56,7 +59,7 @@ writeHttp hc bs = do
   case eResp of
     Left (HttpExceptionRequest _req exceptCtx) -> do
       -- XXX: increment hcErrors
-      putStrLn ("writeHttp, exception context: " ++ show exceptCtx)
+      -- putStrLn ("writeHttp, exception context: " ++ show exceptCtx)
       return Nothing
     Left InvalidUrlException {} -> error "writeHttp, impossible: invalid url"
     Right resp -> return (readMaybe (LBSChar8.unpack (responseBody resp)))

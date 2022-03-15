@@ -6,6 +6,7 @@ module Dumblog.Journal.Worker where
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
 
+import qualified Data.ByteString as BS
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.MP as Journal
 import Journal.Types
@@ -76,6 +77,9 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile eventCount untilS
                                        Write {} -> ServiceTimeWrites
                                        Read {}  -> ServiceTimeReads) serviceTime
             Metrics.measure metrics ResponseTime (latency + serviceTime)
+            case cmd of
+              Write bs   -> Metrics.measure metrics WriteSize (realToFrac (BS.length bs))
+              _otherwise -> return ()
             return (succ ev, s')
 
         }

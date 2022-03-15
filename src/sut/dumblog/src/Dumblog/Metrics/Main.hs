@@ -11,6 +11,7 @@ import GHC.IO.Encoding (setLocaleEncoding, utf8)
 import System.Directory (removePathForcibly)
 import Text.Printf (printf)
 
+import Dumblog.Common.Utils (showBytes)
 import Dumblog.Journal.Main
 import Dumblog.Journal.Metrics
 import Journal (journalMetadata)
@@ -56,8 +57,10 @@ metricsMain = do
       ts' <- displayThroughput metrics ts
       displayUtilisation metrics ts'
       displayJournalMetadata eMeta
+      displayWriteSize metrics
       displayConcurrentConnections metrics
       displayErrors metrics
+      displayMetricsSize
 
       threadDelay 1_000_000
       go ts'
@@ -128,7 +131,7 @@ displayTimings metrics = do
     (latencySum / 1e6) (writeSum / 1e6) (readSum / 1e6) (respTimeSum / 1e6)
   let totalCnt :: Double
       totalCnt = realToFrac (writeCnt + readCnt)
-  printf "  count %7d %17d (%2.0f%%) %17d (%2.0f%%) %21d\n"
+  printf "  count %7d %17d (%2.0f%%) %16d (%2.0f%%) %21d\n"
     latencyCnt
     writeCnt (realToFrac writeCnt / totalCnt * 100)
     readCnt  (realToFrac readCnt  / totalCnt * 100)
@@ -188,17 +191,20 @@ displayJournalMetadata (Right meta) = do
     printf "  %d bytes consumed\n" consumed
     printf "  %d bytes difference\n" (produced - fromIntegral consumed)
 
+displayWriteSize :: DumblogMetrics -> IO ()
+displayWriteSize metrics = do
+  mMin  <- percentile metrics WriteSize 0
+  mMed  <- percentile metrics WriteSize 50
+  mMax  <- percentile metrics WriteSize 100
+  printf "\nWrite size, "
+  printf "min:   %10.0f bytes, med:  %10.0f bytes, max:  %10.0f bytes\n"
+    (fromMaybe 0 mMin) (fromMaybe 0 mMed)  (fromMaybe 0 mMax)
+
 displayConcurrentConnections :: DumblogMetrics -> IO ()
 displayConcurrentConnections metrics = do
   putStr "\nConcurrent number of transactions:"
   cnt <- getCounter metrics CurrentNumberTransactions
   printf " %d\n" cnt
-
-displayErrors :: DumblogMetrics -> IO ()
-displayErrors metrics = do
-  putStr "\nErrors:"
-  errors <- getCounter metrics ErrorsEncountered
-  printf " %d\n" errors
 
 displayUtilisation :: DumblogMetrics -> ThroughputState -> IO ()
 displayUtilisation metrics ts = do
@@ -207,3 +213,13 @@ displayUtilisation metrics ts = do
   printf "\nUtilisation: %.2f\n"
     -- Throughput uses seconds and service time uses µs, hence the `* 10^-6`.
     (throughputAvg ts * (serviceTimeWAvg + serviceTimeRAvg) * 1e-6)
+
+displayErrors :: DumblogMetrics -> IO ()
+displayErrors metrics = do
+  putStr "\nErrors:"
+  errors <- getCounter metrics ErrorsEncountered
+  printf " %d\n" errors
+
+displayMetricsSize :: IO ()
+displayMetricsSize =
+  printf "\n(Metrics' memory use: %s)\n" (showBytes (fromIntegral (metricSize dumblogSchema)))
