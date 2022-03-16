@@ -48,14 +48,15 @@ library
     , http-client
     , http-types
     , journal
-    , ltl
     , network
     , optparse-generic
+    , pretty
     , sendfile
     , sqlite-simple
     , stm
     , text
     , time
+    , tree-diff
     , unix
     , vector
     , wai
