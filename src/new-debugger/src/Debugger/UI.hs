@@ -116,11 +116,11 @@ mkAppState values = AppState
   }
 
 updateAppState :: Vector.Vector InstanceState -> AppState -> AppState
-updateAppState values' (AppState l) = AppState (go (length l) (length l) l)
+updateAppState values' (AppState l0) = AppState (go (length l0) l0)
   where
-    go :: Int -> Int -> L.List () InstanceState -> L.List () InstanceState
-    go m n l | n >= Vector.length values' = l
-             | otherwise = go (m + 1) (n + 1) (L.listInsert m (values' Vector.! n) l)
+    go :: Int -> L.List () InstanceState -> L.List () InstanceState
+    go n l | n >= Vector.length values' = l
+           | otherwise = go (n + 1) (L.listInsert n (values' Vector.! n) l)
 
 runApp :: AppState -> Maybe (BChan AppEvent) -> IO ()
 runApp as mBchan = do
