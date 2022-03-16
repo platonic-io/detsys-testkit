@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Dumblog.SQLite.FrontEnd where
@@ -21,35 +22,47 @@ import Network.Wai.Handler.Warp
        , defaultSettings
        , runSettings
        , setBeforeMainLoop
+       , setOnOpen
        , setOnClose
        , setPort
        )
 
+import Journal.Internal.Metrics
+import Dumblog.Common.Metrics
 import Dumblog.SQLite.Command
 
 ------------------------------------------------------------------------
 
-httpFrontend :: TBQueue Command -> Application
-httpFrontend queue req respond =
+httpFrontend :: TBQueue Command -> DumblogMetrics -> Application
+httpFrontend queue metrics req respond =
   case requestMethod req of
     "GET" -> do
       case parseIndex of
-        Left err ->
+        Left err -> do
+          incrCounter metrics ErrorsEncountered 1
           respond (responseLBS status400 [] err)
         Right ix -> do
           response <- newEmptyMVar
-          atomically (writeTBQueue queue (Read ix response))
+          !arrivalTime <- getCurrentNanosSinceEpoch
+          atomically (writeTBQueue queue (Read ix arrivalTime response))
+          incrCounter metrics QueueDepth 1
           mbs <- takeMVar response
           case mbs of
-            Nothing -> respond (responseLBS status404 [] (BSChar8.pack "Not found"))
+            Nothing -> do
+              incrCounter metrics ErrorsEncountered 1
+              respond (responseLBS status404 [] (BSChar8.pack "Not found"))
             Just bs -> respond (responseLBS status200 [] bs)
     "POST" -> do
       bs <- consumeRequestBodyStrict req
       response <- newEmptyMVar
-      atomically (writeTBQueue queue (Write bs response))
+      !arrivalTime <- getCurrentNanosSinceEpoch
+      atomically (writeTBQueue queue (Write bs arrivalTime response))
+      incrCounter metrics QueueDepth 1
       ix <- takeMVar response
       respond (responseLBS status200 [] (BSChar8.pack (show ix)))
-    _otherwise -> respond (responseLBS status400 [] "Invalid method")
+    _otherwise -> do
+      incrCounter metrics ErrorsEncountered 1
+      respond (responseLBS status400 [] "Invalid method")
   where
     parseIndex :: Either ByteString Int
     parseIndex =
@@ -59,11 +72,13 @@ httpFrontend queue req respond =
           _otherwise -> Left (BSChar8.pack "parseIndex: GET /:ix, :ix isn't an integer")
         _otherwise   -> Left (BSChar8.pack "parseIndex: GET /:ix, :ix missing")
 
-runFrontEnd :: TBQueue Command -> Port -> Maybe (MVar ()) -> IO ()
-runFrontEnd queue port mReady = runSettings settings (httpFrontend queue)
+runFrontEnd :: TBQueue Command -> DumblogMetrics -> Port -> Maybe (MVar ()) -> IO ()
+runFrontEnd queue metrics port mReady = runSettings settings (httpFrontend queue metrics)
   where
     settings
       = setPort port
       $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
-      -- $ setOnClose (\addr -> putStrLn ("closing: " ++ show addr))
+      $ setOnOpen  (\_addr -> incrCounter metrics CurrentNumberTransactions 1 >> return True)
+      $ setOnClose (\_addr  -> incrCounter metrics CurrentNumberTransactions (-1))
+                     -- >> putStrLn ("closing: " ++ show addr))
       $ defaultSettings
