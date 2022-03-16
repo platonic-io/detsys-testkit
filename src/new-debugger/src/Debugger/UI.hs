@@ -13,7 +13,7 @@ import qualified Data.Vector as Vector
 import qualified Graphics.Vty as V
 import Text.Wrap
 
-import Debugger.State
+import Debugger.State hiding (to, from, event, receivedLogical)
 
 ------------------------------------------------------------------------
 
@@ -25,25 +25,28 @@ drawUI as = [ui]
        $ vBox
          [ hBox
            [ vBox
-             [ borderWithLabel (str "Reactor State") $ renderReactorState as
+             [ borderWithLabel (str "State") $ renderReactorState as
              , vLimitPercent 33 $ borderWithLabel (str "Events") $ renderEvents as
              ]
            , borderWithLabel (str "Sequence Diagram") $ renderSeqDia as
            ]
          , vLimit 7 $ hBox
-           [ borderWithLabel (str "Current Message") $ renderMessage as
-           , borderWithLabel (str "Sent Messages") $ renderSentMessage as
+           [ borderWithLabel (str "Input") $ renderMessage as
+           , borderWithLabel (str "Output") $ renderSentMessage as
            ]
-         , vLimit 7 $ borderWithLabel (str "Reactor Log") $ renderLogs as
+         , vLimit 7 $ borderWithLabel (str "Logs") $ renderLogs as
          ]
 
 renderEvent :: Bool -> DebEvent -> String
 renderEvent showMsg (DebEvent from to event receivedLogical msg) =
-  event <> ": " <> from <> " -> " <> to <> " @ " <> show receivedLogical <> if showMsg then " : " <> msg else mempty
+  event <> ": " <> from <> " -> " <> to <> " @ " <> show receivedLogical
+        <> if showMsg then " : " <> msg else mempty
 
 renderToString :: AppState -> (InstanceState -> String) -> Widget ()
-renderToString as f = center$ strWrapWith wrapSettings (fromMaybe "?" . fmap (f . snd) $ L.listSelectedElement $ asLog as)
+renderToString as f = center $ strWrapWith wrapSettings
+  (fromMaybe "?" . fmap (f . snd) $ L.listSelectedElement $ asLog as)
 
+wrapSettings :: WrapSettings
 wrapSettings = defaultWrapSettings
   { preserveIndentation = False, breakLongWords = True }
 
