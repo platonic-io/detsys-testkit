@@ -2,6 +2,7 @@
 module Debugger.UI where
 
 import Brick
+import Brick.BChan
 import Brick.Widgets.Border (borderWithLabel)
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center (center)
@@ -81,7 +82,7 @@ listDrawElement sel is =
 customAttr :: AttrName
 customAttr = L.listSelectedAttr <> "custom"
 
-brickApp :: App AppState e ()
+brickApp :: App AppState AppEvent ()
 brickApp = App
   { appDraw = drawUI
   , appHandleEvent = appEvent
@@ -90,11 +91,14 @@ brickApp = App
   , appChooseCursor = neverShowCursor
   }
 
-appEvent :: AppState -> BrickEvent () e -> EventM () (Next AppState)
+data AppEvent = UpdateState (Vector.Vector InstanceState)
+
+appEvent :: AppState -> BrickEvent () AppEvent -> EventM () (Next AppState)
 appEvent as (VtyEvent e) =
   case e of
     V.EvKey (V.KChar 'q') [] -> halt as
     ev -> continue =<< fmap AppState (L.handleListEventVi L.handleListEvent ev (asLog as))
+appEvent as (AppEvent (UpdateState values')) = continue (updateAppState values' as)
 appEvent as _ = continue as
 
 theMap :: AttrMap
@@ -111,5 +115,15 @@ mkAppState values = AppState
   { asLog = L.list () values 1
   }
 
-runApp :: AppState -> IO ()
-runApp as = void (defaultMain brickApp as)
+updateAppState :: Vector.Vector InstanceState -> AppState -> AppState
+updateAppState values' (AppState l0) = AppState (go (length l0) l0)
+  where
+    go :: Int -> L.List () InstanceState -> L.List () InstanceState
+    go n l | n >= Vector.length values' = l
+           | otherwise = go (n + 1) (L.listInsert n (values' Vector.! n) l)
+
+runApp :: AppState -> Maybe (BChan AppEvent) -> IO ()
+runApp as mBchan = do
+  let builder = V.mkVty V.defaultConfig
+  initialVty <- builder
+  void (customMain initialVty builder mBchan brickApp as)

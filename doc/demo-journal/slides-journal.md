@@ -227,7 +227,7 @@ http GET :8054/0          # Read at index from log, returns string,
 # Summary
 
 * We have shown how to use the journal to:
-  - Faster write path than with a database (append only)
+  - Faster write path than with a database (lock-free and append only)
   - Get faster crash recovery for free
   - Get all the deterministic testing stuff for free
   - Rich time traveling debugger
