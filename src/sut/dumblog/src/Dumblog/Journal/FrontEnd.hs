@@ -20,9 +20,9 @@ import Journal.Internal.Metrics (incrCounter)
 import qualified Journal.MP as Journal
 import Journal.Types (Journal)
 
+import Dumblog.Common.Metrics
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
-import Dumblog.Journal.Metrics
 import Dumblog.Journal.Types
 
 ------------------------------------------------------------------------

@@ -36,7 +36,7 @@ import Dumblog.Journal.Blocker (emptyBlocker)
 import Dumblog.Journal.Codec (Envelope(..), decode)
 import Dumblog.Journal.FrontEnd (FrontEndInfo(..), runFrontEnd)
 import qualified Dumblog.Journal.Logger as DLogger
-import Dumblog.Journal.Metrics (dumblogSchema)
+import Dumblog.Common.Metrics (dumblogSchema)
 import Dumblog.Journal.Snapshot (Snapshot)
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine

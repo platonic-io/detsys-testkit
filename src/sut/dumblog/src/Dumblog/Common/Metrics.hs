@@ -1,4 +1,4 @@
-module Dumblog.Journal.Metrics where
+module Dumblog.Common.Metrics where
 
 import Journal.Internal.Metrics (Metrics, MetricsSchema)
 import qualified Journal.Internal.Metrics as Metrics

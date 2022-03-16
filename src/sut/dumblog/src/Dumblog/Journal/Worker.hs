@@ -17,10 +17,10 @@ import Journal.Types
        , writeBytesConsumed
        )
 
+import Dumblog.Common.Metrics
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
 import Dumblog.Journal.Logger
-import Dumblog.Journal.Metrics
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine
 import Dumblog.Journal.Types
