@@ -28,15 +28,17 @@ extra-source-files:
   README.md
 
 flag persistent-sqlite
-    Description: Enable compilation of the (slower) persitent-sqlite db module
-    Manual: True
-    Default: False
+  description:
+    Enable compilation of the (slower) persitent-sqlite db module
+
+  manual:      True
+  default:     False
 
 library
   build-depends:
     , aeson
     , async
-    , base           ^>=4.14.1.0
+    , base              ^>=4.14.1.0
     , binary
     , bytestring
     , containers
@@ -58,23 +60,26 @@ library
     , vector
     , wai
     , warp
+
   if flag(persistent-sqlite)
-    build-depends:  persistent
-                  , persistent-sqlite
+    build-depends:
+      , persistent
+      , persistent-sqlite
 
   exposed-modules:
     Dumblog.Common.HttpClient
+    Dumblog.Common.Metrics
     Dumblog.Common.Utils
     Dumblog.Journal.Blocker
     Dumblog.Journal.Codec
     Dumblog.Journal.FrontEnd
     Dumblog.Journal.Logger
     Dumblog.Journal.Main
-    Dumblog.Journal.Metrics
     Dumblog.Journal.Snapshot
     Dumblog.Journal.StateMachine
     Dumblog.Journal.Types
     Dumblog.Journal.Worker
+    Dumblog.Metrics.Main
     Dumblog.SQLite.Command
     Dumblog.SQLite.DB
     Dumblog.SQLite.FrontEnd
@@ -84,7 +89,7 @@ library
     Dumblog.ZeroCopy.Main
     Dumblog.ZeroCopy.State
     Dumblog.ZeroCopy.Worker
-    Dumblog.Metrics.Main
+
   if flag(persistent-sqlite)
     exposed-modules: Dumblog.SQLite.DBPersistent
 

@@ -16,7 +16,6 @@ import GHC.Generics (Generic)
 
 import Dumblog.Journal.Logger
 import Dumblog.Journal.Types
-import Dumblog.Journal.Metrics
 import Journal.Internal.Metrics (incrCounter)
 
 ------------------------------------------------------------------------

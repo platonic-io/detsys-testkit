@@ -20,9 +20,9 @@ import Journal.Internal.Metrics (incrCounter)
 import qualified Journal.MP as Journal
 import Journal.Types (Journal)
 
+import Dumblog.Common.Metrics
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
-import Dumblog.Journal.Metrics
 import Dumblog.Journal.Types
 
 ------------------------------------------------------------------------
@@ -88,7 +88,7 @@ runFrontEnd port journal metrics feInfo mReady =
     settings
       = setPort port
       $ setOnOpen  (\_addr -> incrCounter metrics CurrentNumberTransactions 1 >> return True)
-      $ setOnClose (\addr  -> incrCounter metrics CurrentNumberTransactions (-1))
+      $ setOnClose (\_addr  -> incrCounter metrics CurrentNumberTransactions (-1))
                      -- >> putStrLn ("closing: " ++ show addr))
       -- $ setLogger (\req status _mSize ->
       --                 when (status /= status200) $ do

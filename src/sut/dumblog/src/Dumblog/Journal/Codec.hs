@@ -9,8 +9,6 @@ import qualified Data.Binary as Binary
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
-import Data.Time (UTCTime, getCurrentTime, nominalDiffTimeToSeconds)
-import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import GHC.Generics (Generic)
 
 ------------------------------------------------------------------------
@@ -30,12 +28,3 @@ encode e = LBS.toStrict (Binary.encode e)
 -- allow this to fail.
 decode :: Binary a => ByteString -> Envelope a
 decode bs = Binary.decode $ LBS.fromStrict bs
-
-nanosSinceEpoch :: UTCTime -> Int64
-nanosSinceEpoch =
-  floor . (1e9 *) . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds
-
-getCurrentNanosSinceEpoch :: IO Int64
-getCurrentNanosSinceEpoch = do
-  now <- getCurrentTime
-  return (nanosSinceEpoch now)

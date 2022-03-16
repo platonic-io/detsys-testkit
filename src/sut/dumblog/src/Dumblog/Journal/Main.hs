@@ -32,11 +32,11 @@ import Journal.Types
 import Ltl.Json (mergePatch)
 import Options.Generic
 
+import Dumblog.Common.Metrics (dUMBLOG_METRICS, dumblogSchema)
 import Dumblog.Journal.Blocker (emptyBlocker)
 import Dumblog.Journal.Codec (Envelope(..), decode)
 import Dumblog.Journal.FrontEnd (FrontEndInfo(..), runFrontEnd)
 import qualified Dumblog.Journal.Logger as DLogger
-import Dumblog.Journal.Metrics (dumblogSchema)
 import Dumblog.Journal.Snapshot (Snapshot)
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine
@@ -152,9 +152,6 @@ dumblogOptions = defaultOptions
 
 dUMBLOG_JOURNAL :: FilePath
 dUMBLOG_JOURNAL = "/tmp/dumblog.journal"
-
-dUMBLOG_METRICS :: FilePath
-dUMBLOG_METRICS = "/tmp/dumblog.metrics"
 
 dUMBLOG_SNAPSHOT :: FilePath
 dUMBLOG_SNAPSHOT = "/tmp/dumblog.snapshot"
