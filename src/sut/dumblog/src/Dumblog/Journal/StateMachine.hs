@@ -32,20 +32,22 @@ instance ToJSON DumblogByteString where
 data InMemoryDumblog = InMemoryDumblog
   { theLog :: Seq DumblogByteString -- not very memory efficient, but not the point
   , nextIx :: Int
+  , hasBug :: Bool
   } deriving stock Generic
 
 instance Binary InMemoryDumblog
 instance ToJSON InMemoryDumblog
 
 initState :: InMemoryDumblog
-initState = InMemoryDumblog empty 0
+initState = InMemoryDumblog empty 0 False
 
 runCommand :: Logger -> InMemoryDumblog -> Command -> IO (InMemoryDumblog, Response)
-runCommand logger state@(InMemoryDumblog appLog ix) cmd = case cmd of
+runCommand logger state@(InMemoryDumblog appLog ix hasBug) cmd = case cmd of
   Write bs -> do
     logger "Performing a write"
-    pure (InMemoryDumblog (appLog |> DumblogByteString bs) (ix+1), LBS8.pack (show ix))
+    pure (InMemoryDumblog (appLog |> DumblogByteString bs) (ix+1) hasBug, LBS8.pack (show ix))
   Read i
+    | hasBug && ix == 3 -> pure (InMemoryDumblog empty 0 hasBug, LBS8.pack "Dumblog!")
     | i < ix -> pure (state, LBS.fromStrict $ innerByteString (index appLog i))
     | otherwise -> do
         logger $ "Oh no, request not in log"
