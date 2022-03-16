@@ -36,9 +36,9 @@ drawUI as = [ui]
          , vLimit 7 $ borderWithLabel (str "Reactor Log") $ renderLogs as
          ]
 
-renderEvent :: DebEvent -> String
-renderEvent (DebEvent from to event receivedLogical _) =
-  event <> ": " <> from <> " -> " <> to <> " @ " <> show receivedLogical
+renderEvent :: Bool -> DebEvent -> String
+renderEvent showMsg (DebEvent from to event receivedLogical msg) =
+  event <> ": " <> from <> " -> " <> to <> " @ " <> show receivedLogical <> if showMsg then " : " <> msg else mempty
 
 renderToString :: AppState -> (InstanceState -> String) -> Widget ()
 renderToString as f = center$ strWrapWith wrapSettings (fromMaybe "?" . fmap (f . snd) $ L.listSelectedElement $ asLog as)
@@ -60,7 +60,7 @@ renderMessage :: AppState -> Widget ()
 renderMessage as = renderToString as (message . isCurrentEvent)
 
 renderSentMessage :: AppState -> Widget ()
-renderSentMessage as = renderToString as (addEmpty . unlines . map renderEvent . isSent)
+renderSentMessage as = renderToString as (addEmpty . unlines . map (renderEvent True) . isSent)
   where
     addEmpty [] = "\n"
     addEmpty xs = xs
@@ -76,7 +76,7 @@ listDrawElement sel is =
   let selStr s = if sel
                  then withAttr customAttr (str $ ">" <> s)
                  else str $ " " <> s
-  in selStr $ renderEvent $ isCurrentEvent is
+  in selStr $ renderEvent False $ isCurrentEvent is
 
 customAttr :: AttrName
 customAttr = L.listSelectedAttr <> "custom"
