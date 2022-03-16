@@ -40,7 +40,7 @@ watch fp bchan = go
   where
     go :: IO ()
     go = do
-      threadDelay 1000000
+      threadDelay 500000
       content <- decodeFileStrict fp
       case content of
         Nothing -> die "Can't parse debug-file"
