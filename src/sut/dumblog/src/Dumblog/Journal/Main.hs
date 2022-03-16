@@ -86,9 +86,10 @@ replayDebug originCommands originState = do
       pure dfile
     go logger logTime dfile (cmd:cmds) s = do
       putStrLn $ "[REPLAY-DEBUG] running: " <> show cmd
-      (s', _) <- runCommand (DLogger.queueLogger logger) s cmd
+      (s', r) <- runCommand (DLogger.queueLogger logger) s cmd
       logLines <- DLogger.flushQueue logger
       let
+        lbsToString = LText.unpack . LEncoding.decodeUtf8
         (ev, msg) = case cmd of
           Read i -> ("read", show i)
           Write logMsg -> ("write", Text.unpack (decodeUtf8 logMsg))
@@ -100,10 +101,17 @@ replayDebug originCommands originState = do
           , message = msg
           }
         is = InstanceStateRepr
-             { state = LText.unpack (LEncoding.decodeUtf8 (Aeson.encode (mergePatch (Aeson.toJSON s) (Aeson.toJSON s'))))
+             { state = lbsToString (Aeson.encode (mergePatch (Aeson.toJSON s) (Aeson.toJSON s')))
              , currentEvent = ce
              , logs = logLines
-             , sent = []
+             , sent = [ DebEvent
+                        { from = "dumblog"
+                        , to = "client"
+                        , event = ev
+                        , receivedLogical = logTime
+                        , message = lbsToString r
+                        }
+                      ]
              }
       go logger (succ logTime) (Vector.snoc dfile is) cmds s'
 
