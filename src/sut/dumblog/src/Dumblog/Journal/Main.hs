@@ -6,12 +6,13 @@ module Dumblog.Journal.Main where
 
 import Control.Concurrent.Async (link, withAsync)
 import Control.Concurrent.MVar (MVar)
+import Control.Exception (bracket_)
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.Encoding as LEncoding
-import Data.TreeDiff (prettyEditExpr, ediff)
+import Data.TreeDiff (ediff, prettyEditExpr)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Debugger.State (DebEvent(..), InstanceStateRepr(..))
@@ -31,6 +32,8 @@ import Journal.Types
        , writeBytesConsumed
        )
 import Options.Generic
+import System.Directory (copyFile, getTemporaryDirectory, removeFile)
+import System.FilePath ((<.>), (</>))
 import Text.PrettyPrint (render)
 
 import Dumblog.Common.Metrics (dUMBLOG_METRICS, dumblogSchema)
@@ -188,10 +191,16 @@ journalDumblog cfg _capacity port mReady = do
       withAsync (worker journal metrics wInfo workerState) $ \a -> do
         link a
         runFrontEnd port journal metrics feInfo mReady
-    DebugFile fp -> do
+    DebugFile fp -> withTempCopy fpj $ \fpjCopy -> do
       mSnapshot <- Snapshot.readFile fps
-      journal <- fetchJournal mSnapshot fpj dumblogOptions
+      journal <- fetchJournal mSnapshot fpjCopy dumblogOptions
       cmds <- collectAll journal
       debugFileContents <- replayDebug cmds (startingState mSnapshot)
       Aeson.encodeFile (unHelpful fp) debugFileContents
       putStrLn "Generated Debug-file"
+
+withTempCopy :: FilePath -> (FilePath -> IO a) -> IO a
+withTempCopy fp k = do
+  tmpDir <- getTemporaryDirectory
+  let tmpFile = tmpDir </> fp <.> "tmp"
+  bracket_ (copyFile fp tmpFile) (removeFile tmpFile) (k tmpFile)
