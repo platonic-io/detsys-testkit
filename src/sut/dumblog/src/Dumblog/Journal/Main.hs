@@ -8,7 +8,6 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (link, withAsync)
 import Control.Concurrent.MVar (MVar)
 import Control.Exception (bracket_)
-import Control.Monad (forever)
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -18,7 +17,8 @@ import Data.TreeDiff (ediff, prettyEditExpr)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Debugger.State (DebEvent(..), InstanceStateRepr(..))
-import Journal (allocateJournal, defaultOptions, startJournal)
+import Journal
+       (allocateJournal, defaultOptions, journalMetadata, startJournal)
 import Journal.Internal.Logger as Logger
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.MP as Journal
@@ -26,11 +26,20 @@ import Journal.Types
        ( Journal
        , Options
        , Subscriber(..)
+       , activeTermCount
+       , computeTermBeginPosition
+       , indexByTermCount
        , jMetadata
        , oLogger
        , oMaxSubscriber
        , oTermBufferLength
+       , positionBitsToShift
+       , rawTailTermId
+       , rawTailTermOffset
        , readBytesConsumed
+       , readInitialTermId
+       , readRawTail
+       , readTermLength
        , writeBytesConsumed
        )
 import Options.Generic
@@ -197,7 +206,45 @@ journalDumblog cfg _capacity port mReady = do
         link a
         runFrontEnd port journal metrics feInfo mReady
     DebugFile fp -> debugFile (unHelpful fp)
-    DebugFileWatch fp -> forever (debugFile (unHelpful fp) >> threadDelay 1000000)
+    DebugFileWatch fp -> do
+      putStrLn "[journal]: waiting for journal changes..."
+      watch (unHelpful fp)
+
+watch :: FilePath -> IO ()
+watch fp = go 0
+  where
+    go lastBytesProduced = do
+      eMeta <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
+      case eMeta of
+        Left err -> do
+          putStrLn ("[watch] error: " ++ show err)
+          threadDelay 10000
+          go lastBytesProduced
+        Right meta -> do
+          bytesProduced <- readBytesProduced meta
+          if bytesProduced /= lastBytesProduced
+          then do
+            putStrLn "[watch] journal has changed!"
+            debugFile fp
+            go bytesProduced
+          else threadDelay 10000 >> go lastBytesProduced
+
+    readBytesProduced meta = do
+      termCount <- activeTermCount meta
+      let index = indexByTermCount termCount
+      rt <- readRawTail meta index
+      initTermId <- readInitialTermId meta
+      termLen <- readTermLength meta
+      if termLen == 0
+      then return 0
+      else do
+        let termId            = rawTailTermId rt
+            termOffset        = rawTailTermOffset rt termLen
+            termBeginPosition =
+              computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
+
+            produced = termBeginPosition + fromIntegral termOffset
+        return produced
 
 debugFile :: FilePath -> IO ()
 debugFile fp = withTempCopy dUMBLOG_JOURNAL $ \fpjCopy -> do
