@@ -191,6 +191,17 @@ nocite: |
   and journal using deterministic replay to show how the state machines change
   over time (whether the server is running or not).
 
+# Demo script
+
+```bash
+# Show Dumblog API
+echo hi | http POST :8054 # Append to log, returns index, e.g. 0;
+
+http GET :8054/0          # Read at index from log, returns string,
+                          # e.g. "hi".
+
+```
+
 # Amdahl's law vs the Universal scalability law
 
 * *C(N) = N / (1 + a(N - 1) + ((b \* N) \* (N - 1)))*
@@ -209,6 +220,9 @@ nocite: |
   compression/decompression
 * `mmap`ed bytearray (8 bytes per counter) allows for atomic update (`lock xadd`
   in x86 asm) and access for different processes
+* No third party dependencies or extra processes that need to be deployed
+
+![Command centre](./images/command_centre.jpg){ width=75% }
 
 # Summary
 
@@ -231,12 +245,18 @@ nocite: |
   want to keep all of the journal forever due to space limitations);
   - Broken analogy: have several black-boxes, one for each crash...
 
-* Only save keys/topics and offset/length pairs (pointing to disk locations)
-  in-memory and use `sendfile` for zero-copy reads for the journal version of the
-  service;
-
 * Event loop integration: all the above should be implemented on at the event
   loop level so that state machines (sequential code / "business logic") running
   on top of it get all this for free.
+
+# Even further in the future work
+
+* The journal variant currently saves the whole bytestrings in-memory, more
+  realistically one could only save keys/topics and offset/length pairs
+  (pointing to disk locations) in-memory and use `sendfile` for zero-copy reads
+  for the journal version of the service;
+
+* Using the Linux kernel's `io_uring` to ammortise the cost of syscalls (by
+  batching and doing them async).
 
 # Thanks! Questions? References:
