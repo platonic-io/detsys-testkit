@@ -4,9 +4,11 @@
 
 module Dumblog.Journal.Main where
 
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (link, withAsync)
 import Control.Concurrent.MVar (MVar)
 import Control.Exception (bracket_)
+import Control.Monad (forever)
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -143,6 +145,9 @@ data DumblogConfig
   | DebugFile
     { output :: FilePath <?> "Where to output the debug file"
     }
+  | DebugFileWatch
+    { output :: FilePath <?> "Where to output the debug file"
+    }
   deriving (Generic, Show)
 
 instance ParseRecord DumblogConfig
@@ -191,13 +196,17 @@ journalDumblog cfg _capacity port mReady = do
       withAsync (worker journal metrics wInfo workerState) $ \a -> do
         link a
         runFrontEnd port journal metrics feInfo mReady
-    DebugFile fp -> withTempCopy fpj $ \fpjCopy -> do
-      mSnapshot <- Snapshot.readFile fps
-      journal <- fetchJournal mSnapshot fpjCopy dumblogOptions
-      cmds <- collectAll journal
-      debugFileContents <- replayDebug cmds (startingState mSnapshot)
-      Aeson.encodeFile (unHelpful fp) debugFileContents
-      putStrLn "Generated Debug-file"
+    DebugFile fp -> debugFile (unHelpful fp)
+    DebugFileWatch fp -> forever (debugFile (unHelpful fp) >> threadDelay 1000000)
+
+debugFile :: FilePath -> IO ()
+debugFile fp = withTempCopy dUMBLOG_JOURNAL $ \fpjCopy -> do
+  mSnapshot <- Snapshot.readFile dUMBLOG_SNAPSHOT
+  journal <- fetchJournal mSnapshot fpjCopy dumblogOptions
+  cmds <- collectAll journal
+  debugFileContents <- replayDebug cmds (startingState mSnapshot)
+  Aeson.encodeFile fp debugFileContents
+  putStrLn "Generated Debug-file"
 
 withTempCopy :: FilePath -> (FilePath -> IO a) -> IO a
 withTempCopy fp k = do
