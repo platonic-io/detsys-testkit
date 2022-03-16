@@ -6,12 +6,11 @@ import Brick.BChan
 import Control.Concurrent
 import Control.Exception (finally)
 import Data.Aeson (decodeFileStrict)
-import qualified Data.Vector as Vector
 import System.Environment (getArgs)
 import System.Exit (die)
 
 import Debugger.State
-import Debugger.UI (AppEvent(UpdateState), AppState, mkAppState, runApp)
+import Debugger.UI (AppEvent(UpdateState), mkAppState, runApp)
 
 ------------------------------------------------------------------------
 
