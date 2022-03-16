@@ -11,6 +11,7 @@ import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.Encoding as LEncoding
+import Data.TreeDiff (prettyEditExpr, ediff)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Debugger.State (DebEvent(..), InstanceStateRepr(..))
@@ -29,8 +30,8 @@ import Journal.Types
        , readBytesConsumed
        , writeBytesConsumed
        )
-import Ltl.Json (mergePatch)
 import Options.Generic
+import Text.PrettyPrint (render)
 
 import Dumblog.Common.Metrics (dUMBLOG_METRICS, dumblogSchema)
 import Dumblog.Journal.Blocker (emptyBlocker)
@@ -101,7 +102,7 @@ replayDebug originCommands originState = do
           , message = msg
           }
         is = InstanceStateRepr
-             { state = lbsToString (Aeson.encode (mergePatch (Aeson.toJSON s) (Aeson.toJSON s')))
+             { state = render (prettyEditExpr (ediff s s'))
              , currentEvent = ce
              , logs = logLines
              , sent = [ DebEvent
