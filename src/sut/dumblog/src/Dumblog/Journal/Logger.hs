@@ -1,7 +1,6 @@
 module Dumblog.Journal.Logger where
 
 import Data.Foldable
-import Data.Int
 import Data.IORef
 import Data.Sequence
 

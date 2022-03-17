@@ -9,6 +9,7 @@ import Control.Concurrent.Async (link, withAsync)
 import Control.Concurrent.MVar (MVar)
 import Control.Exception (bracket_)
 import qualified Data.Aeson as Aeson
+import Data.Int (Int64)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.Text.Lazy as LText
@@ -55,8 +56,9 @@ import qualified Dumblog.Journal.Logger as DLogger
 import Dumblog.Journal.Snapshot (Snapshot)
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine
-       (InMemoryDumblog, initState, runCommand)
+       (InMemoryDumblog, initState)
 import Dumblog.Journal.Types (Command(..))
+import Dumblog.Journal.Versions.Codec (runCommand)
 import Dumblog.Journal.Worker (WorkerInfo(..), worker)
 
 ------------------------------------------------------------------------
@@ -78,20 +80,19 @@ fetchJournal mSnapshot fpj opts = do
       writeBytesConsumed (jMetadata journal) Sub1 bytes
   pure journal
 
--- this can be pure when `runCommand` gets pure
-replay :: [Command] -> InMemoryDumblog -> IO InMemoryDumblog
+replay :: [(Int64, Command)] -> InMemoryDumblog -> IO InMemoryDumblog
 replay [] s = do
   putStrLn "[REPLAY] finished!"
   pure s
-replay (cmd:cmds) s = do
+replay ((v, cmd):cmds) s = do
   putStrLn $ "[REPLAY] running: " <> show cmd
-  (s', _) <- runCommand DLogger.ioLogger s cmd
+  (s', _) <- runCommand v DLogger.ioLogger s cmd
   replay cmds s'
 
 type DebugFile = Vector InstanceStateRepr
 
 -- TODO: merge with `replay`
-replayDebug :: [Command] -> InMemoryDumblog -> IO DebugFile
+replayDebug :: [(Int64, Command)] -> InMemoryDumblog -> IO DebugFile
 replayDebug originCommands originState = do
   queueLogger <- DLogger.newQueueLogger
   go queueLogger 0 mempty originCommands originState
@@ -99,9 +100,9 @@ replayDebug originCommands originState = do
     go _ _logTime dfile [] _s = do
       putStrLn "[REPLAY-DEBUG] finished!"
       pure dfile
-    go logger logTime dfile (cmd:cmds) s = do
+    go logger logTime dfile ((v, cmd):cmds) s = do
       putStrLn $ "[REPLAY-DEBUG] running: " <> show cmd
-      (s', r) <- runCommand (DLogger.queueLogger logger) s cmd
+      (s', r) <- runCommand v (DLogger.queueLogger logger) s cmd
       logLines <- DLogger.flushQueue logger
       let
         lbsToString = LText.unpack . LEncoding.decodeUtf8
@@ -130,7 +131,7 @@ replayDebug originCommands originState = do
              }
       go logger (succ logTime) (Vector.snoc dfile is) cmds s'
 
-collectAll :: Journal -> IO [Command]
+collectAll :: Journal -> IO [(Int64, Command)]
 collectAll jour = do
   putStrLn "[collect] Checking journal for old-entries"
   val <- Journal.readJournal jour Sub1
@@ -140,9 +141,9 @@ collectAll jour = do
       pure []
     Just entry -> do
       putStrLn "[collect] Found an entry"
-      let Envelope _key cmd _arrivalTime = decode entry
+      let Envelope _key cmd version _arrivalTime = decode entry
       cmds <- collectAll jour
-      pure $ cmd : cmds
+      pure $ (version, cmd) : cmds
 
 startingState :: Maybe Snapshot -> InMemoryDumblog
 startingState Nothing = initState
@@ -182,6 +183,9 @@ dUMBLOG_JOURNAL = "/tmp/dumblog.journal"
 dUMBLOG_SNAPSHOT :: FilePath
 dUMBLOG_SNAPSHOT = "/tmp/dumblog.snapshot"
 
+dUMBLOG_CURRENT_VERSION :: Int64
+dUMBLOG_CURRENT_VERSION = 1 -- 1 has bug, 2 fixes it
+
 journalDumblog :: DumblogConfig -> Int -> Int -> Maybe (MVar ()) -> IO ()
 journalDumblog cfg _capacity port mReady = do
   let fpj = dUMBLOG_JOURNAL
@@ -198,10 +202,10 @@ journalDumblog cfg _capacity port mReady = do
       workerState <- replay cmds (startingState mSnapshot)
       let
         events = length cmds
-        feInfo = FrontEndInfo blocker
+        feInfo = FrontEndInfo blocker dUMBLOG_CURRENT_VERSION
         logger | unHelpful q = DLogger.nullLogger
                | otherwise = DLogger.ioLogger
-        wInfo = WorkerInfo blocker logger fps events untilSnapshot
+        wInfo = WorkerInfo blocker logger fps dUMBLOG_CURRENT_VERSION events untilSnapshot
       withAsync (worker journal metrics wInfo workerState) $ \a -> do
         link a
         runFrontEnd port journal metrics feInfo mReady
