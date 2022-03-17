@@ -1,15 +1,16 @@
 module Dumblog.SQLite.Main where
 
-import Control.Exception (bracket)
 import Control.Concurrent (MVar)
 import Control.Concurrent.Async (withAsync)
 import Control.Concurrent.STM.TBQueue (newTBQueueIO)
+import Control.Exception (bracket)
+import System.Directory (removePathForcibly)
 
-import Journal.Internal.Metrics
 import Dumblog.Common.Metrics
+import Dumblog.SQLite.DB
 import Dumblog.SQLite.FrontEnd
 import Dumblog.SQLite.Worker
-import Dumblog.SQLite.DB
+import Journal.Internal.Metrics
 
 ------------------------------------------------------------------------
 
@@ -24,4 +25,5 @@ sqliteDumblog capacity port mReady = do
 main :: IO ()
 main = do
   putStrLn "Starting Dumblog (SQLite)"
+  removePathForcibly sQLITE_DB_PATH
   sqliteDumblog (64 * 1024) 8054 Nothing
