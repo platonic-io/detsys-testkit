@@ -16,6 +16,7 @@ import GHC.Generics (Generic)
 data Envelope a = Envelope
   { eLength :: !Int
   , eContent :: !a
+  , eVersion :: !Int64
   , eArrival :: !Int64 -- Nano seconds since epoch.
   } deriving stock (Functor, Generic)
 

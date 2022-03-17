@@ -5,8 +5,8 @@ module Dumblog.Journal.Worker where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
-
 import qualified Data.ByteString as BS
+import Data.Int (Int64)
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.MP as Journal
 import Journal.Types
@@ -22,8 +22,9 @@ import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
 import Dumblog.Journal.Logger
 import qualified Dumblog.Journal.Snapshot as Snapshot
-import Dumblog.Journal.StateMachine
+import Dumblog.Journal.StateMachine hiding (runCommand)
 import Dumblog.Journal.Types
+import Dumblog.Journal.Versions.Codec (runCommand)
 
 ------------------------------------------------------------------------
 
@@ -31,6 +32,7 @@ data WorkerInfo = WorkerInfo
   { wiBlockers :: Blocker (Either Response Response)
   , wiLogger :: Logger
   , wiSnapshotFile  :: FilePath
+  , wiCurrentVersion :: Int64
   , wiEvents        :: Int -- how many events since last snapshot
   , wiEventsInRound :: Int -- how many events in one snapshot
   }
@@ -43,14 +45,14 @@ wakeUpFrontend blocker key resp = do
     error $ "Frontend never added MVar"
 
 worker :: Journal -> DumblogMetrics -> WorkerInfo -> InMemoryDumblog -> IO ()
-worker journal metrics (WorkerInfo blocker logger snapshotFile eventCount untilSnapshot) =
+worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion eventCount untilSnapshot) =
   go eventCount
   where
     go ev s
       | ev >= untilSnapshot = do
           logger "[worker] Performing Snapshot"
           bytes <- readBytesConsumed (jMetadata journal) Sub1
-          Snapshot.toFile (Snapshot.Snapshot bytes s) snapshotFile
+          Snapshot.toFile (Snapshot.Snapshot bytes currentVersion s) snapshotFile
           writeBytesConsumed (jMetadata journal) Sub2 bytes
           go 0 s
     go ev s = do
@@ -59,14 +61,14 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile eventCount untilS
         { Nothing -> return (ev, s)
         ; Just entry -> do
             Metrics.decrCounter_ metrics QueueDepth 1
-            let Envelope key cmd arrivalTime = decode entry
+            let Envelope key cmd version arrivalTime = decode entry
             -- XXX: In case of decode error:
             --  Metrics.incrCounter metrics ErrorsEncountered 1
             --  wakeUpFrontend blocker key $ Left "Couldn't parse request"
             --  -- ^ should be better error message
             --
             !startTime <- getCurrentNanosSinceEpoch
-            (s', r) <- runCommand logger s cmd
+            (s', r) <- runCommand version logger s cmd
             wakeUpFrontend blocker key (Right r)
             !endTime <- getCurrentNanosSinceEpoch
             -- Convert from nano s to µs with `* 10^-3`.

@@ -4,6 +4,7 @@ module Dumblog.Journal.Snapshot where
 import Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as LBS
+import Data.Int (Int64)
 import GHC.Generics (Generic)
 
 import qualified System.Directory as Dir
@@ -14,6 +15,7 @@ import Dumblog.Journal.StateMachine
 
 data Snapshot = Snapshot
   { ssBytesInJournal :: Int
+  , ssVersion :: Int64
   , ssState :: InMemoryDumblog
   } deriving Generic
 

@@ -4,9 +4,9 @@
 module Dumblog.Journal.FrontEnd where
 
 import Control.Concurrent.MVar (MVar, putMVar)
-import Control.Monad (when)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as LBS8
+import Data.Int (Int64)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Text.Read as TextReader
@@ -29,10 +29,11 @@ import Dumblog.Journal.Types
 
 data FrontEndInfo = FrontEndInfo
   { blockers :: Blocker (Either Response Response)
+  , currentVersion :: Int64
   }
 
 httpFrontend :: Journal -> DumblogMetrics -> FrontEndInfo -> Wai.Application
-httpFrontend journal metrics (FrontEndInfo blocker) req respond = do
+httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
   body <- Wai.strictRequestBody req
   let mmethod = case parseMethod $ Wai.requestMethod req of
         Left err -> Left $ LBS.fromStrict err
@@ -54,7 +55,7 @@ httpFrontend journal metrics (FrontEndInfo blocker) req respond = do
     Right cmd -> do
       key <- newKey blocker
       now <- getCurrentNanosSinceEpoch
-      let env = encode (Envelope (sequenceNumber key) cmd now)
+      let env = encode (Envelope (sequenceNumber key) cmd cVersion now)
       res <- Journal.appendBS journal env
       res' <- case res of
         Left err -> do
