@@ -18,9 +18,11 @@ import GHC.Stats
        , getRTSStats
        , getRTSStatsEnabled
        )
+import System.Environment (getArgs)
 import System.Mem (performMajorGC)
 import System.Random (StdGen, mkStdGen, randomR)
 import Text.Printf (printf)
+import Text.Read (readMaybe)
 
 import Dumblog.Common.HttpClient
 import Dumblog.Common.Utils (showBytes)
@@ -39,11 +41,8 @@ wRITE_FREQUENCY = 20
 rEAD_FREQUENCY :: Int
 rEAD_FREQUENCY = 80
 
-nUM_OF_CLIENTS :: Int
-nUM_OF_CLIENTS = 20
-
 iTERATIONS :: Int
-iTERATIONS = 1000
+iTERATIONS = 50000
 
 vALUE_TO_WRITE :: ByteString
 vALUE_TO_WRITE = LBS.pack "Dumblog"
@@ -54,8 +53,15 @@ bUFFER_CAPACITY = 1024 * 64
 ------------------------------------------------------------------------
 
 commonMain :: String -> (MVar () -> IO ()) -> IO ()
-commonMain variant io =
-  bracket (commonSetup variant io) commonTeardown commonBenchmark
+commonMain variant io = do
+  args <- getArgs
+  let clients = case args of
+                  [s]        -> fromMaybe nUM_OF_CLIENTS (readMaybe s)
+                  _otherwise -> nUM_OF_CLIENTS
+  bracket (commonSetup variant io) commonTeardown (commonBenchmark clients)
+  where
+    nUM_OF_CLIENTS :: Int
+    nUM_OF_CLIENTS = 1000
 
 commonSetup :: String -> (MVar () -> IO ()) -> IO (Async (), HttpClient)
 commonSetup msg io = do
@@ -70,19 +76,23 @@ commonSetup msg io = do
 commonTeardown :: (Async (), HttpClient) -> IO ()
 commonTeardown (a, _hc) = cancel a
 
-commonBenchmark :: (Async (), HttpClient) -> IO ()
-commonBenchmark (_a, hc) = do
-  n <- getNumCapabilities
-  printf "%-25.25s%10d\n" "CPU capabilities" n
-  printf "%-25.25s%10d\n" "Total number of ops" (iTERATIONS * nUM_OF_CLIENTS)
+(//) :: Int -> Int -> Int
+i // j = round (realToFrac i / realToFrac j)
 
-  let gens = map mkStdGen [0 .. nUM_OF_CLIENTS - 1]
+commonBenchmark :: Int -> (Async (), HttpClient) -> IO ()
+commonBenchmark clients (_a, hc) = do
+  n <- getNumCapabilities
+  printf "%-25.25s%10d\n" "CPU capabilities"    n
+  printf "%-25.25s%10d\n" "Number of clients"   clients
+  printf "%-25.25s%10d\n" "Total number of ops" ((iTERATIONS // clients) * clients)
+
+  let gens = map mkStdGen [0 .. clients - 1]
 
   performMajorGC
 
   !start <- getCurrentTime
   (startAllocs, startCopied, startMaxMemInUse) <- getAllocsAndCopied
-  mapConcurrently_ (commonClient hc) gens
+  mapConcurrently_ (commonClient hc (iTERATIONS // clients)) gens
   !end <- getCurrentTime
   (endAllocs, endCopied, endMaxMemInUse) <- getAllocsAndCopied
 
@@ -90,7 +100,7 @@ commonBenchmark (_a, hc) = do
       !duration = realToFrac (diffUTCTime end start)
 
       throughput :: Double
-      !throughput = realToFrac (iTERATIONS * nUM_OF_CLIENTS) / duration
+      !throughput = realToFrac ((iTERATIONS // clients) * clients) / duration
 
   printf "%-25.25s%10.2f ops/s\n" "Throughput"     throughput
   printf "%-25.25s%10.2f s\n"     "Duration"       duration
@@ -99,8 +109,8 @@ commonBenchmark (_a, hc) = do
   printf "%-25.25s%10s\n"         "Max mem"        (showBytes
                                                      (max endMaxMemInUse startMaxMemInUse))
 
-commonClient :: HttpClient -> StdGen -> IO ()
-commonClient hc gen = go iTERATIONS 0 gen
+commonClient :: HttpClient -> Int -> StdGen -> IO ()
+commonClient hc iterations gen = go iterations 0 gen
   where
     go :: Int -> Int -> StdGen -> IO ()
     go 0 _maxIndex _gen = return ()

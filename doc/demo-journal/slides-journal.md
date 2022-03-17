@@ -105,8 +105,8 @@ nocite: |
 # Design of the journal
 
 * Heavily inspired by Martin "LMAX" Thompson et al's Aeron log buffer
-* Three (virtual) files (clean, active, dirty)
 * Circular buffer implemented on top of `mmap`ed byte array
+* Three (virtual) files (clean, active, dirty)
 * `recv` zero-copied straight to byte array (and persisted)
 * Lock- and wait-free concurrency
 
@@ -164,14 +164,23 @@ nocite: |
 
 # Design of the event loop
 
-1. Fork a webserver where the request handlers have concurrent write access to a
-   shared journal;
+1. Start a webserver where the request handlers have concurrent write access to
+   a shared journal/channel (in the SQLite case);
 
-2. Request handlers merely write the entire request into the journal (this gives
-   us a linearised sequence of requests);
+2. Request handlers merely write the entire request into the journal/channel
+   (this gives us a linearised sequence of requests);
 
-3. A separate "worker" thread reads the journal entires and updates the state of
-   the database.
+3. A separate "worker" thread reads the journal/channel entires and
+   updates/queries the state of the database (sequential access to db).
+
+```
+
+    main {
+      journalOrChannel := createJournalOrChannel()
+      fork (worker journalOrChannel)
+      startWebserver (requestHandler journalOrChannel)
+    }
+```
 
 # Demo
 
@@ -201,6 +210,33 @@ http GET :8054/0          # Read at index from log, returns string,
                           # e.g. "hi".
 
 ```
+
+# Benchmarks
+
+```bash
+# Use the performance governor instead of powersave (for laptops).
+for policy in /sys/devices/system/cpu/cpufreq/policy*; do
+    echo "${policy}"
+    echo "performance" | sudo tee "${policy}/scaling_governor"
+done
+
+# Disable turbo boost.
+echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
+
+# The following run is just a (CPU) warm up, the results are discarded.
+cabal run bench-sqlite
+
+for i in $(seq 10); do
+  for j in $(seq 6 12); do
+    cabal run bench-journal -- $((2**$j)) >> /tmp/bench-journal-$j.txt
+    cabal run bench-sqlite  -- $((2**$j)) >> /tmp/bench-sqlite-$j.txt
+  done
+done
+```
+
+# Benchmark statistics
+
+* TODO: show graph
 
 # Amdahl's law vs the Universal scalability law
 
@@ -244,6 +280,9 @@ http GET :8054/0          # Read at index from log, returns string,
   can be debugged after the fact, even if the journal has been rotated (we don’t
   want to keep all of the journal forever due to space limitations);
   - Broken analogy: have several black-boxes, one for each crash...
+
+* Work out all corner cases with regards to versioning of journal and snapshots,
+  following Chuck's Bandwagon approach;
 
 * Event loop integration: all the above should be implemented on at the event
   loop level so that state machines (sequential code / "business logic") running
