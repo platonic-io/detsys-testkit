@@ -47,18 +47,20 @@ worker :: Journal -> DumblogMetrics -> WorkerInfo -> InMemoryDumblog -> IO ()
 worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion eventCount untilSnapshot) =
   go eventCount
   where
-    go ev s
-      | ev >= untilSnapshot = do
-          logger "[worker] Performing Snapshot"
-          bytes <- readBytesConsumed (jMetadata journal) Sub1
-          Snapshot.toFile (Snapshot.Snapshot bytes currentVersion s) snapshotFile
-          writeBytesConsumed (jMetadata journal) Sub2 bytes
-          go 0 s
+    go :: Int -> InMemoryDumblog -> IO ()
     go ev s = do
-      { val <- Journal.readJournal journal Sub1
-      ; (ev', s') <- case val of
-        { Nothing -> return (ev, s)
-        ; Just entry -> do
+      if ev >= untilSnapshot
+      then do
+        logger "[worker] Performing Snapshot"
+        bytes <- readBytesConsumed (jMetadata journal) Sub1
+        Snapshot.toFile (Snapshot.Snapshot bytes currentVersion s) snapshotFile
+        writeBytesConsumed (jMetadata journal) Sub2 bytes
+        go 0 s
+      else do
+        mEntry <- Journal.readJournal journal Sub1
+        case mEntry of
+          Nothing -> threadDelay 0 >> go ev s
+          Just entry -> do
             Metrics.decrCounter_ metrics QueueDepth 1
             let Envelope key cmd version arrivalTime = decode entry
             -- XXX: In case of decode error:
@@ -81,9 +83,4 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
             case cmd of
               Write bs   -> Metrics.measure metrics WriteSize (realToFrac (BS.length bs))
               _otherwise -> return ()
-            return (succ ev, s')
-
-        }
-      ; threadDelay 10
-      ; go ev' s'
-      }
+            go (ev + 1) s'

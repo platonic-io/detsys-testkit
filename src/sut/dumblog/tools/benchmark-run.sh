@@ -28,6 +28,9 @@ cabal build "${BENCHMARK_CABAL_BUILD_OPTS[@]}" "${BENCHMARK_WORKLOAD2}"
 # Disable turbo boost.
 echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
 
+# Allow for more open file descriptors.
+ulimit -n unlimited
+
 # The following run is just a (CPU) warm up, the results are discarded.
 cabal run "${BENCHMARK_CABAL_RUN_OPTS[@]}" "${BENCHMARK_WORKLOAD2}"
 
