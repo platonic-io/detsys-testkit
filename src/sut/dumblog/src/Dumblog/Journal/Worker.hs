@@ -60,7 +60,7 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
       else do
         entries <- Journal.readManyJournalSC journal Sub1
         if null entries
-        then threadDelay 10 >> go ev s
+        then threadDelay 1 >> go ev s
         else do
           s' <- go' entries s
           go (ev + length entries) s'
