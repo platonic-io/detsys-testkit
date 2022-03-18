@@ -140,6 +140,7 @@ checkInRange val (lower, upper) name
       , ", ", show upper, "]"
       ]
 
+-- XXX: We probably want to be able to disable boundCheck at compile time.
 boundCheck :: HasCallStack => ByteBuffer -> Int -> Int -> IO ()
 boundCheck bb ix size = return () {- do
   invariant bb
