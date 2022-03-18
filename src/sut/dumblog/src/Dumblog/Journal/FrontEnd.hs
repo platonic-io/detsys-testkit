@@ -93,7 +93,7 @@ runFrontEnd port journal metrics feInfo mReady =
     settings
       = setPort port
       $ setOnOpen  (\_addr -> incrCounter metrics CurrentNumberTransactions 1 >> return True)
-      $ setOnClose (\_addr  -> incrCounter metrics CurrentNumberTransactions (-1))
+      $ setOnClose (\_addr -> incrCounter metrics CurrentNumberTransactions (-1))
                      -- >> putStrLn ("closing: " ++ show addr))
       -- $ setLogger (\req status _mSize ->
       --                 when (status /= status200) $ do
