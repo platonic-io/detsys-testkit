@@ -29,7 +29,7 @@ import Dumblog.Journal.Versions.Codec (runCommand)
 ------------------------------------------------------------------------
 
 data WorkerInfo = WorkerInfo
-  { wiBlockers :: Blocker (Either Response Response)
+  { wiBlockers :: Blocker Response
   , wiLogger :: Logger
   , wiSnapshotFile  :: FilePath
   , wiCurrentVersion :: Int64
@@ -37,8 +37,7 @@ data WorkerInfo = WorkerInfo
   , wiEventsInRound :: Int -- how many events in one snapshot
   }
 
-wakeUpFrontend :: Blocker (Either Response Response) -> Int -> Either Response Response
-               -> IO ()
+wakeUpFrontend :: Blocker response -> Int -> response -> IO ()
 wakeUpFrontend blocker key resp = do
   b <- wakeUp blocker key resp
   unless b $
@@ -69,7 +68,7 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
             --
             !startTime <- getCurrentNanosSinceEpoch
             (s', r) <- runCommand version logger s cmd
-            wakeUpFrontend blocker key (Right r)
+            wakeUpFrontend blocker key r
             !endTime <- getCurrentNanosSinceEpoch
             -- Convert from nano s to µs with `* 10^-3`.
             let latency     = realToFrac ((startTime - arrivalTime)) * 0.001 -- µs.
