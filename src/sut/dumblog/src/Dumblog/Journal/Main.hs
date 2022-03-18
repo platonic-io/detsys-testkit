@@ -12,7 +12,6 @@ import qualified Data.Aeson as Aeson
 import Data.Int (Int64)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
-import qualified Data.Text.Lazy.Encoding as LEncoding
 import Data.TreeDiff (ediff, prettyEditExpr)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
