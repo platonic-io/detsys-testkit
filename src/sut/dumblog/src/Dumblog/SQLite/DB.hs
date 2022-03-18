@@ -45,11 +45,11 @@ initDB = do
 writeDB :: Connection -> ByteString -> IO Int
 writeDB conn bs = do
   execute conn "INSERT INTO dumblog (value) VALUES (?)" (Only bs)
-  fromIntegral <$> lastInsertRowId conn
+  fromIntegral . pred <$> lastInsertRowId conn
 
 readDB :: Connection -> Int -> IO (Maybe ByteString)
 readDB conn ix = do
-  result <- query conn "SELECT value from dumblog WHERE ix = ?" (Only ix)
+  result <- query conn "SELECT value from dumblog WHERE ix = ?" (Only (ix + 1))
   case result of
     [[bs]]     -> return (Just bs)
     _otherwise -> return Nothing

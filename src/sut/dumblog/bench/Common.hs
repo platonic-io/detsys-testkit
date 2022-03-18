@@ -110,7 +110,10 @@ commonBenchmark clients (_a, hc) = do
                                                      (max endMaxMemInUse startMaxMemInUse))
 
 commonClient :: HttpClient -> Int -> StdGen -> IO ()
-commonClient hc iterations gen = go iterations 0 gen
+commonClient hc iterations gen = do
+  mMaxIndex <- writeHttp hc vALUE_TO_WRITE
+  let maxIndex = fromMaybe (error "commonClient: initial write failed...") mMaxIndex
+  go (iterations - 1) maxIndex gen
   where
     go :: Int -> Int -> StdGen -> IO ()
     go 0 _maxIndex _gen = return ()
