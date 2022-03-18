@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -54,7 +55,7 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
       respond $ Wai.responseLBS status400 [] err
     Right cmd -> do
       key <- newKey blocker
-      now <- getCurrentNanosSinceEpoch
+      !now <- getCurrentNanosSinceEpoch
       let env = encode (Envelope (sequenceNumber key) cmd cVersion now)
       res <- Journal.appendBS journal env
       res' <- case res of

@@ -42,7 +42,7 @@ rEAD_FREQUENCY :: Int
 rEAD_FREQUENCY = 80
 
 iTERATIONS :: Int
-iTERATIONS = 100000
+iTERATIONS = 10000
 
 vALUE_TO_WRITE :: ByteString
 vALUE_TO_WRITE = LBS.pack "Dumblog"
@@ -61,7 +61,7 @@ commonMain variant io = do
   bracket (commonSetup variant io) commonTeardown (commonBenchmark clients)
   where
     nUM_OF_CLIENTS :: Int
-    nUM_OF_CLIENTS = 1000
+    nUM_OF_CLIENTS = 100
 
 commonSetup :: String -> (MVar () -> IO ()) -> IO (Async (), HttpClient)
 commonSetup msg io = do

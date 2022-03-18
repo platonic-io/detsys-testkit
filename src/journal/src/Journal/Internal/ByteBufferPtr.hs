@@ -141,7 +141,7 @@ checkInRange val (lower, upper) name
       ]
 
 boundCheck :: HasCallStack => ByteBuffer -> Int -> Int -> IO ()
-boundCheck bb ix size = do
+boundCheck bb ix size = return () {- do
   invariant bb
   -- XXX: use Word for size?
   -- XXX: parametrise on build flag and only do these checks if enabled?
@@ -169,6 +169,7 @@ invariant bb = do
   assertM (mark <= pos)
   assertM (pos <= lim)
   assertM (lim - slice <= capa)
+-}
 
 ------------------------------------------------------------------------
 -- * Create

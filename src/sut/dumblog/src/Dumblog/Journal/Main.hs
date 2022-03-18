@@ -105,7 +105,6 @@ replayDebug originCommands originState = do
       (s', r) <- runCommand v (DLogger.queueLogger logger) s cmd
       logLines <- DLogger.flushQueue logger
       let
-        lbsToString = LText.unpack . LEncoding.decodeUtf8
         (ev, msg) = case cmd of
           Read i -> ("read", show i)
           Write logMsg -> ("write", Text.unpack (decodeUtf8 logMsg))
@@ -191,7 +190,7 @@ journalDumblog cfg _capacity port mReady = do
   let fpj = dUMBLOG_JOURNAL
       fpm = dUMBLOG_METRICS
       fps = dUMBLOG_SNAPSHOT
-      untilSnapshot = 1000
+      untilSnapshot = 10000
   case cfg of
     Run q -> do
       mSnapshot <- Snapshot.readFile fps

@@ -35,20 +35,22 @@ module Journal.Types
 --  )
   where
 
-import Data.Coerce (coerce)
-import Control.Concurrent.STM (TVar, atomically, writeTVar, readTVar, newTVarIO)
+import Control.Concurrent.STM
+       (TVar, atomically, newTVarIO, readTVar, writeTVar)
 import Data.Binary (Binary)
 import Data.Bits
 import Data.ByteString (ByteString)
+import Data.Coerce (coerce)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Data.Vector (Vector)
 import Data.Int (Int32, Int64)
+import Data.Vector (Vector)
 import Data.Word (Word32, Word64, Word8)
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (Storable, sizeOf)
 
 import Journal.Internal.ByteBufferPtr
 import Journal.Internal.Logger (Logger)
+import Journal.Internal.Utils
 import Journal.Types.AtomicCounter
 
 ------------------------------------------------------------------------
@@ -59,9 +61,12 @@ pARTITION_COUNT = 3
 newtype Metadata = Metadata { unMetadata :: ByteBuffer }
 
 data Journal = Journal
-  { jTermBuffers   :: {-# UNPACK #-} !(Vector ByteBuffer)
-  , jMetadata      :: {-# UNPACK #-} !Metadata
-  , jLogger        ::                !Logger
+  { jTermBuffers    :: {-# UNPACK #-} !(Vector ByteBuffer)
+  , jMetadata       :: {-# UNPACK #-} !Metadata
+  , jLogger         ::                !Logger
+  , jTermLength          :: !Int32
+  , jPositionBitsToShift :: !Int32
+  , jInitialTermId       :: {-# UNPACK #-} !TermId
   }
 
 data JMetadata = JMetadata
@@ -240,7 +245,7 @@ casCleanPosition (Metadata meta) = casIntAddr meta lOG_CLEAN_POSITION_OFFSET
 
 -- | The number of bits to shift when multiplying or dividing by the term buffer
 -- length.
-positionBitsToShift :: Int32 -> Int
+positionBitsToShift :: Int32 -> Int32
 positionBitsToShift termBufferLength =
   case termBufferLength of
     65536      {- 64   * 1024 -}        -> 16
@@ -281,18 +286,18 @@ indexByTermCount termCount = PartitionIndex $
   fromIntegral termCount `mod` pARTITION_COUNT
 
 -- | Calculate the partition index given a stream position.
-indexByPosition :: Int64 -> Int -> PartitionIndex
+indexByPosition :: Int64 -> Int32 -> PartitionIndex
 indexByPosition pos posBitsToShift = fromIntegral $
-  (pos `shiftR` posBitsToShift) `mod` fromIntegral pARTITION_COUNT
+  (pos `shiftR` int322Int posBitsToShift) `mod` fromIntegral pARTITION_COUNT
 
 -- | Compute the current position in absolute number of bytes.
-computePosition :: TermId -> TermOffset -> Int -> TermId -> Int64
+computePosition :: TermId -> TermOffset -> Int32 -> TermId -> Int64
 computePosition activeTermId termOffset posBitsToShift initTermId =
   computeTermBeginPosition activeTermId posBitsToShift initTermId + fromIntegral termOffset
 
 -- | Compute the current position in absolute number of bytes for the beginning
 -- of a term.
-computeTermBeginPosition :: TermId -> Int -> TermId -> Int64
+computeTermBeginPosition :: TermId -> Int32 -> TermId -> Int64
 computeTermBeginPosition activeTermId posBitsToShift initTermId =
   let
     termCount :: Int64
@@ -302,9 +307,9 @@ computeTermBeginPosition activeTermId posBitsToShift initTermId =
     termCount `shiftL` fromIntegral posBitsToShift
 
 -- | Compute the term id from a position.
-computeTermIdFromPosition :: Int64 -> Int -> TermId -> Int32
+computeTermIdFromPosition :: Int64 -> Int32 -> TermId -> Int32
 computeTermIdFromPosition pos posBitsToShift initTermId = fromIntegral $
-  (pos `shiftR` posBitsToShift) + fromIntegral initTermId
+  (pos `shiftR` int322Int posBitsToShift) + fromIntegral initTermId
 
 -- | Compute the total length of a log file given the term length.
 computeLogLength :: Int -> Int -> Int64

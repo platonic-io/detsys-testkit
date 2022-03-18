@@ -1,4 +1,4 @@
-module Assert (assert, assertM, assertIO) where
+module Assert (assert, assertM, assertIO, assertMMsg) where
 
 import GHC.Stack (HasCallStack)
 
@@ -13,3 +13,7 @@ assertM _ = pure ()
 {-# INLINE assertIO #-}
 assertIO :: IO Bool -> IO ()
 assertIO _ = pure ()
+
+{-# INLINE assertMMsg #-}
+assertMMsg :: Monad m => String -> Bool -> m ()
+assertMMsg _msg _b = return ()
