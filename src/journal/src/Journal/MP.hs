@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Journal.MP where
 
 import Control.Concurrent (threadDelay)
@@ -119,7 +121,8 @@ readManyJournalSC' jour sub = do
                    (align (int322Int len) fRAME_ALIGNMENT)
                  go (offset + align (int322Int len) fRAME_ALIGNMENT) position (bs : acc)
 
-readManyJournalSC :: Journal -> Subscriber -> s -> (s -> ByteString -> IO s) -> IO ()
+readManyJournalSC :: forall s. Journal -> Subscriber -> s -> (s -> ByteString -> IO s)
+                  -> IO (Int, s)
 readManyJournalSC jour sub state0 process = do
   offset <- readBytesConsumed (jMetadata jour) sub
   -- let jLog = logg (jLogger jour)
@@ -144,16 +147,16 @@ readManyJournalSC jour sub state0 process = do
   when (int2Int64 offset == position) $ do
     waitForJournalChange (jMetadata jour) activeTermIndex termOffset
 
-  go offset position state0
+  go 0 offset position state0
   where
-    waitForJournalChange :: Metadata -> TermIndex -> TermOffset -> IO ()
+    waitForJournalChange :: Metadata -> PartitionIndex -> TermOffset -> IO ()
     waitForJournalChange meta activeTermIndex oldTermOffset = go
       where
         go = do
           rawTail <- readRawTail meta activeTermIndex
           let termOffset = rawTailTermOffset rawTail termLength
           if termOffset == oldTermOffset
-          then threadDelay 100 >> go
+          then threadDelay 1 >> go
           else return ()
 
     termLength :: Int32
@@ -165,8 +168,9 @@ readManyJournalSC jour sub state0 process = do
     posBitsToShift :: Int32
     posBitsToShift = jPositionBitsToShift jour
 
-    go offset position state
-      | int2Int64 offset == position = return ()
+    go :: Int -> Int -> Int64 -> s ->  IO (Int, s)
+    go steps offset position state
+      | int2Int64 offset == position = return (steps, state)
       | otherwise = do
         -- assertM (int2Int64 offset < position)
 
@@ -186,9 +190,9 @@ readManyJournalSC jour sub state0 process = do
           if tag == Padding
           then do
             incrBytesConsumed_ (jMetadata jour) sub (int322Int (abs len))
-            go (offset + int322Int (abs len)) position state
+            go steps (offset + int322Int (abs len)) position state
           else if len <= 0 || tag == Empty
-               then go offset position state
+               then go steps offset position state
                else do
                  assertMMsg (show len) (len > 0)
                  -- jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
@@ -198,7 +202,7 @@ readManyJournalSC jour sub state0 process = do
                  state' <- process state bs
                  incrBytesConsumed_ (jMetadata jour) sub
                    (align (int322Int len) fRAME_ALIGNMENT)
-                 go (offset + align (int322Int len) fRAME_ALIGNMENT) position state'
+                 go (steps + 1) (offset + align (int322Int len) fRAME_ALIGNMENT) position state'
 
 readJournal :: Journal -> Subscriber -> IO (Maybe ByteString)
 readJournal jour sub = do

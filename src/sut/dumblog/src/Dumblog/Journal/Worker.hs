@@ -58,13 +58,14 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
         writeBytesConsumed (jMetadata journal) Sub2 bytes
         go 0 s
       else do
-        Journal.readManyJournalSC journal Sub1 s go''
+        (n, s') <- Journal.readManyJournalSC journal Sub1 s go''
         -- entries <- Journal.readManyJournalSC journal Sub1
         -- if null entries
         -- then threadDelay 1 >> go ev s
         -- else do
         --   s' <- go' entries s
         --   go (ev + length entries) s'
+        go (ev + n) s'
 
     go'' :: InMemoryDumblog -> ByteString -> IO InMemoryDumblog
     go'' s entry = do
