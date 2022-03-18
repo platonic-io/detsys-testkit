@@ -141,12 +141,21 @@ readManyJournalSC jour sub state0 process = do
   -- assertM (int2Int64 offset <= position)
 
   -- jLog ("readJournal, readTermCount: " ++ show readTermCount)
-  if int2Int64 offset == position
-  then do
-    threadDelay 10 -- XXX: instead of sleeping we can wait for termOffset to change?
-    readManyJournalSC jour sub state0 process
-  else go offset position state0
+  when (int2Int64 offset == position) $ do
+    waitForJournalChange (jMetadata jour) activeTermIndex termOffset
+
+  go offset position state0
   where
+    waitForJournalChange :: Metadata -> TermIndex -> TermOffset -> IO ()
+    waitForJournalChange meta activeTermIndex oldTermOffset = go
+      where
+        go = do
+          rawTail <- readRawTail meta activeTermIndex
+          let termOffset = rawTailTermOffset rawTail termLength
+          if termOffset == oldTermOffset
+          then threadDelay 100 >> go
+          else return ()
+
     termLength :: Int32
     termLength = jTermLength jour
 
