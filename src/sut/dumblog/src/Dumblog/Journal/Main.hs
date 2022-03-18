@@ -125,7 +125,7 @@ replayDebug originCommands originState = do
                         , to = "client"
                         , event = ev
                         , receivedLogical = logTime
-                        , message = lbsToString r
+                        , message = show r
                         }
                       ]
              }

@@ -11,7 +11,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Text.Read as TextReader
 import Network.HTTP.Types.Method
-import Network.HTTP.Types.Status (status200, status400)
+import Network.HTTP.Types.Status (status200, status400, status404)
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
@@ -28,7 +28,7 @@ import Dumblog.Journal.Types
 ------------------------------------------------------------------------
 
 data FrontEndInfo = FrontEndInfo
-  { blockers :: Blocker (Either Response Response)
+  { blockers :: Blocker Response
   , currentVersion :: Int64
   }
 
@@ -77,10 +77,13 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
               cancel blocker key
               incrCounter metrics ErrorsEncountered 1
               respond $ Wai.responseLBS status400 [] "MVar timeout"
-            Just (Left errMsg) -> do
+            Just (Error errMsg) -> do
               incrCounter metrics ErrorsEncountered 1
               respond $ Wai.responseLBS status400 [] errMsg
-            Just (Right msg) -> respond $ Wai.responseLBS status200 [] msg
+            Just NotFound -> do
+              incrCounter metrics ErrorsEncountered 1
+              respond $ Wai.responseLBS status404 [] "Not found"
+            Just (OK msg) -> respond $ Wai.responseLBS status200 [] msg
 
 runFrontEnd :: Port -> Journal -> DumblogMetrics -> FrontEndInfo -> Maybe (MVar ()) -> IO ()
 runFrontEnd port journal metrics feInfo mReady =

@@ -16,4 +16,8 @@ data Command
 
 instance Binary Command
 
-type Response = LBS.ByteString
+data Response
+  = OK LBS.ByteString
+  | NotFound
+  | Error LBS.ByteString
+  deriving (Show)
