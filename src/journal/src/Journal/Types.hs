@@ -35,8 +35,10 @@ module Journal.Types
 --  )
   where
 
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
        (TVar, atomically, newTVarIO, readTVar, writeTVar)
+import Control.Concurrent.MVar (MVar, newMVar, takeMVar, tryPutMVar)
 import Data.Binary (Binary)
 import Data.Bits
 import Data.ByteString (ByteString)
@@ -67,6 +69,7 @@ data Journal = Journal
   , jTermLength          :: !Int32
   , jPositionBitsToShift :: !Int32
   , jInitialTermId       :: {-# UNPACK #-} !TermId
+  , jReadNotifier :: !WaitingStrategy
   }
 
 data JMetadata = JMetadata
@@ -127,6 +130,29 @@ subscriberOffset Sub2 = lOG_BYTES_CONSUMED2_OFFSET
 
 tombStone :: Int
 tombStone = maxBound
+
+------------------------------------------------------------------------
+
+data WaitingStrategy
+  = ReaderNotifier !(MVar ())
+  | SpinLoopWaitMicros !Int
+
+newReaderNotifier :: IO WaitingStrategy
+-- at the start a reader should check if there is something to read
+newReaderNotifier = ReaderNotifier <$> newMVar ()
+
+newSpinLoopWaitMicros :: Int -> WaitingStrategy
+newSpinLoopWaitMicros = SpinLoopWaitMicros
+
+notifyReader :: WaitingStrategy -> IO ()
+notifyReader (SpinLoopWaitMicros _) = pure ()
+notifyReader (ReaderNotifier rn) = do
+  tryPutMVar rn ()
+  pure ()
+
+blockUntilNotification :: WaitingStrategy -> IO ()
+blockUntilNotification (SpinLoopWaitMicros m) = threadDelay m
+blockUntilNotification (ReaderNotifier rn) = takeMVar rn
 
 ------------------------------------------------------------------------
 
