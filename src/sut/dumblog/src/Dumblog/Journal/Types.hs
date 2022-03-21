@@ -3,8 +3,7 @@
 module Dumblog.Journal.Types where
 
 import Data.Binary (Binary)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as LBS
+import Data.ByteString.Lazy (ByteString)
 import GHC.Generics (Generic)
 
 ------------------------------------------------------------------------
@@ -17,7 +16,7 @@ data Command
 instance Binary Command
 
 data Response
-  = OK LBS.ByteString
+  = OK ByteString
   | NotFound
-  | Error LBS.ByteString
+  | Error ByteString
   deriving (Show)

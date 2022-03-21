@@ -4,6 +4,8 @@ set -euo pipefail
 
 # Inspired by: https://sled.rs/perf.html#experimental-design
 
+BENCHMARK_ITERATIONS=2
+
 BENCHMARK_WORKLOAD1="bench-journal"
 BENCHMARK_WORKLOAD2="bench-sqlite"
 
@@ -29,17 +31,22 @@ cabal build "${BENCHMARK_CABAL_BUILD_OPTS[@]}" "${BENCHMARK_WORKLOAD2}"
 echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
 
 # Allow for more open file descriptors.
-ulimit -n unlimited
+# ulimit -n unlimited
 
 # The following run is just a (CPU) warm up, the results are discarded.
 cabal run "${BENCHMARK_CABAL_RUN_OPTS[@]}" "${BENCHMARK_WORKLOAD2}"
 
-for i in $(seq 15); do
-    for j in $(seq 6 14); do
+declare -a CLIENTS=(5000 6000 7000 8000 9000 10000 11000 12000 13000 14000 15000)
+
+for i in $(seq ${BENCHMARK_ITERATIONS}); do
+    # for j in $(seq 6 14); do
+    for j in "${CLIENTS[@]}"; do
         cabal run "${BENCHMARK_CABAL_RUN_OPTS[@]}" "${BENCHMARK_WORKLOAD1}" -- \
-              $((2**${j})) >> "/tmp/${BENCHMARK_WORKLOAD1}-${j}.txt"
+              ${j} >> "/tmp/${BENCHMARK_WORKLOAD1}-${j}.txt"
+        # $((2**${j})) >> "/tmp/${BENCHMARK_WORKLOAD1}-${j}.txt"
         cabal run "${BENCHMARK_CABAL_RUN_OPTS[@]}" "${BENCHMARK_WORKLOAD2}" -- \
-              $((2**${j})) >> "/tmp/${BENCHMARK_WORKLOAD2}-${j}.txt"
+              ${j} >> "/tmp/${BENCHMARK_WORKLOAD2}-${j}.txt"
+        # $((2**${j})) >> "/tmp/${BENCHMARK_WORKLOAD2}-${j}.txt"
     done
 done
 

@@ -10,8 +10,8 @@ import Control.Concurrent.MVar (MVar)
 import Control.Exception (bracket_)
 import qualified Data.Aeson as Aeson
 import Data.Int (Int64)
-import qualified Data.Text as Text
-import Data.Text.Encoding (decodeUtf8)
+import qualified Data.Text.Lazy as Text
+import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.TreeDiff (ediff, prettyEditExpr)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -42,13 +42,14 @@ import Journal.Types
        , writeBytesConsumed
        )
 import Options.Generic
+import Data.Binary (decode)
 import System.Directory (copyFile, getTemporaryDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
 import Text.PrettyPrint (render)
 
 import Dumblog.Common.Metrics (dUMBLOG_METRICS, dumblogSchema)
 import Dumblog.Journal.Blocker (emptyBlocker)
-import Dumblog.Journal.Codec (Envelope(..), decode)
+import Dumblog.Journal.Codec (Envelope(..))
 import Dumblog.Journal.FrontEnd (FrontEndInfo(..), runFrontEnd)
 import qualified Dumblog.Journal.Logger as DLogger
 import Dumblog.Journal.Snapshot (Snapshot)
@@ -131,7 +132,7 @@ replayDebug originCommands originState = do
 collectAll :: Journal -> IO [(Int64, Command)]
 collectAll jour = do
   putStrLn "[collect] Checking journal for old-entries"
-  val <- Journal.readJournal jour Sub1
+  val <- Journal.readLazyJournal jour Sub1
   case val of
     Nothing -> do
       putStrLn "[collect] No more entries"

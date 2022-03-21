@@ -5,8 +5,9 @@ module Dumblog.Journal.Worker where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
+import Data.Binary (decode)
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.MP as Journal
@@ -58,7 +59,7 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
         writeBytesConsumed (jMetadata journal) Sub2 bytes
         go 0 s
       else do
-        (n, s') <- Journal.readManyJournalSC journal Sub1 s go''
+        (n, s') <- Journal.readManyLazyJournalSC journal Sub1 s go''
         -- entries <- Journal.readManyJournalSC journal Sub1
         -- if null entries
         -- then threadDelay 1 >> go ev s
@@ -89,7 +90,7 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
                                  Read {}  -> ServiceTimeReads) serviceTime
       Metrics.measure metrics ResponseTime (latency + serviceTime)
       case cmd of
-        Write bs   -> Metrics.measure metrics WriteSize (realToFrac (BS.length bs))
+        Write bs   -> Metrics.measure metrics WriteSize (realToFrac (LBS.length bs))
         _otherwise -> return ()
 
       return s'
@@ -117,7 +118,7 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
                                  Read {}  -> ServiceTimeReads) serviceTime
       Metrics.measure metrics ResponseTime (latency + serviceTime)
       case cmd of
-        Write bs   -> Metrics.measure metrics WriteSize (realToFrac (BS.length bs))
+        Write bs   -> Metrics.measure metrics WriteSize (realToFrac (LBS.length bs))
         _otherwise -> return ()
 
       go' entries s'

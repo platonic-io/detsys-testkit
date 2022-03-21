@@ -1,6 +1,7 @@
 module Journal.Internal.BufferClaim where
 
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int32, Int64)
 import Data.Word (Word8)
 import Foreign.ForeignPtr (ForeignPtr, plusForeignPtr, withForeignPtr)
@@ -21,6 +22,9 @@ newBufferClaim src (TermOffset offset) len = BufferClaim <$>
 
 putBS :: BufferClaim -> Int -> ByteString -> IO ()
 putBS (BufferClaim bb) offset bs = putByteStringAt bb offset bs
+
+putLBS :: BufferClaim -> Int -> LBS.ByteString -> IO ()
+putLBS (BufferClaim bb) offset bs = putLazyByteStringAt bb offset bs
 
 putInt32At :: BufferClaim -> Int -> Int32 -> IO ()
 putInt32At (BufferClaim bb) offset i32 = writeInt32OffAddr bb offset i32

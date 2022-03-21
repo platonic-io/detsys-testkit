@@ -5,8 +5,7 @@
 module Dumblog.Journal.Codec where
 
 import Data.Binary (Binary)
-import qualified Data.Binary as Binary
-import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
 import GHC.Generics (Generic)
@@ -20,12 +19,4 @@ data Envelope a = Envelope
   , eArrival :: !Int64 -- Nano seconds since epoch.
   } deriving stock (Functor, Generic)
 
-instance Binary a => Binary (Envelope a) where
-
-encode :: Binary a => Envelope a -> ByteString
-encode e = LBS.toStrict (Binary.encode e)
-
--- This is guaranteed not to copy the bytestring but we should probably
--- allow this to fail.
-decode :: Binary a => ByteString -> Envelope a
-decode bs = Binary.decode $ LBS.fromStrict bs
+instance Binary a => Binary (Envelope a)

@@ -5,6 +5,7 @@ module Journal.MP where
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString as BS
 import Data.Int (Int32, Int64)
 import qualified Data.Vector as Vector
@@ -45,6 +46,20 @@ appendBS jour bs = do
     Left err -> return (Left err)
     Right (_offset, bufferClaim) -> do
       putBS bufferClaim hEADER_LENGTH bs
+      Right <$> commit bufferClaim (jLogger jour)
+
+appendLBS :: Journal -> LBS.ByteString -> IO (Either AppendError ())
+appendLBS jour bs = do
+  let len = fromIntegral (LBS.length bs)
+  assertIO $ do
+    termBufferLen <- int322Int <$> readTermLength (jMetadata jour)
+    return (0 < len &&
+            align (hEADER_LENGTH + len) fRAME_ALIGNMENT <= termBufferLen `div` 2)
+  eClaim <- tryClaim jour len
+  case eClaim of
+    Left err -> return (Left err)
+    Right (_offset, bufferClaim) -> do
+      putLBS bufferClaim hEADER_LENGTH bs
       Right <$> commit bufferClaim (jLogger jour)
 
 recvBytesOffset :: BufferClaim -> Socket -> Int -> Int -> IO Int
@@ -203,6 +218,14 @@ readManyJournalSC jour sub state0 process = do
                  incrBytesConsumed_ (jMetadata jour) sub
                    (align (int322Int len) fRAME_ALIGNMENT)
                  go (steps + 1) (offset + align (int322Int len) fRAME_ALIGNMENT) position state'
+
+readManyLazyJournalSC :: forall s. Journal -> Subscriber -> s -> (s -> LBS.ByteString -> IO s)
+                     -> IO (Int, s)
+readManyLazyJournalSC jour sub state process =
+  readManyJournalSC jour sub state (\s bs -> process s (LBS.fromStrict bs))
+
+readLazyJournal :: Journal -> Subscriber -> IO (Maybe LBS.ByteString)
+readLazyJournal jour sub = fmap (fmap LBS.fromStrict) (readJournal jour sub)
 
 readJournal :: Journal -> Subscriber -> IO (Maybe ByteString)
 readJournal jour sub = do

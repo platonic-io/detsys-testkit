@@ -12,9 +12,8 @@ import Network.Socket (mkSocket)
 import Network.Socket.ByteString (sendAll)
 
 import Journal.Internal.ByteBufferPtr
-import Journal.Internal.Utils (int2Int32, int2Int64)
 import Journal.MP
-import Journal.Types (Journal, Subscriber(Sub1), hEADER_LENGTH)
+import Journal.Types (Journal, Subscriber(Sub1))
 
 import Dumblog.ZeroCopy.State
 
