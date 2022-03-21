@@ -4,8 +4,6 @@ module Dumblog.ZeroCopy.HttpServer where
 
 import Control.Concurrent
 import Control.Exception (bracketOnError)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS
 import Data.Int (Int32, Int64)
 import Data.Maybe (fromMaybe)
 import Foreign (sizeOf)
@@ -16,8 +14,6 @@ import Network.Socket
 import Journal.Internal.BufferClaim
 import Journal.MP
 import Journal.Types (Journal, hEADER_LENGTH, jLogger)
-
-import Dumblog.ZeroCopy.State
 
 ------------------------------------------------------------------------
 
