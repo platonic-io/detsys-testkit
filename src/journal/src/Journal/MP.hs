@@ -202,6 +202,7 @@ readManyJournalSC jour sub state0 process = do
                  state' <- process state bs
                  incrBytesConsumed_ (jMetadata jour) sub
                    (align (int322Int len) fRAME_ALIGNMENT)
+                 threadDelay 1
                  go (steps + 1) (offset + align (int322Int len) fRAME_ALIGNMENT) position state'
 
 readJournal :: Journal -> Subscriber -> IO (Maybe ByteString)
