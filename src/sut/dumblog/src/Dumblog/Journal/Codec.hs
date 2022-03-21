@@ -5,8 +5,6 @@
 module Dumblog.Journal.Codec where
 
 import Data.Binary (Binary)
-import Data.ByteString.Lazy (ByteString)
-import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
 import GHC.Generics (Generic)
 

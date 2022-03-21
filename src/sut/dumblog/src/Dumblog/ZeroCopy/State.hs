@@ -2,14 +2,15 @@ module Dumblog.ZeroCopy.State where
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Internal as BS
+-- import qualified Data.ByteString.Internal as BS
 import Data.Int (Int32, Int64)
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
 import Data.Word (Word16, Word64)
 import Foreign (sizeOf)
-import Network.Socket
-       (Socket, SocketOption(Cork), setSocketOption)
+import Network.Socket (Socket)
+-- import Network.Socket
+--        (SocketOption(Cork), setSocketOption)
 import Network.Socket.ByteString (sendAll)
 import Network.Socket.SendFile.Handle (sendFile')
 import System.IO (Handle, IOMode(ReadMode), openFile)
