@@ -5,8 +5,7 @@
 module Dumblog.Journal.StateMachine where
 
 import Data.Binary (Binary)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as LBS
+import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS8
 import Data.TreeDiff (ToExpr)
 import Data.Sequence
@@ -39,7 +38,7 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix) cmd = case cmd of
     | hasBug && ix == 3 -> do
         logger "Weird reset happend"
         pure (InMemoryDumblog empty 0, Error (LBS8.pack "Dumblog!"))
-    | i < ix -> pure (state, OK (LBS.fromStrict (index appLog i)))
+    | i < ix -> pure (state, OK (index appLog i))
     | otherwise -> do
         logger $ "Oh no, request not in log"
         logger $ ("Max index is " ++ show (ix - 1))

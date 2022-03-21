@@ -175,7 +175,7 @@ nocite: |
 
 ```
 
-    main {
+    main() {
       journalOrChannel := createJournalOrChannel()
       fork (worker journalOrChannel)
       startWebserver (requestHandler journalOrChannel)
@@ -251,6 +251,8 @@ done
 # Built-in profiler/metrics
 
 * Ideas due to Tyler "sled" Neely and Thompson et al
+* Brendan Gregg's [U(tilisation) S(aturation)
+  E(rrors)](https://www.brendangregg.com/usemethod.html)
 * (Atomic) counters (an 64-bit signed integer)
 * Histograms (2 + 2^16 counters) uses `log` and `exp` for
   compression/decompression
@@ -258,7 +260,7 @@ done
   in x86 asm) and access for different processes
 * No third party dependencies or extra processes that need to be deployed
 
-![Command centre](./images/command_centre.jpg){ width=75% }
+![Command centre](./images/command_centre.jpg){ width=70% }
 
 # Summary
 

@@ -22,6 +22,7 @@ import Data.Bits (popCount)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSChar8
+import qualified Data.ByteString.Lazy as LBS
 import Data.ByteString.Internal (fromForeignPtr)
 import Data.IORef (newIORef)
 import Data.Int (Int64)

@@ -326,6 +326,23 @@ putByteStringAt bb doffset bs = do
   withForeignPtr fptr $ \sptr ->
     withForeignPtr (bbData bb) $ \dptr ->
       copyBytes (dptr `plusPtr` (slice + doffset)) (sptr `plusPtr` soffset) len
+{-# INLINE putByteStringAt #-}
+
+putLazyByteStringAt :: ByteBuffer -> Int -> LBS.ByteString -> IO ()
+putLazyByteStringAt bb doffset bs = do
+  Slice slice <- readIORef (bbSlice bb)
+  let len = LBS.length bs
+  boundCheck bb doffset (fromIntegral len)
+  withForeignPtr (bbData bb) $ \dptr ->
+    copyLazyBytes (dptr `plusPtr` (slice + doffset)) bs
+  where
+    copyLazyBytes _dptr LBS.Empty                              = return ()
+    copyLazyBytes dptr (LBS.Chunk (BS.PS fptr soffset len) cs) = do
+      withForeignPtr fptr $ \sptr -> do
+        copyBytes dptr (sptr `plusPtr` soffset) len
+        copyLazyBytes (dptr `plusPtr` len) cs
+{-# INLINE putLazyByteStringAt #-}
+
 {-
 putLazyByteString :: ByteBuffer -> LBS.ByteString -> IO ()
 putLazyByteString bb lbs = do
@@ -358,6 +375,7 @@ getByteStringAt bb offset len = do
   withForeignPtr (bbData bb) $ \sptr ->
     BS.create len $ \dptr ->
       copyBytes dptr (sptr `plusPtr` (slice + offset)) len
+{-# INLINE getByteStringAt #-}
 
 unsafeGetByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
 unsafeGetByteStringAt bb offset len = do
@@ -365,6 +383,12 @@ unsafeGetByteStringAt bb offset len = do
   Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \sptr ->
     BS.unsafePackCStringLen (castPtr (sptr `plusPtr` (slice + offset)), len)
+{-# INLINE unsafeGetByteStringAt #-}
+
+unsafeGetLazyByteStringAt :: ByteBuffer -> Int -> Int -> IO LBS.ByteString
+unsafeGetLazyByteStringAt bb offset len =
+  fmap (LBS.fromStrict) (unsafeGetByteStringAt bb offset len)
+{-# INLINE unsafeGetLazyByteStringAt #-}
 
 ------------------------------------------------------------------------
 -- * Relative operations on `Storable` elements
