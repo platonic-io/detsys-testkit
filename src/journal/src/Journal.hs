@@ -126,7 +126,11 @@ startJournal fp (Options termLength logger _maxSub) = do
         writePosition bb (Position offset)
         writeLimit bb (Limit (offset + termLength))
         slice bb
-  return (Journal termBuffers (Metadata meta) logger)
+
+  initTermId <- readInitialTermId (Metadata meta)
+
+  return (Journal termBuffers (Metadata meta) logger
+            (int2Int32 termLength) (positionBitsToShift (int2Int32 termLength)) initTermId)
 
 ------------------------------------------------------------------------
 
@@ -178,12 +182,13 @@ recvBytes bc sock len = withPtr bc $ \ptr -> recvBuf sock ptr len
 readJournal :: Journal -> Subscriber -> IO (Maybe ByteString)
 readJournal jour sub = do
   offset <- readBytesConsumed (jMetadata jour) sub
-  let jLog = logg (jLogger jour)
-  jLog ("readJournal, offset: " ++ show offset)
+  -- let jLog = logg (jLogger jour)
+  -- jLog ("readJournal, offset: " ++ show offset)
 
-  termLen <- readTermLength (jMetadata jour)
-  let readIndex = indexByPosition (int2Int64 offset) (positionBitsToShift termLen)
-  jLog ("readJournal, readIndex: " ++ show (unPartitionIndex readIndex))
+  let termLen = jTermLength jour
+      posBitsToShift = jPositionBitsToShift jour
+      readIndex = indexByPosition (int2Int64 offset) posBitsToShift
+  -- jLog ("readJournal, readIndex: " ++ show (unPartitionIndex readIndex))
 
   termCount <- activeTermCount (jMetadata jour)
   let activeTermIndex = indexByTermCount termCount
@@ -191,19 +196,19 @@ readJournal jour sub = do
   let termBuffer = jTermBuffers jour Vector.! unPartitionIndex readIndex
       activeTermId = rawTailTermId rawTail
       termOffset = rawTailTermOffset rawTail termLen
+      initTermId = jInitialTermId jour
 
-  jLog ("readJournal, termOffset: " ++ show (unTermOffset termOffset))
-  initTermId <- readInitialTermId (jMetadata jour)
-  jLog ("readJournal, initTermId: " ++ show (unTermId initTermId))
+  -- jLog ("readJournal, termOffset: " ++ show (unTermOffset termOffset))
+  -- jLog ("readJournal, initTermId: " ++ show (unTermId initTermId))
   let position =
-        computePosition activeTermId termOffset (positionBitsToShift termLen) initTermId
+        computePosition activeTermId termOffset posBitsToShift initTermId
   assertM (int2Int64 offset <= position)
 
   let readTermCount =
-        computeTermIdFromPosition (int2Int64 offset) (positionBitsToShift termLen) initTermId
-        - unTermId initTermId
+        computeTermIdFromPosition (int2Int64 offset) posBitsToShift initTermId -
+          unTermId initTermId
 
-  jLog ("readJournal, readTermCount: " ++ show readTermCount)
+  -- jLog ("readJournal, readTermCount: " ++ show readTermCount)
 
   if int2Int64 offset == position
   then return Nothing
@@ -211,20 +216,20 @@ readJournal jour sub = do
     assertM (int2Int64 offset < position)
 
     let relativeOffset = int2Int32 (align offset fRAME_ALIGNMENT) - readTermCount * termLen
-    jLog ("readJournal, relativeOffset: " ++ show relativeOffset)
+    -- jLog ("readJournal, relativeOffset: " ++ show relativeOffset)
     tag <- readFrameType termBuffer (TermOffset relativeOffset)
-    jLog ("readJournal, tag: " ++ show tag)
+    -- jLog ("readJournal, tag: " ++ show tag)
     HeaderLength len <- readFrameLength termBuffer (TermOffset relativeOffset)
-    jLog ("readJournal, len: " ++ show len)
+    -- jLog ("readJournal, len: " ++ show len)
     if tag == Padding
     then do
       assertM (len >= 0)
       incrBytesConsumed_ (jMetadata jour) sub (align (int322Int len) fRAME_ALIGNMENT)
-      jLog "readJournal, skipping padding..."
+      -- jLog "readJournal, skipping padding..."
       readJournal jour sub
     else do
       assertM (len > 0)
-      jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
+      -- jLog ("readJournal, termCount: " ++ show (unTermCount termCount))
       bs <- getByteStringAt termBuffer
               (int322Int relativeOffset + hEADER_LENGTH)
               (int322Int len - hEADER_LENGTH)
@@ -289,10 +294,10 @@ metricsBytesWritten :: Journal -> IO Int64
 metricsBytesWritten jour = do
   let meta = jMetadata jour
   termCount <- activeTermCount meta
-  initTermId <- readInitialTermId meta
   termLen <- readTermLength meta
   let index                = indexByTermCount termCount
   rawTail <- readRawTail meta index
   let termId     = rawTailTermId rawTail
       termOffset = rawTailTermOffset rawTail termLen
-  return (computePosition termId termOffset (positionBitsToShift termLen) initTermId)
+  return (computePosition termId termOffset (jPositionBitsToShift jour)
+          (jInitialTermId jour))

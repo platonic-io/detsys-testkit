@@ -5,6 +5,7 @@ module Dumblog.Journal.Worker where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Int (Int64)
 import qualified Journal.Internal.Metrics as Metrics
@@ -57,30 +58,66 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
         writeBytesConsumed (jMetadata journal) Sub2 bytes
         go 0 s
       else do
-        mEntry <- Journal.readJournal journal Sub1
-        case mEntry of
-          Nothing -> threadDelay 0 >> go ev s
-          Just entry -> do
-            Metrics.decrCounter_ metrics QueueDepth 1
-            let Envelope key cmd version arrivalTime = decode entry
-            -- XXX: In case of decode error:
-            --  Metrics.incrCounter metrics ErrorsEncountered 1
-            --  wakeUpFrontend blocker key $ Left "Couldn't parse request"
-            --  -- ^ should be better error message
-            --
-            !startTime <- getCurrentNanosSinceEpoch
-            (s', r) <- runCommand version logger s cmd
-            wakeUpFrontend blocker key r
-            !endTime <- getCurrentNanosSinceEpoch
-            -- Convert from nano s to µs with `* 10^-3`.
-            let latency     = realToFrac ((startTime - arrivalTime)) * 0.001 -- µs.
-                serviceTime = realToFrac ((endTime   - startTime))   * 0.001
-            Metrics.measure metrics Latency latency
-            Metrics.measure metrics (case cmd of
-                                       Write {} -> ServiceTimeWrites
-                                       Read {}  -> ServiceTimeReads) serviceTime
-            Metrics.measure metrics ResponseTime (latency + serviceTime)
-            case cmd of
-              Write bs   -> Metrics.measure metrics WriteSize (realToFrac (BS.length bs))
-              _otherwise -> return ()
-            go (ev + 1) s'
+        (n, s') <- Journal.readManyJournalSC journal Sub1 s go''
+        -- entries <- Journal.readManyJournalSC journal Sub1
+        -- if null entries
+        -- then threadDelay 1 >> go ev s
+        -- else do
+        --   s' <- go' entries s
+        --   go (ev + length entries) s'
+        go (ev + n) s'
+
+    go'' :: InMemoryDumblog -> ByteString -> IO InMemoryDumblog
+    go'' s entry = do
+      Metrics.decrCounter_ metrics QueueDepth 1
+      let Envelope key cmd version arrivalTime = decode entry
+      -- XXX: In case of decode error:
+      --  Metrics.incrCounter metrics ErrorsEncountered 1
+      --  wakeUpFrontend blocker key $ Left "Couldn't parse request"
+      --  -- ^ should be better error message
+      --
+      !startTime <- getCurrentNanosSinceEpoch
+      (s', r) <- runCommand version logger s cmd
+      wakeUpFrontend blocker key r
+      !endTime <- getCurrentNanosSinceEpoch
+      -- Convert from nano s to µs with `* 10^-3`.
+      let latency     = realToFrac ((startTime - arrivalTime)) * 0.001 -- µs.
+          serviceTime = realToFrac ((endTime   - startTime))   * 0.001
+      Metrics.measure metrics Latency latency
+      Metrics.measure metrics (case cmd of
+                                 Write {} -> ServiceTimeWrites
+                                 Read {}  -> ServiceTimeReads) serviceTime
+      Metrics.measure metrics ResponseTime (latency + serviceTime)
+      case cmd of
+        Write bs   -> Metrics.measure metrics WriteSize (realToFrac (BS.length bs))
+        _otherwise -> return ()
+
+      return s'
+
+    go' :: [ByteString] -> InMemoryDumblog -> IO InMemoryDumblog
+    go' []                s = return s
+    go' (entry : entries) s = do
+      Metrics.decrCounter_ metrics QueueDepth 1
+      let Envelope key cmd version arrivalTime = decode entry
+      -- XXX: In case of decode error:
+      --  Metrics.incrCounter metrics ErrorsEncountered 1
+      --  wakeUpFrontend blocker key $ Left "Couldn't parse request"
+      --  -- ^ should be better error message
+      --
+      !startTime <- getCurrentNanosSinceEpoch
+      (s', r) <- runCommand version logger s cmd
+      wakeUpFrontend blocker key r
+      !endTime <- getCurrentNanosSinceEpoch
+      -- Convert from nano s to µs with `* 10^-3`.
+      let latency     = realToFrac ((startTime - arrivalTime)) * 0.001 -- µs.
+          serviceTime = realToFrac ((endTime   - startTime))   * 0.001
+      Metrics.measure metrics Latency latency
+      Metrics.measure metrics (case cmd of
+                                 Write {} -> ServiceTimeWrites
+                                 Read {}  -> ServiceTimeReads) serviceTime
+      Metrics.measure metrics ResponseTime (latency + serviceTime)
+      case cmd of
+        Write bs   -> Metrics.measure metrics WriteSize (realToFrac (BS.length bs))
+        _otherwise -> return ()
+
+      go' entries s'

@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -54,7 +55,7 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
       respond $ Wai.responseLBS status400 [] err
     Right cmd -> do
       key <- newKey blocker
-      now <- getCurrentNanosSinceEpoch
+      !now <- getCurrentNanosSinceEpoch
       let env = encode (Envelope (sequenceNumber key) cmd cVersion now)
       res <- Journal.appendBS journal env
       res' <- case res of
@@ -92,7 +93,7 @@ runFrontEnd port journal metrics feInfo mReady =
     settings
       = setPort port
       $ setOnOpen  (\_addr -> incrCounter metrics CurrentNumberTransactions 1 >> return True)
-      $ setOnClose (\_addr  -> incrCounter metrics CurrentNumberTransactions (-1))
+      $ setOnClose (\_addr -> incrCounter metrics CurrentNumberTransactions (-1))
                      -- >> putStrLn ("closing: " ++ show addr))
       -- $ setLogger (\req status _mSize ->
       --                 when (status /= status200) $ do

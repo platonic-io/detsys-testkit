@@ -140,8 +140,12 @@ checkInRange val (lower, upper) name
       , ", ", show upper, "]"
       ]
 
+-- XXX: We probably want to be able to disable boundCheck at compile time.
 boundCheck :: HasCallStack => ByteBuffer -> Int -> Int -> IO ()
-boundCheck bb ix size = do
+boundCheck bb ix size = return ()
+{-# INLINE boundCheck #-}
+
+{- do
   invariant bb
   -- XXX: use Word for size?
   -- XXX: parametrise on build flag and only do these checks if enabled?
@@ -169,6 +173,7 @@ invariant bb = do
   assertM (mark <= pos)
   assertM (pos <= lim)
   assertM (lim - slice <= capa)
+-}
 
 ------------------------------------------------------------------------
 -- * Create
@@ -403,14 +408,17 @@ primitiveInt f c size bb offset@(I# offset#) = do
     IO $ \s ->
       case f (addr# `plusAddr#` (offset# +# slice#)) 0# s of
         (# s', i #) -> (# s', c i #)
+{-# INLINE primitiveInt #-}
 
 primitiveInt32 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
                -> ByteBuffer -> Int ->  IO Int32
 primitiveInt32 f bb offset = primitiveInt f I32# (sizeOf (4 :: Int32)) bb offset
+{-# INLINE primitiveInt32 #-}
 
 primitiveInt64 :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# #))
                -> ByteBuffer -> Int ->  IO Int64
 primitiveInt64 f bb offset = primitiveInt f I64# (sizeOf (8 :: Int64)) bb offset
+{-# INLINE primitiveInt64 #-}
 
 primitiveInt_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
               -> (i -> Int#) -> Int -> ByteBuffer -> Int -> i -> IO ()
@@ -422,14 +430,17 @@ primitiveInt_ f d size bb offset@(I# offset#) i = do
     IO $ \s ->
       case f (addr# `plusAddr#` (offset# +# slice#)) 0# value# s of
         s' -> (# s', () #)
+{-# INLINE primitiveInt_ #-}
 
 primitiveInt32_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
               -> ByteBuffer -> Int -> Int32 -> IO ()
 primitiveInt32_ f = primitiveInt_ f (\(I32# x#) -> x#) (sizeOf (4 :: Int32))
+{-# INLINE primitiveInt32_ #-}
 
 primitiveInt64_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
               -> ByteBuffer -> Int -> Int64 -> IO ()
 primitiveInt64_ f = primitiveInt_ f (\(I64# x#) -> x#) (sizeOf (8 :: Int64))
+{-# INLINE primitiveInt64_ #-}
 
 -- readCharOffArray#
 -- readWideCharOffArray#
@@ -465,6 +476,7 @@ primitiveWord f c size bb offset@(I# offset#) = do
     IO $ \s ->
       case f (addr# `plusAddr#` (offset# +# slice#)) 0# s of
         (# s', i #) -> (# s', c i #)
+{-# INLINE primitiveWord #-}
 
 primitiveWord_ :: (Addr# -> Int# -> Word# -> State# RealWorld -> State# RealWorld)
               -> (w -> Word#) -> Int -> ByteBuffer -> Int -> w -> IO ()
@@ -476,6 +488,7 @@ primitiveWord_ f d size bb offset@(I# offset#) w = do
     IO $ \s ->
       case f (addr# `plusAddr#` (offset# +# slice#)) 0# value# s of
         s' -> (# s', () #)
+{-# INLINE primitiveWord_ #-}
 
 readWord8OffAddr :: ByteBuffer -> Int -> IO Word8
 readWord8OffAddr = primitiveWord readWord8OffAddr# W8# (sizeOf (1 :: Word8))
@@ -562,6 +575,7 @@ fetchAddInt64Array bb offset incr = do
   Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \ptr ->
     fromIntegral <$> fetchAddInt64Ptr (ptr `plusPtr` (offset + slice)) incr
+{-# INLINE fetchAddInt64Array #-}
 
 -- | Given a bytebuffer, and offset in machine words, and a value to add,
 -- atomically add the value to the element. Implies a full memory barrier.
@@ -571,9 +585,11 @@ fetchAddInt64Array_ bb offset incr = do
   Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \ptr ->
     void $ fetchAddInt64Ptr (ptr `plusPtr` (offset + slice)) incr
+{-# INLINE fetchAddInt64Array_ #-}
 
 fetchAddIntArray_ :: ByteBuffer -> Int -> Int -> IO ()
 fetchAddIntArray_ bb offset (I# incr) = fetchAddInt64Array_ bb offset (I64# incr)
+{-# INLINE fetchAddIntArray_ #-}
 
 {-
 -- | Given a bytebuffer, and offset in machine words, and a value to add,

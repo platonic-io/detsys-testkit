@@ -12,8 +12,6 @@ import qualified Data.Aeson as Aeson
 import Data.Int (Int64)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
-import qualified Data.Text.Lazy as LText
-import qualified Data.Text.Lazy.Encoding as LEncoding
 import Data.TreeDiff (ediff, prettyEditExpr)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -105,7 +103,6 @@ replayDebug originCommands originState = do
       (s', r) <- runCommand v (DLogger.queueLogger logger) s cmd
       logLines <- DLogger.flushQueue logger
       let
-        lbsToString = LText.unpack . LEncoding.decodeUtf8
         (ev, msg) = case cmd of
           Read i -> ("read", show i)
           Write logMsg -> ("write", Text.unpack (decodeUtf8 logMsg))
