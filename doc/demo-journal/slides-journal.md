@@ -227,7 +227,7 @@ echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
 cabal run bench-sqlite
 
 for i in $(seq 10); do
-  for j in $(seq 6 12); do
+  for j in $(seq 2 12); do
     cabal run bench-journal -- $((2**$j)) >> /tmp/bench-journal-$j.txt
     cabal run bench-sqlite  -- $((2**$j)) >> /tmp/bench-sqlite-$j.txt
   done
@@ -236,7 +236,7 @@ done
 
 # Benchmark statistics
 
-* TODO: show graph
+![](./images/journal-benchmark.jpg)
 
 # Amdahl's law vs the Universal scalability law
 
