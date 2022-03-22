@@ -240,7 +240,7 @@ df256 = read.table(textConnection(Input256),header=TRUE)
 bartlett.test(df256$throughput ~ df256$workload, data=df256)
 
 t.test(df256$throughput ~ df256$workload, data=df256,
-       var.equal=TRUE,
+       var.equal=FALSE,
        conf.level=0.95)
 
 Input512=("
@@ -255,6 +255,26 @@ journal-512                5780.60
 journal-512                5756.72
 journal-512                6042.59
 journal-512                5895.52
+journal-512                5901.41
+journal-512                5850.24
+journal-512                5947.85
+journal-512                5907.77
+journal-512                6093.77
+journal-512                5928.50
+journal-512                5827.59
+journal-512                5982.38
+journal-512                6003.93
+journal-512                5882.08
+journal-512                5875.74
+journal-512                5744.34
+journal-512                5643.23
+journal-512                6082.79
+journal-512                6206.22
+journal-512                5982.41
+journal-512                5722.13
+journal-512                5902.64
+journal-512                5924.12
+journal-512                5849.07
 sqlite-512               4851.46
 sqlite-512               4175.24
 sqlite-512               5001.94
@@ -265,6 +285,26 @@ sqlite-512               6603.62
 sqlite-512               6625.08
 sqlite-512               6482.68
 sqlite-512               6430.65
+sqlite-512               4714.32
+sqlite-512               4250.24
+sqlite-512               6604.46
+sqlite-512               4997.60
+sqlite-512               4718.35
+sqlite-512               6752.57
+sqlite-512               4274.27
+sqlite-512               6255.25
+sqlite-512               5831.62
+sqlite-512               4677.35
+sqlite-512               6265.19
+sqlite-512               4534.84
+sqlite-512               4561.84
+sqlite-512               4579.69
+sqlite-512               6674.64
+sqlite-512               4278.95
+sqlite-512               6830.67
+sqlite-512               6454.88
+sqlite-512               5122.86
+sqlite-512               4319.10
 ")
 
 df512 = read.table(textConnection(Input512),header=TRUE)
@@ -302,7 +342,7 @@ df1024 = read.table(textConnection(Input1024),header=TRUE)
 bartlett.test(df1024$throughput ~ df1024$workload, data=df1024)
 
 t.test(df1024$throughput ~ df1024$workload, data=df1024,
-       var.equal=TRUE,
+       var.equal=FALSE,
        conf.level=0.95)
 
 Input2048=("
@@ -374,7 +414,7 @@ c32   <- c(6440.925, 6015.705)
 c64   <- c(6238.401, 6054.991)
 c128  <- c(6129.595, 6831.315)
 c256  <- c(6179.770, 6013.608)
-c512  <- c(5937.373, 5839.218)
+c512  <- c(5921.065, 5503.029)
 c1024 <- c(5828.134, 4248.163)
 c2048 <- c(5444.993, 3802.999)
 c4096 <- c(4924.328, 3549.512)

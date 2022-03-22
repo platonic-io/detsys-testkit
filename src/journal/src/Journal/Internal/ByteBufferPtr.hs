@@ -635,11 +635,14 @@ force :: ByteBuffer -> IO ()
 force bb =
   withForeignPtr (bbData bb) $ \ptr ->
     msync ptr (fromIntegral (bbCapacity bb)) mS_SYNC False
+{-# INLINE force #-}
 
 forceAt :: ByteBuffer -> Int -> Int -> IO ()
-forceAt bb offset len =
+forceAt bb offset len = do
+  Slice slice <- readIORef (bbSlice bb)
   withForeignPtr (bbData bb) $ \ptr ->
-    msync (ptr `plusPtr` offset) (fromIntegral len) mS_SYNC False
+    msync (ptr `plusPtr` (slice + offset)) (fromIntegral len) mS_SYNC False
+{-# INLINE forceAt #-}
 
 ------------------------------------------------------------------------
 
