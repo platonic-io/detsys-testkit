@@ -46,7 +46,7 @@ appendBS jour bs = do
     Left err -> return (Left err)
     Right (_offset, bufferClaim) -> do
       putBS bufferClaim hEADER_LENGTH bs
-      Right <$> commit bufferClaim (jLogger jour)
+      Right <$> commit bufferClaim (jLogger jour) (jReadNotifier jour)
 
 appendLBS :: Journal -> LBS.ByteString -> IO (Either AppendError ())
 appendLBS jour bs = do
@@ -60,7 +60,7 @@ appendLBS jour bs = do
     Left err -> return (Left err)
     Right (_offset, bufferClaim) -> do
       putLBS bufferClaim hEADER_LENGTH bs
-      Right <$> commit bufferClaim (jLogger jour)
+      Right <$> commit bufferClaim (jLogger jour) (jReadNotifier jour)
 
 recvBytesOffset :: BufferClaim -> Socket -> Int -> Int -> IO Int
 recvBytesOffset bc sock offset len = withPtr bc $ \ptr ->
@@ -171,7 +171,7 @@ readManyJournalSC jour sub state0 process = do
           rawTail <- readRawTail meta activeTermIndex
           let termOffset = rawTailTermOffset rawTail termLength
           if termOffset == oldTermOffset
-          then threadDelay 1 >> go
+          then blockUntilNotification (jReadNotifier jour) >> go
           else return ()
 
     termLength :: Int32
