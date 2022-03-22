@@ -224,17 +224,47 @@ done
 echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
 
 # The following run is just a (CPU) warm up, the results are discarded.
-cabal run bench-sqlite
+bench-sqlite
 
 for i in $(seq 10); do
   for j in $(seq 2 12); do
-    cabal run bench-journal -- $((2**$j)) >> /tmp/bench-journal-$j.txt
-    cabal run bench-sqlite  -- $((2**$j)) >> /tmp/bench-sqlite-$j.txt
+    bench-journal -- $((2**$j)) >> /tmp/bench-journal-$j.txt
+    bench-sqlite  -- $((2**$j)) >> /tmp/bench-sqlite-$j.txt
   done
 done
 ```
 
 # Benchmark statistics
+
+```R
+Input512=("
+  workload                   throughput
+  journal-512                6129.90
+  ...
+  journal-512                5756.72
+  sqlite-512                 4851.46
+  ...
+  sqlite-512                 6735.40
+")
+
+df512 = read.table(textConnection(Input512),header=TRUE)
+bartlett.test(df512$throughput ~ df512$workload, data=df512)
+
+t.test(df512$throughput ~ df512$workload, data=df512,
+       var.equal=TRUE,
+       conf.level=0.95)
+```
+
+* Output
+
+```bash
+data:  df512$throughput by df512$workload
+t = 0.29646, df = 18, p-value = 0.7703
+mean in group journal-512  mean in group sqlite-512
+                 5937.373                  5839.218
+```
+
+# Benchmark plot
 
 ![](./images/journal-benchmark.jpg)
 
@@ -265,7 +295,7 @@ done
 # Summary
 
 * We have shown how to use the journal to:
-  - Faster write path than with a database (lock-free and append only)
+  - Faster write path than with a database (lock-free, append only and zero-copy)
   - Get faster crash recovery for free
   - Get all the deterministic testing stuff for free
   - Rich time traveling debugger
@@ -298,6 +328,9 @@ done
   for the journal version of the service;
 
 * Using the Linux kernel's `io_uring` to ammortise the cost of syscalls (by
-  batching and doing them async).
+  batching and doing them async);
+
+* But protocol improvements are likely much more important for performance than
+  these low-level database engine and event loop improvements!
 
 # Thanks! Questions? References:

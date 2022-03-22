@@ -42,11 +42,15 @@ commit :: BufferClaim -> Logger -> IO ()
 commit (BufferClaim bb) logger = do
   let Capacity frameLen = getCapacity bb
   logg logger ("commit, frameLen: " ++ show frameLen)
+  -- XXX:
+  -- forceAt bb 0 frameLen
   writeFrameType bb 0 Valid
   writeFrameLength bb 0 (HeaderLength (int2Int32 frameLen))
+{-# INLINE commit #-}
 
 abort :: BufferClaim -> IO ()
 abort (BufferClaim bb) = do
   let Capacity frameLen = getCapacity bb
   writeFrameType bb 0 Padding
   writeFrameLength bb 0 (HeaderLength (int2Int32 frameLen))
+{-# INLINE abort #-}
