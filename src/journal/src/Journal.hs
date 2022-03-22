@@ -130,8 +130,11 @@ startJournal fp (Options termLength logger _maxSub) = do
 
   initTermId <- readInitialTermId (Metadata meta)
 
+  readerNotifier <- newReaderNotifier
+
   return (Journal termBuffers (Metadata meta) logger
-            (int2Int32 termLength) (positionBitsToShift (int2Int32 termLength)) initTermId)
+            (int2Int32 termLength) (positionBitsToShift (int2Int32 termLength)) initTermId
+            readerNotifier)
 
 ------------------------------------------------------------------------
 
@@ -149,7 +152,7 @@ appendBS jour bs = do
     Left err -> return (Left err)
     Right (_offset, bufferClaim) -> do
       putBS bufferClaim hEADER_LENGTH bs
-      Right <$> commit bufferClaim (jLogger jour)
+      Right <$> commit bufferClaim (jLogger jour) (jReadNotifier jour)
 
 -- tee :: Journal -> Socket -> Int -> IO ByteString
 -- tee jour sock len = do

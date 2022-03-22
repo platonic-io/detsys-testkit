@@ -3,7 +3,6 @@
 
 module Dumblog.Journal.Worker where
 
-import Control.Concurrent (threadDelay)
 import Control.Monad (unless)
 import Data.Binary (decode)
 import Data.ByteString.Lazy (ByteString)
@@ -95,6 +94,7 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
 
       return s'
 
+{-
     go' :: [ByteString] -> InMemoryDumblog -> IO InMemoryDumblog
     go' []                s = return s
     go' (entry : entries) s = do
@@ -122,3 +122,4 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
         _otherwise -> return ()
 
       go' entries s'
+-}

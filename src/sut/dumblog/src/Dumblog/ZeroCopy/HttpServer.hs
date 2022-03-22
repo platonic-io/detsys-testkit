@@ -4,8 +4,6 @@ module Dumblog.ZeroCopy.HttpServer where
 
 import Control.Concurrent
 import Control.Exception (bracketOnError)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS
 import Data.Int (Int32, Int64)
 import Data.Maybe (fromMaybe)
 import Foreign (sizeOf)
@@ -15,9 +13,7 @@ import Network.Socket
 
 import Journal.Internal.BufferClaim
 import Journal.MP
-import Journal.Types (Journal, hEADER_LENGTH, jLogger)
-
-import Dumblog.ZeroCopy.State
+import Journal.Types (Journal, hEADER_LENGTH, jLogger, jReadNotifier)
 
 ------------------------------------------------------------------------
 
@@ -65,7 +61,7 @@ client' _mgr jour conn offset bufferClaim _fdKey _event = do
   CInt fd <- socketToFd conn
   putInt32At bufferClaim hEADER_LENGTH fd
   putInt64At bufferClaim (hEADER_LENGTH + sizeOf (4 :: Int32)) offset
-  commit bufferClaim (jLogger jour)
+  commit bufferClaim (jLogger jour) (jReadNotifier jour)
   -- XXX: implement keep-alive...
   -- close conn
 

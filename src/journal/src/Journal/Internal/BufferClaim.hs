@@ -38,14 +38,15 @@ withPtr (BufferClaim bb) k = do
   -- XXX: boundcheck?
   withForeignPtr (bbData bb `plusForeignPtr` slice) k
 
-commit :: BufferClaim -> Logger -> IO ()
-commit (BufferClaim bb) logger = do
+commit :: BufferClaim -> Logger -> WaitingStrategy -> IO ()
+commit (BufferClaim bb) logger rn = do
   let Capacity frameLen = getCapacity bb
   logg logger ("commit, frameLen: " ++ show frameLen)
   -- XXX:
   -- forceAt bb 0 frameLen
   writeFrameType bb 0 Valid
   writeFrameLength bb 0 (HeaderLength (int2Int32 frameLen))
+  notifyReader rn
 {-# INLINE commit #-}
 
 abort :: BufferClaim -> IO ()
