@@ -1,4 +1,4 @@
-module Dumblog.Journal.Versions.Codec where
+module Dumblog.Journal.Versions where
 
 import Data.Int(Int64)
 
@@ -6,6 +6,9 @@ import Dumblog.Journal.Logger (Logger)
 import Dumblog.Journal.Types (Command, Response)
 import Dumblog.Journal.StateMachine(InMemoryDumblog)
 import qualified Dumblog.Journal.StateMachine as SM
+
+dUMBLOG_CURRENT_VERSION :: Int64
+dUMBLOG_CURRENT_VERSION = 1 -- 1 has bug, 2 fixes it
 
 runCommand :: Int64 -> Logger -> InMemoryDumblog -> Command -> IO (InMemoryDumblog, Response)
 runCommand 1 = SM.runCommand True
