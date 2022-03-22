@@ -61,7 +61,7 @@ commonMain variant io = do
   bracket (commonSetup variant io) commonTeardown (commonBenchmark clients)
   where
     nUM_OF_CLIENTS :: Int
-    nUM_OF_CLIENTS = 1000
+    nUM_OF_CLIENTS = 100
 
 commonSetup :: String -> (MVar () -> IO ()) -> IO (Async (), HttpClient)
 commonSetup msg io = do
