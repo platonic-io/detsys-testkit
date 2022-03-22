@@ -79,7 +79,7 @@ library
     Dumblog.Journal.Snapshot
     Dumblog.Journal.StateMachine
     Dumblog.Journal.Types
-    Dumblog.Journal.Versions.Codec
+    Dumblog.Journal.Versions
     Dumblog.Journal.Worker
     Dumblog.Metrics.Main
     Dumblog.SQLite.Command

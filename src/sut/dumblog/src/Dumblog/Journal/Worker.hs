@@ -25,7 +25,7 @@ import Dumblog.Journal.Logger
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine hiding (runCommand)
 import Dumblog.Journal.Types
-import Dumblog.Journal.Versions.Codec (runCommand)
+import Dumblog.Journal.Versions (runCommand)
 
 ------------------------------------------------------------------------
 

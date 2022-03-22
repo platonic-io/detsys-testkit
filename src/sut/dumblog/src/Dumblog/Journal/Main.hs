@@ -57,7 +57,7 @@ import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine
        (InMemoryDumblog, initState)
 import Dumblog.Journal.Types (Command(..))
-import Dumblog.Journal.Versions.Codec (runCommand)
+import Dumblog.Journal.Versions (dUMBLOG_CURRENT_VERSION, runCommand)
 import Dumblog.Journal.Worker (WorkerInfo(..), worker)
 
 ------------------------------------------------------------------------
@@ -180,9 +180,6 @@ dUMBLOG_JOURNAL = "/tmp/dumblog.journal"
 
 dUMBLOG_SNAPSHOT :: FilePath
 dUMBLOG_SNAPSHOT = "/tmp/dumblog.snapshot"
-
-dUMBLOG_CURRENT_VERSION :: Int64
-dUMBLOG_CURRENT_VERSION = 1 -- 1 has bug, 2 fixes it
 
 journalDumblog :: DumblogConfig -> Int -> Int -> Maybe (MVar ()) -> IO ()
 journalDumblog cfg _capacity port mReady = do
