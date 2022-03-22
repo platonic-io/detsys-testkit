@@ -209,6 +209,17 @@ echo hi | http POST :8054 # Append to log, returns index, e.g. 0;
 http GET :8054/0          # Read at index from log, returns string,
                           # e.g. "hi".
 
+# Metrics
+metrics
+
+# Debugger
+dumblog-journal debugfilewatch -- --output /tmp/dumblog.df
+debugger watch -- /tmp/dumblog.df
+
+# Snapshot and replay
+
+# Benchmark
+bench-journal
 ```
 
 # Benchmarks
