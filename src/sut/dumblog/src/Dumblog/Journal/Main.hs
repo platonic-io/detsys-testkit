@@ -10,8 +10,6 @@ import Control.Concurrent.MVar (MVar)
 import Control.Exception (bracket_)
 import qualified Data.Aeson as Aeson
 import Data.Int (Int64)
-import qualified Data.Text.Lazy as Text
-import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.TreeDiff (ediff, prettyEditExpr)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -104,9 +102,10 @@ replayDebug originCommands originState = do
       (s', r) <- runCommand v (DLogger.queueLogger logger) s cmd
       logLines <- DLogger.flushQueue logger
       let
-        (ev, msg) = case cmd of
-          Read i -> ("read", show i)
-          Write logMsg -> ("write", Text.unpack (decodeUtf8 logMsg))
+        ev = case cmd of
+          Read {} -> "read"
+          Write {}-> "write"
+        msg = show cmd
         ce = DebEvent
           { from = "client"
           , to = "dumblog"
