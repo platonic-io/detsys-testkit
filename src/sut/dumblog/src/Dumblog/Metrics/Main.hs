@@ -101,7 +101,7 @@ displayTimings metrics = do
   m999RT  <- percentile metrics ResponseTime 99.9
   m9999RT <- percentile metrics ResponseTime 99.99
   mMaxRT  <- percentile metrics ResponseTime 100
-  printf "%-25.25s%-25.25s%-25.25s%-25.25s\n" "\nLatency:"
+  printf "\n%-13.13s%-12.12s%-25.25s%-25.25s%-25.25s\n" "" "Latency:"
                                        "Service time (writes):"
                                        "Service time (reads):"
                                        "Response time:"
