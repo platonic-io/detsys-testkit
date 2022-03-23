@@ -37,7 +37,7 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix) cmd = case cmd of
   Read i
     | hasBug && ix == 3 -> do
         logger "Weird reset happend"
-        pure (InMemoryDumblog empty 0, Error (LBS8.pack "Dumblog!"))
+        pure (initState, Error (LBS8.pack "Dumblog!"))
     | i < ix -> pure (state, OK (index appLog i))
     | otherwise -> do
         logger $ "Oh no, request not in log"

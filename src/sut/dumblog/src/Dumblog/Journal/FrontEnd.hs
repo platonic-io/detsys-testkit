@@ -120,5 +120,5 @@ runFrontEnd port journal metrics feInfo mReady =
       --                   putStrLn ("warp, request: " ++ show req)
       --                   putStrLn ("warp, status: "  ++ show status)
       --                   print =<< Wai.strictRequestBody req)
-      $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
+      $ setBeforeMainLoop (putStrLn ("Running on port " ++ show port) >> maybe (pure ()) (\ready -> putMVar ready ()) mReady)
       $ defaultSettings
