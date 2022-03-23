@@ -50,7 +50,6 @@ library
     , journal
     , network
     , optparse-generic
-    , pretty
     , sendfile
     , sqlite-simple
     , stm
