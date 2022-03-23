@@ -5,14 +5,16 @@ import Brick
 import Brick.BChan
 import Brick.Widgets.Border (borderWithLabel)
 import Brick.Widgets.Border.Style (unicode)
-import Brick.Widgets.Center (center)
+import Brick.Widgets.Center (center, vCenter)
 import qualified Brick.Widgets.List as L
 import Control.Monad (void)
 import Data.Maybe (fromMaybe)
+import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 import qualified Graphics.Vty as V
 import Text.Wrap
 
+import Debugger.AnsiEscape (Segment(..), parseANSI)
 import Debugger.State hiding (to, from, event, receivedLogical)
 
 ------------------------------------------------------------------------
@@ -50,7 +52,14 @@ wrapSettings = defaultWrapSettings
   { preserveIndentation = False, breakLongWords = True }
 
 renderReactorState :: AppState -> Widget ()
-renderReactorState as = renderToString as isState
+renderReactorState as = fillWidth $ vCenter $ myWrap
+  (fromMaybe "?" . fmap (isState . snd) $ L.listSelectedElement $ asLog as)
+  where
+    fillWidth x = hBox [x, center $ str " "]
+    myWrap = vBox . map myStr . lines
+    myStr x = hBox [ raw $ V.text' a c
+                   | Segment a c <- parseANSI (Text.pack x)
+                   ]
 
 renderEvents :: AppState -> Widget ()
 renderEvents as =

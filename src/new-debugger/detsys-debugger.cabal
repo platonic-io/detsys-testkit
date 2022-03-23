@@ -19,6 +19,7 @@ tested-with:        GHC ==8.10.4
 library
   hs-source-dirs:   src/
   exposed-modules:
+    Debugger.AnsiEscape
     Debugger.Main
     Debugger.State
     Debugger.UI
@@ -29,6 +30,7 @@ library
     , aeson
     , base        ^>=4.14
     , brick
+    , text
     , vector
     , word-wrap
     , vty

@@ -10,7 +10,7 @@ import Control.Concurrent.MVar (MVar)
 import Control.Exception (bracket_)
 import qualified Data.Aeson as Aeson
 import Data.Int (Int64)
-import Data.TreeDiff (ediff, prettyEditExpr)
+import Data.TreeDiff (ansiWlPretty, ediff, ppEditExpr)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Debugger.State (DebEvent(..), InstanceStateRepr(..))
@@ -43,7 +43,6 @@ import Options.Generic
 import Data.Binary (decode)
 import System.Directory (copyFile, getTemporaryDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
-import Text.PrettyPrint (render)
 
 import Dumblog.Common.Metrics (dUMBLOG_METRICS, dumblogSchema)
 import Dumblog.Journal.Blocker (emptyBlocker)
@@ -114,7 +113,7 @@ replayDebug originCommands originState = do
           , message = msg
           }
         is = InstanceStateRepr
-             { state = render (prettyEditExpr (ediff s s'))
+             { state = show (ppEditExpr ansiWlPretty (ediff s s'))
              , currentEvent = ce
              , logs = logLines
              , sent = [ DebEvent
