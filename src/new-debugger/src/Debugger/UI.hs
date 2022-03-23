@@ -28,11 +28,10 @@ drawUI as = [ui]
              [ borderWithLabel (str "State") $ renderReactorState as
              , vLimitPercent 33 $ borderWithLabel (str "Events") $ renderEvents as
              ]
-           , borderWithLabel (str "Sequence Diagram") $ renderSeqDia as
-           ]
-         , vLimit 7 $ hBox
-           [ borderWithLabel (str "Input") $ renderMessage as
-           , borderWithLabel (str "Output") $ renderSentMessage as
+           , vBox
+             [ borderWithLabel (str "Input") $ renderMessage as
+             , borderWithLabel (str "Output") $ renderSentMessage as
+             ]
            ]
          , vLimit 7 $ borderWithLabel (str "Logs") $ renderLogs as
          ]
