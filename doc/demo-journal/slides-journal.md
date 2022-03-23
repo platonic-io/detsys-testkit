@@ -23,10 +23,10 @@ nocite: |
 
 * Today we will show how to build upon these ideas to enable debuggability of live systems
   - Live as in deployed systems, not just systems running in a test environment
-  - Time traveling debugger (step forward *and backwards* and see how the system
-    evolves over time)
   - Analogy: black-box in a plane (journal of all events that happened from
     takeoff to crash)
+  - Time traveling debugger (step forward *and backwards* and see how the system
+    evolves over time)
   - More than merely logging, we can *replay* the exact concurrent execution of
     the system determinstically
   - Quickly diagnose problems in production
@@ -38,7 +38,7 @@ nocite: |
 
 * The design of the journal of events (our "black-box")
   - Low performance overhead
-  - Also useful for efficient crash recovery
+  - Also useful for simulation testing and efficient crash recovery
 
 * Demo comparing our journal design vs SQLite
   - Collect performance metrics in the software under test
@@ -107,6 +107,7 @@ nocite: |
 * Heavily inspired by Martin "LMAX" Thompson et al's Aeron log buffer
 * Circular buffer implemented on top of `mmap`ed byte array
 * Three (virtual) files (clean, active, dirty)
+* Contiguous memory/disk (pre-fetching/striding)
 * `recv` zero-copied straight to byte array (and persisted)
 * Lock- and wait-free concurrency
 
@@ -164,6 +165,15 @@ nocite: |
 
 # Design of the event loop
 
+```
+    main() {
+      journalOrChannel := createJournalOrChannel()
+      fork (worker journalOrChannel)
+      startWebserver (requestHandler journalOrChannel)
+    }
+
+
+```
 1. Start a webserver where the request handlers have concurrent write access to
    a shared journal/channel (in the SQLite case);
 
@@ -173,14 +183,6 @@ nocite: |
 3. A separate "worker" thread reads the journal/channel entires and
    updates/queries the state of the database (sequential access to db).
 
-```
-
-    main() {
-      journalOrChannel := createJournalOrChannel()
-      fork (worker journalOrChannel)
-      startWebserver (requestHandler journalOrChannel)
-    }
-```
 
 # Demo
 
@@ -279,7 +281,7 @@ mean in group journal-512  mean in group sqlite-512
 
 ![](./images/journal-benchmark.jpg)
 
-# Amdahl's law vs the Universal scalability law
+# Amdahl's law vs the Gunther's Universal scalability law
 
 * *C(N) = N / (1 + a(N - 1) + ((b \* N) \* (N - 1)))*
   + *C* = capacity or throughput
@@ -305,13 +307,19 @@ mean in group journal-512  mean in group sqlite-512
 
 # Summary
 
-* We have shown how to use the journal to:
-  - Faster write path than with a database (lock-free, append only and zero-copy)
-  - Get faster crash recovery for free
-  - Get all the deterministic testing stuff for free
+* Recording the inputs and determinism are key to make debugging (and testing)
+  convenient
+
+* Performant journal for recording inputs
+  - Could be faster than a database (lock-free, contiguous and zero-copy)
+
+* Several use cases of journal
   - Rich time traveling debugger
-* How to add a built-in a profiler and how to use it in benchmarks
-* Zero third-party dependency observability (metrics/logs/tracing)
+  - Simulation/fast deterministic testing
+  - Together with snapshots we get faster crash recovery
+
+* Built-in a profiler/metrics and how to use it in statistically sound
+  benchmarks
 
 # Future work
 
