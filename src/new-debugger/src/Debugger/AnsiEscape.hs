@@ -25,6 +25,7 @@ onHead :: (a -> a) -> [a] -> [a]
 onHead _ [] = []
 onHead f (a:as) = f a : as
 
+esc :: Text
 esc = "\ESC["
 
 -- | Parse a text that has been preceded by an 'esc' sequence
