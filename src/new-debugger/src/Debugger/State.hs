@@ -2,6 +2,7 @@
 module Debugger.State where
 
 import Data.Aeson
+import Data.Int
 import GHC.Generics (Generic)
 
 import Data.Vector (Vector)
@@ -21,6 +22,7 @@ instance ToJSON DebEvent
 data InstanceState = InstanceState
  { isState :: String -- Should probably be per reactor
  , isCurrentEvent :: DebEvent
+ , isRunningVersion :: Int64
  , isSeqDia :: String
  , isLogs :: [String]
  , isSent :: [DebEvent]
@@ -29,6 +31,7 @@ data InstanceState = InstanceState
 data InstanceStateRepr = InstanceStateRepr
   { state :: String
   , currentEvent :: DebEvent
+  , runningVersion :: Int64
   , logs :: [String]
   , sent :: [DebEvent]
   } deriving Generic
@@ -45,6 +48,7 @@ fromRepr = fmap repr
     repr i = InstanceState
       { isState = state i
       , isCurrentEvent = currentEvent i
+      , isRunningVersion = runningVersion i
       , isSeqDia = "Sequence Diagram not supported yet!" -- should actually be built here
       , isLogs = logs i
       , isSent = sent i

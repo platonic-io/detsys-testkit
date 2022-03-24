@@ -115,6 +115,7 @@ replayDebug originCommands originState = do
         is = InstanceStateRepr
              { state = show (ppEditExpr ansiWlPretty (ediff s s'))
              , currentEvent = ce
+             , runningVersion = v
              , logs = logLines
              , sent = [ DebEvent
                         { from = "dumblog"

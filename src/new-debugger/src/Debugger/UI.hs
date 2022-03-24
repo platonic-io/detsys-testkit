@@ -32,6 +32,7 @@ drawUI as = [ui]
              ]
            , vBox
              [ borderWithLabel (str "Input") $ renderMessage as
+             , vLimit 3 $ borderWithLabel (str "Version") $ renderVersion as
              , borderWithLabel (str "Output") $ renderSentMessage as
              ]
            ]
@@ -70,6 +71,9 @@ renderSeqDia as = renderToString as isSeqDia
 
 renderMessage :: AppState -> Widget ()
 renderMessage as = renderToString as (message . isCurrentEvent)
+
+renderVersion :: AppState -> Widget ()
+renderVersion as = renderToString as (show . isRunningVersion)
 
 renderSentMessage :: AppState -> Widget ()
 renderSentMessage as = renderToString as (addEmpty . unlines . map (renderEvent True) . isSent)
