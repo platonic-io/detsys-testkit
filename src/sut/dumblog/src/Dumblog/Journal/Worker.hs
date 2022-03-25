@@ -30,7 +30,7 @@ import Dumblog.Journal.Versions (runCommand)
 ------------------------------------------------------------------------
 
 data WorkerInfo = WorkerInfo
-  { wiBlockers :: Blocker Response
+  { wiBlockers :: Blocker ClientResponse
   , wiLogger :: Logger
   , wiSnapshotFile  :: FilePath
   , wiCurrentVersion :: Int64
@@ -59,67 +59,33 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
         go 0 s
       else do
         (n, s') <- Journal.readManyLazyJournalSC journal Sub1 s go''
-        -- entries <- Journal.readManyJournalSC journal Sub1
-        -- if null entries
-        -- then threadDelay 1 >> go ev s
-        -- else do
-        --   s' <- go' entries s
-        --   go (ev + length entries) s'
         go (ev + n) s'
 
     go'' :: InMemoryDumblog -> ByteString -> IO InMemoryDumblog
     go'' s entry = do
       Metrics.decrCounter_ metrics QueueDepth 1
-      let Envelope key cmd version arrivalTime = decode entry
+      let Envelope key input version arrivalTime = decode entry
       -- XXX: In case of decode error:
       --  Metrics.incrCounter metrics ErrorsEncountered 1
       --  wakeUpFrontend blocker key $ Left "Couldn't parse request"
       --  -- ^ should be better error message
       --
       !startTime <- getCurrentNanosSinceEpoch
-      (s', r) <- runCommand version logger s cmd
-      wakeUpFrontend blocker key r
-      !endTime <- getCurrentNanosSinceEpoch
-      -- Convert from nano s to µs with `* 10^-3`.
-      let latency     = realToFrac ((startTime - arrivalTime)) * 0.001 -- µs.
-          serviceTime = realToFrac ((endTime   - startTime))   * 0.001
-      Metrics.measure metrics Latency latency
-      Metrics.measure metrics (case cmd of
-                                 Write {} -> ServiceTimeWrites
-                                 Read {}  -> ServiceTimeReads) serviceTime
-      Metrics.measure metrics ResponseTime (latency + serviceTime)
-      case cmd of
-        Write bs   -> Metrics.measure metrics WriteSize (realToFrac (LBS.length bs))
-        _otherwise -> return ()
+      (s', output) <- runCommand version logger s input
+      case output of
+        ClientResponse resp -> do
+          wakeUpFrontend blocker key resp
+          !endTime <- getCurrentNanosSinceEpoch
+          -- Convert from nano s to µs with `* 10^-3`.
+          let latency     = realToFrac ((startTime - arrivalTime)) * 0.001 -- µs.
+              serviceTime = realToFrac ((endTime   - startTime))   * 0.001
+          Metrics.measure metrics Latency latency
+          Metrics.measure metrics (case input of
+                                     ClientRequest (Write {}) -> ServiceTimeWrites
+                                     ClientRequest (Read {})  -> ServiceTimeReads) serviceTime
+          Metrics.measure metrics ResponseTime (latency + serviceTime)
+          case input of
+            ClientRequest (Write bs) -> Metrics.measure metrics WriteSize (realToFrac (LBS.length bs))
+            _otherwise -> return ()
 
-      return s'
-
-{-
-    go' :: [ByteString] -> InMemoryDumblog -> IO InMemoryDumblog
-    go' []                s = return s
-    go' (entry : entries) s = do
-      Metrics.decrCounter_ metrics QueueDepth 1
-      let Envelope key cmd version arrivalTime = decode entry
-      -- XXX: In case of decode error:
-      --  Metrics.incrCounter metrics ErrorsEncountered 1
-      --  wakeUpFrontend blocker key $ Left "Couldn't parse request"
-      --  -- ^ should be better error message
-      --
-      !startTime <- getCurrentNanosSinceEpoch
-      (s', r) <- runCommand version logger s cmd
-      wakeUpFrontend blocker key r
-      !endTime <- getCurrentNanosSinceEpoch
-      -- Convert from nano s to µs with `* 10^-3`.
-      let latency     = realToFrac ((startTime - arrivalTime)) * 0.001 -- µs.
-          serviceTime = realToFrac ((endTime   - startTime))   * 0.001
-      Metrics.measure metrics Latency latency
-      Metrics.measure metrics (case cmd of
-                                 Write {} -> ServiceTimeWrites
-                                 Read {}  -> ServiceTimeReads) serviceTime
-      Metrics.measure metrics ResponseTime (latency + serviceTime)
-      case cmd of
-        Write bs   -> Metrics.measure metrics WriteSize (realToFrac (LBS.length bs))
-        _otherwise -> return ()
-
-      go' entries s'
--}
+          return s'

@@ -29,18 +29,19 @@ instance ToExpr InMemoryDumblog
 initState :: InMemoryDumblog
 initState = InMemoryDumblog empty 0
 
-runCommand :: Bool -> Logger -> InMemoryDumblog -> Command -> IO (InMemoryDumblog, Response)
-runCommand hasBug logger state@(InMemoryDumblog appLog ix) cmd = case cmd of
-  Write bs -> do
-    logger "Performing a write"
-    pure (InMemoryDumblog (appLog |> bs) (ix+1), OK (LBS8.pack (show ix)))
-  Read i
-    | hasBug && ix == 3 -> do
-        logger "Weird reset happend"
-        pure (initState, Error (LBS8.pack "Dumblog!"))
-    | i < ix -> pure (state, OK (index appLog i))
-    | otherwise -> do
-        logger $ "Oh no, request not in log"
-        logger $ ("Max index is " ++ show (ix - 1))
-        pure (state, NotFound)
-    -- ^ XXX: we probably should really signal failure
+runCommand :: Bool -> Logger -> InMemoryDumblog -> Input -> IO (InMemoryDumblog, Output)
+runCommand hasBug logger state@(InMemoryDumblog appLog ix) input =
+  case input of
+    ClientRequest req -> fmap (fmap ClientResponse) $ case req of
+      Write bs -> do
+        logger "Performing a write"
+        pure (InMemoryDumblog (appLog |> bs) (ix+1), OK (LBS8.pack (show ix)))
+      Read i
+        | hasBug && ix == 3 -> do
+            logger "Weird reset happend"
+            pure (initState, Error (LBS8.pack "Dumblog!"))
+        | i < ix -> pure (state, OK (index appLog i))
+        | otherwise -> do
+            logger $ "Oh no, request not in log"
+            logger $ ("Max index is " ++ show (ix - 1))
+            pure (state, NotFound)

@@ -189,13 +189,13 @@ allocateAligned size align = do
   newByteBuffer fptr (Capacity size) (Limit size) 0 Nothing
 
 mmapped :: FilePath -> Int -> IO ByteBuffer
-mmapped fp capa =
+mmapped fp size =
   bracket (openFd fp ReadWrite Nothing defaultFileFlags) closeFd $ \fd -> do
     -- pageSize <- sysconfPageSize -- XXX align with `pageSize`?
-    ptr <- mmap Nothing (fromIntegral capa)
+    ptr <- mmap Nothing (fromIntegral size)
              (pROT_READ .|. pROT_WRITE) mAP_SHARED (Just fd) 0
-    fptr <- newForeignPtr ptr (finalizer ptr capa)
-    newByteBuffer fptr (Capacity capa) (Limit capa) 0 Nothing
+    fptr <- newForeignPtr ptr (finalizer ptr size)
+    newByteBuffer fptr (Capacity size) (Limit size) 0 Nothing
   where
     finalizer :: Ptr a -> Int -> IO ()
     finalizer ptr size = munmap ptr (fromIntegral size)

@@ -53,7 +53,7 @@ import Dumblog.Journal.Snapshot (Snapshot)
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine
        (InMemoryDumblog, initState)
-import Dumblog.Journal.Types (Command(..))
+import Dumblog.Journal.Types (Input(..), ClientRequest(..))
 import Dumblog.Journal.Versions (dUMBLOG_CURRENT_VERSION, runCommand)
 import Dumblog.Journal.Worker (WorkerInfo(..), worker)
 
@@ -76,7 +76,7 @@ fetchJournal mSnapshot fpj opts = do
       writeBytesConsumed (jMetadata journal) Sub1 bytes
   pure journal
 
-replay :: [(Int64, Command)] -> InMemoryDumblog -> IO InMemoryDumblog
+replay :: [(Int64, Input)] -> InMemoryDumblog -> IO InMemoryDumblog
 replay [] s = do
   putStrLn "[REPLAY] finished!"
   pure s
@@ -88,7 +88,7 @@ replay ((v, cmd):cmds) s = do
 type DebugFile = Vector InstanceStateRepr
 
 -- TODO: merge with `replay`
-replayDebug :: [(Int64, Command)] -> InMemoryDumblog -> IO DebugFile
+replayDebug :: [(Int64, Input)] -> InMemoryDumblog -> IO DebugFile
 replayDebug originCommands originState = do
   queueLogger <- DLogger.newQueueLogger
   go queueLogger 0 mempty originCommands originState
@@ -102,8 +102,8 @@ replayDebug originCommands originState = do
       logLines <- DLogger.flushQueue logger
       let
         ev = case cmd of
-          Read {} -> "read"
-          Write {}-> "write"
+          ClientRequest (Read {}) -> "read"
+          ClientRequest (Write {})-> "write"
         msg = show cmd
         ce = DebEvent
           { from = "client"
@@ -128,7 +128,7 @@ replayDebug originCommands originState = do
              }
       go logger (succ logTime) (Vector.snoc dfile is) cmds s'
 
-collectAll :: Journal -> IO [(Int64, Command)]
+collectAll :: Journal -> IO [(Int64, Input)]
 collectAll jour = do
   putStrLn "[collect] Checking journal for old-entries"
   val <- Journal.readLazyJournal jour Sub1

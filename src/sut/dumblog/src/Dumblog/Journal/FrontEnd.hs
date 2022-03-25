@@ -27,7 +27,7 @@ import Dumblog.Journal.Types
 ------------------------------------------------------------------------
 
 data FrontEndInfo = FrontEndInfo
-  { blockers :: Blocker Response
+  { blockers :: Blocker ClientResponse
   , currentVersion :: Int64
   }
 
@@ -42,7 +42,7 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
         Right ix -> do
           key <- newKey blocker
           !arrivalTime <- getCurrentNanosSinceEpoch
-          let bs = encode (Envelope (sequenceNumber key) (Read ix) cVersion arrivalTime)
+          let bs = encode (Envelope (sequenceNumber key) (ClientRequest (Read ix)) cVersion arrivalTime)
               success = do
                 incrCounter metrics QueueDepth 1
                 blockRespond key
@@ -55,7 +55,8 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
       reqBody <- Wai.consumeRequestBodyStrict req
       key <- newKey blocker
       !arrivalTime <- getCurrentNanosSinceEpoch
-      let bs = encode (Envelope (sequenceNumber key) (Write reqBody) cVersion arrivalTime)
+      let bs = encode
+                 (Envelope (sequenceNumber key) (ClientRequest (Write reqBody)) cVersion arrivalTime)
           success = do
             incrCounter metrics QueueDepth 1
             blockRespond key
