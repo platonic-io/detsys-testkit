@@ -45,3 +45,4 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix) input =
             logger $ "Oh no, request not in log"
             logger $ ("Max index is " ++ show (ix - 1))
             pure (state, NotFound)
+    InternalMessageIn msg -> undefined
