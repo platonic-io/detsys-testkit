@@ -34,7 +34,7 @@ data ClientResponse
   deriving stock Show
 
 data InternalMessage
-  = Backup
-  | Ack
+  = Backup Int ByteString
+  | Ack Int
   deriving stock (Generic, Show)
   deriving anyclass Binary
