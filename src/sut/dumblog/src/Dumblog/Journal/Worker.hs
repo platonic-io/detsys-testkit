@@ -8,6 +8,7 @@ import Data.Binary (decode)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
+import Data.Maybe (fromMaybe)
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.MP as Journal
 import Journal.Types
@@ -18,6 +19,7 @@ import Journal.Types
        , writeBytesConsumed
        )
 
+import Dumblog.Common.HttpClient (ackHttp, backupHttp, newHttpClient)
 import Dumblog.Common.Metrics
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
@@ -81,7 +83,8 @@ worker journal metrics wi = go (wiEvents wi)
           Metrics.measure metrics Latency latency
           Metrics.measure metrics (case input of
                                      ClientRequest (Write {}) -> ServiceTimeWrites
-                                     ClientRequest (Read {})  -> ServiceTimeReads) serviceTime
+                                     ClientRequest (Read {})  -> ServiceTimeReads
+                                     _othrwise -> error "impossible") serviceTime
           Metrics.measure metrics ResponseTime (latency + serviceTime)
           case input of
             ClientRequest (Write bs) -> Metrics.measure metrics WriteSize (realToFrac (LBS.length bs))
@@ -91,7 +94,15 @@ worker journal metrics wi = go (wiEvents wi)
         InternalMessageOut msg ->
           case msg of
             Ack ix -> do
+              let port = fromMaybe (error "No peer port") (peerPort s')
+              -- XXX: avoid creating a new http client every time...
+              hc <- newHttpClient "localhost" port
+              ackHttp hc ix
               return s'
-            Backup ix bs -> return s'
+            Backup ix bs -> do
+              let port = fromMaybe (error "No peer port") (peerPort s')
+              hc <- newHttpClient "localhost" port
+              backupHttp hc ix bs
+              return s'
 
         AdminResponse -> return s'

@@ -9,7 +9,9 @@ import Control.Concurrent.Async (link, withAsync)
 import Control.Concurrent.MVar (MVar)
 import Control.Exception (bracket_)
 import qualified Data.Aeson as Aeson
+import Data.Binary (decode)
 import Data.Int (Int64)
+import Data.Maybe (fromMaybe)
 import Data.TreeDiff (ansiWlPretty, ediff, ppEditExpr)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -40,7 +42,6 @@ import Journal.Types
        , writeBytesConsumed
        )
 import Options.Generic
-import Data.Binary (decode)
 import System.Directory (copyFile, getTemporaryDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
 
@@ -51,9 +52,8 @@ import Dumblog.Journal.FrontEnd (FrontEndInfo(..), runFrontEnd)
 import qualified Dumblog.Journal.Logger as DLogger
 import Dumblog.Journal.Snapshot (Snapshot)
 import qualified Dumblog.Journal.Snapshot as Snapshot
-import Dumblog.Journal.StateMachine
-       (InMemoryDumblog, initState)
-import Dumblog.Journal.Types (Input(..), ClientRequest(..))
+import Dumblog.Journal.StateMachine (InMemoryDumblog, initState)
+import Dumblog.Journal.Types (ClientRequest(..), Input(..))
 import Dumblog.Journal.Versions (dUMBLOG_CURRENT_VERSION, runCommand)
 import Dumblog.Journal.Worker (WorkerInfo(..), worker)
 
@@ -148,7 +148,9 @@ startingState (Just snap) = Snapshot.ssState snap
 
 data DumblogConfig
   = Run
-    { quiet :: Bool <?> "Should we suppress program log messages" }
+    { quiet :: Bool <?> "Should we suppress program log messages"
+    , port  :: Maybe Int
+    }
   | DebugFile
     { output :: FilePath <?> "Where to output the debug file"
     }
@@ -160,7 +162,7 @@ data DumblogConfig
 instance ParseRecord DumblogConfig
 
 quietRun :: DumblogConfig
-quietRun = Run (Helpful True)
+quietRun = Run (Helpful True) Nothing
 
 {-
 Unclear how to:
@@ -180,14 +182,17 @@ dUMBLOG_JOURNAL = "/tmp/dumblog.journal"
 dUMBLOG_SNAPSHOT :: FilePath
 dUMBLOG_SNAPSHOT = "/tmp/dumblog.snapshot"
 
-journalDumblog :: DumblogConfig -> Int -> Int -> Maybe (MVar ()) -> IO ()
-journalDumblog cfg _capacity port mReady = do
+dUMBLOG_PORT :: Int
+dUMBLOG_PORT = 8054
+
+journalDumblog :: DumblogConfig -> Int -> Maybe (MVar ()) -> IO ()
+journalDumblog cfg _capacity mReady = do
   let fpj = dUMBLOG_JOURNAL
       fpm = dUMBLOG_METRICS
       fps = dUMBLOG_SNAPSHOT
       untilSnapshot = 1000
   case cfg of
-    Run q -> do
+    Run q mPort -> do
       mSnapshot <- Snapshot.readFile fps
       journal <- fetchJournal mSnapshot fpj dumblogOptions
       metrics <- Metrics.newMetrics dumblogSchema fpm
@@ -202,7 +207,7 @@ journalDumblog cfg _capacity port mReady = do
         wInfo = WorkerInfo blocker logger fps dUMBLOG_CURRENT_VERSION events untilSnapshot
       withAsync (worker journal metrics wInfo workerState) $ \a -> do
         link a
-        runFrontEnd port journal metrics feInfo mReady
+        runFrontEnd (fromMaybe dUMBLOG_PORT mPort) journal metrics feInfo mReady
     DebugFile fp -> debugFile (unHelpful fp)
     DebugFileWatch fp -> do
       putStrLn "[journal]: waiting for journal changes..."

@@ -54,6 +54,7 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix mPeerPort) input =
             logger "Performing a write"
             pure (InMemoryDumblog (appLog |> bs) (ix+1) mPeerPort,
                   ClientResponse (OK (LBS8.pack (show (ix + 1)))))
+
     InternalMessageIn msg -> case msg of
       Backup ix' bs -> do
         logger "Performing a backup"
@@ -62,4 +63,6 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix mPeerPort) input =
         logger "Acknowledging a backup"
         pure (state, ClientResponse (OK (LBS8.pack (show ix'))))
 
-    AdminCommand (Connect port) -> pure (state { peerPort = Just port }, AdminResponse)
+    AdminCommand (Connect port) -> do
+      logger ("Adding peer on port: " ++ show port)
+      pure (state { peerPort = Just port }, AdminResponse)
