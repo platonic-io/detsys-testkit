@@ -73,3 +73,9 @@ readHttp hc ix = do
       return Nothing -- XXX: increment hcErrors
     Left InvalidUrlException {} -> error "readHttp, impossible: invalid url"
     Right resp -> return (Just (responseBody resp))
+
+backupHttp :: HttpClient -> Int -> ByteString -> IO ()
+backupHttp = undefined
+
+ackHttp :: HttpClient -> Int -> IO ()
+ackHttp = undefined

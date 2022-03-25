@@ -39,10 +39,10 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
         Left err -> do
           incrCounter metrics ErrorsEncountered 1
           respond (Wai.responseLBS status400 [] err)
-        Right ix -> appendInput (ClientRequest (Read ix))
+        Right ix -> appendInputWaitForResp (ClientRequest (Read ix))
     "POST" -> do
       reqBody <- Wai.consumeRequestBodyStrict req
-      appendInput (ClientRequest (Write reqBody))
+      appendInputWaitForResp (ClientRequest (Write reqBody))
     "PUT" -> do
       case parseIndex of
         Left err -> do
@@ -51,8 +51,14 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
         Right ix  -> do
           reqBody <- Wai.consumeRequestBodyStrict req
           if not (LBS8.null reqBody)
-          then appendInput (InternalMessageIn (Backup ix reqBody))
-          else appendInput (InternalMessageIn (Ack ix))
+          then appendInputNoWaitForResp (InternalMessageIn (Backup ix reqBody))
+          else appendInputNoWaitForResp (InternalMessageIn (Ack ix))
+    "CONNECT" -> do
+      case parseIndex of
+        Left err -> do
+          incrCounter metrics ErrorsEncountered 1
+          respond (Wai.responseLBS status400 [] err)
+        Right ix -> appendInputNoWaitForResp (AdminCommand (Connect ix))
 
     _otherwise -> do
       incrCounter metrics ErrorsEncountered 1
@@ -66,8 +72,8 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
           _otherwise -> Left (LBS8.pack "parseIndex: GET /:ix, :ix isn't an integer")
         _otherwise   -> Left (LBS8.pack "parseIndex: GET /:ix, :ix missing")
 
-    appendInput :: Input -> IO Wai.ResponseReceived
-    appendInput input = do
+    appendInputWaitForResp :: Input -> IO Wai.ResponseReceived
+    appendInputWaitForResp input = do
       key <- newKey blocker
       !arrivalTime <- getCurrentNanosSinceEpoch
       let bs = encode (Envelope (sequenceNumber key) input cVersion arrivalTime)
@@ -79,35 +85,47 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
             incrCounter metrics ErrorsEncountered 1
             respond $ Wai.responseLBS status400 [] (LBS8.pack (show err))
       retryAppendBS bs success failure
-      where
-        blockRespond key = do
-          mResp <- timeout (30*1000*1000) (blockUntil key)
-          -- Journal.dumpJournal journal
-          case mResp of
-            Nothing -> do
-              cancel blocker key
-              incrCounter metrics ErrorsEncountered 1
-              respond $ Wai.responseLBS status400 [] "MVar timeout"
-            Just (Error errMsg) -> do
-              incrCounter metrics ErrorsEncountered 1
-              respond $ Wai.responseLBS status400 [] errMsg
-            Just NotFound -> do
-              incrCounter metrics ErrorsEncountered 1
-              respond $ Wai.responseLBS status404 [] "Not found"
-            Just (OK msg) -> respond $ Wai.responseLBS status200 [] msg
 
-        retryAppendBS bs success failure = do
-          res <- Journal.appendLBS journal bs
-          case res of
-            Left err -> do
-              putStrLn ("httpFrontend, append error: " ++ show err)
-              res' <- Journal.appendLBS journal bs
-              case res' of
-                Left err' -> do
-                  putStrLn ("httpFrontend, append error 2: " ++ show err')
-                  failure err'
-                Right () -> success
+    appendInputNoWaitForResp :: Input -> IO Wai.ResponseReceived
+    appendInputNoWaitForResp input = do
+      !arrivalTime <- getCurrentNanosSinceEpoch
+      let bs = encode (Envelope (-1) input cVersion arrivalTime)
+          success = do
+            incrCounter metrics QueueDepth 1
+            respond $ Wai.responseLBS status200 [] (LBS8.pack "")
+          failure err = do
+            incrCounter metrics ErrorsEncountered 1
+            respond $ Wai.responseLBS status400 [] (LBS8.pack (show err))
+      retryAppendBS bs success failure
+
+    blockRespond key = do
+      mResp <- timeout (30*1000*1000) (blockUntil key)
+      -- Journal.dumpJournal journal
+      case mResp of
+        Nothing -> do
+          cancel blocker key
+          incrCounter metrics ErrorsEncountered 1
+          respond $ Wai.responseLBS status400 [] "MVar timeout"
+        Just (Error errMsg) -> do
+          incrCounter metrics ErrorsEncountered 1
+          respond $ Wai.responseLBS status400 [] errMsg
+        Just NotFound -> do
+          incrCounter metrics ErrorsEncountered 1
+          respond $ Wai.responseLBS status404 [] "Not found"
+        Just (OK msg) -> respond $ Wai.responseLBS status200 [] msg
+
+    retryAppendBS bs success failure = do
+      res <- Journal.appendLBS journal bs
+      case res of
+        Left err -> do
+          putStrLn ("httpFrontend, append error: " ++ show err)
+          res' <- Journal.appendLBS journal bs
+          case res' of
+            Left err' -> do
+              putStrLn ("httpFrontend, append error 2: " ++ show err')
+              failure err'
             Right () -> success
+        Right () -> success
 
 runFrontEnd :: Port -> Journal -> DumblogMetrics -> FrontEndInfo -> Maybe (MVar ()) -> IO ()
 runFrontEnd port journal metrics feInfo mReady =
@@ -123,5 +141,6 @@ runFrontEnd port journal metrics feInfo mReady =
       --                   putStrLn ("warp, request: " ++ show req)
       --                   putStrLn ("warp, status: "  ++ show status)
       --                   print =<< Wai.strictRequestBody req)
-      $ setBeforeMainLoop (putStrLn ("Running on port " ++ show port) >> maybe (pure ()) (\ready -> putMVar ready ()) mReady)
+      $ setBeforeMainLoop (putStrLn ("Running on port " ++ show port) >>
+                           maybe (pure ()) (\ready -> putMVar ready ()) mReady)
       $ defaultSettings
