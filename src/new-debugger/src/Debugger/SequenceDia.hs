@@ -60,7 +60,7 @@ mkArrow allBoxes from to (Message msg msgLen) = let (x,y) = go 0 allBoxes in [x,
 data Message = Message String Int
 
 simpleMessage :: String -> Message
-simpleMessage x = Message x (length x)
+simpleMessage x = Message (" " <> x <> " ") (2+length x)
 
 markedMessage :: String -> Message
 markedMessage x = Message ("\x001b[93m[" <> x <> "]\x001b[0m") (2+length x)
