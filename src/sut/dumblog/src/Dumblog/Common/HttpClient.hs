@@ -28,10 +28,12 @@ import Text.Read (readMaybe)
 ------------------------------------------------------------------------
 
 data HttpClient = HttpClient
-  { hcManager  :: Manager -- | NOTE: If possible, you should share a single
-                          -- `Manager` between multiple threads and requests.
-  , hcWriteReq :: ByteString -> Request
-  , hcReadReq  :: Int -> Request
+  { hcManager   :: Manager -- | NOTE: If possible, you should share a single
+                           -- `Manager` between multiple threads and requests.
+  , hcWriteReq  :: ByteString -> Request
+  , hcReadReq   :: Int -> Request
+  , hcBackupReq :: Int -> ByteString -> Request
+  , hcAckReq    :: Int -> Request
   -- , hcErrors   :: AtomicCounter
   }
 
@@ -51,7 +53,18 @@ newHttpClient host port = do
                            , path   = path initReq <> BSChar8.pack (show ix)
                            }
 
-  return (HttpClient mgr writeReq readReq)
+      backupReq :: Int -> ByteString -> Request
+      backupReq ix bs = initReq { method = "PUT"
+                                , path   = path initReq <> BSChar8.pack (show ix)
+                                , requestBody = RequestBodyLBS bs
+                                }
+
+      ackReq :: Int -> Request
+      ackReq ix = initReq { method = "PUT"
+                          , path   = path initReq <> BSChar8.pack (show ix)
+                          }
+
+  return (HttpClient mgr writeReq readReq backupReq ackReq)
 
 writeHttp :: HttpClient -> ByteString -> IO (Maybe Int)
 writeHttp hc bs = do
@@ -75,7 +88,19 @@ readHttp hc ix = do
     Right resp -> return (Just (responseBody resp))
 
 backupHttp :: HttpClient -> Int -> ByteString -> IO ()
-backupHttp = undefined
+backupHttp hc ix bs = do
+  eResp <- try (httpLbs (hcBackupReq hc ix bs) (hcManager hc))
+  case eResp of
+    Left (HttpExceptionRequest _req exceptCtx) -> do
+      putStrLn ("readHttp, exception context: " ++ show exceptCtx)
+    Left InvalidUrlException {} -> error "backupHttp, impossible: invalid url"
+    Right _resp -> return ()
 
 ackHttp :: HttpClient -> Int -> IO ()
-ackHttp = undefined
+ackHttp hc ix = do
+  eResp <- try (httpLbs (hcAckReq hc ix) (hcManager hc))
+  case eResp of
+    Left (HttpExceptionRequest _req exceptCtx) -> do
+      putStrLn ("readHttp, exception context: " ++ show exceptCtx)
+    Left InvalidUrlException {} -> error "ackHttp, impossible: invalid url"
+    Right _resp -> return ()

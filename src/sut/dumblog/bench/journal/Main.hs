@@ -10,6 +10,6 @@ import Common
 
 main :: IO ()
 main = do
-  removePathForcibly dUMBLOG_JOURNAL
-  removePathForcibly dUMBLOG_SNAPSHOT
+  removePathForcibly (dumblogJournalPath dUMBLOG_PORT)
+  removePathForcibly (dumblogSnapshotPath dUMBLOG_PORT)
   commonMain "Journal" (journalDumblog quietRun bUFFER_CAPACITY . Just)

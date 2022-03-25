@@ -45,7 +45,7 @@ import Options.Generic
 import System.Directory (copyFile, getTemporaryDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
 
-import Dumblog.Common.Metrics (dUMBLOG_METRICS, dumblogSchema)
+import Dumblog.Common.Metrics (dumblogSchema, dumblogMetricsPath)
 import Dumblog.Journal.Blocker (emptyBlocker)
 import Dumblog.Journal.Codec (Envelope(..))
 import Dumblog.Journal.FrontEnd (FrontEndInfo(..), runFrontEnd)
@@ -176,26 +176,23 @@ dumblogOptions = defaultOptions
   , oTermBufferLength = 512 * 1024 * 1024
   }
 
-dUMBLOG_JOURNAL :: FilePath
-dUMBLOG_JOURNAL = "/tmp/dumblog.journal"
-
-dUMBLOG_SNAPSHOT :: FilePath
-dUMBLOG_SNAPSHOT = "/tmp/dumblog.snapshot"
-
 dUMBLOG_PORT :: Int
 dUMBLOG_PORT = 8054
 
+dumblogJournalPath :: Int -> FilePath
+dumblogJournalPath port = "/tmp/dumblog-" ++ show port ++ ".journal"
+
+dumblogSnapshotPath :: Int -> FilePath
+dumblogSnapshotPath port = "/tmp/dumblog-" ++ show port ++ ".snapshot"
+
 journalDumblog :: DumblogConfig -> Int -> Maybe (MVar ()) -> IO ()
 journalDumblog cfg _capacity mReady = do
-  let fpj = dUMBLOG_JOURNAL
-      fpm = dUMBLOG_METRICS
-      fps = dUMBLOG_SNAPSHOT
-      untilSnapshot = 1000
   case cfg of
     Run q mPort -> do
-      mSnapshot <- Snapshot.readFile fps
-      journal <- fetchJournal mSnapshot fpj dumblogOptions
-      metrics <- Metrics.newMetrics dumblogSchema fpm
+      let port = fromMaybe dUMBLOG_PORT mPort
+      mSnapshot <- Snapshot.readFile (dumblogSnapshotPath port)
+      journal <- fetchJournal mSnapshot (dumblogJournalPath port) dumblogOptions
+      metrics <- Metrics.newMetrics dumblogSchema (dumblogMetricsPath port)
       blocker <- emptyBlocker 0 -- it is okay to start over
       cmds <- collectAll journal
       workerState <- replay cmds (startingState mSnapshot)
@@ -204,20 +201,24 @@ journalDumblog cfg _capacity mReady = do
         feInfo = FrontEndInfo blocker dUMBLOG_CURRENT_VERSION
         logger | unHelpful q = DLogger.nullLogger
                | otherwise = DLogger.ioLogger
-        wInfo = WorkerInfo blocker logger fps dUMBLOG_CURRENT_VERSION events untilSnapshot
+        untilSnapshot = 1000
+        wInfo = WorkerInfo blocker logger (dumblogSnapshotPath port)
+                           dUMBLOG_CURRENT_VERSION events untilSnapshot
       withAsync (worker journal metrics wInfo workerState) $ \a -> do
         link a
-        runFrontEnd (fromMaybe dUMBLOG_PORT mPort) journal metrics feInfo mReady
-    DebugFile fp -> debugFile (unHelpful fp)
-    DebugFileWatch fp -> do
+        runFrontEnd port journal metrics feInfo mReady
+    DebugFile debugFile -> genDebugFile (dumblogJournalPath dUMBLOG_PORT) -- XXX: port is hardcoded.
+                                        (dumblogSnapshotPath dUMBLOG_PORT)
+                                        (unHelpful debugFile)
+    DebugFileWatch debugFile -> do
       putStrLn "[journal]: waiting for journal changes..."
-      watch (unHelpful fp)
+      watch (dumblogJournalPath dUMBLOG_PORT) (dumblogSnapshotPath dUMBLOG_PORT) (unHelpful debugFile)
 
-watch :: FilePath -> IO ()
-watch fp = go 0
+watch :: FilePath -> FilePath -> FilePath -> IO ()
+watch journalFile snapshotFile debugFile = go 0
   where
     go lastBytesProduced = do
-      eMeta <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
+      eMeta <- journalMetadata journalFile dumblogOptions
       case eMeta of
         Left err -> do
           putStrLn ("[watch] error: " ++ show err)
@@ -228,7 +229,7 @@ watch fp = go 0
           if bytesProduced /= lastBytesProduced
           then do
             putStrLn "[watch] journal has changed!"
-            debugFile fp
+            genDebugFile journalFile snapshotFile debugFile
             go bytesProduced
           else threadDelay 10000 >> go lastBytesProduced
 
@@ -249,14 +250,15 @@ watch fp = go 0
             produced = termBeginPosition + fromIntegral termOffset
         return produced
 
-debugFile :: FilePath -> IO ()
-debugFile fp = withTempCopy dUMBLOG_JOURNAL $ \fpjCopy -> do
-  mSnapshot <- Snapshot.readFile dUMBLOG_SNAPSHOT
-  journal <- fetchJournal mSnapshot fpjCopy dumblogOptions
-  cmds <- collectAll journal
-  debugFileContents <- replayDebug cmds (startingState mSnapshot)
-  Aeson.encodeFile fp debugFileContents
-  putStrLn "Generated Debug-file"
+genDebugFile :: FilePath -> FilePath -> FilePath -> IO ()
+genDebugFile journalFile snapshotFile debugFile =
+  withTempCopy journalFile $ \journalCopy -> do
+    mSnapshot <- Snapshot.readFile snapshotFile
+    journal <- fetchJournal mSnapshot journalCopy dumblogOptions
+    cmds <- collectAll journal
+    debugFileContents <- replayDebug cmds (startingState mSnapshot)
+    Aeson.encodeFile debugFile debugFileContents
+    putStrLn "Generated Debug-file"
 
 withTempCopy :: FilePath -> (FilePath -> IO a) -> IO a
 withTempCopy fp k = do
