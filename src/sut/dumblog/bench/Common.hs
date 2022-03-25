@@ -26,14 +26,12 @@ import Text.Read (readMaybe)
 
 import Dumblog.Common.HttpClient
 import Dumblog.Common.Utils (showBytes)
+import Dumblog.Journal.Main (dUMBLOG_PORT)
 
 ------------------------------------------------------------------------
 
 hOST :: String
 hOST = "localhost"
-
-pORT :: Int
-pORT = 8054
 
 wRITE_FREQUENCY :: Int
 wRITE_FREQUENCY = 20
@@ -70,7 +68,7 @@ commonSetup msg io = do
   a <- async (io ready)
   link a
   () <- takeMVar ready
-  hc <- newHttpClient hOST pORT
+  hc <- newHttpClient hOST dUMBLOG_PORT
   return (a, hc)
 
 commonTeardown :: (Async (), HttpClient) -> IO ()
