@@ -13,6 +13,7 @@ import GHC.Generics (Generic)
 data Input
   = ClientRequest ClientRequest
   | InternalMessageIn InternalMessage
+  | AdminCommand AdminCommand
   deriving stock (Generic, Show)
   deriving anyclass Binary
 
@@ -22,9 +23,15 @@ data ClientRequest
   deriving stock (Generic, Show)
   deriving anyclass Binary
 
+data AdminCommand
+  = Connect Int
+  deriving stock (Generic, Show)
+  deriving anyclass Binary
+
 data Output
   = ClientResponse ClientResponse
   | InternalMessageOut InternalMessage
+  | AdminResponse
   deriving stock Show
 
 data ClientResponse

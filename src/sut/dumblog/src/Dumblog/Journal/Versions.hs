@@ -14,4 +14,5 @@ runCommand :: Int64 -> Logger -> InMemoryDumblog -> Input -> IO (InMemoryDumblog
 runCommand 1 = SM.runCommand True
 -- this line will be added in demo!
 -- runCommand 2 = SM.runCommand False
-runCommand v = \_ _ cmd -> error ("Don't know how to run the command: " <> show cmd <> " in version: " <> show v)
+runCommand v = \_ _ cmd ->
+  error ("Don't know how to run the command: " <> show cmd <> " in version: " <> show v)

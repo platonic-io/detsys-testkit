@@ -45,24 +45,23 @@ wakeUpFrontend blocker key resp = do
     error $ "Frontend never added MVar"
 
 worker :: Journal -> DumblogMetrics -> WorkerInfo -> InMemoryDumblog -> IO ()
-worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion eventCount untilSnapshot) =
-  go eventCount
+worker journal metrics wi = go (wiEvents wi)
   where
     go :: Int -> InMemoryDumblog -> IO ()
     go ev s = do
-      if ev >= untilSnapshot
+      if ev >= wiEventsInRound wi
       then do
-        logger "[worker] Performing Snapshot"
+        wiLogger wi "[worker] Performing Snapshot"
         bytes <- readBytesConsumed (jMetadata journal) Sub1
-        Snapshot.toFile (Snapshot.Snapshot bytes currentVersion s) snapshotFile
+        Snapshot.toFile (Snapshot.Snapshot bytes (wiCurrentVersion wi) s) (wiSnapshotFile wi)
         writeBytesConsumed (jMetadata journal) Sub2 bytes
         go 0 s
       else do
-        (n, s') <- Journal.readManyLazyJournalSC journal Sub1 s go''
+        (n, s') <- Journal.readManyLazyJournalSC journal Sub1 s go'
         go (ev + n) s'
 
-    go'' :: InMemoryDumblog -> ByteString -> IO InMemoryDumblog
-    go'' s entry = do
+    go' :: InMemoryDumblog -> ByteString -> IO InMemoryDumblog
+    go' s entry = do
       Metrics.decrCounter_ metrics QueueDepth 1
       let Envelope key input version arrivalTime = decode entry
       -- XXX: In case of decode error:
@@ -71,10 +70,10 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
       --  -- ^ should be better error message
       --
       !startTime <- getCurrentNanosSinceEpoch
-      (s', output) <- runCommand version logger s input
+      (s', output) <- runCommand version (wiLogger wi) s input
       case output of
         ClientResponse resp -> do
-          wakeUpFrontend blocker key resp
+          wakeUpFrontend (wiBlockers wi) key resp
           !endTime <- getCurrentNanosSinceEpoch
           -- Convert from nano s to µs with `* 10^-3`.
           let latency     = realToFrac ((startTime - arrivalTime)) * 0.001 -- µs.
@@ -89,3 +88,10 @@ worker journal metrics (WorkerInfo blocker logger snapshotFile currentVersion ev
             _otherwise -> return ()
 
           return s'
+        InternalMessageOut msg ->
+          case msg of
+            Ack ix -> do
+              return s'
+            Backup ix bs -> return s'
+
+        AdminResponse -> return s'

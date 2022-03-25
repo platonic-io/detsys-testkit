@@ -143,12 +143,12 @@ collectAll jour = do
       pure $ (version, cmd) : cmds
 
 startingState :: Maybe Snapshot -> InMemoryDumblog
-startingState Nothing = initState
+startingState Nothing     = initState
 startingState (Just snap) = Snapshot.ssState snap
 
 data DumblogConfig
   = Run
-    { quiet :: Bool <?> "Should we suppress program log messages"}
+    { quiet :: Bool <?> "Should we suppress program log messages" }
   | DebugFile
     { output :: FilePath <?> "Where to output the debug file"
     }
