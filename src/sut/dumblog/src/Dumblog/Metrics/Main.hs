@@ -35,17 +35,17 @@ initThroughputState = do
 throughputAvg :: ThroughputState -> Double
 throughputAvg ts = tsSum ts / realToFrac (tsIterations ts)
 
-metricsMain :: IO ()
-metricsMain = do
+metricsMain :: Int -> IO ()
+metricsMain port = do
   setLocaleEncoding utf8 -- Otherwise we can't print µ...
-  removePathForcibly dUMBLOG_METRICS
+  removePathForcibly (dumblogMetricsPath port)
   ts <- initThroughputState
   go ts
   where
     go :: ThroughputState -> IO ()
     go ts = do
-      metrics <- newMetrics dumblogSchema dUMBLOG_METRICS
-      eMeta   <- journalMetadata dUMBLOG_JOURNAL dumblogOptions
+      metrics <- newMetrics dumblogSchema (dumblogMetricsPath port)
+      eMeta   <- journalMetadata (dumblogJournalPath port) dumblogOptions
 
       -- Only needed on MacOS it seems.
       msyncMetrics metrics

@@ -17,7 +17,7 @@ import Journal.Internal.Metrics
 sqliteDumblog :: Int -> Int -> Maybe (MVar ()) -> IO ()
 sqliteDumblog capacity port mReady = do
   queue <- newTBQueueIO (fromIntegral capacity)
-  metrics <- newMetrics dumblogSchema dUMBLOG_METRICS
+  metrics <- newMetrics dumblogSchema (dumblogMetricsPath port)
   bracket initDB closeDB $ \conn ->
     withAsync (worker queue metrics conn) $ \_async ->
       runFrontEnd queue metrics port mReady

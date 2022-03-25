@@ -84,7 +84,7 @@ worker journal metrics wi = go (wiEvents wi)
           Metrics.measure metrics (case input of
                                      ClientRequest (Write {}) -> ServiceTimeWrites
                                      ClientRequest (Read {})  -> ServiceTimeReads
-                                     _othrwise -> error "impossible") serviceTime
+                                     _otherwise -> error "impossible") serviceTime
           Metrics.measure metrics ResponseTime (latency + serviceTime)
           case input of
             ClientRequest (Write bs) -> Metrics.measure metrics WriteSize (realToFrac (LBS.length bs))
