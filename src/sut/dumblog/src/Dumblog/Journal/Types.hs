@@ -1,4 +1,6 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 module Dumblog.Journal.Types where
 
@@ -8,15 +10,31 @@ import GHC.Generics (Generic)
 
 ------------------------------------------------------------------------
 
-data Command
+data Input
+  = ClientRequest ClientRequest
+  | InternalMessageIn InternalMessage
+  deriving stock (Generic, Show)
+  deriving anyclass Binary
+
+data ClientRequest
   = Write ByteString
   | Read Int
-  deriving (Generic, Show)
+  deriving stock (Generic, Show)
+  deriving anyclass Binary
 
-instance Binary Command
+data Output
+  = ClientResponse ClientResponse
+  | InternalMessageOut InternalMessage
+  deriving stock Show
 
-data Response
+data ClientResponse
   = OK ByteString
   | NotFound
   | Error ByteString
-  deriving (Show)
+  deriving stock Show
+
+data InternalMessage
+  = Backup
+  | Ack
+  deriving stock (Generic, Show)
+  deriving anyclass Binary

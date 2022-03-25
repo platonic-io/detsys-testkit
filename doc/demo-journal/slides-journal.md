@@ -44,7 +44,7 @@ nocite: |
 
 # Inspiration and prior work
 
-* Tyler Neely's `sled` database
+* Tyler Neely's [`sled`](https://sled.rs/simulation.html) database
 
 * Erlang
   - Perhaps best known for: "actor model"-like concurrency
