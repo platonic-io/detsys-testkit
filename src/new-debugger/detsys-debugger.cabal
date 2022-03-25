@@ -21,6 +21,7 @@ library
   exposed-modules:
     Debugger.AnsiEscape
     Debugger.Main
+    Debugger.SequenceDia
     Debugger.State
     Debugger.UI
 
