@@ -49,7 +49,7 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix mPeerPort) input =
         | isJust mPeerPort -> do
             logger "Forwarding write to backup"
             pure (InMemoryDumblog (appLog |> bs) (ix+1) mPeerPort,
-                  InternalMessageOut (Backup (ix + 1) bs sn))
+                  InternalMessageOut (Backup ix bs sn))
         | otherwise -> do
             logger "Performing a write"
             pure (InMemoryDumblog (appLog |> bs) (ix+1) mPeerPort,
