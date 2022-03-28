@@ -53,7 +53,7 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix mPeerPort) input =
         | otherwise -> do
             logger "Performing a write"
             pure (InMemoryDumblog (appLog |> bs) (ix+1) mPeerPort,
-                  ClientResponse (OK (LBS8.pack (show (ix + 1)))) sn)
+                  ClientResponse (OK (LBS8.pack (show ix))) sn)
 
     InternalMessageIn msg -> case msg of
       Backup ix' bs sn -> do
