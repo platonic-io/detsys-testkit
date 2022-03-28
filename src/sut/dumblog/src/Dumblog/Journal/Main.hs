@@ -53,7 +53,7 @@ import qualified Dumblog.Journal.Logger as DLogger
 import Dumblog.Journal.Snapshot (Snapshot)
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine (InMemoryDumblog, initState)
-import Dumblog.Journal.Types (ClientRequest(..), Input(..), CommandName(..))
+import Dumblog.Journal.Types (Input(..), Output(..), CommandName(..))
 import Dumblog.Journal.Versions (dUMBLOG_CURRENT_VERSION, runCommand)
 import Dumblog.Journal.Worker (WorkerInfo(..), worker)
 
@@ -103,7 +103,10 @@ replayDebug originCommands originState = do
       let
         msg = show cmd
         ce = DebEvent
-          { from = "client"
+          { from = case cmd of
+              ClientRequest {} -> "client"
+              InternalMessageIn {} -> "backup"
+              AdminCommand {} -> "admin"
           , to = "dumblog"
           , event = commandName cmd
           , receivedLogical = logTime
@@ -116,7 +119,10 @@ replayDebug originCommands originState = do
              , logs = logLines
              , sent = [ DebEvent
                         { from = "dumblog"
-                        , to = "client"
+                        , to = case r of
+                            ClientResponse {} -> "client"
+                            InternalMessageOut {} -> "backup"
+                            AdminResponse {} -> "admin"
                         , event = commandName r
                         , receivedLogical = logTime
                         , message = show r
@@ -177,19 +183,19 @@ dUMBLOG_PORT :: Int
 dUMBLOG_PORT = 8054
 
 dumblogJournalPath :: Int -> FilePath
-dumblogJournalPath port = "/tmp/dumblog-" ++ show port ++ ".journal"
+dumblogJournalPath portUsed = "/tmp/dumblog-" ++ show portUsed ++ ".journal"
 
 dumblogSnapshotPath :: Int -> FilePath
-dumblogSnapshotPath port = "/tmp/dumblog-" ++ show port ++ ".snapshot"
+dumblogSnapshotPath portUsed = "/tmp/dumblog-" ++ show portUsed ++ ".snapshot"
 
 journalDumblog :: DumblogConfig -> Int -> Maybe (MVar ()) -> IO ()
 journalDumblog cfg _capacity mReady = do
   case cfg of
     Run q mPort -> do
-      let port = fromMaybe dUMBLOG_PORT mPort
-      mSnapshot <- Snapshot.readFile (dumblogSnapshotPath port)
-      journal <- fetchJournal mSnapshot (dumblogJournalPath port) dumblogOptions
-      metrics <- Metrics.newMetrics dumblogSchema (dumblogMetricsPath port)
+      let portToUse = fromMaybe dUMBLOG_PORT mPort
+      mSnapshot <- Snapshot.readFile (dumblogSnapshotPath portToUse)
+      journal <- fetchJournal mSnapshot (dumblogJournalPath portToUse) dumblogOptions
+      metrics <- Metrics.newMetrics dumblogSchema (dumblogMetricsPath portToUse)
       blocker <- emptyBlocker 0 -- it is okay to start over
       cmds <- collectAll journal
       workerState <- replay cmds (startingState mSnapshot)
@@ -199,11 +205,11 @@ journalDumblog cfg _capacity mReady = do
         logger | unHelpful q = DLogger.nullLogger
                | otherwise = DLogger.ioLogger
         untilSnapshot = 1000
-        wInfo = WorkerInfo blocker logger (dumblogSnapshotPath port)
+        wInfo = WorkerInfo blocker logger (dumblogSnapshotPath portToUse)
                            dUMBLOG_CURRENT_VERSION events untilSnapshot
       withAsync (worker journal metrics wInfo workerState) $ \a -> do
         link a
-        runFrontEnd port journal metrics feInfo mReady
+        runFrontEnd portToUse journal metrics feInfo mReady
     DebugFile debugFile -> genDebugFile (dumblogJournalPath dUMBLOG_PORT) -- XXX: port is hardcoded.
                                         (dumblogSnapshotPath dUMBLOG_PORT)
                                         (unHelpful debugFile)
