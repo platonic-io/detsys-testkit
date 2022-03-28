@@ -30,11 +30,12 @@ drawUI as = [ui]
              [ borderWithLabel (str "State") $ renderReactorState as
              , vLimitPercent 33 $ borderWithLabel (str "Events") $ renderEvents as
              ]
-           , vBox
-             [ borderWithLabel (str "Input") $ renderMessage as
-             , vLimit 3 $ borderWithLabel (str "Version") $ renderVersion as
-             , borderWithLabel (str "Output") $ renderSentMessage as
-             ]
+           , borderWithLabel (str "Sequence Diagram") $ renderSeqDia as
+           ]
+         , vLimit 3 $ hBox
+           [ borderWithLabel (str "Input") $ renderMessage as
+           , hLimit 9 $ borderWithLabel (str "Version") $ renderVersion as
+           , borderWithLabel (str "Output") $ renderSentMessage as
            ]
          , vLimit 7 $ borderWithLabel (str "Logs") $ renderLogs as
          ]
@@ -62,12 +63,19 @@ renderReactorState as = fillWidth $ vCenter $ myWrap
                    | Segment a c <- parseANSI (Text.pack x)
                    ]
 
+renderSeqDia :: AppState -> Widget ()
+renderSeqDia as = fillWidth $ vCenter $ myWrap
+  (fromMaybe "?" . fmap (isSeqDia . snd) $ L.listSelectedElement $ asLog as)
+  where
+    fillWidth x = hBox [x, center $ str " "]
+    myWrap = vBox . map myStr . lines
+    myStr x = hBox [ raw $ V.text' a c
+                   | Segment a c <- parseANSI (Text.pack x)
+                   ]
+
 renderEvents :: AppState -> Widget ()
 renderEvents as =
   center $ L.renderList listDrawElement True $ asLog as
-
-renderSeqDia :: AppState -> Widget ()
-renderSeqDia as = renderToString as isSeqDia
 
 renderMessage :: AppState -> Widget ()
 renderMessage as = renderToString as (message . isCurrentEvent)
