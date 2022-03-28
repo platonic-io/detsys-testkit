@@ -58,7 +58,7 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix mPeerPort) input =
     InternalMessageIn msg -> case msg of
       Backup ix' bs sn -> do
         logger "Performing a backup"
-        pure (InMemoryDumblog (appLog |> bs) ix' mPeerPort, InternalMessageOut (Ack ix' sn))
+        pure (InMemoryDumblog (appLog |> bs) (ix' + 1) mPeerPort, InternalMessageOut (Ack ix' sn))
       Ack ix' sn -> do
         logger "Acknowledging a backup"
         pure (state, ClientResponse (OK (LBS8.pack (show ix'))) sn)
