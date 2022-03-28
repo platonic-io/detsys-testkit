@@ -3,9 +3,9 @@
 module Dumblog.Common.HttpClient where
 
 import Control.Exception (try)
-import qualified Data.ByteString.Char8 as BSChar8
+import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as LBSChar8
+import qualified Data.ByteString.Lazy.Char8 as LBS8
 import Network.HTTP.Client
        ( HttpException(HttpExceptionRequest, InvalidUrlException)
        , Manager
@@ -19,11 +19,14 @@ import Network.HTTP.Client
        , parseRequest
        , path
        , requestBody
+       , requestHeaders
        , responseBody
        , responseTimeoutMicro
        )
 import Network.Wai.Handler.Warp (Port)
 import Text.Read (readMaybe)
+
+import Dumblog.Journal.Types (SeqNum, unSeqNum)
 
 ------------------------------------------------------------------------
 
@@ -32,8 +35,8 @@ data HttpClient = HttpClient
                            -- `Manager` between multiple threads and requests.
   , hcWriteReq  :: ByteString -> Request
   , hcReadReq   :: Int -> Request
-  , hcBackupReq :: Int -> ByteString -> Request
-  , hcAckReq    :: Int -> Request
+  , hcBackupReq :: Int -> ByteString -> SeqNum -> Request
+  , hcAckReq    :: Int -> SeqNum -> Request
   -- , hcErrors   :: AtomicCounter
   }
 
@@ -50,19 +53,23 @@ newHttpClient host port = do
 
       readReq :: Int -> Request
       readReq ix = initReq { method = "GET"
-                           , path   = path initReq <> BSChar8.pack (show ix)
+                           , path   = path initReq <> BS8.pack (show ix)
                            }
 
-      backupReq :: Int -> ByteString -> Request
-      backupReq ix bs = initReq { method = "PUT"
-                                , path   = path initReq <> BSChar8.pack (show ix)
-                                , requestBody = RequestBodyLBS bs
-                                }
+      backupReq :: Int -> ByteString -> SeqNum -> Request
+      backupReq ix bs sn = initReq
+        { method         = "PUT"
+        , path           = path initReq <> BS8.pack (show ix)
+        , requestBody    = RequestBodyLBS bs
+        , requestHeaders = requestHeaders initReq ++ [("key", BS8.pack (show (unSeqNum sn)))]
+        }
 
-      ackReq :: Int -> Request
-      ackReq ix = initReq { method = "PUT"
-                          , path   = path initReq <> BSChar8.pack (show ix)
-                          }
+      ackReq :: Int -> SeqNum -> Request
+      ackReq ix sn = initReq
+        { method         = "PUT"
+        , path           = path initReq <> BS8.pack (show ix)
+        , requestHeaders = requestHeaders initReq ++ [("key", BS8.pack (show (unSeqNum sn)))]
+        }
 
   return (HttpClient mgr writeReq readReq backupReq ackReq)
 
@@ -75,7 +82,7 @@ writeHttp hc bs = do
       putStrLn ("writeHttp, exception context: " ++ show exceptCtx)
       return Nothing
     Left InvalidUrlException {} -> error "writeHttp, impossible: invalid url"
-    Right resp -> return (readMaybe (LBSChar8.unpack (responseBody resp)))
+    Right resp -> return (readMaybe (LBS8.unpack (responseBody resp)))
 
 readHttp :: HttpClient -> Int -> IO (Maybe ByteString)
 readHttp hc ix = do
@@ -87,20 +94,20 @@ readHttp hc ix = do
     Left InvalidUrlException {} -> error "readHttp, impossible: invalid url"
     Right resp -> return (Just (responseBody resp))
 
-backupHttp :: HttpClient -> Int -> ByteString -> IO ()
-backupHttp hc ix bs = do
-  eResp <- try (httpLbs (hcBackupReq hc ix bs) (hcManager hc))
+backupHttp :: HttpClient -> Int -> ByteString -> SeqNum -> IO ()
+backupHttp hc ix bs sn = do
+  eResp <- try (httpLbs (hcBackupReq hc ix bs sn) (hcManager hc))
   case eResp of
     Left (HttpExceptionRequest _req exceptCtx) -> do
-      putStrLn ("readHttp, exception context: " ++ show exceptCtx)
+      putStrLn ("backupHttp, exception context: " ++ show exceptCtx)
     Left InvalidUrlException {} -> error "backupHttp, impossible: invalid url"
     Right _resp -> return ()
 
-ackHttp :: HttpClient -> Int -> IO ()
-ackHttp hc ix = do
-  eResp <- try (httpLbs (hcAckReq hc ix) (hcManager hc))
+ackHttp :: HttpClient -> Int -> SeqNum -> IO ()
+ackHttp hc ix sn = do
+  eResp <- try (httpLbs (hcAckReq hc ix sn) (hcManager hc))
   case eResp of
     Left (HttpExceptionRequest _req exceptCtx) -> do
-      putStrLn ("readHttp, exception context: " ++ show exceptCtx)
+      putStrLn ("ackHttp, exception context: " ++ show exceptCtx)
     Left InvalidUrlException {} -> error "ackHttp, impossible: invalid url"
     Right _resp -> return ()

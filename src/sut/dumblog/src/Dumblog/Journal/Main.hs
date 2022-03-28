@@ -102,8 +102,8 @@ replayDebug originCommands originState = do
       logLines <- DLogger.flushQueue logger
       let
         ev = case cmd of
-          ClientRequest (Read {}) -> "read"
-          ClientRequest (Write {})-> "write"
+          ClientRequest (Read {}) _ -> "read"
+          ClientRequest (Write {}) _ -> "write"
         msg = show cmd
         ce = DebEvent
           { from = "client"

@@ -6,6 +6,7 @@ module Dumblog.Journal.FrontEnd where
 
 import Control.Concurrent.MVar (MVar, putMVar)
 import Data.Binary (encode)
+import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS8
 import Data.Int (Int64)
@@ -50,9 +51,12 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
           respond (Wai.responseLBS status400 [] err)
         Right ix  -> do
           reqBody <- Wai.consumeRequestBodyStrict req
-          if not (LBS8.null reqBody)
-          then appendInputNoWaitForResp (InternalMessageIn (Backup ix reqBody))
-          else appendInputNoWaitForResp (InternalMessageIn (Ack ix))
+          case parseSeqNum of
+            Nothing  -> respond (Wai.responseLBS status400 [] "Missing sequence number")
+            Just sn ->
+              if not (LBS8.null reqBody)
+              then appendInputNoWaitForResp (InternalMessageIn (Backup ix reqBody sn))
+              else appendInputNoWaitForResp (InternalMessageIn (Ack ix sn))
     "CONNECT" -> do
       case parseIndex of
         Left err -> do
@@ -72,11 +76,17 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
           _otherwise -> Left (LBS8.pack "parseIndex: GET /:ix, :ix isn't an integer")
         _otherwise   -> Left (LBS8.pack "parseIndex: GET /:ix, :ix missing")
 
-    appendInputWaitForResp :: Input -> IO Wai.ResponseReceived
+    parseSeqNum :: Maybe SeqNum
+    parseSeqNum = do
+      key <- lookup "key" (Wai.requestHeaders req)
+      fmap (SeqNum . fst) (BS8.readInt key)
+
+    appendInputWaitForResp :: (SeqNum -> Input) -> IO Wai.ResponseReceived
     appendInputWaitForResp input = do
       key <- newKey blocker
       !arrivalTime <- getCurrentNanosSinceEpoch
-      let bs = encode (Envelope (sequenceNumber key) input cVersion arrivalTime)
+      let bs = encode (Envelope (sequenceNumber key) (input (SeqNum (sequenceNumber key)))
+                                cVersion arrivalTime)
           success = do
             incrCounter metrics QueueDepth 1
             blockRespond key

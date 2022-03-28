@@ -35,33 +35,33 @@ initState = InMemoryDumblog empty 0 Nothing
 runCommand :: Bool -> Logger -> InMemoryDumblog -> Input -> IO (InMemoryDumblog, Output)
 runCommand hasBug logger state@(InMemoryDumblog appLog ix mPeerPort) input =
   case input of
-    ClientRequest req -> case req of
+    ClientRequest req sn -> case req of
       Read i
         | hasBug && ix == 3 -> do
             logger "Weird reset happend"
-            pure (initState, ClientResponse (Error (LBS8.pack "Dumblog!")))
-        | i < ix -> pure (state, ClientResponse (OK (index appLog i)))
+            pure (initState, ClientResponse (Error (LBS8.pack "Dumblog!")) sn)
+        | i < ix -> pure (state, ClientResponse (OK (index appLog i)) sn)
         | otherwise -> do
             logger $ "Oh no, request not in log"
             logger $ ("Max index is " ++ show (ix - 1))
-            pure (state, ClientResponse NotFound)
+            pure (state, ClientResponse NotFound sn)
       Write bs
         | isJust mPeerPort -> do
             logger "Forwarding write to backup"
             pure (InMemoryDumblog (appLog |> bs) (ix+1) mPeerPort,
-                  InternalMessageOut (Backup (ix + 1) bs))
+                  InternalMessageOut (Backup (ix + 1) bs sn))
         | otherwise -> do
             logger "Performing a write"
             pure (InMemoryDumblog (appLog |> bs) (ix+1) mPeerPort,
-                  ClientResponse (OK (LBS8.pack (show (ix + 1)))))
+                  ClientResponse (OK (LBS8.pack (show (ix + 1)))) sn)
 
     InternalMessageIn msg -> case msg of
-      Backup ix' bs -> do
+      Backup ix' bs sn -> do
         logger "Performing a backup"
-        pure (InMemoryDumblog (appLog |> bs) ix' mPeerPort, InternalMessageOut (Ack ix'))
-      Ack ix' -> do
+        pure (InMemoryDumblog (appLog |> bs) ix' mPeerPort, InternalMessageOut (Ack ix' sn))
+      Ack ix' sn -> do
         logger "Acknowledging a backup"
-        pure (state, ClientResponse (OK (LBS8.pack (show ix'))))
+        pure (state, ClientResponse (OK (LBS8.pack (show ix'))) sn)
 
     AdminCommand (Connect port) -> do
       logger ("Adding peer on port: " ++ show port)

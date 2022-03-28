@@ -74,35 +74,35 @@ worker journal metrics wi = go (wiEvents wi)
       !startTime <- getCurrentNanosSinceEpoch
       (s', output) <- runCommand version (wiLogger wi) s input
       case output of
-        ClientResponse resp -> do
+        ClientResponse resp (SeqNum key) -> do
           wakeUpFrontend (wiBlockers wi) key resp
           !endTime <- getCurrentNanosSinceEpoch
           -- Convert from nano s to µs with `* 10^-3`.
           let latency     = realToFrac ((startTime - arrivalTime)) * 0.001 -- µs.
               serviceTime = realToFrac ((endTime   - startTime))   * 0.001
           Metrics.measure metrics Latency latency
-          Metrics.measure metrics (case input of
-                                     ClientRequest (Write {}) -> ServiceTimeWrites
-                                     ClientRequest (Read {})  -> ServiceTimeReads
-                                     _otherwise -> error "impossible") serviceTime
+          case input of
+            ClientRequest (Write {}) _ -> Metrics.measure metrics ServiceTimeWrites serviceTime
+            ClientRequest (Read {})  _ -> Metrics.measure metrics ServiceTimeReads  serviceTime
+            _otherwise -> return ()
           Metrics.measure metrics ResponseTime (latency + serviceTime)
           case input of
-            ClientRequest (Write bs) -> Metrics.measure metrics WriteSize (realToFrac (LBS.length bs))
+            ClientRequest (Write bs) _ -> Metrics.measure metrics WriteSize (realToFrac (LBS.length bs))
             _otherwise -> return ()
 
           return s'
         InternalMessageOut msg ->
           case msg of
-            Ack ix -> do
+            Ack ix sn -> do
               let port = fromMaybe (error "No peer port") (peerPort s')
               -- XXX: avoid creating a new http client every time...
               hc <- newHttpClient "localhost" port
-              ackHttp hc ix
+              ackHttp hc ix sn
               return s'
-            Backup ix bs -> do
+            Backup ix bs sn -> do
               let port = fromMaybe (error "No peer port") (peerPort s')
               hc <- newHttpClient "localhost" port
-              backupHttp hc ix bs
+              backupHttp hc ix bs sn
               return s'
 
         AdminResponse -> return s'

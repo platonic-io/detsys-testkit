@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 
@@ -10,8 +11,11 @@ import GHC.Generics (Generic)
 
 ------------------------------------------------------------------------
 
+newtype SeqNum = SeqNum { unSeqNum :: Int }
+  deriving newtype (Show, Binary)
+
 data Input
-  = ClientRequest ClientRequest
+  = ClientRequest ClientRequest SeqNum
   | InternalMessageIn InternalMessage
   | AdminCommand AdminCommand
   deriving stock (Generic, Show)
@@ -29,7 +33,7 @@ data AdminCommand
   deriving anyclass Binary
 
 data Output
-  = ClientResponse ClientResponse
+  = ClientResponse ClientResponse SeqNum
   | InternalMessageOut InternalMessage
   | AdminResponse
   deriving stock Show
@@ -41,7 +45,7 @@ data ClientResponse
   deriving stock Show
 
 data InternalMessage
-  = Backup Int ByteString
-  | Ack Int
+  = Backup Int ByteString SeqNum
+  | Ack Int SeqNum
   deriving stock (Generic, Show)
   deriving anyclass Binary
