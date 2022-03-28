@@ -53,7 +53,7 @@ import qualified Dumblog.Journal.Logger as DLogger
 import Dumblog.Journal.Snapshot (Snapshot)
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine (InMemoryDumblog, initState)
-import Dumblog.Journal.Types (ClientRequest(..), Input(..))
+import Dumblog.Journal.Types (ClientRequest(..), Input(..), CommandName(..))
 import Dumblog.Journal.Versions (dUMBLOG_CURRENT_VERSION, runCommand)
 import Dumblog.Journal.Worker (WorkerInfo(..), worker)
 
@@ -101,14 +101,11 @@ replayDebug originCommands originState = do
       (s', r) <- runCommand v (DLogger.queueLogger logger) s cmd
       logLines <- DLogger.flushQueue logger
       let
-        ev = case cmd of
-          ClientRequest (Read {}) -> "read"
-          ClientRequest (Write {})-> "write"
         msg = show cmd
         ce = DebEvent
           { from = "client"
           , to = "dumblog"
-          , event = ev
+          , event = commandName cmd
           , receivedLogical = logTime
           , message = msg
           }
@@ -120,7 +117,7 @@ replayDebug originCommands originState = do
              , sent = [ DebEvent
                         { from = "dumblog"
                         , to = "client"
-                        , event = ev
+                        , event = commandName r
                         , receivedLogical = logTime
                         , message = show r
                         }
