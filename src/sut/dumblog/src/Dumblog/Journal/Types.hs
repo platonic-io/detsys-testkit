@@ -26,7 +26,7 @@ data Input
 
 instance CommandName Input where
   commandName c = case c of
-    ClientRequest cr -> commandName cr
+    ClientRequest cr _ -> commandName cr
     InternalMessageIn im -> commandName im
     AdminCommand ac -> commandName ac
 
@@ -56,7 +56,7 @@ data Output
 
 instance CommandName Output where
   commandName c = case c of
-    ClientResponse cr -> commandName cr
+    ClientResponse cr _ -> commandName cr
     InternalMessageOut im -> commandName im
     AdminResponse -> "admin" -- maybe not the nicest name
 
