@@ -25,7 +25,7 @@ data InstanceState = InstanceState
  { isState :: String -- Should probably be per reactor
  , isCurrentEvent :: DebEvent
  , isRunningVersion :: Int64
- , isSeqDia :: String
+ , isSeqDia :: Int -> String -- the current height
  , isLogs :: [String]
  , isSent :: [DebEvent]
  }

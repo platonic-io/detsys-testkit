@@ -7,6 +7,7 @@ import Brick.Widgets.Border (borderWithLabel)
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center (center, vCenter)
 import qualified Brick.Widgets.List as L
+import Lens.Micro ((^.))
 import Control.Monad (void)
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
@@ -62,10 +63,20 @@ renderReactorState as = fillWidth $ vCenter $ myWrap
     myStr x = hBox [ raw $ V.text' a c
                    | Segment a c <- parseANSI (Text.pack x)
                    ]
+-- only works for greedy sizes
+withHeight :: (Int -> Widget n) -> Widget n
+withHeight c = Widget
+  { hSize = Greedy
+  , vSize = Greedy
+  , render = do
+      ctx <- getContext
+      render (c $ ctx ^. availHeightL)
+  }
 
 renderSeqDia :: AppState -> Widget ()
-renderSeqDia as = fillWidth $ vCenter $ myWrap
-  (fromMaybe "?" . fmap (isSeqDia . snd) $ L.listSelectedElement $ asLog as)
+renderSeqDia as = withHeight $ \h ->
+  fillWidth $ vCenter $ myWrap
+  (fromMaybe "?" . fmap (($ h) . isSeqDia . snd) $ L.listSelectedElement $ asLog as)
   where
     fillWidth x = hBox [x, center $ str " "]
     myWrap = vBox . map myStr . lines
