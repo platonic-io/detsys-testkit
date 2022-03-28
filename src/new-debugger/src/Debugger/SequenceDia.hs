@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Debugger.SequenceDia where
 
 type Name = String
@@ -8,10 +9,18 @@ hLine = '─'
 vLine :: Char
 vLine = '│'
 
-mkBoxLines :: Bool -> [(Int, Name)] -> [String]
-mkBoxLines isTop allBoxes = let (x,y,z) = go allBoxes in [x,y,z]
+mkBoxLines :: Bool -> Bool -> [(Int, Name)] -> [String]
+mkBoxLines isTop dotted allBoxes = let (x,y,z) = go allBoxes in if isTop then [x,y,z, extraLine] else [extraLine, x,y,z]
   where
   emptySpace i = (replicate i ' ', replicate i ' ', replicate i ' ')
+  extraLine = mygo allBoxes
+    where
+      mygo [] = mempty
+      mygo ((pre,name):xs)
+        = replicate (pre + 2 + length name `div` 2) ' ' ++
+        [if dotted then '╎' else vLine] ++
+        replicate (length name `div` 2 + 2) ' ' ++
+        mygo xs
   go :: [(Int, Name)] -> (String, String, String)
   go [] = mempty
   go ((pre,name):xs) =
@@ -73,17 +82,30 @@ data Arrow msg = Arrow
   , aMessage :: msg
   }
 
-generate :: [Arrow String] -> Int -> String
-generate originalArrs current = unlines $
-  mkBoxLines True names <>
+generate :: [Arrow String] -> Int -> Int -> String
+generate originalArrs current height = unlines $
+  mkBoxLines True (dropBeginning > 0) names <>
   concat [ mkArrow names fromIndex toIndex msg
-    | arr <- arrsMsg
+    | arr <- take howManyElements $ drop dropBeginning arrsMsg
     , let fromIndex = index (aFrom arr) names
           toIndex = index (aTo arr) names
           msg = aMessage arr
     ] <>
-  mkBoxLines False names
+  mkBoxLines False (howManyElements < length originalArrs - dropBeginning) names
   where
+
+    indexOfCurrent = mygo 0 originalArrs -- TODO this is wrong
+      where
+        mygo !_ [] = error "INTERNAL ERROR! can't find current index"
+        mygo n (arr : arrs)
+          | aAt arr == current = n
+          | otherwise = mygo (succ n) arrs
+
+    howManyElements = (height - 2*4) `div` 2 -- number of arrows we should display
+    atLeastHowManyAfter = min 5 howManyElements
+
+    dropBeginning = max (min (length originalArrs) (indexOfCurrent+atLeastHowManyAfter) - howManyElements) 0
+
     arrsMsg = fmap (\arr -> if aAt arr == current
                      then arr {aMessage = markedMessage (aMessage arr)}
                      else arr {aMessage = simpleMessage (aMessage arr)})
@@ -119,7 +141,7 @@ generate originalArrs current = unlines $
             | otherwise = fromIndex
 
 example :: Int -> String
-example = generate arrs
+example = generate arrs 1000
   where
     arrs =
       [ Arrow "Client" "Dumblog" 0 "Append"
