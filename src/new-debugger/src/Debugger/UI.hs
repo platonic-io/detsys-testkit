@@ -14,6 +14,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 import qualified Graphics.Vty as V
+import Text.Printf (printf)
 import Text.Wrap
 
 import Debugger.AnsiEscape (Segment(..), parseANSI)
@@ -44,8 +45,7 @@ drawUI as = [ui]
 
 renderEvent :: LocalTime -> DebEvent -> String
 renderEvent localTime (DebEvent from to event receivedLogical _msg) =
-  take 22 (show localTime)  <> ": " <>
-  event <> ": " <> from <> " -> " <> to <> " @ " <> show receivedLogical
+  printf "%-25.25s: %-8.8s: %7.7s -> %-7.7s @ %d" (show localTime) event from to receivedLogical
 
 renderOutputEvent :: DebEvent -> String
 renderOutputEvent (DebEvent _ to _ _ msg) =
