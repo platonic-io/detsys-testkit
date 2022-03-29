@@ -45,6 +45,7 @@ import Options.Generic
 import System.Directory (copyFile, getTemporaryDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
 
+import Dumblog.Common.Constants (dUMBLOG_PORT)
 import Dumblog.Common.Metrics (dumblogSchema, dumblogMetricsPath)
 import Dumblog.Journal.Blocker (emptyBlocker)
 import Dumblog.Journal.Codec (Envelope(..))
@@ -178,9 +179,6 @@ dumblogOptions = defaultOptions
   , oMaxSubscriber = Sub2
   , oTermBufferLength = 512 * 1024 * 1024
   }
-
-dUMBLOG_PORT :: Int
-dUMBLOG_PORT = 8054
 
 dumblogJournalPath :: Int -> FilePath
 dumblogJournalPath portUsed = "/tmp/dumblog-" ++ show portUsed ++ ".journal"
