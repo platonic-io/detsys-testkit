@@ -13,7 +13,7 @@ import Text.Printf (printf)
 
 import Dumblog.Common.Metrics
 import Dumblog.Common.Utils (showBytes)
-import Dumblog.Journal.Main
+import Dumblog.Journal.Main hiding (port)
 import Journal (journalMetadata)
 import Journal.Internal.Metrics hiding (Latency)
 import Journal.Types

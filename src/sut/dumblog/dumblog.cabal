@@ -67,6 +67,7 @@ library
       , persistent-sqlite
 
   exposed-modules:
+    Dumblog.Common.Constants
     Dumblog.Common.HttpClient
     Dumblog.Common.Metrics
     Dumblog.Common.Utils

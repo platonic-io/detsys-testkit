@@ -24,9 +24,9 @@ import System.Random (StdGen, mkStdGen, randomR)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
+import Dumblog.Common.Constants (dUMBLOG_PORT)
 import Dumblog.Common.HttpClient
 import Dumblog.Common.Utils (showBytes)
-import Dumblog.Journal.Main (dUMBLOG_PORT)
 
 ------------------------------------------------------------------------
 

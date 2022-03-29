@@ -2,6 +2,7 @@ module Main where
 
 import System.Directory (removePathForcibly)
 
+import Dumblog.Common.Constants
 import Dumblog.Journal.Main
 
 import Common
