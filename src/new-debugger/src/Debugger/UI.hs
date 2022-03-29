@@ -42,13 +42,14 @@ drawUI as = [ui]
          , vLimit 7 $ borderWithLabel (str "Logs") $ renderLogs as
          ]
 
-renderEvent :: Bool -> Maybe LocalTime -> DebEvent -> String
-renderEvent showMsg mLocalTime (DebEvent from to event receivedLogical msg) =
-  (case mLocalTime of
-     Just localTime -> take 22 (show localTime)  <> ": "
-     Nothing -> "") <>
+renderEvent :: LocalTime -> DebEvent -> String
+renderEvent localTime (DebEvent from to event receivedLogical _msg) =
+  take 22 (show localTime)  <> ": " <>
   event <> ": " <> from <> " -> " <> to <> " @ " <> show receivedLogical
-        <> if showMsg then " : " <> msg else mempty
+
+renderOutputEvent :: DebEvent -> String
+renderOutputEvent (DebEvent _ to _ _ msg) =
+  to <> ": " <> msg
 
 renderToString :: AppState -> (InstanceState -> String) -> Widget ()
 renderToString as f = center $ strWrapWith wrapSettings
@@ -99,7 +100,7 @@ renderVersion :: AppState -> Widget ()
 renderVersion as = renderToString as (show . isRunningVersion)
 
 renderSentMessage :: AppState -> Widget ()
-renderSentMessage as = renderToString as (addEmpty . unlines . map (renderEvent True Nothing) . isSent)
+renderSentMessage as = renderToString as (addEmpty . unlines . map renderOutputEvent . isSent)
   where
     addEmpty [] = "\n"
     addEmpty xs = xs
@@ -115,7 +116,7 @@ listDrawElement tz sel is =
   let selStr s = if sel
                  then withAttr customAttr (str $ ">" <> s)
                  else str $ " " <> s
-  in selStr $ renderEvent False (Just $ utcToLocalTime tz (isReceivedTime is)) $ isCurrentEvent is
+  in selStr $ renderEvent (utcToLocalTime tz (isReceivedTime is)) $ isCurrentEvent is
 
 customAttr :: AttrName
 customAttr = L.listSelectedAttr <> "custom"
