@@ -10,7 +10,6 @@ import Control.Concurrent.MVar (MVar)
 import Control.Exception (bracket_)
 import qualified Data.Aeson as Aeson
 import Data.Binary (decode)
-import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
 import Data.TreeDiff (ansiWlPretty, ediff, ppEditExpr)
 import Data.Vector (Vector)
@@ -77,19 +76,19 @@ fetchJournal mSnapshot fpj opts = do
       writeBytesConsumed (jMetadata journal) Sub1 bytes
   pure journal
 
-replay :: [(Int64, Input)] -> InMemoryDumblog -> IO InMemoryDumblog
+replay :: [Envelope Input] -> InMemoryDumblog -> IO InMemoryDumblog
 replay [] s = do
   putStrLn "[REPLAY] finished!"
   pure s
-replay ((v, cmd):cmds) s = do
-  putStrLn $ "[REPLAY] running: " <> show cmd
-  (s', _) <- runCommand v DLogger.ioLogger s cmd
+replay (env:cmds) s = do
+  putStrLn $ "[REPLAY] running: " <> show (eContent env)
+  (s', _) <- runCommand (eVersion env) DLogger.ioLogger s (eContent env)
   replay cmds s'
 
 type DebugFile = Vector InstanceStateRepr
 
 -- TODO: merge with `replay`
-replayDebug :: [(Int64, Input)] -> InMemoryDumblog -> IO DebugFile
+replayDebug :: [Envelope Input] -> InMemoryDumblog -> IO DebugFile
 replayDebug originCommands originState = do
   queueLogger <- DLogger.newQueueLogger
   go queueLogger 0 mempty originCommands originState
@@ -97,7 +96,9 @@ replayDebug originCommands originState = do
     go _ _logTime dfile [] _s = do
       putStrLn "[REPLAY-DEBUG] finished!"
       pure dfile
-    go logger logTime dfile ((v, cmd):cmds) s = do
+    go logger logTime dfile (env:cmds) s = do
+      let cmd = eContent env
+          v = eVersion env
       putStrLn $ "[REPLAY-DEBUG] running: " <> show cmd
       (s', r) <- runCommand v (DLogger.queueLogger logger) s cmd
       logLines <- DLogger.flushQueue logger
@@ -117,6 +118,7 @@ replayDebug originCommands originState = do
              { state = show (ppEditExpr ansiWlPretty (ediff s s'))
              , currentEvent = ce
              , runningVersion = v
+             , receivedTime = eArrival env
              , logs = logLines
              , sent = [ DebEvent
                         { from = "dumblog"
@@ -132,7 +134,7 @@ replayDebug originCommands originState = do
              }
       go logger (succ logTime) (Vector.snoc dfile is) cmds s'
 
-collectAll :: Journal -> IO [(Int64, Input)]
+collectAll :: Journal -> IO [Envelope Input]
 collectAll jour = do
   putStrLn "[collect] Checking journal for old-entries"
   val <- Journal.readLazyJournal jour Sub1
@@ -142,9 +144,9 @@ collectAll jour = do
       pure []
     Just entry -> do
       putStrLn "[collect] Found an entry"
-      let Envelope cmd version _arrivalTime = decode entry
+      let env = decode entry
       cmds <- collectAll jour
-      pure $ (version, cmd) : cmds
+      pure $ env : cmds
 
 startingState :: Maybe Snapshot -> InMemoryDumblog
 startingState Nothing     = initState
