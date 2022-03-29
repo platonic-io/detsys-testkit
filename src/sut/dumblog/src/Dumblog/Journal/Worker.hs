@@ -65,7 +65,7 @@ worker journal metrics wi = go (wiEvents wi)
     go' :: InMemoryDumblog -> ByteString -> IO InMemoryDumblog
     go' s entry = do
       Metrics.decrCounter_ metrics QueueDepth 1
-      let Envelope key input version arrivalTime = decode entry
+      let Envelope input version arrivalTime = decode entry
       -- XXX: In case of decode error:
       --  Metrics.incrCounter metrics ErrorsEncountered 1
       --  wakeUpFrontend blocker key $ Left "Couldn't parse request"
