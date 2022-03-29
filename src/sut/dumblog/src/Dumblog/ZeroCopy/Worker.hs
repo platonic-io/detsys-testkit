@@ -30,7 +30,7 @@ worker jour = go
         Just fdAndReq -> do
           -- XXX: We should probably add a variant of readJournal that returns a
           -- bytebuffer instead of converting the bytestring to a bytebuffer...
-          bb <- unsafeFromBS fdAndReq
+          let bb = unsafeFromBS fdAndReq
           fd <- readInt32OffAddr bb 0
           offset <- readInt64OffAddr bb (sizeOf (4 :: Int32))
           let req = BS.drop (sizeOf (4 :: Int32) + sizeOf (8 :: Int64)) fdAndReq

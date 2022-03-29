@@ -38,10 +38,8 @@ import Journal.Internal.Utils
 data ByteBuffer = ByteBuffer
   { bbData     :: {-# UNPACK #-} !(ForeignPtr Word8)
   , bbCapacity :: {-# UNPACK #-} !Capacity
-  , bbLimit    :: {-# UNPACK #-} !(IORef Limit)
-  , bbPosition :: {-# UNPACK #-} !(IORef Position)
-  , bbMark     :: {-# UNPACK #-} !(IORef Position)
-  , bbSlice    :: {-# UNPACK #-} !(IORef Slice)
+  , bbLimit    :: {-# UNPACK #-} !Limit
+  , bbSlice    :: {-# UNPACK #-} !Slice
   -- XXX: ByteOrder / Endianess? Use `Data.Bits.compliment` to reverse bits?
   }
 
@@ -59,71 +57,18 @@ newtype Slice = Slice Int
 
 ------------------------------------------------------------------------
 
-newByteBuffer :: ForeignPtr Word8 -> Capacity -> Limit -> Position -> Maybe (IORef Slice)
-              -> IO ByteBuffer
-newByteBuffer fptr capa lim pos mSli
-  = ByteBuffer fptr capa
-  <$> newIORef lim
-  <*> newIORef pos
-  <*> newIORef (-1)
-  <*> maybe (newIORef 0) return mSli
+newByteBuffer :: ForeignPtr Word8 -> Capacity -> Limit -> Maybe Slice -> ByteBuffer
+newByteBuffer fptr capa lim mSli = ByteBuffer fptr capa lim (maybe 0 id mSli)
 
 -- This is a hack, don't use.
-unsafeFromBS :: BS.ByteString -> IO ByteBuffer
-unsafeFromBS bs
-  = ByteBuffer fptr (Capacity len)
-  <$> newIORef (Limit len)
-  <*> newIORef 0
-  <*> newIORef (-1)
-  <*> newIORef (Slice offset)
+unsafeFromBS :: BS.ByteString -> ByteBuffer
+unsafeFromBS bs = ByteBuffer fptr (Capacity len) (Limit len) (Slice offset)
   where
     (fptr, offset, len) = BS.toForeignPtr bs
 
 getCapacity :: ByteBuffer -> Capacity
 getCapacity = bbCapacity
 {-# INLINE getCapacity #-}
-
-readLimit :: ByteBuffer -> IO Limit
-readLimit = readIORef . bbLimit
-{-# INLINE readLimit #-}
-
-writeLimit :: ByteBuffer -> Limit -> IO ()
-writeLimit bb = writeIORef (bbLimit bb)
-{-# INLINE writeLimit #-}
-
-readPosition :: ByteBuffer -> IO Position
-readPosition = readIORef . bbPosition
-{-# INLINE readPosition #-}
-
-writePosition :: ByteBuffer -> Position -> IO ()
-writePosition bb = writeIORef (bbPosition bb)
-{-# INLINE writePosition #-}
-
-incrPosition :: ByteBuffer -> Int -> IO ()
-incrPosition bb i = modifyIORef (bbPosition bb) (+ fromIntegral i)
-{-# INLINE incrPosition #-}
-
-readMark :: ByteBuffer -> IO Position
-readMark = readIORef . bbMark
-{-# INLINE readMark #-}
-
-writeMark :: ByteBuffer -> Position -> IO ()
-writeMark bb = writeIORef (bbMark bb)
-{-# INLINE writeMark #-}
-
-readSlice :: ByteBuffer -> IO Slice
-readSlice = readIORef . bbSlice
-
-writeSlice :: ByteBuffer -> Slice -> IO ()
-writeSlice bb = writeIORef (bbSlice bb)
-
-------------------------------------------------------------------------
-
-remaining :: ByteBuffer -> IO Int
-remaining bb = do
-  lim <- readLimit bb
-  pos <- readPosition bb
-  return (fromIntegral (lim - fromIntegral pos))
 
 ------------------------------------------------------------------------
 -- * Checks
@@ -181,12 +126,12 @@ invariant bb = do
 allocate :: Int -> IO ByteBuffer
 allocate size = do
   fptr <- mallocForeignPtrBytes size
-  newByteBuffer fptr (Capacity size) (Limit size) 0 Nothing
+  return (newByteBuffer fptr (Capacity size) (Limit size) Nothing)
 
 allocateAligned :: Int -> Int -> IO ByteBuffer
 allocateAligned size align = do
   fptr <- posixMemalignFPtr size align
-  newByteBuffer fptr (Capacity size) (Limit size) 0 Nothing
+  return (newByteBuffer fptr (Capacity size) (Limit size) Nothing)
 
 mmapped :: FilePath -> Int -> IO ByteBuffer
 mmapped fp size =
@@ -195,113 +140,50 @@ mmapped fp size =
     ptr <- mmap Nothing (fromIntegral size)
              (pROT_READ .|. pROT_WRITE) mAP_SHARED (Just fd) 0
     fptr <- newForeignPtr ptr (finalizer ptr size)
-    newByteBuffer fptr (Capacity size) (Limit size) 0 Nothing
+    return (newByteBuffer fptr (Capacity size) (Limit size) Nothing)
   where
     finalizer :: Ptr a -> Int -> IO ()
     finalizer ptr size = munmap ptr (fromIntegral size)
 
-wrap :: ByteBuffer -> IO ByteBuffer
-wrap bb = newByteBuffer (bbData bb) capa lim (Position 0) (Just (bbSlice bb))
+wrap :: ByteBuffer -> ByteBuffer
+wrap bb = newByteBuffer (bbData bb) capa lim (Just (bbSlice bb))
   where
     capa = bbCapacity bb
     lim  = Limit (fromIntegral capa)
 
-wrapPart :: ByteBuffer -> Int -> Int -> IO ByteBuffer
-wrapPart bb offset len = do
-  Limit oldLimit <- readIORef (bbLimit bb)
-  Slice slice <- readIORef (bbSlice bb)
-  checkInRange offset (0, oldLimit) "offset"
-  checkInRange len (0, oldLimit-offset) "len"
-  slice' <- newIORef (Slice (slice + offset))
-  newByteBuffer (bbData bb) capa lim pos (Just slice')
+wrapPart :: ByteBuffer -> Int -> Int -> ByteBuffer
+wrapPart bb offset len =
+  let Limit oldLimit = bbLimit bb
+      Slice slice = bbSlice bb
+  -- checkInRange offset (0, oldLimit) "offset"
+  -- checkInRange len (0, oldLimit-offset) "len"
+      slice' = Slice (slice + offset)
+  in
+    newByteBuffer (bbData bb) capa lim (Just slice')
   where
     capa = Capacity len
     lim  = Limit len
     pos  = Position 0
 
-slice :: ByteBuffer -> IO ByteBuffer
-slice bb = do
-  pos <- readPosition bb
-  left <- remaining bb
-  slice <- newIORef (fromIntegral pos)
-  newByteBuffer (bbData bb) (Capacity left) (Limit left) (Position 0) (Just slice)
-
-duplicate :: ByteBuffer -> IO ByteBuffer
-duplicate bb = do
-  lim <- readLimit bb
-  pos <- readPosition bb
-  newByteBuffer (bbData bb) (getCapacity bb) lim pos (Just (bbSlice bb))
+duplicate :: ByteBuffer -> ByteBuffer
+duplicate bb =
+  newByteBuffer (bbData bb) (getCapacity bb) (bbLimit bb) (Just (bbSlice bb))
 
 ------------------------------------------------------------------------
-
-mark :: ByteBuffer -> IO ()
-mark bb = do
-  pos <- readPosition bb
-  writeMark bb pos
-
-compact :: ByteBuffer -> IO ByteBuffer
-compact = undefined
-
-------------------------------------------------------------------------
-
--- | Clears the byte buffer. The position is set to zero, the limit is set to
--- the capacity, and the mark is discarded.
-clear :: ByteBuffer -> IO ()
-clear bb = do
-  writePosition bb 0
-  let Capacity capa = getCapacity bb
-  writeLimit bb (Limit capa)
-  writeMark bb (-1)
 
 clean :: ByteBuffer -> IO ()
 clean bb = do
-  Position from <- readPosition bb
-  Limit to <- readLimit bb
-  fillBytes (unsafeForeignPtrToPtr (bbData bb) `plusPtr` from) 0 (to - from)
+  let Limit to = bbLimit bb
+  fillBytes (unsafeForeignPtrToPtr (bbData bb)) 0 to
 
 cleanAt :: ByteBuffer -> Int -> Int -> IO ()
 cleanAt bb offset len = do
   boundCheck bb offset len
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   fillBytes (unsafeForeignPtrToPtr (bbData bb) `plusPtr` (slice + offset)) 0 len
 
--- | Flips the byte buffer. The limit is set to the current position and then
--- the position is set to zero. If the mark is defined then it is discarded.
-flipBB :: ByteBuffer -> IO ()
-flipBB bb = do
-  Position pos <- readPosition bb
-  writeLimit bb (Limit pos)
-  writePosition bb 0
-  writeMark bb (-1)
-
--- | Rewinds the byte buffer. The position is set to zero and the mark is
--- discarded.
-rewind :: ByteBuffer -> IO ()
-rewind bb = do
-  writePosition bb 0
-  writeMark bb (-1)
-
--- | Resets the byte buffer's position to the previously marked position.
-reset :: ByteBuffer -> IO ()
-reset bb = do
-  mrk <- readMark bb
-  writePosition bb mrk
-
 ------------------------------------------------------------------------
--- * Single-byte relative operations
-
-putByte :: ByteBuffer -> Word8 -> IO ()
-putByte = undefined
-
-getByte :: ByteBuffer -> IO Word8
-getByte bb = do
-  pos <- readPosition bb
-  w8 <- indexWord8OffAddr bb (unPosition pos)
-  writePosition bb (pos + 1)
-  return w8
-
-------------------------------------------------------------------------
--- * Multi-byte relative and absolute operations
+-- * Multi-byte absolute operations
 
   {-
 putBytes :: ByteBuffer -> ByteBuffer -> IO ()
@@ -313,14 +195,11 @@ putBytes src dest = do
     case copyMutableByteArray# (bbData src) 0# (bbData dest) destPos# srcCapa# s of
       s' -> (# s', () #)
   incrPosition dest srcCapa
-
-getBytes :: ByteBuffer -> Int -> Int -> IO [Word8]
-getBytes bb offset len = undefined
 -}
 
 putByteStringAt :: ByteBuffer -> Int -> BS.ByteString -> IO ()
 putByteStringAt bb doffset bs = do
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   let (fptr, soffset, len) = BS.toForeignPtr bs
   boundCheck bb doffset len
   withForeignPtr fptr $ \sptr ->
@@ -330,7 +209,7 @@ putByteStringAt bb doffset bs = do
 
 putLazyByteStringAt :: ByteBuffer -> Int -> LBS.ByteString -> IO ()
 putLazyByteStringAt bb doffset bs = do
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   let len = LBS.length bs
   boundCheck bb doffset (fromIntegral len)
   withForeignPtr (bbData bb) $ \dptr ->
@@ -371,7 +250,7 @@ getLazyByteString bb len = do
 getByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
 getByteStringAt bb offset len = do
   boundCheck bb offset len -- XXX???
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   withForeignPtr (bbData bb) $ \sptr ->
     BS.create len $ \dptr ->
       copyBytes dptr (sptr `plusPtr` (slice + offset)) len
@@ -380,7 +259,7 @@ getByteStringAt bb offset len = do
 unsafeGetByteStringAt :: ByteBuffer -> Int -> Int -> IO BS.ByteString
 unsafeGetByteStringAt bb offset len = do
   boundCheck bb offset len -- XXX???
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   withForeignPtr (bbData bb) $ \sptr ->
     BS.unsafePackCStringLen (castPtr (sptr `plusPtr` (slice + offset)), len)
 {-# INLINE unsafeGetByteStringAt #-}
@@ -389,22 +268,6 @@ unsafeGetLazyByteStringAt :: ByteBuffer -> Int -> Int -> IO LBS.ByteString
 unsafeGetLazyByteStringAt bb offset len =
   fmap (LBS.fromStrict) (unsafeGetByteStringAt bb offset len)
 {-# INLINE unsafeGetLazyByteStringAt #-}
-
-------------------------------------------------------------------------
--- * Relative operations on `Storable` elements
-
-putStorable :: Storable a => ByteBuffer -> a -> IO ()
-putStorable bb x = do
-  pos <- readPosition bb
-  putStorableAt bb (fromIntegral pos) x
-  incrPosition bb (sizeOf x)
-
-getStorable :: Storable a => ByteBuffer -> IO a
-getStorable bb = do
-  pos <- readPosition bb
-  x <- getStorableAt bb (fromIntegral pos)
-  incrPosition bb (sizeOf x)
-  return x
 
 ------------------------------------------------------------------------
 -- * Absolute operations on `Storable` elements
@@ -427,7 +290,7 @@ primitiveInt :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Int# 
              -> (Int# -> i) -> Int -> ByteBuffer -> Int -> IO i
 primitiveInt f c size bb offset@(I# offset#) = do
   boundCheck bb offset size
-  Slice (I# slice#) <- readIORef (bbSlice bb)
+  let Slice (I# slice#) = bbSlice bb
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
       case f (addr# `plusAddr#` (offset# +# slice#)) 0# s of
@@ -449,7 +312,7 @@ primitiveInt_ :: (Addr# -> Int# -> Int# -> State# RealWorld -> State# RealWorld)
 primitiveInt_ f d size bb offset@(I# offset#) i = do
   boundCheck bb offset size
   let value# = d i
-  Slice (I# slice#) <- readIORef (bbSlice bb)
+  let Slice (I# slice#) = bbSlice bb
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
       case f (addr# `plusAddr#` (offset# +# slice#)) 0# value# s of
@@ -495,7 +358,7 @@ primitiveWord :: (Addr# -> Int# -> State# RealWorld -> (# State# RealWorld, Word
              -> (Word# -> w) -> Int -> ByteBuffer -> Int -> IO w
 primitiveWord f c size bb offset@(I# offset#) = do
   boundCheck bb offset size
-  Slice (I# slice#) <- readIORef (bbSlice bb)
+  let Slice (I# slice#) = bbSlice bb
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
       case f (addr# `plusAddr#` (offset# +# slice#)) 0# s of
@@ -507,7 +370,7 @@ primitiveWord_ :: (Addr# -> Int# -> Word# -> State# RealWorld -> State# RealWorl
 primitiveWord_ f d size bb offset@(I# offset#) w = do
   boundCheck bb offset size
   let value# = d w
-  Slice (I# slice#) <- readIORef (bbSlice bb)
+  let Slice (I# slice#) = bbSlice bb
   withForeignPtr (bbData bb) $ \(Ptr addr#) ->
     IO $ \s ->
       case f (addr# `plusAddr#` (offset# +# slice#)) 0# value# s of
@@ -572,21 +435,21 @@ writeWord64OffAddr = primitiveWord_ writeWord64OffAddr# (\(W64# w#) -> w#) (size
 casInt32Addr :: ByteBuffer -> Int -> Int32 -> Int32 -> IO Bool
 casInt32Addr bb offset expected desired = do
   boundCheck bb offset (sizeOf (4 :: Int32))
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   withForeignPtr (bbData bb) $ \ptr ->
     casInt32Ptr (ptr `plusPtr` (offset + slice)) expected desired
 
 casInt64Addr :: ByteBuffer -> Int -> Int64 -> Int64 -> IO Bool
 casInt64Addr bb offset expected desired = do
   boundCheck bb offset (sizeOf (8 :: Int64))
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   withForeignPtr (bbData bb) $ \ptr ->
     casInt64Ptr (ptr `plusPtr` (offset + slice)) expected desired
 
 casIntAddr :: ByteBuffer -> Int -> Int -> Int -> IO Bool
 casIntAddr bb offset expected desired = do
   boundCheck bb offset (sizeOf (8 :: Int))
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   withForeignPtr (bbData bb) $ \ptr ->
     casIntPtr (ptr `plusPtr` (offset + slice)) expected desired
 
@@ -596,7 +459,7 @@ casIntAddr bb offset expected desired = do
 fetchAddInt64Array :: ByteBuffer -> Int -> Int64 -> IO Int64
 fetchAddInt64Array bb offset incr = do
   boundCheck bb offset (sizeOf (8 :: Int64))
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   withForeignPtr (bbData bb) $ \ptr ->
     fromIntegral <$> fetchAddInt64Ptr (ptr `plusPtr` (offset + slice)) incr
 {-# INLINE fetchAddInt64Array #-}
@@ -606,7 +469,7 @@ fetchAddInt64Array bb offset incr = do
 fetchAddInt64Array_ :: ByteBuffer -> Int -> Int64 -> IO ()
 fetchAddInt64Array_ bb offset incr = do
   boundCheck bb offset (sizeOf (8 :: Int64))
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   withForeignPtr (bbData bb) $ \ptr ->
     void $ fetchAddInt64Ptr (ptr `plusPtr` (offset + slice)) incr
 {-# INLINE fetchAddInt64Array_ #-}
@@ -639,22 +502,7 @@ force bb =
 
 forceAt :: ByteBuffer -> Int -> Int -> IO ()
 forceAt bb offset len = do
-  Slice slice <- readIORef (bbSlice bb)
+  let Slice slice = bbSlice bb
   withForeignPtr (bbData bb) $ \ptr ->
     msync (ptr `plusPtr` (slice + offset)) (fromIntegral len) mS_SYNC False
 {-# INLINE forceAt #-}
-
-------------------------------------------------------------------------
-
-t2 :: IO ()
-t2 = do
-  ds <- replicateM 200000 $ do
-    bb <- mmapped "/tmp/mmap.txt" 4096
-    bb' <- duplicate bb
-    putStorable bb (0.1 :: Double)
-    putStorable bb 'A'
-    d <- getStorable bb'
-    return (d :: Double)
-  if all (== 0.1) ds
-  then putStrLn "success!"
-  else error "t2: bad"

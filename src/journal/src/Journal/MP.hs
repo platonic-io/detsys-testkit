@@ -396,7 +396,7 @@ termAppenderClaim jour len activeTermId = do
     let frameOffset = termOffset
     headerWrite termBuffer frameOffset (HeaderLength (int2Int32 frameLen)) termId
       (jLogger jour)
-    bufClaim <- newBufferClaim termBuffer termOffset frameLen
+    let bufClaim = newBufferClaim termBuffer termOffset frameLen
     return (Right (resultingOffset, bufClaim))
 
 handleEndOfLogCondition :: ByteBuffer -> TermOffset -> Int -> TermId -> Logger -> IO ()

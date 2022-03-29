@@ -75,7 +75,7 @@ allocateJournal fp (Options termBufferLen logger maxSub) = do
 
     fallocate fp (fromIntegral logLength)
     bb <- mmapped fp logLength
-    meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
+    let meta = wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
 
     writeTermLength meta (fromIntegral termBufferLen)
     initTermId <- TermId <$> randomIO
@@ -94,7 +94,7 @@ allocateJournal fp (Options termBufferLen logger maxSub) = do
     unless (size == toInteger logLength) $
       error "allocateJournal: file size doesn't match with log length"
     bb <- mmapped fp logLength
-    meta <- Metadata <$> wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
+    let meta = Metadata (wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH)
     termBufferLen' <- readTermLength meta
     unless (int322Int termBufferLen' == termBufferLen) $
       error "allocateJournal: oTermBufferLength doesn't match the metadata"
@@ -109,7 +109,7 @@ journalMetadata fp opts = do
   ebb <- try (mmapped fp logLength)
   case ebb of
     Right bb -> do
-      meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
+      let meta = wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
       return (Right (Metadata meta))
     Left err -> return (Left err)
 
@@ -117,16 +117,13 @@ startJournal :: FilePath -> Options -> IO Journal
 startJournal fp (Options termLength logger _maxSub) = do
   logLength <- fromIntegral <$> getFileSize fp
   bb <- mmapped fp logLength
-  meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
+  let meta = wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
 
-  termBuffers <-
-    Vector.generateM pARTITION_COUNT $ \i ->
-      let
-        offset = i * termLength
-      in do
-        writePosition bb (Position offset)
-        writeLimit bb (Limit (offset + termLength))
-        slice bb
+      termBuffers = Vector.generate pARTITION_COUNT $ \i ->
+        let
+          offset = i * termLength
+        in
+          wrapPart bb offset (offset + termLength)
 
   initTermId <- readInitialTermId (Metadata meta)
 
