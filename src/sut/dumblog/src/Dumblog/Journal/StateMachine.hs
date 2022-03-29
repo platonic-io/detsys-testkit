@@ -38,7 +38,6 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix mPeerPort) input =
     ClientRequest req sn -> case req of
       Read i
         | hasBug && ix == 3 -> do
-            logger "Weird reset happend"
             pure (initState, ClientResponse (Error (LBS8.pack "Dumblog!")) sn)
         | i < ix -> pure (state, ClientResponse (OK (index appLog i)) sn)
         | otherwise -> do
