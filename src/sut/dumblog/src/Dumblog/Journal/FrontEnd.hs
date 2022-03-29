@@ -85,7 +85,7 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
     appendInputWaitForResp input = do
       key <- newKey blocker
       !arrivalTime <- getCurrentNanosSinceEpoch
-      let bs = encode (Envelope (sequenceNumber key) (input (SeqNum (sequenceNumber key)))
+      let bs = encode (Envelope (input (SeqNum (sequenceNumber key)))
                                 cVersion arrivalTime)
           success = do
             incrCounter metrics QueueDepth 1
@@ -99,7 +99,7 @@ httpFrontend journal metrics (FrontEndInfo blocker cVersion) req respond = do
     appendInputNoWaitForResp :: Input -> IO Wai.ResponseReceived
     appendInputNoWaitForResp input = do
       !arrivalTime <- getCurrentNanosSinceEpoch
-      let bs = encode (Envelope (-1) input cVersion arrivalTime)
+      let bs = encode (Envelope input cVersion arrivalTime)
           success = do
             incrCounter metrics QueueDepth 1
             respond $ Wai.responseLBS status200 [] (LBS8.pack "")

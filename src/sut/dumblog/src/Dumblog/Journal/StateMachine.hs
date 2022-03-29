@@ -38,8 +38,7 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix mPeerPort) input =
     ClientRequest req sn -> case req of
       Read i
         | hasBug && ix == 3 -> do
-            logger "Weird reset happend"
-            pure (initState, ClientResponse (Error (LBS8.pack "Dumblog!")) sn)
+            pure (resetLog state, ClientResponse (Error (LBS8.pack "Dumblog!")) sn)
         | i < ix -> pure (state, ClientResponse (OK (index appLog i)) sn)
         | otherwise -> do
             logger $ "Oh no, request not in log"
@@ -66,3 +65,9 @@ runCommand hasBug logger state@(InMemoryDumblog appLog ix mPeerPort) input =
     AdminCommand (Connect port) -> do
       logger ("Adding peer on port: " ++ show port)
       pure (state { peerPort = Just port }, AdminResponse)
+
+resetLog :: InMemoryDumblog -> InMemoryDumblog
+resetLog s = s
+  { theLog = theLog initState
+  , nextIx = nextIx initState
+  }
