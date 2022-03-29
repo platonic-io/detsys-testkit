@@ -7,6 +7,7 @@ import Brick.Widgets.Border (borderWithLabel)
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center (center, vCenter)
 import qualified Brick.Widgets.List as L
+import Data.Time.LocalTime (LocalTime, TimeZone, utcToLocalTime)
 import Lens.Micro ((^.))
 import Control.Monad (void)
 import Data.Maybe (fromMaybe)
@@ -41,8 +42,11 @@ drawUI as = [ui]
          , vLimit 7 $ borderWithLabel (str "Logs") $ renderLogs as
          ]
 
-renderEvent :: Bool -> DebEvent -> String
-renderEvent showMsg (DebEvent from to event receivedLogical msg) =
+renderEvent :: Bool -> Maybe LocalTime -> DebEvent -> String
+renderEvent showMsg mLocalTime (DebEvent from to event receivedLogical msg) =
+  (case mLocalTime of
+     Just localTime -> take 22 (show localTime)  <> ": "
+     Nothing -> "") <>
   event <> ": " <> from <> " -> " <> to <> " @ " <> show receivedLogical
         <> if showMsg then " : " <> msg else mempty
 
@@ -86,7 +90,7 @@ renderSeqDia as = withHeight $ \h ->
 
 renderEvents :: AppState -> Widget ()
 renderEvents as =
-  center $ L.renderList listDrawElement True $ asLog as
+  center $ L.renderList (listDrawElement $ asTimeZone as) True $ asLog as
 
 renderMessage :: AppState -> Widget ()
 renderMessage as = renderToString as (message . isCurrentEvent)
@@ -95,7 +99,7 @@ renderVersion :: AppState -> Widget ()
 renderVersion as = renderToString as (show . isRunningVersion)
 
 renderSentMessage :: AppState -> Widget ()
-renderSentMessage as = renderToString as (addEmpty . unlines . map (renderEvent True) . isSent)
+renderSentMessage as = renderToString as (addEmpty . unlines . map (renderEvent True Nothing) . isSent)
   where
     addEmpty [] = "\n"
     addEmpty xs = xs
@@ -106,12 +110,12 @@ renderLogs as = renderToString as (addEmpty . unlines . isLogs)
     addEmpty [] = "\n"
     addEmpty xs = xs
 
-listDrawElement :: Bool -> InstanceState -> Widget ()
-listDrawElement sel is =
+listDrawElement :: TimeZone -> Bool -> InstanceState -> Widget ()
+listDrawElement tz sel is =
   let selStr s = if sel
                  then withAttr customAttr (str $ ">" <> s)
                  else str $ " " <> s
-  in selStr $ renderEvent False $ isCurrentEvent is
+  in selStr $ renderEvent False (Just $ utcToLocalTime tz (isReceivedTime is)) $ isCurrentEvent is
 
 customAttr :: AttrName
 customAttr = L.listSelectedAttr <> "custom"
@@ -131,7 +135,7 @@ appEvent :: AppState -> BrickEvent () AppEvent -> EventM () (Next AppState)
 appEvent as (VtyEvent e) =
   case e of
     V.EvKey (V.KChar 'q') [] -> halt as
-    ev -> continue =<< fmap AppState (L.handleListEventVi L.handleListEvent ev (asLog as))
+    ev -> continue =<< fmap (\xs -> as {asLog = xs}) (L.handleListEventVi L.handleListEvent ev (asLog as))
 appEvent as (AppEvent (UpdateState values')) = continue (updateAppState values' as)
 appEvent as _ = continue as
 
@@ -142,15 +146,17 @@ theMap = attrMap V.defAttr
 
 data AppState = AppState
   { asLog :: L.List () InstanceState
+  , asTimeZone :: TimeZone
   }
 
-mkAppState :: Vector.Vector InstanceState -> AppState
-mkAppState values = AppState
+mkAppState :: TimeZone -> Vector.Vector InstanceState -> AppState
+mkAppState tz values = AppState
   { asLog = L.list () values 1
+  , asTimeZone = tz
   }
 
 updateAppState :: Vector.Vector InstanceState -> AppState -> AppState
-updateAppState values' (AppState l0) = AppState (go (length l0) l0)
+updateAppState values' (AppState l0 tz) = AppState (go (length l0) l0) tz
   where
     go :: Int -> L.List () InstanceState -> L.List () InstanceState
     go n l | n >= Vector.length values' = l
