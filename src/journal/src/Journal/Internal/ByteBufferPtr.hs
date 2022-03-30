@@ -201,16 +201,13 @@ mmapped :: FilePath -> Int -> IO ByteBuffer
 mmapped fp size = do
   let flags = ShmOpenFlags
                 { shmReadWrite = True
-                , shmCreate    = True
+                , shmCreate    = False
                 , shmExclusive = False
-                , shmTrunc     = True
+                , shmTrunc     = False
                 }
   bracket (shmOpen fp flags (ownerReadMode .|. ownerWriteMode)) closeFd $ \fd -> do
     -- pageSize <- sysconfPageSize -- XXX align with `pageSize`?
     setFdSize fd (fromIntegral size) -- calls the `ftruncate` syscall.
-    bracket (callocBytes size) free $ \zeroesPtr -> do
-      bytesWritten <- fdWriteBuf fd zeroesPtr (fromIntegral size)
-      assertM (fromIntegral bytesWritten == size)
     ptr <- mmap Nothing (fromIntegral size)
              (pROT_READ .|. pROT_WRITE) mAP_SHARED (Just fd) 0
     fptr <- newForeignPtr ptr (finalizer ptr size)

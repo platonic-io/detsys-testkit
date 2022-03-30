@@ -324,6 +324,13 @@ tryClaim jour len = do
       position   =
         computeTermBeginPosition termId (positionBitsToShift (int2Int32 termLen)) initTermId
           + int322Int64 (unTermOffset termOffset)
+  --     jLog = logg (jLogger jour)
+
+  -- jLog ("tryClaim, termCount: " ++ show (unTermCount termCount))
+  -- jLog ("tryClaim, activePartitionIndex: " ++ show (unPartitionIndex activePartitionIndex))
+  -- jLog ("tryClaim, termOffset: " ++ show (unTermOffset termOffset))
+  -- jLog ("tryClaim, position: " ++ show position)
+  -- jLog ("tryClaim, limit: " ++ show limit)
 
   if unTermCount termCount /= unTermId (termId - initTermId)
   then return (Left AdminAction) -- XXX: what does this mean to end up here?

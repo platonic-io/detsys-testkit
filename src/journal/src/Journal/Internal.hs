@@ -88,7 +88,9 @@ calculatePositionLimit jour = do
   termWindowLen    <- termWindowLength (jMetadata jour)
   let _consumerPos  = maxSubscriberPos
       proposedLimit = minSubscriberPos + int322Int termWindowLen
+ --     jLog = logg (jLogger jour)
 
+ -- jLog ("calculatePositionLimit, termWindowLen: " ++ show termWindowLen)
   cleanBufferTo jour minSubscriberPos
   return (int2Int64 proposedLimit)
   where

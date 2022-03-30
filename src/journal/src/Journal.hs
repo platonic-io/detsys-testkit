@@ -59,13 +59,13 @@ defaultOptions = Options (64 * 1024) ioLogger Sub1
 
 allocateJournal :: FilePath -> Options -> IO ()
 allocateJournal fp (Options termBufferLen logger maxSub) = do
-  unless (popCount termBufferLen == 1) $
-    -- XXX: check bounds
-    error "allocateJournal: oTermBufferLength must be a power of 2"
-  b <- doesFileExist fp
-  size <- if b then getFileSize fp else return 0
-  if size == 0
-  then do
+  --unless (popCount termBufferLen == 1) $
+  --  -- XXX: check bounds
+  --  error "allocateJournal: oTermBufferLength must be a power of 2"
+  -- b <- doesFileExist fp
+  -- size <- if b then getFileSize fp else return 0
+  -- if size == 0
+  -- then do
     logg logger ("allocateJournal, creating new journal: " ++ fp)
     -- let dir = takeDirectory fp
     -- dirExists <- doesDirectoryExist dir
@@ -73,11 +73,14 @@ allocateJournal fp (Options termBufferLen logger maxSub) = do
 
     let logLength = termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH
 
-    -- fallocate fp (fromIntegral logLength)
+    fallocate ("/dev/shm/" ++ fp) (fromIntegral logLength)
     bb <- mmapped fp logLength
     meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
 
+    logg logger ("allocateJournal, termBufferLen: " ++ show termBufferLen)
     writeTermLength meta (fromIntegral termBufferLen)
+    termLen <- readTermLength (Metadata meta)
+    logg logger ("allocateJournal, termLen: " ++ show termLen)
     initTermId <- TermId <$> randomIO
     writeInitialTermId meta initTermId
     forM_ [0 .. pARTITION_COUNT - 1] $ \i ->
@@ -88,20 +91,20 @@ allocateJournal fp (Options termBufferLen logger maxSub) = do
     -- Set tombstones for all subscribers *above* `maxSub`
     forM_ (drop 1 [maxSub..]) $ \sub ->
       writeBytesConsumed (Metadata meta) sub tombStone
-  else do
-    logg logger ("allocateJournal, journal exists: " ++ fp)
-    let logLength = termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH
-    unless (size == toInteger logLength) $
-      error "allocateJournal: file size doesn't match with log length"
-    bb <- mmapped fp logLength
-    meta <- Metadata <$> wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
-    termBufferLen' <- readTermLength meta
-    unless (int322Int termBufferLen' == termBufferLen) $
-      error "allocateJournal: oTermBufferLength doesn't match the metadata"
-    pageSize <- sysconfPageSize
-    pageSize' <- readPageSize meta
-    unless (int322Int pageSize' == pageSize) $
-      error "allocateJournal: pageSize doesn't match the metadata"
+  -- else do
+  --   logg logger ("allocateJournal, journal exists: " ++ fp)
+  --   let logLength = termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH
+  --   unless (size == toInteger logLength) $
+  --     error "allocateJournal: file size doesn't match with log length"
+  --   bb <- mmapped fp logLength
+  --   meta <- Metadata <$> wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
+  --   termBufferLen' <- readTermLength meta
+  --   unless (int322Int termBufferLen' == termBufferLen) $
+  --     error "allocateJournal: oTermBufferLength doesn't match the metadata"
+  --   pageSize <- sysconfPageSize
+  --   pageSize' <- readPageSize meta
+  --   unless (int322Int pageSize' == pageSize) $
+  --     error "allocateJournal: pageSize doesn't match the metadata"
 
 journalMetadata :: FilePath -> Options -> IO (Either IOException Metadata)
 journalMetadata fp opts = do
