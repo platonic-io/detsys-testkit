@@ -324,7 +324,8 @@ t = 0.29646, df = 18, p-value = 0.7703
 * Work out all corner cases with regards to versioning of journal and snapshots,
   following Chuck's Bandwagon approach;
 
-* Event loop integration.
+* Event loop integration. More on this in forthcoming simulation testing
+  workshop/mini course!
 
 # Even further in the future work
 
