@@ -67,13 +67,13 @@ allocateJournal fp (Options termBufferLen logger maxSub) = do
   if size == 0
   then do
     logg logger ("allocateJournal, creating new journal: " ++ fp)
-    let dir = takeDirectory fp
-    dirExists <- doesDirectoryExist dir
-    unless dirExists (createDirectoryIfMissing True dir)
+    -- let dir = takeDirectory fp
+    -- dirExists <- doesDirectoryExist dir
+    -- unless dirExists (createDirectoryIfMissing True dir)
 
     let logLength = termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH
 
-    fallocate fp (fromIntegral logLength)
+    -- fallocate fp (fromIntegral logLength)
     bb <- mmapped fp logLength
     meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
 
@@ -114,18 +114,19 @@ journalMetadata fp opts = do
     Left err -> return (Left err)
 
 startJournal :: FilePath -> Options -> IO Journal
-startJournal fp (Options termLength logger _maxSub) = do
-  logLength <- fromIntegral <$> getFileSize fp
+startJournal fp (Options termBufferLen logger _maxSub) = do
+  -- logLength <- fromIntegral <$> getFileSize fp
+  let logLength = termBufferLen * pARTITION_COUNT + lOG_META_DATA_LENGTH
   bb <- mmapped fp logLength
   meta <- wrapPart bb (logLength - lOG_META_DATA_LENGTH) lOG_META_DATA_LENGTH
 
   termBuffers <-
     Vector.generateM pARTITION_COUNT $ \i ->
       let
-        offset = i * termLength
+        offset = i * termBufferLen
       in do
         writePosition bb (Position offset)
-        writeLimit bb (Limit (offset + termLength))
+        writeLimit bb (Limit (offset + termBufferLen))
         slice bb
 
   initTermId <- readInitialTermId (Metadata meta)
@@ -133,7 +134,7 @@ startJournal fp (Options termLength logger _maxSub) = do
   readerNotifier <- newReaderNotifier
 
   return (Journal termBuffers (Metadata meta) logger
-            (int2Int32 termLength) (positionBitsToShift (int2Int32 termLength)) initTermId
+            (int2Int32 termBufferLen) (positionBitsToShift (int2Int32 termBufferLen)) initTermId
             readerNotifier)
 
 ------------------------------------------------------------------------

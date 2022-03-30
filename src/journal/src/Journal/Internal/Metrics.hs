@@ -42,10 +42,10 @@ metricSize schema = metricSizeOfCounters schema + metricSizeOfHistograms schema
 newMetrics :: (Enum c, Bounded c, Enum h, Bounded h)
            => MetricsSchema c h -> FilePath -> IO (Metrics c h)
 newMetrics schema fp = do
-  exists <- doesFileExist fp
-  when (not exists) $ do
-    -- XXX: should this be page aligned?
-    fallocate fp (sizeOfCounters + sizeOfHistograms)
+  -- exists <- doesFileExist fp
+  -- when (not exists) $ do
+  --   -- XXX: should this be page aligned?
+  --   fallocate fp (sizeOfCounters + sizeOfHistograms)
   bb <- mmapped fp (metricSize schema)
   cbuf <- wrapPart bb 0 sizeOfCounters
   hbuf <- wrapPart bb sizeOfCounters sizeOfHistograms

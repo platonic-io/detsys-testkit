@@ -215,7 +215,8 @@ common bench-common
 
 benchmark bench-journal
   import:         bench-common
-  build-depends:  dumblog-lib-journal
+  build-depends:  dumblog-lib-journal,
+                  unix
   hs-source-dirs: bench/journal
   main-is:        Main.hs
   type:           exitcode-stdio-1.0

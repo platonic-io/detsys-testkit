@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MagicHash #-}
-{-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE UnboxedTuples #-}
 
 module Journal.Internal.ByteBufferPtr where
 
@@ -10,23 +10,32 @@ import Control.Monad
 import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
-import qualified Data.ByteString.Unsafe as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Internal as LBS
+import qualified Data.ByteString.Unsafe as BS
 import Data.IORef
 import Data.Int
 import Data.Word
-import Foreign (copyBytes, fillBytes, plusPtr, withForeignPtr, castPtr)
-import Foreign.Concurrent
+import Foreign
+       ( callocBytes
+       , castPtr
+       , copyBytes
+       , fillBytes
+       , free
+       , plusPtr
+       , withForeignPtr
+       )
+import Foreign.Concurrent (newForeignPtr)
 import Foreign.Storable
 import GHC.Exts
 import GHC.ForeignPtr
 import GHC.IO (IO(IO))
 import GHC.Int (Int32(I32#), Int64(I64#))
-import GHC.Word (Word8(W8#), Word16(W16#), Word32(W32#), Word64(W64#))
 import GHC.Stack
-import System.Posix.IO
-       (OpenMode(ReadWrite), closeFd, defaultFileFlags, openFd)
+import GHC.Word (Word16(W16#), Word32(W32#), Word64(W64#), Word8(W8#))
+import System.Posix.Files (ownerReadMode, ownerWriteMode, setFdSize)
+import System.Posix.IO (closeFd, fdWriteBuf)
+import System.Posix.SharedMem (ShmOpenFlags(..), shmOpen)
 
 import Journal.Internal.Atomics
 import Journal.Internal.Mmap
@@ -189,16 +198,27 @@ allocateAligned size align = do
   newByteBuffer fptr (Capacity size) (Limit size) 0 Nothing
 
 mmapped :: FilePath -> Int -> IO ByteBuffer
-mmapped fp size =
-  bracket (openFd fp ReadWrite Nothing defaultFileFlags) closeFd $ \fd -> do
+mmapped fp size = do
+  let flags = ShmOpenFlags
+                { shmReadWrite = True
+                , shmCreate    = True
+                , shmExclusive = False
+                , shmTrunc     = True
+                }
+  bracket (shmOpen fp flags (ownerReadMode .|. ownerWriteMode)) closeFd $ \fd -> do
     -- pageSize <- sysconfPageSize -- XXX align with `pageSize`?
+    setFdSize fd (fromIntegral size) -- calls the `ftruncate` syscall.
+    bracket (callocBytes size) free $ \zeroesPtr -> do
+      bytesWritten <- fdWriteBuf fd zeroesPtr (fromIntegral size)
+      assertM (fromIntegral bytesWritten == size)
     ptr <- mmap Nothing (fromIntegral size)
              (pROT_READ .|. pROT_WRITE) mAP_SHARED (Just fd) 0
     fptr <- newForeignPtr ptr (finalizer ptr size)
     newByteBuffer fptr (Capacity size) (Limit size) 0 Nothing
   where
     finalizer :: Ptr a -> Int -> IO ()
-    finalizer ptr size = munmap ptr (fromIntegral size)
+    finalizer ptr size = do
+      munmap ptr (fromIntegral size)
 
 wrap :: ByteBuffer -> IO ByteBuffer
 wrap bb = newByteBuffer (bbData bb) capa lim (Position 0) (Just (bbSlice bb))

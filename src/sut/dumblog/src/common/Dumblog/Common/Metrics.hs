@@ -10,7 +10,7 @@ import qualified Journal.Internal.Metrics as Metrics
 ------------------------------------------------------------------------
 
 dumblogMetricsPath :: Int -> FilePath
-dumblogMetricsPath port = "/tmp/dumblog-" ++ show port ++ ".metrics"
+dumblogMetricsPath port = "/dumblog-" ++ show port ++ ".metrics"
 
 ------------------------------------------------------------------------
 

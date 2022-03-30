@@ -38,7 +38,7 @@ throughputAvg ts = tsSum ts / realToFrac (tsIterations ts)
 metricsMain :: Int -> IO ()
 metricsMain port = do
   setLocaleEncoding utf8 -- Otherwise we can't print µ...
-  removePathForcibly (dumblogMetricsPath port)
+  -- removePathForcibly (dumblogMetricsPath port)
   ts <- initThroughputState
   go ts
   where

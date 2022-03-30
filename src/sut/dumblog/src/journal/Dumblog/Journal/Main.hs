@@ -58,7 +58,7 @@ import Dumblog.Journal.Worker (WorkerInfo(..), worker)
 -- TODO: we should just reads until we hit `before`
 fetchJournal :: Maybe Snapshot -> FilePath -> Options -> IO Journal
 fetchJournal mSnapshot fpj opts = do
-  allocateJournal fpj opts
+  -- allocateJournal fpj opts
   journal <- startJournal fpj opts
   case mSnapshot of
     Nothing -> do

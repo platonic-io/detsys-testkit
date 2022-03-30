@@ -15,7 +15,7 @@ dumblogOptions = defaultOptions
   }
 
 dumblogJournalPath :: Int -> FilePath
-dumblogJournalPath portUsed = "/tmp/dumblog-" ++ show portUsed ++ ".journal"
+dumblogJournalPath portUsed = "/dumblog-" ++ show portUsed ++ ".journal"
 
 dumblogSnapshotPath :: Int -> FilePath
 dumblogSnapshotPath portUsed = "/tmp/dumblog-" ++ show portUsed ++ ".snapshot"
