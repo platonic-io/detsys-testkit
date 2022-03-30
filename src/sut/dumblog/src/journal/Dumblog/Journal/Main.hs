@@ -16,8 +16,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Debugger.State (DebEvent(..), InstanceStateRepr(..))
 import Journal
-       (allocateJournal, defaultOptions, journalMetadata, startJournal)
-import Journal.Internal.Logger as Logger
+       (allocateJournal, journalMetadata, startJournal)
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.MP as Journal
 import Journal.Types
@@ -28,9 +27,6 @@ import Journal.Types
        , computeTermBeginPosition
        , indexByTermCount
        , jMetadata
-       , oLogger
-       , oMaxSubscriber
-       , oTermBufferLength
        , positionBitsToShift
        , rawTailTermId
        , rawTailTermOffset
@@ -44,7 +40,7 @@ import Options.Generic
 import System.Directory (copyFile, getTemporaryDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
 
-import Dumblog.Common.Constants (dUMBLOG_PORT)
+import Dumblog.Common.Constants (dUMBLOG_PORT, dumblogOptions, dumblogJournalPath, dumblogSnapshotPath)
 import Dumblog.Common.Metrics (dumblogSchema, dumblogMetricsPath)
 import Dumblog.Journal.Blocker (emptyBlocker)
 import Dumblog.Journal.Codec (Envelope(..))
@@ -174,19 +170,6 @@ quietRun = Run (Helpful True) Nothing
 Unclear how to:
 * How to archive the journal
 -}
-
-dumblogOptions :: Options
-dumblogOptions = defaultOptions
-  { oLogger = Logger.nullLogger
-  , oMaxSubscriber = Sub2
-  , oTermBufferLength = 512 * 1024 * 1024
-  }
-
-dumblogJournalPath :: Int -> FilePath
-dumblogJournalPath portUsed = "/tmp/dumblog-" ++ show portUsed ++ ".journal"
-
-dumblogSnapshotPath :: Int -> FilePath
-dumblogSnapshotPath portUsed = "/tmp/dumblog-" ++ show portUsed ++ ".snapshot"
 
 journalDumblog :: DumblogConfig -> Int -> Maybe (MVar ()) -> IO ()
 journalDumblog cfg _capacity mReady = do

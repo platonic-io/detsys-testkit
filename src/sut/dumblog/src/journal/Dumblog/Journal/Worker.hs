@@ -21,6 +21,7 @@ import Journal.Types
 
 import Dumblog.Common.HttpClient (ackHttp, backupHttp, newHttpClient)
 import Dumblog.Common.Metrics
+import Dumblog.Common.Types (SeqNum(..))
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
 import Dumblog.Journal.Logger

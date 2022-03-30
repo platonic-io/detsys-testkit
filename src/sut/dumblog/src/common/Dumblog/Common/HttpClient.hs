@@ -26,7 +26,7 @@ import Network.HTTP.Client
 import Network.Wai.Handler.Warp (Port)
 import Text.Read (readMaybe)
 
-import Dumblog.Journal.Types (SeqNum, unSeqNum)
+import Dumblog.Common.Types (SeqNum, unSeqNum)
 
 ------------------------------------------------------------------------
 
