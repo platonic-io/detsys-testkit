@@ -21,6 +21,7 @@ import qualified Journal.MP as Journal
 import Journal.Types (Journal)
 
 import Dumblog.Common.Metrics
+import Dumblog.Common.Types
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
 import Dumblog.Journal.Types
