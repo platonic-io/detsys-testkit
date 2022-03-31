@@ -1,7 +1,7 @@
 ---
 title: Towards conveniently debuggable distributed systems
 author: Stevan Andjelkovic \and Daniel Gustafsson
-date: 24th Mar, 2022
+date: 31th Mar, 2022
 header-includes:
   - \definecolor{links}{HTML}{2A1B81}
   - \hypersetup{colorlinks,linkcolor=,urlcolor=links}
@@ -316,23 +316,23 @@ t = 0.29646, df = 18, p-value = 0.7703
 
 # Future work
 
-* Add ability to download remote nodes’ snapshots and journals in the debugger;
+* Add ability to download remote nodes’ snapshots and journals in the debugger
 
 * Stash journal prefixes that lead up to crashes
   - Broken analogy: have several black-boxes, one for each crash
 
 * Work out all corner cases with regards to versioning of journal and snapshots,
-  following Chuck's Bandwagon approach;
+  following Chuck's Bandwagon approach
 
 * Event loop integration. More on this in forthcoming simulation testing
   workshop/mini course!
 
 # Even further in the future work
 
-* Zero-copy read path (`sendfile` syscall);
+* Zero-copy read path (`sendfile` syscall)
 
 * Use `io_uring` to amortise the cost of syscalls (by
-  batching and doing them async);
+  batching and doing them async)
 
 * But protocol improvements are likely much more important for performance than
   these low-level database engine and event loop improvements!
