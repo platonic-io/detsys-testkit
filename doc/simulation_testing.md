@@ -135,8 +135,14 @@ written by three AWS engineers:
 
 ### Dropbox
 
-https://dropbox.tech/infrastructure/rewriting-the-heart-of-our-sync-engine
-https://lobste.rs/s/ob6a8z/rewriting_heart_our_sync_engine
+* https://dropbox.tech/infrastructure/rewriting-the-heart-of-our-sync-engine
+* https://lobste.rs/s/ob6a8z/rewriting_heart_our_sync_engine
+
+### Basho
+
+* [Riak](https://speakerdeck.com/jtuple/hansei-property-based-development-of-concurrent-systems)
+  (a distributed NoSQL key-value data store that offers high availability, fault
+  tolerance, operational simplicity, and scalability)
 
 ### IOHK
 
