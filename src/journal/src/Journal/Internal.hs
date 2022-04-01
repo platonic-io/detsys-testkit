@@ -173,7 +173,7 @@ exclusiveTermAppenderClaim meta termBuffer termId termOffset len logger = do
     jLog ("termAppenderClaim, termOffset: " ++ show (unTermOffset termOffset))
     jLog ("termAppenderClaim, frameLength: " ++ show frameLength)
     headerWrite termBuffer termOffset (fromIntegral frameLength) termId logger
-    bufClaim <- newBufferClaim termBuffer termOffset frameLength
+    let bufClaim = newBufferClaim termBuffer termOffset frameLength
     return (Right (resultingOffset, bufClaim))
 
 handleEndOfLogCondition :: ByteBuffer -> TermOffset -> Capacity -> TermId -> Logger -> IO ()

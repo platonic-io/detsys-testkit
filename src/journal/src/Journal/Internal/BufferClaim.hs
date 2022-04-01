@@ -16,9 +16,9 @@ import Journal.Types
 
 newtype BufferClaim = BufferClaim { bcByteBuffer :: ByteBuffer }
 
-newBufferClaim :: ByteBuffer -> TermOffset -> Int -> IO BufferClaim
-newBufferClaim src (TermOffset offset) len = BufferClaim <$>
-  wrapPart src (int322Int offset) len
+newBufferClaim :: ByteBuffer -> TermOffset -> Int -> BufferClaim
+newBufferClaim src (TermOffset offset) len =
+  BufferClaim (wrapPart src (int322Int offset) len)
 
 putBS :: BufferClaim -> Int -> ByteString -> IO ()
 putBS (BufferClaim bb) offset bs = putByteStringAt bb offset bs
@@ -34,7 +34,7 @@ putInt64At (BufferClaim bb) offset i64 = writeInt64OffAddr bb offset i64
 
 withPtr :: BufferClaim -> (Ptr Word8 -> IO a) -> IO a
 withPtr (BufferClaim bb) k = do
-  Slice slice <- readSlice bb
+  let Slice slice = bbSlice bb
   -- XXX: boundcheck?
   withForeignPtr (bbData bb `plusForeignPtr` slice) k
 

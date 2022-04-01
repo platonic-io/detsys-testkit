@@ -47,8 +47,8 @@ newMetrics schema fp = do
     -- XXX: should this be page aligned?
     fallocate fp (sizeOfCounters + sizeOfHistograms)
   bb <- mmapped fp (metricSize schema)
-  cbuf <- wrapPart bb 0 sizeOfCounters
-  hbuf <- wrapPart bb sizeOfCounters sizeOfHistograms
+  let cbuf = wrapPart bb 0 sizeOfCounters
+      hbuf = wrapPart bb sizeOfCounters sizeOfHistograms
   return (Metrics cbuf hbuf)
   where
     sizeOfCounters = metricSizeOfCounters schema

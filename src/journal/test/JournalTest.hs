@@ -969,8 +969,8 @@ prop_lineariseIsOkay = mapSize (min 20) $
 unit_casRawTail :: Assertion
 unit_casRawTail = do
   bb' <- allocate 16
-  bb <- wrapPart bb' 8 8
-  let meta = Metadata bb'
+  let bb = wrapPart bb' 8 8
+      meta = Metadata bb'
       index = 0
       termId = TermId 42
       termId' = TermId 43
