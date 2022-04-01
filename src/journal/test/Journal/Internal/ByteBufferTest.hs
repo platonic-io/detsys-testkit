@@ -280,7 +280,7 @@ exec' cmd  bbs = case cmd of
   ReadInt64  offset -> run Int64 readInt64OffAddr offset
   WriteInt64 offset value -> runValue writeInt64OffAddr offset value
   MkWrapPart lv rv offset len -> do
-    bb' <- wrapPart (selectByteBuffer bbs rv) offset len
+    let bb' = wrapPart (selectByteBuffer bbs rv) offset len
     case lv of
       WW1 -> return (Unit (), bbs { bbWrapper1 = bb'})
       WW2 -> return (Unit (), bbs { bbWrapper2 = bb'})
@@ -362,8 +362,8 @@ validProgram = go True
 makeInitialByteBuffers :: ByteBuffer -> IO ByteBuffers
 makeInitialByteBuffers bb = do
   let Capacity size = getCapacity bb
-  bb1 <- wrapPart bb 0 size
-  bb2 <- wrapPart bb 0 size
+  let bb1 = wrapPart bb 0 size
+      bb2 = wrapPart bb 0 size
   return ByteBuffers
     { bbOriginal = bb
     , bbWrapper1 = bb1
@@ -457,7 +457,7 @@ unit_byteBufferByteString = do
 unit_casInt64 :: Assertion
 unit_casInt64 = do
   bb' <- allocate 16
-  bb <- wrapPart bb' 8 8
+  let bb = wrapPart bb' 8 8
   writeInt64OffAddr bb 0 42
   fortyTwo <- readInt64OffAddr bb 0
   assertEqual "" 42 fortyTwo
@@ -469,7 +469,7 @@ unit_casInt64 = do
 unit_casInt64Big :: Assertion
 unit_casInt64Big = do
   bb' <- allocate 16
-  bb <- wrapPart bb' 8 8
+  let bb = wrapPart bb' 8 8
   writeInt64OffAddr bb 0 (maxBound - 1)
   i <- readInt64OffAddr bb 0
   assertEqual "" (maxBound - 1) i
