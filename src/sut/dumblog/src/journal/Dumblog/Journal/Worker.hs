@@ -21,6 +21,7 @@ import Journal.Types
 
 import Dumblog.Common.HttpClient (ackHttp, backupHttp, newHttpClient)
 import Dumblog.Common.Metrics
+import Dumblog.Common.Types (SeqNum(..))
 import Dumblog.Journal.Blocker
 import Dumblog.Journal.Codec
 import Dumblog.Journal.Logger
@@ -65,7 +66,7 @@ worker journal metrics wi = go (wiEvents wi)
     go' :: InMemoryDumblog -> ByteString -> IO InMemoryDumblog
     go' s entry = do
       Metrics.decrCounter_ metrics QueueDepth 1
-      let Envelope key input version arrivalTime = decode entry
+      let Envelope input version arrivalTime = decode entry
       -- XXX: In case of decode error:
       --  Metrics.incrCounter metrics ErrorsEncountered 1
       --  wakeUpFrontend blocker key $ Left "Couldn't parse request"

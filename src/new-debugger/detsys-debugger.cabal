@@ -33,6 +33,7 @@ library
     , brick
     , microlens
     , text
+    , time
     , vector
     , word-wrap
     , vty

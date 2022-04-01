@@ -11,9 +11,9 @@ import GHC.IO.Encoding (setLocaleEncoding, utf8)
 import System.Directory (removePathForcibly)
 import Text.Printf (printf)
 
+import Dumblog.Common.Constants (dumblogJournalPath, dumblogOptions)
 import Dumblog.Common.Metrics
 import Dumblog.Common.Utils (showBytes)
-import Dumblog.Journal.Main
 import Journal (journalMetadata)
 import Journal.Internal.Metrics hiding (Latency)
 import Journal.Types

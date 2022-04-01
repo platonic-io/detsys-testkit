@@ -10,15 +10,13 @@ import Control.Concurrent.MVar (MVar)
 import Control.Exception (bracket_)
 import qualified Data.Aeson as Aeson
 import Data.Binary (decode)
-import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
 import Data.TreeDiff (ansiWlPretty, ediff, ppEditExpr)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Debugger.State (DebEvent(..), InstanceStateRepr(..))
 import Journal
-       (allocateJournal, defaultOptions, journalMetadata, startJournal)
-import Journal.Internal.Logger as Logger
+       (allocateJournal, journalMetadata, startJournal)
 import qualified Journal.Internal.Metrics as Metrics
 import qualified Journal.MP as Journal
 import Journal.Types
@@ -29,9 +27,6 @@ import Journal.Types
        , computeTermBeginPosition
        , indexByTermCount
        , jMetadata
-       , oLogger
-       , oMaxSubscriber
-       , oTermBufferLength
        , positionBitsToShift
        , rawTailTermId
        , rawTailTermOffset
@@ -45,6 +40,7 @@ import Options.Generic
 import System.Directory (copyFile, getTemporaryDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
 
+import Dumblog.Common.Constants (dUMBLOG_PORT, dumblogOptions, dumblogJournalPath, dumblogSnapshotPath)
 import Dumblog.Common.Metrics (dumblogSchema, dumblogMetricsPath)
 import Dumblog.Journal.Blocker (emptyBlocker)
 import Dumblog.Journal.Codec (Envelope(..))
@@ -53,7 +49,7 @@ import qualified Dumblog.Journal.Logger as DLogger
 import Dumblog.Journal.Snapshot (Snapshot)
 import qualified Dumblog.Journal.Snapshot as Snapshot
 import Dumblog.Journal.StateMachine (InMemoryDumblog, initState)
-import Dumblog.Journal.Types (ClientRequest(..), Input(..), CommandName(..))
+import Dumblog.Journal.Types (Input(..), Output(..), CommandName(..))
 import Dumblog.Journal.Versions (dUMBLOG_CURRENT_VERSION, runCommand)
 import Dumblog.Journal.Worker (WorkerInfo(..), worker)
 
@@ -76,19 +72,19 @@ fetchJournal mSnapshot fpj opts = do
       writeBytesConsumed (jMetadata journal) Sub1 bytes
   pure journal
 
-replay :: [(Int64, Input)] -> InMemoryDumblog -> IO InMemoryDumblog
+replay :: [Envelope Input] -> InMemoryDumblog -> IO InMemoryDumblog
 replay [] s = do
   putStrLn "[REPLAY] finished!"
   pure s
-replay ((v, cmd):cmds) s = do
-  putStrLn $ "[REPLAY] running: " <> show cmd
-  (s', _) <- runCommand v DLogger.ioLogger s cmd
+replay (env:cmds) s = do
+  putStrLn $ "[REPLAY] running: " <> show (eContent env)
+  (s', _) <- runCommand (eVersion env) DLogger.ioLogger s (eContent env)
   replay cmds s'
 
 type DebugFile = Vector InstanceStateRepr
 
 -- TODO: merge with `replay`
-replayDebug :: [(Int64, Input)] -> InMemoryDumblog -> IO DebugFile
+replayDebug :: [Envelope Input] -> InMemoryDumblog -> IO DebugFile
 replayDebug originCommands originState = do
   queueLogger <- DLogger.newQueueLogger
   go queueLogger 0 mempty originCommands originState
@@ -96,14 +92,19 @@ replayDebug originCommands originState = do
     go _ _logTime dfile [] _s = do
       putStrLn "[REPLAY-DEBUG] finished!"
       pure dfile
-    go logger logTime dfile ((v, cmd):cmds) s = do
+    go logger logTime dfile (env:cmds) s = do
+      let cmd = eContent env
+          v = eVersion env
       putStrLn $ "[REPLAY-DEBUG] running: " <> show cmd
       (s', r) <- runCommand v (DLogger.queueLogger logger) s cmd
       logLines <- DLogger.flushQueue logger
       let
         msg = show cmd
         ce = DebEvent
-          { from = "client"
+          { from = case cmd of
+              ClientRequest {} -> "client"
+              InternalMessageIn {} -> "backup"
+              AdminCommand {} -> "admin"
           , to = "dumblog"
           , event = commandName cmd
           , receivedLogical = logTime
@@ -113,10 +114,14 @@ replayDebug originCommands originState = do
              { state = show (ppEditExpr ansiWlPretty (ediff s s'))
              , currentEvent = ce
              , runningVersion = v
+             , receivedTime = eArrival env
              , logs = logLines
              , sent = [ DebEvent
                         { from = "dumblog"
-                        , to = "client"
+                        , to = case r of
+                            ClientResponse {} -> "client"
+                            InternalMessageOut {} -> "backup"
+                            AdminResponse {} -> "admin"
                         , event = commandName r
                         , receivedLogical = logTime
                         , message = show r
@@ -125,7 +130,7 @@ replayDebug originCommands originState = do
              }
       go logger (succ logTime) (Vector.snoc dfile is) cmds s'
 
-collectAll :: Journal -> IO [(Int64, Input)]
+collectAll :: Journal -> IO [Envelope Input]
 collectAll jour = do
   putStrLn "[collect] Checking journal for old-entries"
   val <- Journal.readLazyJournal jour Sub1
@@ -135,9 +140,9 @@ collectAll jour = do
       pure []
     Just entry -> do
       putStrLn "[collect] Found an entry"
-      let Envelope _key cmd version _arrivalTime = decode entry
+      let env = decode entry
       cmds <- collectAll jour
-      pure $ (version, cmd) : cmds
+      pure $ env : cmds
 
 startingState :: Maybe Snapshot -> InMemoryDumblog
 startingState Nothing     = initState
@@ -166,30 +171,14 @@ Unclear how to:
 * How to archive the journal
 -}
 
-dumblogOptions :: Options
-dumblogOptions = defaultOptions
-  { oLogger = Logger.nullLogger
-  , oMaxSubscriber = Sub2
-  , oTermBufferLength = 512 * 1024 * 1024
-  }
-
-dUMBLOG_PORT :: Int
-dUMBLOG_PORT = 8054
-
-dumblogJournalPath :: Int -> FilePath
-dumblogJournalPath port = "/tmp/dumblog-" ++ show port ++ ".journal"
-
-dumblogSnapshotPath :: Int -> FilePath
-dumblogSnapshotPath port = "/tmp/dumblog-" ++ show port ++ ".snapshot"
-
 journalDumblog :: DumblogConfig -> Int -> Maybe (MVar ()) -> IO ()
 journalDumblog cfg _capacity mReady = do
   case cfg of
     Run q mPort -> do
-      let port = fromMaybe dUMBLOG_PORT mPort
-      mSnapshot <- Snapshot.readFile (dumblogSnapshotPath port)
-      journal <- fetchJournal mSnapshot (dumblogJournalPath port) dumblogOptions
-      metrics <- Metrics.newMetrics dumblogSchema (dumblogMetricsPath port)
+      let portToUse = fromMaybe dUMBLOG_PORT mPort
+      mSnapshot <- Snapshot.readFile (dumblogSnapshotPath portToUse)
+      journal <- fetchJournal mSnapshot (dumblogJournalPath portToUse) dumblogOptions
+      metrics <- Metrics.newMetrics dumblogSchema (dumblogMetricsPath portToUse)
       blocker <- emptyBlocker 0 -- it is okay to start over
       cmds <- collectAll journal
       workerState <- replay cmds (startingState mSnapshot)
@@ -199,11 +188,11 @@ journalDumblog cfg _capacity mReady = do
         logger | unHelpful q = DLogger.nullLogger
                | otherwise = DLogger.ioLogger
         untilSnapshot = 1000
-        wInfo = WorkerInfo blocker logger (dumblogSnapshotPath port)
+        wInfo = WorkerInfo blocker logger (dumblogSnapshotPath portToUse)
                            dUMBLOG_CURRENT_VERSION events untilSnapshot
       withAsync (worker journal metrics wInfo workerState) $ \a -> do
         link a
-        runFrontEnd port journal metrics feInfo mReady
+        runFrontEnd portToUse journal metrics feInfo mReady
     DebugFile debugFile -> genDebugFile (dumblogJournalPath dUMBLOG_PORT) -- XXX: port is hardcoded.
                                         (dumblogSnapshotPath dUMBLOG_PORT)
                                         (unHelpful debugFile)

@@ -34,42 +34,88 @@ flag persistent-sqlite
   manual:      True
   default:     False
 
-library
+common library-common
+  build-depends:
+    , base              ^>=4.14.1.0
+  default-language: Haskell2010
+  ghc-options:      -Wall -O2
+
+library dumblog-lib-common
+  import: library-common
+  build-depends:
+    , binary
+    , bytestring
+    , journal
+    , http-client
+    , time
+    , warp
+  exposed-modules:
+    Dumblog.Common.Constants
+    Dumblog.Common.HttpClient
+    Dumblog.Common.Metrics
+    Dumblog.Common.Types
+    Dumblog.Common.Utils
+  hs-source-dirs: src/common
+
+library dumblog-lib-metrics
+  import: library-common
+  build-depends:
+    , directory
+    , dumblog-lib-common
+    , journal
+    , time
+  exposed-modules:
+    Dumblog.Metrics.Main
+  hs-source-dirs: src/metrics
+
+library dumblog-lib-sqlite
+  import: library-common
+  build-depends:
+    , async
+    , bytestring
+    , directory
+    , dumblog-lib-common
+    -- import journal for metrics
+    , journal
+    , http-types
+    , sqlite-simple
+    , stm
+    , text
+    , wai
+    , warp
+  if flag(persistent-sqlite)
+    build-depends:
+      , persistent
+      , persistent-sqlite
+  exposed-modules:
+    Dumblog.SQLite.Command
+    Dumblog.SQLite.DB
+    Dumblog.SQLite.FrontEnd
+    Dumblog.SQLite.Main
+    Dumblog.SQLite.Worker
+  hs-source-dirs: src/sqlite
+
+library dumblog-lib-journal
+  import: library-common
   build-depends:
     , aeson
     , async
-    , base              ^>=4.14.1.0
     , binary
     , bytestring
     , containers
     , detsys-debugger
     , directory
+    , dumblog-lib-common
     , filepath
-    , http-client
     , http-types
     , journal
-    , network
     , optparse-generic
-    , sendfile
-    , sqlite-simple
-    , stm
     , text
-    , time
     , tree-diff
-    , unix
     , vector
     , wai
     , warp
-
-  if flag(persistent-sqlite)
-    build-depends:
-      , persistent
-      , persistent-sqlite
-
   exposed-modules:
-    Dumblog.Common.HttpClient
-    Dumblog.Common.Metrics
-    Dumblog.Common.Utils
     Dumblog.Journal.Blocker
     Dumblog.Journal.Codec
     Dumblog.Journal.FrontEnd
@@ -80,28 +126,28 @@ library
     Dumblog.Journal.Types
     Dumblog.Journal.Versions
     Dumblog.Journal.Worker
-    Dumblog.Metrics.Main
-    Dumblog.SQLite.Command
-    Dumblog.SQLite.DB
-    Dumblog.SQLite.FrontEnd
-    Dumblog.SQLite.Main
-    Dumblog.SQLite.Worker
+  hs-source-dirs: src/journal
+
+library dumblog-lib-zero-copy
+  import: library-common
+  build-depends:
+    , async
+    , bytestring
+    , journal
+    , network
+    , sendfile
+    , vector
+  exposed-modules:
     Dumblog.ZeroCopy.HttpServer
     Dumblog.ZeroCopy.Main
     Dumblog.ZeroCopy.State
     Dumblog.ZeroCopy.Worker
-
-  if flag(persistent-sqlite)
-    exposed-modules: Dumblog.SQLite.DBPersistent
-
-  hs-source-dirs:   src
-  default-language: Haskell2010
-  ghc-options:      -Wall -O2
+  hs-source-dirs: src/zero-copy
 
 common executable-common
   build-depends:
     , base
-    , dumblog
+    , dumblog-lib-common
 
   default-language: Haskell2010
   ghc-options:      -O2 -threaded -rtsopts -with-rtsopts=-N
@@ -111,6 +157,7 @@ executable dumblog-journal
   build-depends:
     , async
     , directory
+    , dumblog-lib-journal
     , journal
     , optparse-generic
 
@@ -119,16 +166,19 @@ executable dumblog-journal
 
 executable dumblog-sqlite
   import:         executable-common
+  build-depends:  dumblog-lib-sqlite
   hs-source-dirs: app/sqlite
   main-is:        Main.hs
 
 executable dumblog-zero-copy
   import:         executable-common
+  build-depends:  dumblog-lib-zero-copy
   hs-source-dirs: app/zero-copy
   main-is:        Main.hs
 
 executable metrics
   import:         executable-common
+  build-depends:  dumblog-lib-metrics
   hs-source-dirs: app/metrics
   main-is:        Main.hs
 
@@ -139,7 +189,7 @@ common bench-common
     , base
     , bytestring
     , directory
-    , dumblog
+    , dumblog-lib-common
     , random
     , time
 
@@ -165,18 +215,21 @@ common bench-common
 
 benchmark bench-journal
   import:         bench-common
+  build-depends:  dumblog-lib-journal
   hs-source-dirs: bench/journal
   main-is:        Main.hs
   type:           exitcode-stdio-1.0
 
 benchmark bench-sqlite
   import:         bench-common
+  build-depends:  dumblog-lib-sqlite
   hs-source-dirs: bench/sqlite
   main-is:        Main.hs
   type:           exitcode-stdio-1.0
 
 benchmark bench-zero-copy
   import:         bench-common
+  build-depends:  dumblog-lib-zero-copy
   hs-source-dirs: bench/zero-copy
   main-is:        Main.hs
   type:           exitcode-stdio-1.0

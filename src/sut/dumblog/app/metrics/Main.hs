@@ -1,8 +1,9 @@
 module Main where
 
+import Dumblog.Common.Constants
 import Dumblog.Metrics.Main
 
 ------------------------------------------------------------------------
 
 main :: IO ()
-main = metricsMain
+main = metricsMain dUMBLOG_PORT

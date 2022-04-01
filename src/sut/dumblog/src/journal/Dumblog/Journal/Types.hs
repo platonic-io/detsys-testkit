@@ -9,10 +9,8 @@ import Data.Binary (Binary)
 import Data.ByteString.Lazy (ByteString)
 import GHC.Generics (Generic)
 
+import Dumblog.Common.Types (SeqNum)
 ------------------------------------------------------------------------
-
-newtype SeqNum = SeqNum { unSeqNum :: Int }
-  deriving newtype (Show, Binary)
 
 class CommandName c where
   commandName :: c -> String

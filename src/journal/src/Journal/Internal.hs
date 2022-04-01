@@ -102,9 +102,11 @@ cleanBufferTo :: Journal -> Int -> IO ()
 cleanBufferTo jour position = do
   cleanPosition <- readCleanPosition (jMetadata jour)
   termBufferLen <- readTermLength (jMetadata jour)
-  when (position > cleanPosition) $ do
-    let index = indexByPosition (int2Int64 cleanPosition) (positionBitsToShift termBufferLen)
-        dirtyTerm = jTermBuffers jour Vector.! unPartitionIndex index
+  let
+    cleanIndex = indexByPosition (int2Int64 cleanPosition) (positionBitsToShift termBufferLen)
+    activeIndex = indexByPosition (int2Int64 position) (positionBitsToShift termBufferLen)
+  when (cleanIndex /= activeIndex && position > cleanPosition) $ do
+    let dirtyTerm = jTermBuffers jour Vector.! unPartitionIndex cleanIndex
         bytesForCleaning = position - cleanPosition
         bufferCapacity = int322Int termBufferLen
         termOffset = cleanPosition .&. (bufferCapacity - 1)
