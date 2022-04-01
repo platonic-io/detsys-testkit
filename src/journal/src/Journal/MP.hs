@@ -317,13 +317,13 @@ tryClaim jour len = do
   let activePartitionIndex = indexByTermCount termCount
       termBuffer = jTermBuffers jour Vector.! unPartitionIndex activePartitionIndex
   rawTail <- readRawTail (jMetadata jour) activePartitionIndex
-  initTermId <- readInitialTermId (jMetadata jour)
-  let termLen    = unCapacity (getCapacity termBuffer)
-      termId     = rawTailTermId rawTail
-      termOffset = rawTailTermOffset rawTail (int2Int32 termLen)
-      position   =
-        computeTermBeginPosition termId (positionBitsToShift (int2Int32 termLen)) initTermId
-          + int322Int64 (unTermOffset termOffset)
+  let initTermId     = jInitialTermId jour
+      termLen        = jTermLength jour
+      termId         = rawTailTermId rawTail
+      termOffset     = rawTailTermOffset rawTail termLen
+      posBitsToShift = jPositionBitsToShift jour
+      position       = computeTermBeginPosition termId posBitsToShift initTermId
+                       + int322Int64 (unTermOffset termOffset)
 
   if unTermCount termCount /= unTermId (termId - initTermId)
   then return (Left AdminAction) -- XXX: what does this mean to end up here?
