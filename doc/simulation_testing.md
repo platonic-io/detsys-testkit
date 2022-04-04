@@ -55,8 +55,9 @@ common keyword "simulation".
 
 ### NATO's Software Engineering conference in 1968
 
-Here's the concluding remark from Alan Perlis about a discussion about a paper
-on simulation testing by Brian Randell at the first
+Here's the concluding remark from Alan Perlis (the first recipient of the Turing
+Award) about a discussion about a paper on simulation testing by Brian Randell
+at the first
 [conference](http://homepages.cs.ncl.ac.uk/brian.randell/NATO/nato1968.PDF) on
 Software Engineering (this is where we got the term from) in 1968:
 
