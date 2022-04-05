@@ -33,6 +33,7 @@ library
                   , QuickCheck
                   , http-client
                   , stm
+                  , time
                   , HUnit
                   , wai
                   , warp
@@ -44,6 +45,7 @@ library
     ATMC.Lec4FaultInjection
     ATMC.Lec5SimulationTesting
     ATMC.Lec5SimulationTestingV2
+    Experiment.Simulation
 
   default-language: Haskell2010
 
