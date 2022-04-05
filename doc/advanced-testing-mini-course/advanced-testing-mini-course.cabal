@@ -27,8 +27,15 @@ extra-source-files:
 library
   build-depends:    base ^>=4.14.1.0
   hs-source-dirs:   src
-  build-depends:    QuickCheck
+  build-depends:    async
+                  , bytestring
+                  , containers
+                  , QuickCheck
+                  , http-client
+                  , stm
                   , HUnit
+                  , wai
+                  , warp
   exposed-modules:
     ATMC
     ATMC.Lec1SMTesting
@@ -36,6 +43,7 @@ library
     ATMC.Lec3SMContractTesting
     ATMC.Lec4FaultInjection
     ATMC.Lec5SimulationTesting
+    ATMC.Lec5SimulationTestingV2
 
   default-language: Haskell2010
 

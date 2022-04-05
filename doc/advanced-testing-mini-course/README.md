@@ -6,7 +6,7 @@ Advanced property-based testing mini-course
 ===========================================
 
 -   Goals:
-    -   Show how to test stateful (i.e. impure/monadic) programs using property-based testing in general;
+    -   Show how to test stateful (i.e. impure/monadic) programs using property-based testing in general;
     -   Show how to use fault injection and so called simulation testing to test distributed systems in particular;
     -   Introduce the reader to related work and open problems in the area.
 -   Pre-requisites:
@@ -383,4 +383,3 @@ newFakeNetwork = do
 ```
 
 ---
-
