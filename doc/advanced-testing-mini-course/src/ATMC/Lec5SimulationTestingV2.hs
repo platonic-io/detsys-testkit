@@ -2,17 +2,20 @@
 
 module ATMC.Lec5SimulationTestingV2 where
 
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.Typeable
-import GHC.Natural
-import Control.Concurrent.STM.TBQueue
 import Control.Concurrent.Async
 import Control.Concurrent.STM
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
+import Control.Concurrent.STM.TBQueue
+import qualified Data.ByteString.Char8 as BS8
+import Data.ByteString.Lazy (ByteString)
+import Data.Functor (void)
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Text.Read (decimal)
+import Data.Typeable
+import GHC.Natural
 import Network.HTTP.Client
-import Network.Wai
+import Network.HTTP.Types.Status
+import Network.Wai hiding (requestBody)
 import Network.Wai.Handler.Warp
 
 ------------------------------------------------------------------------
@@ -36,14 +39,35 @@ networkHttp = do
   incoming <- newTBQueueIO qUEUE_SIZE
   mgr      <- newManager defaultManagerSettings
   initReq  <- parseRequest ("http://localhost:" ++ show pORT)
+  let sendReq = \addr msg ->
+        initReq { method      = "POST"
+                , path        = path initReq <> BS8.pack (show addr)
+                , requestBody = RequestBodyLBS msg
+                }
   return Network
-    { nSend    = \addr msg -> undefined
+    { nSend    = \addr msg -> void (httpLbs (sendReq addr msg) mgr) -- XXX: error handling
     , nDeliver = atomically (readTBQueue incoming)
-    , nStart   = run pORT app
+    , nStart   = run pORT (app incoming)
     }
 
-app :: Application
-app req = undefined
+app :: TBQueue (Addr, ByteString) -> Application
+app incoming req respond =
+  case requestMethod req of
+    "POST" -> case parseAddr of
+                Nothing -> respond (responseLBS status400 [] "No address")
+                Just addr -> do
+                  reqBody <- consumeRequestBodyStrict req
+                  atomically (writeTBQueue incoming (addr, reqBody))
+                  respond (responseLBS status200 [] "")
+    _otherwise -> respond (responseLBS status400 [] "Unsupported method")
+  where
+    parseAddr :: Maybe Addr
+    parseAddr =
+      case pathInfo req of
+        [txt] -> case decimal txt of
+          Right (ix, _rest) -> Just ix
+          _otherwise -> Nothing
+        _otherwise   -> Nothing
 
 data Codec input output = Codec
   { cEncode :: output -> ByteString

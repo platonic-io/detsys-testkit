@@ -30,7 +30,9 @@ library
   build-depends:    async
                   , bytestring
                   , containers
+                  , http-types
                   , QuickCheck
+                  , text
                   , http-client
                   , stm
                   , HUnit
