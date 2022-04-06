@@ -35,6 +35,7 @@ library
                   , text
                   , http-client
                   , stm
+                  , time
                   , HUnit
                   , wai
                   , warp
@@ -46,6 +47,14 @@ library
     ATMC.Lec4FaultInjection
     ATMC.Lec5SimulationTesting
     ATMC.Lec5SimulationTestingV2
+    ATMC.Lec5SimulationTestingV3
+    ATMC.Lec5.AwaitingClients
+    ATMC.Lec5.StateMachine
+    ATMC.Lec5.Time
+    ATMC.Lec5.EventQueue
+    ATMC.Lec5.Codec
+    ATMC.Lec5.Network
+    ATMC.Lec5.Options
 
   default-language: Haskell2010
 
@@ -57,6 +66,7 @@ executable advanced-testing-mini-course
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
-  build-depends:    base ^>=4.14.1.0
+  build-depends:    base
+                 ,  advanced-testing-mini-course
   hs-source-dirs:   app
   default-language: Haskell2010
