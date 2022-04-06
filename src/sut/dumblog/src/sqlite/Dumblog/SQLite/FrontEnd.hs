@@ -79,6 +79,6 @@ runFrontEnd queue metrics port mReady = runSettings settings (httpFrontend queue
       = setPort port
       $ maybe id (\ready -> setBeforeMainLoop (putMVar ready ())) mReady
       $ setOnOpen  (\_addr -> incrCounter metrics CurrentNumberTransactions 1 >> return True)
-      $ setOnClose (\_addr  -> incrCounter metrics CurrentNumberTransactions (-1))
+      $ setOnClose (\_addr -> incrCounter metrics CurrentNumberTransactions (-1))
                      -- >> putStrLn ("closing: " ++ show addr))
       $ defaultSettings

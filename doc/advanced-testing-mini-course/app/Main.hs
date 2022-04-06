@@ -1,4 +1,8 @@
 module Main where
 
+import ATMC.Lec5SimulationTestingV2
+
+------------------------------------------------------------------------
+
 main :: IO ()
-main = putStrLn "Hello, Haskell!"
+main = productionMain
