@@ -44,6 +44,6 @@ with the next version, then tag and push the new version with:
     git pull
     git branch -d update-changelog-"${NEW_VERSION}"
 
-    git tag -a "v${NEW_VERSION}" -m "tag: v${NEW_VERISON}"
+    git tag -a "v${NEW_VERSION}" -m "tag: v${NEW_VERSION}"
     git push origin "v${NEW_VERSION}"
 ```

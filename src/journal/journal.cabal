@@ -67,7 +67,6 @@ library
     Journal.Internal.FileAllocate
     Journal.Internal.Parse
     Journal.Internal.Metrics
-    Journal.Internal.ByteBuffer
     Journal.Internal.ByteBufferPtr
     Journal.Internal.BufferClaim
     Journal.Internal.Logger

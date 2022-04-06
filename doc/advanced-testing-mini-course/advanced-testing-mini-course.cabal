@@ -55,6 +55,7 @@ library
     ATMC.Lec5.Codec
     ATMC.Lec5.Network
     ATMC.Lec5.Options
+    Experiment.Simulation
 
   default-language: Haskell2010
 

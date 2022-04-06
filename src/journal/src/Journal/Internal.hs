@@ -51,14 +51,14 @@ tryClaim jour len = do
   let index                = indexByTermCount termCount
       activePartitionIndex = index
   rt <- readRawTail (jMetadata jour) index
-  initTermId <- readInitialTermId (jMetadata jour)
-  termLen <- readTermLength (jMetadata jour)
+  let initTermId     = jInitialTermId jour
+      termLen        = jTermLength jour
+      posBitsToShift = jPositionBitsToShift jour
 
   -- XXX: cache and read these from there?
   let termId            = rawTailTermId rt
       termOffset        = rawTailTermOffset rt termLen
-      termBeginPosition =
-        computeTermBeginPosition termId (positionBitsToShift termLen) initTermId
+      termBeginPosition = computeTermBeginPosition termId posBitsToShift initTermId
       jLog = logg (jLogger jour)
 
   jLog ("tryClaim, termCount: " ++ show (unTermCount termCount))
