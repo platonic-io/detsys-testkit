@@ -27,7 +27,7 @@ pORT = 8050
 
 data Network = Network
   { nRecv :: IO ByteString
-  , nSend :: NodeId -> ByteString -> IO ()
+  , nSend :: NodeId -> NodeId -> ByteString -> IO ()
   , nRun  :: IO ()
   }
 
@@ -36,13 +36,13 @@ realNetwork queue ac clock = do
   incoming <- newTBQueueIO 65536
   mgr      <- newManager defaultManagerSettings
   initReq  <- parseRequest ("http://localhost:" ++ show pORT)
-  let sendReq = \nodeId msg ->
+  let sendReq = \fromNodeId toNodeId msg ->
         initReq { method      = "PUT"
-                -- , path        = path initReq <> BS8.pack (addrToPath addr)
+                , path        = path initReq <> BS8.pack (show (unNodeId toNodeId))
                 , requestBody = RequestBodyLBS msg
                 }
   return Network
-    { nSend = \addr msg -> void (httpLbs (sendReq addr msg) mgr) -- XXX: error handling
+    { nSend = \from to msg -> void (httpLbs (sendReq from to msg) mgr) -- XXX: error handling
     , nRecv = atomically (readTBQueue incoming)
     , nRun  = run pORT (app queue ac clock incoming)
     }
@@ -52,14 +52,14 @@ app queue awaiting clock incoming req respond =
   case requestMethod req of
     "POST" -> case parseNodeId of
                 Nothing -> respond (responseLBS status400 [] "No receiver node id")
-                Just nodeId -> do
+                Just receiverNodeId -> do
                   reqBody <- consumeRequestBodyStrict req
                   resp <- newEmptyMVar
-                  clientId <- addAwaitingClient awaiting
+                  senderClientId <- addAwaitingClient awaiting
                   time <- cGetCurrentTime clock
                   enqueueEvent queue
-                    (NetworkEvent (RawInput nodeId
-                                   (ClientRequest time clientId reqBody)))
+                    (NetworkEvent (RawInput receiverNodeId
+                                   (ClientRequest time senderClientId reqBody)))
                   bs <- takeMVar resp
                   respond (responseLBS status200 [] bs)
     "PUT" -> error "internal msg"

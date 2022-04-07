@@ -6,10 +6,10 @@ import ATMC.Lec5.Time
 
 ------------------------------------------------------------------------
 
-newtype NodeId = NodeId Int
+newtype NodeId = NodeId { unNodeId :: Int }
   deriving (Eq, Ord, Show)
 
-newtype ClientId = ClientId Int
+newtype ClientId = ClientId { unClientId :: Int }
   deriving (Eq, Ord, Show)
 
 data SM state request message response = SM
