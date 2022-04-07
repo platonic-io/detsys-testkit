@@ -20,8 +20,10 @@ import ATMC.Lec5.Time
 
 type SMM s req msg resp a = StateT s (Writer [Output resp msg]) a
 
-runSMM :: SMM s req msg resp () -> s -> (((), s), [Output resp msg])
-runSMM m s = runWriter (runStateT m s)
+runSMM :: SMM s req msg resp () -> s -> ([Output resp msg], s)
+runSMM m s = (outputs, s')
+  where
+    (((), s'), outputs) = runWriter (runStateT m s)
 
 send :: NodeId -> msg -> SMM s req msg resp ()
 send nid msg = lift (tell [InternalMessageOut nid msg])
@@ -42,10 +44,16 @@ data ExampleState = ExampleState
   }
   deriving Show
 
+initExState :: ExampleState
+initExState = ExampleState 0
+
 instance HasField "esInt" ExampleState Int where
   hasField (ExampleState i) = (ExampleState, i)
 
 data Req  = Req
+  deriving Show
+
+data Msg = Msg
   deriving Show
 
 data Resp = Resp
@@ -58,4 +66,7 @@ example (ClientRequest at cid req) = do
   update @"esInt" (+3)
   reply cid Resp
 
-t = runSMM (example (ClientRequest epoch (ClientId 0) Req)) (ExampleState 0)
+t = runSMM (example (ClientRequest epoch (ClientId 0) Req)) initExState
+
+sm :: SM ExampleState Req Msg Resp
+sm = SM initExState (runSMM . example)
