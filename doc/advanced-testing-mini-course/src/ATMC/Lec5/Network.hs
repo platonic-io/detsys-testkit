@@ -33,25 +33,25 @@ data Network = Network
 
 realNetwork :: EventQueue -> AwaitingClients -> Clock -> IO Network
 realNetwork queue ac clock = do
-  incoming <- newTBQueueIO 1024
+  incoming <- newTBQueueIO 65536
   mgr      <- newManager defaultManagerSettings
   initReq  <- parseRequest ("http://localhost:" ++ show pORT)
   let sendReq = \nodeId msg ->
-        initReq { method      = "POST"
+        initReq { method      = "PUT"
                 -- , path        = path initReq <> BS8.pack (addrToPath addr)
                 , requestBody = RequestBodyLBS msg
                 }
   return Network
-    { nSend    = \addr msg -> void (httpLbs (sendReq addr msg) mgr) -- XXX: error handling
+    { nSend = \addr msg -> void (httpLbs (sendReq addr msg) mgr) -- XXX: error handling
     , nRecv = atomically (readTBQueue incoming)
-    , nRun   = run pORT (app queue ac clock incoming)
+    , nRun  = run pORT (app queue ac clock incoming)
     }
 
 app :: EventQueue -> AwaitingClients -> Clock -> TBQueue ByteString -> Application
 app queue awaiting clock incoming req respond =
   case requestMethod req of
     "POST" -> case parseNodeId of
-                Nothing -> respond (responseLBS status400 [] "No address")
+                Nothing -> respond (responseLBS status400 [] "No receiver node id")
                 Just nodeId -> do
                   reqBody <- consumeRequestBodyStrict req
                   resp <- newEmptyMVar
@@ -69,8 +69,7 @@ app queue awaiting clock incoming req respond =
     parseNodeId =
       case pathInfo req of
         [txt] -> case decimal txt of
-          Right (addr, _rest) | 0 <= addr -> Just (NodeId addr)
-                              | otherwise -> Nothing
+          Right (nodeId, _rest) -> Just (NodeId nodeId)
           _otherwise -> Nothing
         _otherwise   -> Nothing
 
