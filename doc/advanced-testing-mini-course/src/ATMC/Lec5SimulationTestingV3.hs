@@ -53,19 +53,20 @@ runWorker topo queue ac clock net pids = go
     exit = mapM_ cancel pids
 
     handleEvent :: Event -> IO ()
-    handleEvent (NetworkEvent (RawInput (ClientRequest at clientId nodeId req))) =
-      case lookupReceiver nodeId topo of
+    handleEvent (NetworkEvent rawInput) =
+      case lookupReceiver (inputReceiver rawInput) topo of
         Nothing -> return () -- XXX: Log?
-        Just (SomeCodecSM codec (SM state step)) -> case cDecode codec req of
-          Nothing -> return ()
-          Just input -> do
-            let (outputs, state') = step input state
-            mapM_ (handleOutput codec) outputs
+        Just (SomeCodecSM codec (SM state step)) ->
+          case prepareInput codec rawInput of
+            Nothing -> return ()
+            Just input -> do
+              let (outputs, state') = step input state
+              mapM_ (handleOutput codec) outputs
 
     handleEvent (TimerEvent) = undefined
-    handleEvent (CommandEvent Exit) = error "__IMPOSSIBLE__"
+    handleEvent (CommandEvent Exit) = error "IMPOSSIBLE: this case has already been handled"
 
     handleOutput codec (ClientResponse clientId response) =
-      respondToAwaitingClient ac clientId (cEncode codec (Left response))
+      respondToAwaitingClient ac clientId (cEncodeResponse codec response)
     handleOutput codec (InternalMessageOut nodeId msg) =
-      nSend net nodeId (cEncode codec (Right msg))
+      nSend net nodeId (cEncodeMessage codec msg)

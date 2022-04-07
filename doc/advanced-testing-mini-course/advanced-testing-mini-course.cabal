@@ -34,7 +34,9 @@ library
                   , QuickCheck
                   , text
                   , http-client
+                  , record-hasfield
                   , stm
+                  , transformers
                   , time
                   , HUnit
                   , wai
@@ -50,6 +52,7 @@ library
     ATMC.Lec5SimulationTestingV3
     ATMC.Lec5.AwaitingClients
     ATMC.Lec5.StateMachine
+    ATMC.Lec5.StateMachineDSL
     ATMC.Lec5.Time
     ATMC.Lec5.EventQueue
     ATMC.Lec5.Codec

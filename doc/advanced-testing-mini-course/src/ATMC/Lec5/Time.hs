@@ -29,8 +29,11 @@ fakeClock t0 = do
     , cSetCurrentTime = writeIORef ref
     }
 
+epoch :: Time
+epoch = Time (UTCTime (fromOrdinalDate 1970 0) 0)
+
 fakeClockEpoch :: IO Clock
-fakeClockEpoch = fakeClock (Time (UTCTime (fromOrdinalDate 1970 0) 0))
+fakeClockEpoch = fakeClock epoch
 
 newClock :: Deployment -> IO Clock
 newClock Production = realClock
