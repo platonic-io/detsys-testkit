@@ -9,7 +9,7 @@
 module ATMC.Lec5.StateMachineDSL where
 
 import Control.Monad.Trans.Class
-import Control.Monad.Trans.State
+import Control.Monad.Trans.State hiding (get)
 import Control.Monad.Trans.Writer
 import GHC.Records.Compat
 
@@ -35,6 +35,10 @@ set :: forall f s a req msg resp. HasField f s a
     => a -> SMM s req msg resp ()
 set x = modify (\s -> setField @f s x)
 
+get :: forall f s a req msg resp. HasField f s a
+    => SMM s req msg resp a
+get = gets (getField @f)
+
 update :: forall f s a req msg resp. HasField f s a
        => (a -> a) -> SMM s req msg resp ()
 update u = modify (\s -> setField @f s (u (getField @f s)))
@@ -42,7 +46,7 @@ update u = modify (\s -> setField @f s (u (getField @f s)))
 data ExampleState = ExampleState
   { esInt :: Int
   }
-  deriving Show
+  deriving (Eq, Show)
 
 initExState :: ExampleState
 initExState = ExampleState 0
@@ -54,19 +58,22 @@ data Req  = Req
   deriving Show
 
 data Msg = Msg
-  deriving Show
+  deriving (Eq, Show)
 
-data Resp = Resp
-  deriving Show
+data Resp = Resp Int
+  deriving (Eq, Show)
 
-example :: Input req msg -> SMM ExampleState req msg Resp ()
+example :: Input Req Msg -> SMM ExampleState Req Msg Resp ()
 example (ClientRequest at cid req) = do
   set    @"esInt" 1
   update @"esInt" (+2)
   update @"esInt" (+3)
-  respond cid Resp
+  s <- get @"esInt"
+  respond cid (Resp s)
 
+t :: Bool
 t = runSMM (example (ClientRequest epoch (ClientId 0) Req)) initExState
+    == ([ClientResponse (ClientId 0) (Resp 6)],ExampleState {esInt = 6})
 
 sm :: SM ExampleState Req Msg Resp
 sm = SM initExState (runSMM . example)

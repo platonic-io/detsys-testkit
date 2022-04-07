@@ -7,10 +7,10 @@ import ATMC.Lec5.Time
 ------------------------------------------------------------------------
 
 newtype NodeId = NodeId Int
-  deriving Show
+  deriving (Eq, Ord, Show)
 
 newtype ClientId = ClientId Int
-  deriving Show
+  deriving (Eq, Ord, Show)
 
 data SM state request message response = SM
   { smState :: state
@@ -24,7 +24,7 @@ data Input request message
 data Output response message
   = ClientResponse ClientId response
   | InternalMessageOut NodeId message
-  deriving Show
+  deriving (Eq, Show)
 
 inputReceiver :: RawInput -> NodeId
 inputReceiver (RawInput to (ClientRequest   _at _from _req)) = to
