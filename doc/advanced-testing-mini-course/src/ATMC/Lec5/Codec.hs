@@ -20,7 +20,7 @@ data SomeCodecSM = forall state request message response. Typeable state =>
                    SomeCodecSM (Codec request message response)
                                (SM state request message response)
 
-prepareInput :: Codec req msg resp -> RawInput -> Maybe (Input req msg)
-prepareInput codec (RawInput _to (ClientRequest at from bs)) = do
+decodeInput :: Codec req msg resp -> Input ByteString ByteString -> Maybe (Input req msg)
+decodeInput codec (ClientRequest at from bs) = do
   req <- cDecodeRequest codec bs
   return (ClientRequest at from req)

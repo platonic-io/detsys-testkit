@@ -6,10 +6,10 @@ import ATMC.Lec5.Time
 
 ------------------------------------------------------------------------
 
-newtype NodeId = NodeId Int
+newtype NodeId = NodeId { unNodeId :: Int }
   deriving (Eq, Ord, Show)
 
-newtype ClientId = ClientId Int
+newtype ClientId = ClientId { unClientId :: Int }
   deriving (Eq, Ord, Show)
 
 data SM state request message response = SM
@@ -26,8 +26,11 @@ data Output response message
   | InternalMessageOut NodeId message
   deriving (Eq, Show)
 
-inputReceiver :: RawInput -> NodeId
-inputReceiver (RawInput to (ClientRequest   _at _from _req)) = to
-inputReceiver (RawInput to (InternalMessage _at _from _msg)) = to
-
 data RawInput = RawInput NodeId (Input ByteString ByteString)
+
+inputTime :: Input request message -> Time
+inputTime (ClientRequest   time _cid _req) = time
+inputTime (InternalMessage time _nid _msg) = time
+
+rawInputTime :: RawInput -> Time
+rawInputTime (RawInput _to input) = inputTime input
