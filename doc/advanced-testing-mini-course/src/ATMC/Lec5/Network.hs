@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module ATMC.Lec5.Network where
 
 import Data.Typeable

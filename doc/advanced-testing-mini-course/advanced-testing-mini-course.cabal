@@ -58,6 +58,9 @@ library
     ATMC.Lec5.Codec
     ATMC.Lec5.Network
     ATMC.Lec5.Options
+    ATMC.Lec5.SmartBFT.Machine
+    ATMC.Lec5.SmartBFT.Messages
+    ATMC.Lec5.SmartBFT.State
     Experiment.Simulation
 
   default-language: Haskell2010
