@@ -26,8 +26,4 @@ data Output response message
   | InternalMessageOut NodeId message
   deriving (Eq, Show)
 
-inputReceiver :: RawInput -> NodeId
-inputReceiver (RawInput to (ClientRequest   _at _from _req)) = to
-inputReceiver (RawInput to (InternalMessage _at _from _msg)) = to
-
 data RawInput = RawInput NodeId (Input ByteString ByteString)

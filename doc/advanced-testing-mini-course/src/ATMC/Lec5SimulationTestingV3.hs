@@ -53,11 +53,11 @@ runWorker topo queue ac clock net pids = go
     exit = mapM_ cancel pids
 
     handleEvent :: Event -> IO ()
-    handleEvent (NetworkEvent rawInput) =
-      case lookupReceiver (inputReceiver rawInput) topo of
+    handleEvent (NetworkEvent (RawInput nodeId rawInput)) =
+      case lookupReceiver nodeId topo of
         Nothing -> return () -- XXX: Log?
         Just (SomeCodecSM codec (SM state step)) ->
-          case prepareInput codec rawInput of
+          case decodeInput codec rawInput of
             Nothing -> return ()
             Just input -> do
               let (outputs, state') = step input state
