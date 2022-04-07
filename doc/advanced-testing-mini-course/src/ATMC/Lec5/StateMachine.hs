@@ -27,3 +27,10 @@ data Output response message
   deriving (Eq, Show)
 
 data RawInput = RawInput NodeId (Input ByteString ByteString)
+
+inputTime :: Input request message -> Time
+inputTime (ClientRequest   time _cid _req) = time
+inputTime (InternalMessage time _nid _msg) = time
+
+rawInputTime :: RawInput -> Time
+rawInputTime (RawInput _to input) = inputTime input

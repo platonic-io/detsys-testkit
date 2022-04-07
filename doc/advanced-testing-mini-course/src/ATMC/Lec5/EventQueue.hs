@@ -21,7 +21,7 @@ isExitCommand (CommandEvent Exit) = True
 isExitCommand _otherwise          = False
 
 eventTime :: Event -> Time
-eventTime = undefined
+eventTime (NetworkEvent rawInput) = rawInputTime rawInput
 
 newtype EventQueue = EventQueue (TBQueue Event)
 
