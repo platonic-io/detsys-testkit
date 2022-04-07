@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
@@ -13,6 +14,7 @@ import Control.Monad.Trans.Writer
 import GHC.Records.Compat
 
 import ATMC.Lec5.StateMachine
+import ATMC.Lec5.Time
 
 ------------------------------------------------------------------------
 
@@ -27,13 +29,13 @@ send nid msg = lift (tell [InternalMessageOut nid msg])
 reply :: ClientId -> resp -> SMM s req msg resp ()
 reply cid resp = lift (tell [ClientResponse cid resp])
 
-set :: forall f s a req msg resp proxy. HasField f s a
-    => proxy f -> a -> SMM s req msg resp ()
-set _ x = modify (\s -> setField @f s x)
+set :: forall f s a req msg resp. HasField f s a
+    => a -> SMM s req msg resp ()
+set x = modify (\s -> setField @f s x)
 
-update :: forall f s a req msg resp proxy. HasField f s a
-       => proxy f -> (a -> a) -> SMM s req msg resp ()
-update _ u = modify (\s -> setField @f s (u (getField @f s)))
+update :: forall f s a req msg resp. HasField f s a
+       => (a -> a) -> SMM s req msg resp ()
+update u = modify (\s -> setField @f s (u (getField @f s)))
 
 data ExampleState = ExampleState
   { esInt :: Int
@@ -43,10 +45,17 @@ data ExampleState = ExampleState
 instance HasField "esInt" ExampleState Int where
   hasField (ExampleState i) = (ExampleState, i)
 
-example :: SMM ExampleState req msg resp ()
-example = do
-  set    @"esInt" undefined 1
-  update @"esInt" undefined (+2)
-  update @"esInt" undefined (+3)
+data Req  = Req
+  deriving Show
 
-t = runSMM example (ExampleState 0)
+data Resp = Resp
+  deriving Show
+
+example :: Input req msg -> SMM ExampleState req msg Resp ()
+example (ClientRequest at cid req) = do
+  set    @"esInt" 1
+  update @"esInt" (+2)
+  update @"esInt" (+3)
+  reply cid Resp
+
+t = runSMM (example (ClientRequest epoch (ClientId 0) Req)) (ExampleState 0)

@@ -18,8 +18,8 @@ data SM state request message response = SM
   }
 
 data Input request message
-  = ClientRequest Time ClientId NodeId request
-  | InternalMessage Time NodeId NodeId message
+  = ClientRequest Time ClientId request
+  | InternalMessage Time NodeId message
 
 data Output response message
   = ClientResponse ClientId response
@@ -27,7 +27,7 @@ data Output response message
   deriving Show
 
 inputReceiver :: RawInput -> NodeId
-inputReceiver (RawInput (ClientRequest   _at _from to _req)) = to
-inputReceiver (RawInput (InternalMessage _at _from to _msg)) = to
+inputReceiver (RawInput to (ClientRequest   _at _from _req)) = to
+inputReceiver (RawInput to (InternalMessage _at _from _msg)) = to
 
-newtype RawInput = RawInput (Input ByteString ByteString)
+data RawInput = RawInput NodeId (Input ByteString ByteString)

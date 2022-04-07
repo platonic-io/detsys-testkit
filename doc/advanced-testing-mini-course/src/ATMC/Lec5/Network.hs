@@ -58,8 +58,8 @@ app queue awaiting clock incoming req respond =
                   clientId <- addAwaitingClient awaiting
                   time <- cGetCurrentTime clock
                   enqueueEvent queue
-                    (NetworkEvent (RawInput
-                                   (ClientRequest time clientId nodeId reqBody)))
+                    (NetworkEvent (RawInput nodeId
+                                   (ClientRequest time clientId reqBody)))
                   bs <- takeMVar resp
                   respond (responseLBS status200 [] bs)
     "PUT" -> error "internal msg"
