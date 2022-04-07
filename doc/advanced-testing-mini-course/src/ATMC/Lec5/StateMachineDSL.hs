@@ -28,8 +28,8 @@ runSMM m s = (outputs, s')
 send :: NodeId -> msg -> SMM s req msg resp ()
 send nid msg = lift (tell [InternalMessageOut nid msg])
 
-reply :: ClientId -> resp -> SMM s req msg resp ()
-reply cid resp = lift (tell [ClientResponse cid resp])
+respond :: ClientId -> resp -> SMM s req msg resp ()
+respond cid resp = lift (tell [ClientResponse cid resp])
 
 set :: forall f s a req msg resp. HasField f s a
     => a -> SMM s req msg resp ()
@@ -64,7 +64,7 @@ example (ClientRequest at cid req) = do
   set    @"esInt" 1
   update @"esInt" (+2)
   update @"esInt" (+3)
-  reply cid Resp
+  respond cid Resp
 
 t = runSMM (example (ClientRequest epoch (ClientId 0) Req)) initExState
 
