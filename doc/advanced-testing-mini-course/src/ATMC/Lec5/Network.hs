@@ -51,7 +51,7 @@ app :: EventQueue -> AwaitingClients -> Clock -> TBQueue ByteString -> Applicati
 app queue awaiting clock incoming req respond =
   case requestMethod req of
     "POST" -> case parseNodeId of
-                Nothing -> respond (responseLBS status400 [] "No receiver node id")
+                Nothing -> respond (responseLBS status400 [] "Missing receiver node id")
                 Just receiverNodeId -> do
                   reqBody <- consumeRequestBodyStrict req
                   resp <- newEmptyMVar
@@ -62,7 +62,16 @@ app queue awaiting clock incoming req respond =
                                    (ClientRequest time senderClientId reqBody)))
                   bs <- takeMVar resp
                   respond (responseLBS status200 [] bs)
-    "PUT" -> error "internal msg"
+    "PUT" -> case parse2NodeIds of
+               Nothing -> respond (responseLBS status400 [] "Missing sender/receiver node id")
+               Just (fromNodeId, toNodeId) -> do
+                  reqBody <- consumeRequestBodyStrict req
+                  time <- cGetCurrentTime clock
+                  enqueueEvent queue
+                    (NetworkEvent (RawInput toNodeId
+                                   (InternalMessage time fromNodeId reqBody)))
+                  respond (responseLBS status200 [] "")
+
     _otherwise -> respond (responseLBS status400 [] "Unsupported method")
   where
     parseNodeId :: Maybe NodeId
@@ -70,6 +79,15 @@ app queue awaiting clock incoming req respond =
       case pathInfo req of
         [txt] -> case decimal txt of
           Right (nodeId, _rest) -> Just (NodeId nodeId)
+          _otherwise -> Nothing
+        _otherwise   -> Nothing
+
+    parse2NodeIds :: Maybe (NodeId, NodeId)
+    parse2NodeIds =
+      case pathInfo req of
+        [txt, txt'] -> case (decimal txt, decimal txt') of
+          (Right (nodeId, _rest), Right (nodeId', _rest')) ->
+            Just (NodeId nodeId, NodeId nodeId')
           _otherwise -> Nothing
         _otherwise   -> Nothing
 
