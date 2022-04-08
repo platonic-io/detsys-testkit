@@ -2,6 +2,7 @@ module ATMC.Lec5.Time where
 
 import Data.IORef
 import Data.Time
+import Data.Time.Clock
 import Data.Time.Calendar.OrdinalDate
 
 import ATMC.Lec5.Options
@@ -9,7 +10,10 @@ import ATMC.Lec5.Options
 ------------------------------------------------------------------------
 
 newtype Time = Time UTCTime
-  deriving Show
+  deriving (Eq, Ord, Show)
+
+addTime :: NominalDiffTime -> Time -> Time
+addTime secs (Time t) = Time (addUTCTime secs t)
 
 data Clock = Clock
   { cGetCurrentTime :: IO Time
