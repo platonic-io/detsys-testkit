@@ -24,3 +24,11 @@ decodeInput :: Codec req msg resp -> Input ByteString ByteString -> Maybe (Input
 decodeInput codec (ClientRequest at from bs) = do
   req <- cDecodeRequest codec bs
   return (ClientRequest at from req)
+
+idCodec :: Codec ByteString ByteString ByteString
+idCodec = Codec
+  { cDecodeRequest  = Just
+  , cDecodeMessage  = Just
+  , cEncodeResponse = id
+  , cEncodeMessage  = id
+  }

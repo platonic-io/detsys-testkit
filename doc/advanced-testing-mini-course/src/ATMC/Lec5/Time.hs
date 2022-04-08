@@ -9,6 +9,7 @@ import ATMC.Lec5.Options
 ------------------------------------------------------------------------
 
 newtype Time = Time UTCTime
+  deriving Show
 
 data Clock = Clock
   { cGetCurrentTime :: IO Time

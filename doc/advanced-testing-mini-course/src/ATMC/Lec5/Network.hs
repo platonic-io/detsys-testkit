@@ -1,10 +1,13 @@
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module ATMC.Lec5.Network where
 
-import Data.Typeable
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TBQueue
+import Control.Exception
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Lazy (ByteString)
 import Data.Functor
@@ -14,6 +17,7 @@ import Network.HTTP.Client
 import Network.HTTP.Types.Status
 import Network.Wai hiding (requestBody)
 import Network.Wai.Handler.Warp
+import System.Timeout (timeout)
 
 import ATMC.Lec5.AwaitingClients
 import ATMC.Lec5.EventQueue
@@ -42,8 +46,11 @@ realNetwork queue ac clock = do
                 , path        = path initReq <> BS8.pack (show (unNodeId toNodeId))
                 , requestBody = RequestBodyLBS msg
                 }
+      send from to msg = void (httpLbs (sendReq from to msg) mgr)
+                        `catch` (\(e :: HttpException) ->
+                                   putStrLn ("send failed, error: " ++ show e))
   return Network
-    { nSend = \from to msg -> void (httpLbs (sendReq from to msg) mgr) -- XXX: error handling
+    { nSend = send
     , nRecv = atomically (readTBQueue incoming)
     , nRun  = run pORT (app queue ac clock incoming)
     }
@@ -55,14 +62,18 @@ app queue awaiting clock incoming req respond =
                 Nothing -> respond (responseLBS status400 [] "Missing receiver node id")
                 Just receiverNodeId -> do
                   reqBody <- consumeRequestBodyStrict req
-                  resp <- newEmptyMVar
-                  senderClientId <- addAwaitingClient awaiting
+                  (senderClientId, resp) <- addAwaitingClient awaiting
                   time <- cGetCurrentTime clock
                   enqueueEvent queue
                     (NetworkEvent (RawInput receiverNodeId
                                    (ClientRequest time senderClientId reqBody)))
-                  bs <- takeMVar resp
-                  respond (responseLBS status200 [] bs)
+                  mBs <- timeout (60_000_000) (takeMVar resp) -- 60s
+                  case mBs of
+                    Nothing -> do
+                      putStrLn "Client response timed out..."
+                      removeAwaitingClient awaiting senderClientId
+                      respond (responseLBS status500 [] "Timeout due to overload or bug")
+                    Just bs -> respond (responseLBS status200 [] bs)
     "PUT" -> case parse2NodeIds of
                Nothing -> respond (responseLBS status400 [] "Missing sender/receiver node id")
                Just (fromNodeId, toNodeId) -> do

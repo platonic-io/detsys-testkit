@@ -1,8 +1,10 @@
 module Main where
 
-import ATMC.Lec5SimulationTestingV2
+import ATMC.Lec5SimulationTestingV3
+import ATMC.Lec5.StateMachine
+import ATMC.Lec5.Codec
 
 ------------------------------------------------------------------------
 
 main :: IO ()
-main = productionMain
+main = eventLoopProduction [SomeCodecSM idCodec echoSM]

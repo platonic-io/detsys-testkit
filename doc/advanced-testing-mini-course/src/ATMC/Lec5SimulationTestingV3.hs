@@ -25,8 +25,17 @@ newtype Topology = Topology (IntMap SomeCodecSM)
 lookupReceiver :: NodeId -> Topology -> Maybe SomeCodecSM
 lookupReceiver (NodeId nid) (Topology im) = IntMap.lookup nid im
 
+eventLoopProduction :: [SomeCodecSM] -> IO ()
+eventLoopProduction
+  = eventLoop (Options Production)
+  . Topology
+  . IntMap.fromList
+  . zip [0..]
+
 eventLoop :: Options -> Topology -> IO ()
 eventLoop opts topo = do
+  putStrLn ("Starting event loop in " ++ show (oDeployment opts) ++
+            " mode on port: "  ++ show pORT)
   queue <- newEventQueue
   ac    <- newAwaitingClients
   clock <- newClock (oDeployment opts)
@@ -55,10 +64,12 @@ runWorker topo queue ac clock net pids = go
     handleEvent :: Event -> IO ()
     handleEvent (NetworkEvent (RawInput nodeId rawInput)) =
       case lookupReceiver nodeId topo of
-        Nothing -> return () -- XXX: Log?
+        Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state step)) ->
           case decodeInput codec rawInput of
-            Nothing -> return ()
+            Nothing -> putStrLn (("Decoding of input failed, node id: " ++
+                                  show (unNodeId nodeId)) ++ ", input: " ++
+                                  show rawInput)
             Just input -> do
               let (outputs, state') = step input state
               mapM_ (handleOutput codec nodeId) outputs
