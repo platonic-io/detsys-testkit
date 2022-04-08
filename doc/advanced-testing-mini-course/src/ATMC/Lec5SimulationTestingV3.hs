@@ -1,5 +1,8 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module ATMC.Lec5SimulationTestingV3 where
 
+import Control.Exception
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Concurrent.MVar
@@ -71,12 +74,17 @@ runWorker topo queue ac clock net pids = go
                                   show (unNodeId nodeId)) ++ ", input: " ++
                                   show rawInput)
             Just input -> do
-              let (outputs, state') = step input state
-              mapM_ (handleOutput codec nodeId) outputs
+              r <- try (evaluate (step input state))
+              case r of
+                Left (e :: SomeException) ->
+                  putStrLn ("step failed, error: " ++ displayException e)
+                Right (outputs, state') ->
+                  mapM_ (handleOutput codec nodeId) outputs
 
     handleEvent (TimerEvent) = undefined
     handleEvent (CommandEvent Exit) = error "IMPOSSIBLE: this case has already been handled"
 
+    handleOutput :: Codec req msg resp -> NodeId -> Output resp msg -> IO ()
     handleOutput codec _fromNodeId (ClientResponse clientId response) =
       respondToAwaitingClient ac clientId (cEncodeResponse codec response)
     handleOutput codec fromNodeId (InternalMessageOut toNodeId msg) =

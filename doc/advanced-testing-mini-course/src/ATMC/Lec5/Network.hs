@@ -31,7 +31,7 @@ pORT :: Int
 pORT = 8050
 
 data Network = Network
-  { nRecv :: IO ByteString
+  { nRecv :: IO ByteString -- XXX: not used...
   , nSend :: NodeId -> NodeId -> ByteString -> IO ()
   , nRun  :: IO ()
   }
@@ -68,10 +68,10 @@ app queue awaiting clock incoming req respond =
                     (NetworkEvent (RawInput receiverNodeId
                                    (ClientRequest time senderClientId reqBody)))
                   mBs <- timeout (60_000_000) (takeMVar resp) -- 60s
+                  removeAwaitingClient awaiting senderClientId
                   case mBs of
                     Nothing -> do
                       putStrLn "Client response timed out..."
-                      removeAwaitingClient awaiting senderClientId
                       respond (responseLBS status500 [] "Timeout due to overload or bug")
                     Just bs -> respond (responseLBS status200 [] bs)
     "PUT" -> case parse2NodeIds of
