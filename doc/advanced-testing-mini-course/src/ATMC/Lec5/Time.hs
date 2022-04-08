@@ -5,8 +5,6 @@ import Data.Time
 import Data.Time.Clock
 import Data.Time.Calendar.OrdinalDate
 
-import ATMC.Lec5.Options
-
 ------------------------------------------------------------------------
 
 newtype Time = Time UTCTime
@@ -39,7 +37,3 @@ epoch = Time (UTCTime (fromOrdinalDate 1970 0) 0)
 
 fakeClockEpoch :: IO Clock
 fakeClockEpoch = fakeClock epoch
-
-newClock :: Deployment -> IO Clock
-newClock Production = realClock
-newClock Simulation = fakeClockEpoch

@@ -2,24 +2,25 @@
 
 module ATMC.Lec5SimulationTestingV3 where
 
-import Control.Exception
 import Control.Concurrent.Async
-import Control.Concurrent.STM
 import Control.Concurrent.MVar
+import Control.Concurrent.STM
+import Control.Exception
+import Data.ByteString.Lazy (ByteString)
 import Data.IORef
-import Data.Typeable
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import Data.ByteString.Lazy (ByteString)
 import Data.Time
+import Data.Typeable
 
-import ATMC.Lec5.Time
-import ATMC.Lec5.Event
+import ATMC.Lec5.Agenda
 import ATMC.Lec5.AwaitingClients
-import ATMC.Lec5.StateMachine
-import ATMC.Lec5.Options
-import ATMC.Lec5.Network
 import ATMC.Lec5.Codec
+import ATMC.Lec5.Event
+import ATMC.Lec5.Network
+import ATMC.Lec5.Options
+import ATMC.Lec5.StateMachine
+import ATMC.Lec5.Time
 
 ------------------------------------------------------------------------
 
@@ -34,6 +35,10 @@ eventLoopProduction
   . Topology
   . IntMap.fromList
   . zip [0..]
+
+newClock :: Deployment -> IO Clock
+newClock Production           = realClock
+newClock (Simulation _agenda) = fakeClockEpoch
 
 eventLoop :: Options -> Topology -> IO ()
 eventLoop opts topo = do

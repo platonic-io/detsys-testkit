@@ -103,9 +103,9 @@ app awaiting clock incoming req respond =
           _otherwise -> Nothing
         _otherwise   -> Nothing
 
-fakeNetwork :: AwaitingClients -> Clock -> IO Network
-fakeNetwork awaiting clock = do
-  agenda <- newTVarIO emptyAgenda
+fakeNetwork :: Agenda RawInput -> AwaitingClients -> Clock -> IO Network
+fakeNetwork a _awaiting clock = do
+  agenda <- newTVarIO a
   return Network
     { nRecv = recv agenda
     , nSend = send agenda
@@ -130,5 +130,5 @@ fakeNetwork awaiting clock = do
         (push (arrivalTime, RawInput to (InternalMessage arrivalTime from msg))))
 
 newNetwork :: Deployment -> AwaitingClients -> Clock -> IO Network
-newNetwork Production = realNetwork
-newNetwork Simulation = fakeNetwork
+newNetwork Production          = realNetwork
+newNetwork (Simulation agenda) = fakeNetwork agenda
