@@ -1,6 +1,9 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module ATMC.Lec5.Network where
 
 import Data.Typeable
+import Control.Exception
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TBQueue
@@ -41,8 +44,11 @@ realNetwork queue ac clock = do
                 , path        = path initReq <> BS8.pack (show (unNodeId toNodeId))
                 , requestBody = RequestBodyLBS msg
                 }
+      send from to msg = void (httpLbs (sendReq from to msg) mgr)
+                        `catch` (\(e :: HttpException) ->
+                                   putStrLn ("send failed, error: " ++ show e))
   return Network
-    { nSend = \from to msg -> void (httpLbs (sendReq from to msg) mgr) -- XXX: error handling
+    { nSend = send
     , nRecv = atomically (readTBQueue incoming)
     , nRun  = run pORT (app queue ac clock incoming)
     }

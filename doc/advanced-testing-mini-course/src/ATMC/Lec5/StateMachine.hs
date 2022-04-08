@@ -20,6 +20,7 @@ data SM state request message response = SM
 data Input request message
   = ClientRequest Time ClientId request
   | InternalMessage Time NodeId message
+  deriving Show
 
 data Output response message
   = ClientResponse ClientId response
@@ -27,6 +28,7 @@ data Output response message
   deriving (Eq, Show)
 
 data RawInput = RawInput NodeId (Input ByteString ByteString)
+  deriving Show
 
 inputTime :: Input request message -> Time
 inputTime (ClientRequest   time _cid _req) = time
@@ -34,3 +36,9 @@ inputTime (InternalMessage time _nid _msg) = time
 
 rawInputTime :: RawInput -> Time
 rawInputTime (RawInput _to input) = inputTime input
+
+echoSM :: SM () ByteString ByteString ByteString
+echoSM = SM
+  { smState = ()
+  , smStep  = \(ClientRequest _at cid req) () -> ([ClientResponse cid req], ())
+  }
