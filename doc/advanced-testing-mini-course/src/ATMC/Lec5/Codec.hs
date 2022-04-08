@@ -24,6 +24,9 @@ decodeInput :: Codec req msg resp -> Input ByteString ByteString -> Maybe (Input
 decodeInput codec (ClientRequest at from bs) = do
   req <- cDecodeRequest codec bs
   return (ClientRequest at from req)
+decodeInput codec (InternalMessage at from bs) = do
+  msg <- cDecodeMessage codec bs
+  return (InternalMessage at from msg)
 
 idCodec :: Codec ByteString ByteString ByteString
 idCodec = Codec
