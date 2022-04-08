@@ -54,7 +54,7 @@ library
     ATMC.Lec5.StateMachine
     ATMC.Lec5.StateMachineDSL
     ATMC.Lec5.Time
-    ATMC.Lec5.EventQueue
+    ATMC.Lec5.Event
     ATMC.Lec5.Codec
     ATMC.Lec5.Network
     ATMC.Lec5.Options
