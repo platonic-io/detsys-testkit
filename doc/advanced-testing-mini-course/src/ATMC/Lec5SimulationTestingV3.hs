@@ -14,7 +14,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Time
 
 import ATMC.Lec5.Time
-import ATMC.Lec5.EventQueue
+import ATMC.Lec5.Event
 import ATMC.Lec5.AwaitingClients
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Options
@@ -39,21 +39,20 @@ eventLoop :: Options -> Topology -> IO ()
 eventLoop opts topo = do
   putStrLn ("Starting event loop in " ++ show (oDeployment opts) ++
             " mode on port: "  ++ show pORT)
-  queue <- newEventQueue
   ac    <- newAwaitingClients
   clock <- newClock (oDeployment opts)
-  net   <- newNetwork (oDeployment opts) queue ac clock
+  net   <- newNetwork (oDeployment opts) ac clock
   withAsync (nRun net) $ \anet -> do
     link anet
-    runWorker topo queue ac clock net [anet]
+    runWorker topo ac clock net [anet]
 
-runWorker :: Topology -> EventQueue -> AwaitingClients -> Clock -> Network -> [Async ()]
+runWorker :: Topology -> AwaitingClients -> Clock -> Network -> [Async ()]
           -> IO ()
-runWorker topo queue ac clock net pids = go
+runWorker topo ac clock net pids = go
   where
     go :: IO ()
     go = do
-      event <- dequeueEvent queue
+      event <- atomically (NetworkEvent <$> nRecv net) -- <|> TimerEvent <$>...
       if isExitCommand event
       then exit
       else do

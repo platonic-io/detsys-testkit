@@ -20,7 +20,6 @@ import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
 
 import ATMC.Lec5.AwaitingClients
-import ATMC.Lec5.EventQueue
 import ATMC.Lec5.Options
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Time
@@ -31,13 +30,13 @@ pORT :: Int
 pORT = 8050
 
 data Network = Network
-  { nRecv :: IO ByteString -- XXX: not used...
+  { nRecv :: STM RawInput
   , nSend :: NodeId -> NodeId -> ByteString -> IO ()
   , nRun  :: IO ()
   }
 
-realNetwork :: EventQueue -> AwaitingClients -> Clock -> IO Network
-realNetwork queue ac clock = do
+realNetwork :: AwaitingClients -> Clock -> IO Network
+realNetwork ac clock = do
   incoming <- newTBQueueIO 65536
   mgr      <- newManager defaultManagerSettings
   initReq  <- parseRequest ("http://localhost:" ++ show pORT)
@@ -51,24 +50,24 @@ realNetwork queue ac clock = do
                                    putStrLn ("send failed, error: " ++ show e))
   return Network
     { nSend = send
-    , nRecv = atomically (readTBQueue incoming)
-    , nRun  = run pORT (app queue ac clock incoming)
+    , nRecv = readTBQueue incoming
+    , nRun  = run pORT (app ac clock incoming)
     }
 
-app :: EventQueue -> AwaitingClients -> Clock -> TBQueue ByteString -> Application
-app queue awaiting clock incoming req respond =
+app :: AwaitingClients -> Clock -> TBQueue RawInput -> Application
+app awaiting clock incoming req respond =
   case requestMethod req of
     "POST" -> case parseNodeId of
                 Nothing -> respond (responseLBS status400 [] "Missing receiver node id")
-                Just receiverNodeId -> do
+                Just toNodeId -> do
                   reqBody <- consumeRequestBodyStrict req
-                  (senderClientId, resp) <- addAwaitingClient awaiting
+                  (fromClientId, resp) <- addAwaitingClient awaiting
                   time <- cGetCurrentTime clock
-                  enqueueEvent queue
-                    (NetworkEvent (RawInput receiverNodeId
-                                   (ClientRequest time senderClientId reqBody)))
+                  atomically
+                    (writeTBQueue incoming
+                      (RawInput toNodeId (ClientRequest time fromClientId reqBody)))
                   mBs <- timeout (60_000_000) (takeMVar resp) -- 60s
-                  removeAwaitingClient awaiting senderClientId
+                  removeAwaitingClient awaiting fromClientId
                   case mBs of
                     Nothing -> do
                       putStrLn "Client response timed out..."
@@ -79,9 +78,9 @@ app queue awaiting clock incoming req respond =
                Just (fromNodeId, toNodeId) -> do
                   reqBody <- consumeRequestBodyStrict req
                   time <- cGetCurrentTime clock
-                  enqueueEvent queue
-                    (NetworkEvent (RawInput toNodeId
-                                   (InternalMessage time fromNodeId reqBody)))
+                  atomically
+                    (writeTBQueue incoming
+                      (RawInput toNodeId (InternalMessage time fromNodeId reqBody)))
                   respond (responseLBS status200 [] "")
 
     _otherwise -> respond (responseLBS status400 [] "Unsupported method")
@@ -103,9 +102,35 @@ app queue awaiting clock incoming req respond =
           _otherwise -> Nothing
         _otherwise   -> Nothing
 
-fakeNetwork :: EventQueue -> AwaitingClients -> Clock -> IO Network
-fakeNetwork = undefined
+fakeNetwork :: AwaitingClients -> Clock -> IO Network
+fakeNetwork awaiting clock = do
+  return Network
+    { nRecv = undefined
+    , nSend = undefined
+    , nRun  = return ()
+    }
+  {-
+fakeSend :: Heap -> Addr -> Msg -> (Heap, ())
+fakeSend heap addr msg = do
+  t <- genArrivalTime
+  (enqueue (addr, msg, t) heap, ())
 
-newNetwork :: Deployment -> EventQueue -> AwaitingClients -> Clock -> IO Network
+fakeRecv :: Heap -> (Heap, (Addr, Msg, Time))
+fakeRecv = dequeue -- XXX: partial function
+
+newFakeNetwork :: IO Network
+newFakeNetwork = do
+  heap <- newIORef emptyHeap
+  let select outgoing = do
+        h <- readIORef heap
+        let h' = fakeSendAll h outgoing
+            (h'', incoming) = fakeRecv h'
+        writeIORef heap h''
+        return incoming
+  ...
+  return Network {..}
+-}
+
+newNetwork :: Deployment -> AwaitingClients -> Clock -> IO Network
 newNetwork Production = realNetwork
 newNetwork Simulation = fakeNetwork

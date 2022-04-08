@@ -15,6 +15,8 @@ newtype ClientId = ClientId { unClientId :: Int }
 data SM state request message response = SM
   { smState :: state
   , smStep  :: Input request message -> state -> ([Output response message], state)
+  -- smPredicate :: state -> [pred]
+  -- smProcess :: pred -> state -> ([Output response message], state)
   }
 
 data Input request message
