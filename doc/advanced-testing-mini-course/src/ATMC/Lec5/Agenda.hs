@@ -13,6 +13,7 @@ import ATMC.Lec5.Time
 
 newtype Agenda e = Agenda (Heap (Entry Time e))
   deriving newtype (Semigroup, Monoid)
+  deriving stock Show
 
 emptyAgenda :: Agenda e
 emptyAgenda = Agenda Heap.empty
