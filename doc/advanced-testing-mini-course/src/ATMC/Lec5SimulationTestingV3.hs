@@ -34,6 +34,8 @@ eventLoopProduction
 
 eventLoop :: Options -> Topology -> IO ()
 eventLoop opts topo = do
+  putStrLn ("Starting event loop in " ++ show (oDeployment opts) ++
+            " mode on port: "  ++ show pORT)
   queue <- newEventQueue
   ac    <- newAwaitingClients
   clock <- newClock (oDeployment opts)
