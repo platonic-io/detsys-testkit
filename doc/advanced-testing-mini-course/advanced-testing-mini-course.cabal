@@ -30,6 +30,7 @@ library
   build-depends:    async
                   , bytestring
                   , containers
+                  , heaps
                   , http-types
                   , QuickCheck
                   , text
@@ -50,6 +51,7 @@ library
     ATMC.Lec5SimulationTesting
     ATMC.Lec5SimulationTestingV2
     ATMC.Lec5SimulationTestingV3
+    ATMC.Lec5.Agenda
     ATMC.Lec5.AwaitingClients
     ATMC.Lec5.StateMachine
     ATMC.Lec5.StateMachineDSL

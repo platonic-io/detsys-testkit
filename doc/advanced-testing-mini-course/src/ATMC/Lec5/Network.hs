@@ -19,6 +19,7 @@ import Network.Wai hiding (requestBody)
 import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
 
+import ATMC.Lec5.Agenda
 import ATMC.Lec5.AwaitingClients
 import ATMC.Lec5.Options
 import ATMC.Lec5.StateMachine
@@ -104,32 +105,29 @@ app awaiting clock incoming req respond =
 
 fakeNetwork :: AwaitingClients -> Clock -> IO Network
 fakeNetwork awaiting clock = do
+  agenda <- newTVarIO emptyAgenda
   return Network
-    { nRecv = undefined
-    , nSend = undefined
+    { nRecv = recv agenda
+    , nSend = send agenda
     , nRun  = return ()
     }
-  {-
-fakeSend :: Heap -> Addr -> Msg -> (Heap, ())
-fakeSend heap addr msg = do
-  t <- genArrivalTime
-  (enqueue (addr, msg, t) heap, ())
+  where
+    recv :: TVar (Agenda RawInput) -> STM RawInput
+    recv agenda = do
+      a <- readTVar agenda
+      case pop a of
+        Nothing -> retry
+        Just ((_time, rawInput), a') -> do
+          writeTVar agenda a'
+          return rawInput
 
-fakeRecv :: Heap -> (Heap, (Addr, Msg, Time))
-fakeRecv = dequeue -- XXX: partial function
-
-newFakeNetwork :: IO Network
-newFakeNetwork = do
-  heap <- newIORef emptyHeap
-  let select outgoing = do
-        h <- readIORef heap
-        let h' = fakeSendAll h outgoing
-            (h'', incoming) = fakeRecv h'
-        writeIORef heap h''
-        return incoming
-  ...
-  return Network {..}
--}
+    send :: TVar (Agenda RawInput) -> NodeId -> NodeId -> ByteString -> IO ()
+    send agenda from to msg = do
+      now <- cGetCurrentTime clock
+      -- XXX: need seed to generate random arrival time
+      let arrivalTime = addTime 1 now
+      atomically (modifyTVar' agenda
+        (push (arrivalTime, RawInput to (InternalMessage arrivalTime from msg))))
 
 newNetwork :: Deployment -> AwaitingClients -> Clock -> IO Network
 newNetwork Production = realNetwork
