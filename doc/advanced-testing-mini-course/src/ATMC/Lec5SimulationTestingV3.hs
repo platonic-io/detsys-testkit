@@ -71,8 +71,9 @@ runWorker config clock net cmdQ pids = go
     go :: IO ()
     go = do
       event <- atomically
-                 $   (NetworkEvent <$> nRecv net)
-                 <|> (CommandEvent <$> readTBQueue cmdQ)
+                 $   ((NetworkEvent <$> nRecv net)
+                      `catchSTM` (\(e :: SomeException) -> return (CommandEvent Exit)))
+                 -- <|> (CommandEvent <$> readTBQueue cmdQ)
            -- <|> TimerEvent <$>...
       if isExitCommand event
       then exit

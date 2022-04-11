@@ -20,6 +20,7 @@ import Network.HTTP.Types.Status
 import Network.Wai hiding (requestBody)
 import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
+import System.Exit
 
 import ATMC.Lec5.Agenda
 import ATMC.Lec5.AwaitingClients
@@ -129,8 +130,8 @@ fakeNetwork a clock cmdQ = do
       case pop a of
         Nothing -> do
           writeTBQueue cmdQ Exit
-          traceM "retrying..."
-          retry
+          throwSTM ExitSuccess
+          -- retry
           -- return (RawInput (NodeId (-1)) (ClientRequest epoch (ClientId (-1)) "dummy"))
         Just ((_time, rawInput), a') -> do
           writeTVar agenda a'
