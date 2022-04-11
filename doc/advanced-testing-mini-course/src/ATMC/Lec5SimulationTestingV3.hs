@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module ATMC.Lec5SimulationTestingV3 where
 
@@ -28,6 +29,10 @@ newtype Topology = Topology (IntMap SomeCodecSM)
 lookupReceiver :: NodeId -> Topology -> Maybe SomeCodecSM
 lookupReceiver (NodeId nid) (Topology im) = IntMap.lookup nid im
 
+newClock :: Deployment -> IO Clock
+newClock Production           = realClock
+newClock (Simulation _agenda) = fakeClockEpoch
+
 eventLoopProduction :: [SomeCodecSM] -> IO ()
 eventLoopProduction
   = eventLoop (Options Production)
@@ -35,9 +40,16 @@ eventLoopProduction
   . IntMap.fromList
   . zip [0..]
 
-newClock :: Deployment -> IO Clock
-newClock Production           = realClock
-newClock (Simulation _agenda) = fakeClockEpoch
+eventLoopSimulation :: Agenda -> [SomeCodecSM] -> IO ()
+eventLoopSimulation agenda
+  = eventLoop (Options (Simulation agenda))
+  . Topology
+  . IntMap.fromList
+  . zip [0..]
+
+echoAgenda :: Agenda
+echoAgenda = makeAgenda
+  [(epoch, RawInput (NodeId 0) (ClientRequest epoch (ClientId 0) "hi"))]
 
 eventLoop :: Options -> Topology -> IO ()
 eventLoop opts topo = do
@@ -59,6 +71,7 @@ runWorker topo clock net pids = go
       then exit
       else do
         cSetCurrentTime clock (eventTime event) -- This is a noop in production deployment.
+        print event
         handleEvent event
         go
 

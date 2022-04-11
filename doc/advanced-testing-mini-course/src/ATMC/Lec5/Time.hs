@@ -1,3 +1,5 @@
+{-# LANGUAGE DerivingStrategies #-}
+
 module ATMC.Lec5.Time where
 
 import Data.IORef
@@ -8,7 +10,7 @@ import Data.Time.Calendar.OrdinalDate
 ------------------------------------------------------------------------
 
 newtype Time = Time UTCTime
-  deriving (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show)
 
 addTime :: NominalDiffTime -> Time -> Time
 addTime secs (Time t) = Time (addUTCTime secs t)
