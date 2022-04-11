@@ -20,8 +20,10 @@ import ATMC.Lec5.Time
 
 type SMM s msg resp a = StateT s (StateT StdGen (Writer [Output resp msg])) a
 
-runSMM :: Int -> SMM s msg resp () -> s -> ([Output resp msg], s)
-runSMM seed m s = (outputs, s')
+newtype Seed = Seed Int
+
+runSMM :: Seed -> SMM s msg resp () -> s -> ([Output resp msg], s)
+runSMM (Seed seed) m s = (outputs, s')
   where
     ((((), s'), _stdGen'), outputs) =
       runWriter (runStateT (runStateT m s) (Random.mkStdGen seed))
@@ -67,8 +69,8 @@ example (ClientRequest at cid req) = do
   respond cid (Resp s)
 
 t :: Bool
-t = runSMM 0 (example (ClientRequest epoch (ClientId 0) Req)) initExState
+t = runSMM (Seed 0) (example (ClientRequest epoch (ClientId 0) Req)) initExState
     == ([ClientResponse (ClientId 0) (Resp 6)], ExampleState {_esInt = 6})
 
 sm :: SM ExampleState Req Msg Resp
-sm = SM initExState (runSMM 0 . example)
+sm = SM initExState (runSMM (Seed 0) . example)
