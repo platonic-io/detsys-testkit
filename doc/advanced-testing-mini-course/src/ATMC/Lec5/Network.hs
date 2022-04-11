@@ -18,6 +18,7 @@ import Network.HTTP.Types.Status
 import Network.Wai hiding (requestBody)
 import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
+import System.Exit
 
 import ATMC.Lec5.Agenda
 import ATMC.Lec5.AwaitingClients
@@ -38,8 +39,8 @@ data Network = Network
   , nRun     :: IO ()
   }
 
-realNetwork :: Clock -> IO Network
-realNetwork clock = do
+realNetwork :: Clock -> TBQueue CommandEvent -> IO Network
+realNetwork clock _cmdQ = do
   ac       <- newAwaitingClients
   incoming <- newTBQueueIO 65536
   mgr      <- newManager defaultManagerSettings
@@ -111,8 +112,8 @@ newtype History = History (TQueue (Either RawInput ByteString))
 
 data HEvent = HEClientReq
 
-fakeNetwork :: Agenda -> Clock -> IO Network
-fakeNetwork a clock = do
+fakeNetwork :: Agenda -> Clock -> TBQueue CommandEvent -> IO Network
+fakeNetwork a clock cmdQ = do
   agenda <- newTVarIO a
   return Network
     { nRecv    = recv agenda
@@ -125,7 +126,11 @@ fakeNetwork a clock = do
     recv agenda = do
       a <- readTVar agenda
       case pop a of
-        Nothing -> retry
+        Nothing -> do
+          writeTBQueue cmdQ Exit
+          -- NOTE: We need to throw here, because merely retrying will rollback
+          -- the write of the exit command.
+          throwSTM ExitSuccess
         Just ((_time, rawInput), a') -> do
           writeTVar agenda a'
           return rawInput
@@ -140,8 +145,9 @@ fakeNetwork a clock = do
 
     respond :: ClientId -> ByteString -> IO ()
     respond clientId resp = do
+      -- XXX: actually append this to the history.
       putStrLn ("History: " ++ show (clientId, resp))
 
-newNetwork :: Deployment -> Clock -> IO Network
+newNetwork :: Deployment -> Clock -> TBQueue CommandEvent -> IO Network
 newNetwork Production          = realNetwork
 newNetwork (Simulation agenda) = fakeNetwork agenda
