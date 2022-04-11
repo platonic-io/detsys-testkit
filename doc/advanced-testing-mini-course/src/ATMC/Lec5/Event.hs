@@ -11,6 +11,7 @@ data Event
   = NetworkEvent RawInput
   | TimerEvent -- TimerEvent
   | CommandEvent CommandEvent
+  deriving Show
 
 data RawInput = RawInput NodeId (Input ByteString ByteString)
   deriving Show
@@ -23,6 +24,7 @@ rawInputTime :: RawInput -> Time
 rawInputTime (RawInput _to input) = inputTime input
 
 data CommandEvent = Exit
+  deriving Show
 
 isExitCommand :: Event -> Bool
 isExitCommand (CommandEvent Exit) = True

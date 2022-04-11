@@ -107,9 +107,11 @@ app awaiting clock incoming req respond =
           _otherwise -> Nothing
         _otherwise -> Nothing
 
-newtype History = History [Either RawInput ()]
+newtype History = History (TQueue (Either RawInput ByteString))
 
-fakeNetwork :: Agenda RawInput -> Clock -> IO Network
+data HEvent = HEClientReq
+
+fakeNetwork :: Agenda -> Clock -> IO Network
 fakeNetwork a clock = do
   agenda <- newTVarIO a
   return Network
@@ -119,7 +121,7 @@ fakeNetwork a clock = do
     , nRun     = return ()
     }
   where
-    recv :: TVar (Agenda RawInput) -> STM RawInput
+    recv :: TVar Agenda -> STM RawInput
     recv agenda = do
       a <- readTVar agenda
       case pop a of
@@ -128,7 +130,7 @@ fakeNetwork a clock = do
           writeTVar agenda a'
           return rawInput
 
-    send :: TVar (Agenda RawInput) -> NodeId -> NodeId -> ByteString -> IO ()
+    send :: TVar Agenda -> NodeId -> NodeId -> ByteString -> IO ()
     send agenda from to msg = do
       now <- cGetCurrentTime clock
       -- XXX: need seed to generate random arrival time
@@ -138,7 +140,7 @@ fakeNetwork a clock = do
 
     respond :: ClientId -> ByteString -> IO ()
     respond clientId resp = do
-      undefined
+      putStrLn ("History: " ++ show (clientId, resp))
 
 newNetwork :: Deployment -> Clock -> IO Network
 newNetwork Production          = realNetwork

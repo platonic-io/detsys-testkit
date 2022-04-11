@@ -6,9 +6,11 @@ module ATMC.Lec5.StateMachineDSL
   )
 where
 
+import System.Random (StdGen)
+import qualified System.Random as Random
 import Lens.Micro.Platform
 import Control.Monad.Trans.Class
-import Control.Monad.Trans.State hiding (get)
+import Control.Monad.Trans.State
 import Control.Monad.Trans.Writer
 
 import ATMC.Lec5.StateMachine
@@ -16,18 +18,26 @@ import ATMC.Lec5.Time
 
 ------------------------------------------------------------------------
 
-type SMM s msg resp a = StateT s (Writer [Output resp msg]) a
+type SMM s msg resp a = StateT s (StateT StdGen (Writer [Output resp msg])) a
 
-runSMM :: SMM s msg resp () -> s -> ([Output resp msg], s)
-runSMM m s = (outputs, s')
+runSMM :: Int -> SMM s msg resp () -> s -> ([Output resp msg], s)
+runSMM seed m s = (outputs, s')
   where
-    (((), s'), outputs) = runWriter (runStateT m s)
+    ((((), s'), _stdGen'), outputs) =
+      runWriter (runStateT (runStateT m s) (Random.mkStdGen seed))
 
 send :: NodeId -> msg -> SMM s msg resp ()
-send nid msg = lift (tell [InternalMessageOut nid msg])
+send nid msg = lift (lift (tell [InternalMessageOut nid msg]))
 
 respond :: ClientId -> resp -> SMM s msg resp ()
-respond cid resp = lift (tell [ClientResponse cid resp])
+respond cid resp = lift (lift (tell [ClientResponse cid resp]))
+
+random :: SMM s msg resp Int
+random = do
+  g <- lift get
+  let (i, g') = Random.random g
+  lift (put g')
+  return i
 
 data ExampleState = ExampleState
   { _esInt :: Int
@@ -57,8 +67,8 @@ example (ClientRequest at cid req) = do
   respond cid (Resp s)
 
 t :: Bool
-t = runSMM (example (ClientRequest epoch (ClientId 0) Req)) initExState
-    == ([ClientResponse (ClientId 0) (Resp 6)],ExampleState {_esInt = 6})
+t = runSMM 0 (example (ClientRequest epoch (ClientId 0) Req)) initExState
+    == ([ClientResponse (ClientId 0) (Resp 6)], ExampleState {_esInt = 6})
 
 sm :: SM ExampleState Req Msg Resp
-sm = SM initExState (runSMM . example)
+sm = SM initExState (runSMM 0 . example)

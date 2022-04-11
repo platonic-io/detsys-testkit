@@ -6,7 +6,7 @@ import ATMC.Lec5.StateMachine
 
 ------------------------------------------------------------------------
 
-data Deployment = Production | Simulation (Agenda RawInput)
+data Deployment = Production | Simulation Agenda
   deriving Show
 
 data Options = Options
