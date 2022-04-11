@@ -25,6 +25,12 @@ addAwaitingClient ac = do
   atomicModifyIORef' (acAwaitingClients ac) (\im -> (IntMap.insert i resp im, ()))
   return (ClientId i, resp)
 
+addFakeAwaitingClient :: AwaitingClients -> ClientId -> IO (MVar ByteString)
+addFakeAwaitingClient ac (ClientId cid) = do
+  resp <- newEmptyMVar
+  atomicModifyIORef' (acAwaitingClients ac) (\im -> (IntMap.insert cid resp im, ()))
+  return resp
+
 removeAwaitingClient :: AwaitingClients -> ClientId -> IO ()
 removeAwaitingClient ac (ClientId cid) =
   atomicModifyIORef' (acAwaitingClients ac) (\im -> (IntMap.delete cid im, ()))

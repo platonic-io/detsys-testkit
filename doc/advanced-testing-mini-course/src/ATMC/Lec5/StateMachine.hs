@@ -29,16 +29,6 @@ data Output response message
   | InternalMessageOut NodeId message
   deriving (Eq, Show)
 
-data RawInput = RawInput NodeId (Input ByteString ByteString)
-  deriving Show
-
-inputTime :: Input request message -> Time
-inputTime (ClientRequest   time _cid _req) = time
-inputTime (InternalMessage time _nid _msg) = time
-
-rawInputTime :: RawInput -> Time
-rawInputTime (RawInput _to input) = inputTime input
-
 echoSM :: SM () ByteString ByteString ByteString
 echoSM = SM
   { smState = ()
