@@ -35,7 +35,7 @@ library
                   , QuickCheck
                   , text
                   , http-client
-                  , record-hasfield
+                  , microlens-platform
                   , stm
                   , transformers
                   , time

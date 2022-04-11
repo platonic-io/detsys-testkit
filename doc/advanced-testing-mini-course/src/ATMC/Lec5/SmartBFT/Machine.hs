@@ -41,41 +41,41 @@ transactionsToPropose = do
 maybeSendPropose :: Time -> RoundId -> BFT ()
 maybeSendPropose now cId = preConditions
   [ do -- node must be a leader
-      me <- get @"me"
-      leader <- get @"leader"
-      return (me == leader)
+      me_ <- use (globalState.me)
+      leader <- use (globalState.leader)
+      return (me_ == leader)
   , do -- height must be >= lastInitiatedRound
-      h <- get @"height"
-      last <- get @"lastInitiatedRound"
+      h <- use (globalState.height)
+      last <- use (consensusState.lastInitiatedRound)
       return (h >= last)
   , do -- cannot send new proposal if state transfer is in progress
-      not <$> get @"stateTransferInProgress"
+      not <$> use (globalState.stateTransferInProgress)
   , do -- cannot send new proposal if leader election is in progress and consenses paused
-      not <$> get @"consensusPaused"
+      not <$> use (consensusState.consensusPaused)
   ] $ do
-  me <- get @"me"
+  me <- use (globalState.me)
   txs <- transactionsToPropose
-  rId <- get @"regency"
+  rId <- use (globalState.regency)
   let proposal = Proposal txs now
       propose = ConsensusMessage cId rId me (Propose (proposalHash proposal) proposal)
-  set @"lastInitiatedRound" cId
+  consensusState.lastInitiatedRound .= cId
   handlePropose now cId rId proposal
   broadCast propose
 
 handleClientAppend :: Time -> TransactionContent -> BFT ()
 handleClientAppend now tx = do
   let txs = [tx]
-  me <- get @"me"
+  me_ <- use (globalState.me)
   appendTransactions now txs
-  h <- get @"height"
+  h <- use (globalState.height)
   maybeSendPropose now (succ h)
-  broadCast (Append me txs)
+  broadCast (Append me_ txs)
   -- we should register the client
 
 handleAppend :: Time -> [TransactionContent] -> BFT ()
 handleAppend now txs = do
   appendTransactions now txs
-  h <- get @"height"
+  h <- use (globalState.height)
   maybeSendPropose now (succ h)
 
 updateRound :: RoundId -> (Round -> BFT Round) -> BFT ()
