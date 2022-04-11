@@ -16,4 +16,4 @@ machine :: Input (VRRequest VROp) (VRMessage VROp) -> VR ()
 machine = tODO
 
 sm :: [NodeId] -> NodeId -> SM VRState (VRRequest VROp) (VRMessage VROp) VRResponse
-sm otherNodes me = SM (initState otherNodes me) (runSMM 0 . machine)
+sm otherNodes me = SM (initState otherNodes me) (runSMM (Seed 0) . machine)
