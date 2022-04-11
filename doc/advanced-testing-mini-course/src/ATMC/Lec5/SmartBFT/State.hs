@@ -1,46 +1,47 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module ATMC.Lec5.SmartBFT.State where
 
 import Data.Map (Map)
 import Data.Sequence (Seq)
 import Data.Set (Set)
 import Data.Time (NominalDiffTime)
-import GHC.Records.Compat
 
 import ATMC.Lec5.StateMachine
+import ATMC.Lec5.StateMachineDSL
 import ATMC.Lec5.Time (Time)
 import ATMC.Lec5.SmartBFT.Messages
 
 data SBFTState = SBFTState
-  { globalState :: GlobalState
-  , consensusState :: ConsensusState
-  , leadershipState :: LeadershipState
-  , stateTransferState :: StateTransferState
-  , pendingQueue :: PendingQueue
-  , theLog :: Seq TransactionContent
+  { _globalState :: GlobalState
+  , _consensusState :: ConsensusState
+  , _leadershipState :: LeadershipState
+  , _stateTransferState :: StateTransferState
+  , _pendingQueue :: PendingQueue
+  , _theLog :: Seq TransactionContent
   }
 
 data GlobalState = GlobalState
-  { me :: NodeId
-  , membership :: [NodeId]
-  , height :: RoundId
-  , regency :: RegencyId
-  , leader :: Source
-  , pendingRegency :: RegencyId
-  , electionsEnabled :: Bool
-  , stateTransferInProgress :: Bool
+  { _me :: NodeId
+  , _membership :: [NodeId]
+  , _height :: RoundId
+  , _regency :: RegencyId
+  , _leader :: Source
+  , _pendingRegency :: RegencyId
+  , _electionsEnabled :: Bool
+  , _stateTransferInProgress :: Bool
   }
+
 
 --------------------------------------------------------------------------------
 -- Consenus
 --------------------------------------------------------------------------------
 
 data ConsensusState = ConsensusState
-  { rounds :: Map RoundId Round
-  , rebroadCastInterval :: NominalDiffTime
-  , lastInitiatedRound :: RoundId
-  , consensusPaused :: Bool
+  { _rounds :: Map RoundId Round
+  , _rebroadCastInterval :: NominalDiffTime
+  , _lastInitiatedRound :: RoundId
+  , _consensusPaused :: Bool
   }
 
 data Round = Round
@@ -104,27 +105,7 @@ data StateTransferState = StateTranferState
 -- TODO implement
 data PendingQueue = PendingQueue
 
---------------------------------------------------------------------------------
--- Fields...
---------------------------------------------------------------------------------
+makeLenses ''SBFTState
 
-instance HasField "leader" SBFTState NodeId where
-  hasField s = (\x -> s {globalState = (globalState s) {leader = x}}, leader (globalState s))
-
-instance HasField "me" SBFTState NodeId where
-  hasField s = (\x -> s {globalState = (globalState s) {me = x}}, me (globalState s))
-
-instance HasField "height" SBFTState RoundId where
-  hasField s = (\x -> s {globalState = (globalState s) {height = x}}, height (globalState s))
-
-instance HasField "regency" SBFTState RegencyId where
-  hasField s = (\x -> s {globalState = (globalState s) {regency = x}}, regency (globalState s))
-
-instance HasField "stateTransferInProgress" SBFTState Bool where
-  hasField s = (\x -> s {globalState = (globalState s) {stateTransferInProgress = x}}, stateTransferInProgress (globalState s))
-
-instance HasField "consensusPaused" SBFTState Bool where
-  hasField s = (\x -> s {consensusState = (consensusState s) {consensusPaused = x}}, consensusPaused (consensusState s))
-
-instance HasField "lastInitiatedRound" SBFTState RoundId where
-  hasField s = (\x -> s {consensusState = (consensusState s) {lastInitiatedRound = x}}, lastInitiatedRound (consensusState s))
+makeLenses ''GlobalState
+makeLenses ''ConsensusState
