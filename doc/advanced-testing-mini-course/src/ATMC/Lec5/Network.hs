@@ -24,6 +24,7 @@ import ATMC.Lec5.AwaitingClients
 import ATMC.Lec5.Options
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Time
+import ATMC.Lec5.Event
 
 ------------------------------------------------------------------------
 
@@ -31,13 +32,15 @@ pORT :: Int
 pORT = 8050
 
 data Network = Network
-  { nRecv :: STM RawInput
-  , nSend :: NodeId -> NodeId -> ByteString -> IO ()
-  , nRun  :: IO ()
+  { nRecv    :: STM RawInput
+  , nSend    :: NodeId -> NodeId -> ByteString -> IO ()
+  , nRespond :: ClientId -> ByteString -> IO ()
+  , nRun     :: IO ()
   }
 
-realNetwork :: AwaitingClients -> Clock -> IO Network
-realNetwork ac clock = do
+realNetwork :: Clock -> IO Network
+realNetwork clock = do
+  ac       <- newAwaitingClients
   incoming <- newTBQueueIO 65536
   mgr      <- newManager defaultManagerSettings
   initReq  <- parseRequest ("http://localhost:" ++ show pORT)
@@ -50,9 +53,10 @@ realNetwork ac clock = do
                         `catch` (\(e :: HttpException) ->
                                    putStrLn ("send failed, error: " ++ show e))
   return Network
-    { nSend = send
-    , nRecv = readTBQueue incoming
-    , nRun  = run pORT (app ac clock incoming)
+    { nSend    = send
+    , nRecv    = readTBQueue incoming
+    , nRespond = respondToAwaitingClient ac
+    , nRun     = run pORT (app ac clock incoming)
     }
 
 app :: AwaitingClients -> Clock -> TBQueue RawInput -> Application
@@ -101,15 +105,18 @@ app awaiting clock incoming req respond =
           (Right (nodeId, _rest), Right (nodeId', _rest')) ->
             Just (NodeId nodeId, NodeId nodeId')
           _otherwise -> Nothing
-        _otherwise   -> Nothing
+        _otherwise -> Nothing
 
-fakeNetwork :: Agenda RawInput -> AwaitingClients -> Clock -> IO Network
-fakeNetwork a _awaiting clock = do
+newtype History = History [Either RawInput ()]
+
+fakeNetwork :: Agenda RawInput -> Clock -> IO Network
+fakeNetwork a clock = do
   agenda <- newTVarIO a
   return Network
-    { nRecv = recv agenda
-    , nSend = send agenda
-    , nRun  = return ()
+    { nRecv    = recv agenda
+    , nSend    = send agenda
+    , nRespond = respond
+    , nRun     = return ()
     }
   where
     recv :: TVar (Agenda RawInput) -> STM RawInput
@@ -129,6 +136,10 @@ fakeNetwork a _awaiting clock = do
       atomically (modifyTVar' agenda
         (push (arrivalTime, RawInput to (InternalMessage arrivalTime from msg))))
 
-newNetwork :: Deployment -> AwaitingClients -> Clock -> IO Network
+    respond :: ClientId -> ByteString -> IO ()
+    respond clientId resp = do
+      undefined
+
+newNetwork :: Deployment -> Clock -> IO Network
 newNetwork Production          = realNetwork
 newNetwork (Simulation agenda) = fakeNetwork agenda

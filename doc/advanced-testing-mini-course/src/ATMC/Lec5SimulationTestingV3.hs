@@ -14,7 +14,6 @@ import Data.Time
 import Data.Typeable
 
 import ATMC.Lec5.Agenda
-import ATMC.Lec5.AwaitingClients
 import ATMC.Lec5.Codec
 import ATMC.Lec5.Event
 import ATMC.Lec5.Network
@@ -44,16 +43,14 @@ eventLoop :: Options -> Topology -> IO ()
 eventLoop opts topo = do
   putStrLn ("Starting event loop in " ++ show (oDeployment opts) ++
             " mode on port: "  ++ show pORT)
-  ac    <- newAwaitingClients
   clock <- newClock (oDeployment opts)
-  net   <- newNetwork (oDeployment opts) ac clock
+  net   <- newNetwork (oDeployment opts) clock
   withAsync (nRun net) $ \anet -> do
     link anet
-    runWorker topo ac clock net [anet]
+    runWorker topo clock net [anet]
 
-runWorker :: Topology -> AwaitingClients -> Clock -> Network -> [Async ()]
-          -> IO ()
-runWorker topo ac clock net pids = go
+runWorker :: Topology -> Clock -> Network -> [Async ()] -> IO ()
+runWorker topo clock net pids = go
   where
     go :: IO ()
     go = do
@@ -90,6 +87,6 @@ runWorker topo ac clock net pids = go
 
     handleOutput :: Codec req msg resp -> NodeId -> Output resp msg -> IO ()
     handleOutput codec _fromNodeId (ClientResponse clientId response) =
-      respondToAwaitingClient ac clientId (cEncodeResponse codec response)
+      nRespond net clientId (cEncodeResponse codec response)
     handleOutput codec fromNodeId (InternalMessageOut toNodeId msg) =
       nSend net fromNodeId toNodeId (cEncodeMessage codec msg)

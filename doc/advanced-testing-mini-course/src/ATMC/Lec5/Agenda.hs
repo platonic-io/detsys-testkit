@@ -6,6 +6,7 @@ module ATMC.Lec5.Agenda where
 import Data.Heap (Entry(Entry), Heap)
 import qualified Data.Heap as Heap
 import Data.List (foldl')
+import Data.Foldable
 
 import ATMC.Lec5.Time
 
@@ -35,3 +36,6 @@ push (t, e) (Agenda h) = Agenda (Heap.insert (Entry t e) h)
 pushList :: [(Time, e)] -> Agenda e -> Agenda e
 pushList tes (Agenda h) =
   Agenda (foldl' (\ih (t, e) -> Heap.insert (Entry t e) ih) h tes)
+
+filterAgenda :: (e -> Bool) -> Agenda e -> [e]
+filterAgenda p (Agenda h) = filter p (map Heap.payload (toList h))
