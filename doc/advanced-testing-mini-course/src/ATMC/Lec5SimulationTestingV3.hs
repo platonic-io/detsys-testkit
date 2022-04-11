@@ -3,6 +3,7 @@
 
 module ATMC.Lec5SimulationTestingV3 where
 
+import Control.Applicative
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
@@ -24,10 +25,10 @@ import ATMC.Lec5.Time
 
 ------------------------------------------------------------------------
 
-newtype Topology = Topology (IntMap SomeCodecSM)
+newtype Configuration = Configuration (IntMap SomeCodecSM)
 
-lookupReceiver :: NodeId -> Topology -> Maybe SomeCodecSM
-lookupReceiver (NodeId nid) (Topology im) = IntMap.lookup nid im
+lookupReceiver :: NodeId -> Configuration -> Maybe SomeCodecSM
+lookupReceiver (NodeId nid) (Configuration im) = IntMap.lookup nid im
 
 newClock :: Deployment -> IO Clock
 newClock Production           = realClock
@@ -36,14 +37,14 @@ newClock (Simulation _agenda) = fakeClockEpoch
 eventLoopProduction :: [SomeCodecSM] -> IO ()
 eventLoopProduction
   = eventLoop (Options Production)
-  . Topology
+  . Configuration
   . IntMap.fromList
   . zip [0..]
 
 eventLoopSimulation :: Agenda -> [SomeCodecSM] -> IO ()
 eventLoopSimulation agenda
   = eventLoop (Options (Simulation agenda))
-  . Topology
+  . Configuration
   . IntMap.fromList
   . zip [0..]
 
@@ -51,26 +52,33 @@ echoAgenda :: Agenda
 echoAgenda = makeAgenda
   [(epoch, RawInput (NodeId 0) (ClientRequest epoch (ClientId 0) "hi"))]
 
-eventLoop :: Options -> Topology -> IO ()
-eventLoop opts topo = do
+eventLoop :: Options -> Configuration -> IO ()
+eventLoop opts config = do
   putStrLn ("Starting event loop in " ++ show (oDeployment opts) ++
             " mode on port: "  ++ show pORT)
   clock <- newClock (oDeployment opts)
-  net   <- newNetwork (oDeployment opts) clock
+  cmdQ  <- newTBQueueIO 1
+  -- Works:
+  -- atomically $ writeTBQueue cmdQ Exit
+  net   <- newNetwork (oDeployment opts) clock cmdQ
   withAsync (nRun net) $ \anet -> do
     link anet
-    runWorker topo clock net [anet]
+    runWorker config clock net cmdQ [anet]
 
-runWorker :: Topology -> Clock -> Network -> [Async ()] -> IO ()
-runWorker topo clock net pids = go
+runWorker :: Configuration -> Clock -> Network -> TBQueue CommandEvent -> [Async ()] -> IO ()
+runWorker config clock net cmdQ pids = go
   where
     go :: IO ()
     go = do
-      event <- atomically (NetworkEvent <$> nRecv net) -- <|> TimerEvent <$>...
+      event <- atomically
+                 $   (NetworkEvent <$> nRecv net)
+                 <|> (CommandEvent <$> readTBQueue cmdQ)
+           -- <|> TimerEvent <$>...
       if isExitCommand event
       then exit
       else do
         cSetCurrentTime clock (eventTime event) -- This is a noop in production deployment.
+        putStr "ABOUT TO HANDLE: "
         print event
         handleEvent event
         go
@@ -80,7 +88,7 @@ runWorker topo clock net pids = go
 
     handleEvent :: Event -> IO ()
     handleEvent (NetworkEvent (RawInput nodeId rawInput)) =
-      case lookupReceiver nodeId topo of
+      case lookupReceiver nodeId config of
         Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state step)) ->
           case decodeInput codec rawInput of
