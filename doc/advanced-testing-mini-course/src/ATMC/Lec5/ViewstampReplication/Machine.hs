@@ -1,5 +1,7 @@
 module ATMC.Lec5.ViewstampReplication.Machine where
 
+import Control.Monad
+
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
 import ATMC.Lec5.ViewstampReplication.Message
@@ -16,6 +18,19 @@ type VR a = SMM VRState (VRMessage VROp) VRResponse a
 
 tODO :: a
 tODO = error "Not implemented yet"
+
+isPrimary :: VR Bool
+isPrimary = do
+  ViewNumber cVn <- use currentViewNumber
+  nodes <- use (configuration.to length)
+  rn <- use replicaNumber
+  return (rn == cVn `mod` nodes)
+
+checkIsPrimary :: VR ()
+checkIsPrimary = isPrimary >>= guard
+
+checkIsBackup :: VR ()
+checkIsBackup = isPrimary >>= (guard . not)
 
 {- -- When we get ticks --
 6. Normally the primary informs backups about the
@@ -36,7 +51,9 @@ machine (ClientRequest time c (VRRequest op s)) = do
 the primary, where op is the operation (with its ar-
 guments) the client wants to run, c is the client-id,
 and s is the request-number assigned to the request.
-
+  -}
+  checkIsPrimary
+  {-
 2. When the primary receives the request, it compares
 the request-number in the request with the informa-
 tion in the client table. If the request-number s isn’t
@@ -44,7 +61,27 @@ bigger than the information in the table it drops the
 request, but it will re-send the response if the re-
 quest is the most recent one from this client and it
 has already been executed.
-
+  -}
+  clientStatus <- use (clientTable.at c)
+  earlyReturn <- case clientStatus of
+    Nothing -> do
+      clientTable.at c .= Just (InFlight s)
+      return False
+    Just cs -> do
+      guard (requestNumber cs <= s)
+      case cs of
+        Completed s' r vn
+          | s' == s -> do
+              -- should check that it has been executed?
+              respond c (VRReply vn s r)
+              return True
+          | otherwise -> return False
+        InFlight{} -> return False
+  -- A bit annoying that we don't have early return.., can't use `guard` since
+  -- that would remove the `respond` that we want to happen..
+  if earlyReturn
+    then return ()
+  {-
 3. The primary advances op-number, adds the request
 to the end of the log, and updates the information
 for this client in the client-table to contain the new
@@ -54,9 +91,11 @@ current view-number, m is the message it received
 from the client, n is the op-number it assigned to
 the request, and k is the commit-number.
   -}
-  tODO
+    else do
+      tODO
 machine (InternalMessage time from iMsg) = case iMsg of
   Prepare v m n k -> do
+    checkIsBackup
     {-
 4. Backups process PREPARE messages in order: a
 backup won’t accept a prepare with op-number n
@@ -71,9 +110,11 @@ sends a 〈PREPAREOK v, n, i〉 message to the pri-
 mary to indicate that this operation and all earlier
 ones have prepared locally.
     -}
+    -- also look at step 7.
     tODO
   PrepareOk v n -> do
     let i = from
+    checkIsPrimary
     {-
 5. The primary waits for f PREPAREOK messages
 from different backups; at this point it considers
@@ -90,6 +131,7 @@ entry in the client-table to contain the result.
     -}
     tODO
   Commit v k -> do
+    checkIsBackup
     {-
 7. When a backup learns of a commit, it waits un-
 til it has the request in its log (which may require
