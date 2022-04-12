@@ -1,7 +1,5 @@
 module ATMC.Lec5.ViewstampReplication.Machine where
 
-import Control.Monad
-
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
 import ATMC.Lec5.ViewstampReplication.Message
@@ -27,10 +25,10 @@ isPrimary = do
   return (rn == cVn `mod` nodes)
 
 checkIsPrimary :: VR ()
-checkIsPrimary = isPrimary >>= guard
+checkIsPrimary = guardM isPrimary
 
 checkIsBackup :: VR ()
-checkIsBackup = isPrimary >>= (guard . not)
+checkIsBackup = guardM (not <$> isPrimary)
 
 {- -- When we get ticks --
 6. Normally the primary informs backups about the
@@ -63,10 +61,9 @@ quest is the most recent one from this client and it
 has already been executed.
   -}
   clientStatus <- use (clientTable.at c)
-  earlyReturn <- case clientStatus of
+  case clientStatus of
     Nothing -> do
       clientTable.at c .= Just (InFlight s)
-      return False
     Just cs -> do
       guard (requestNumber cs <= s)
       case cs of
@@ -74,13 +71,9 @@ has already been executed.
           | s' == s -> do
               -- should check that it has been executed?
               respond c (VRReply vn s r)
-              return True
-          | otherwise -> return False
-        InFlight{} -> return False
-  -- A bit annoying that we don't have early return.., can't use `guard` since
-  -- that would remove the `respond` that we want to happen..
-  if earlyReturn
-    then return ()
+              ereturn
+          | otherwise -> return ()
+        InFlight{} -> return ()
   {-
 3. The primary advances op-number, adds the request
 to the end of the log, and updates the information
@@ -91,8 +84,7 @@ current view-number, m is the message it received
 from the client, n is the op-number it assigned to
 the request, and k is the commit-number.
   -}
-    else do
-      tODO
+  tODO
 machine (InternalMessage time from iMsg) = case iMsg of
   Prepare v m n k -> do
     checkIsBackup
