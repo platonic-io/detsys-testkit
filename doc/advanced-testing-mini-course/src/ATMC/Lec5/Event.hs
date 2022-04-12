@@ -23,12 +23,12 @@ inputTime (InternalMessage time _nid _msg) = time
 rawInputTime :: RawInput -> Time
 rawInputTime (RawInput _to input) = inputTime input
 
+eventTime :: Event -> Time
+eventTime (NetworkEvent rawInput) = rawInputTime rawInput
+
 data CommandEvent = Exit
   deriving Show
 
 isExitCommand :: Event -> Bool
 isExitCommand (CommandEvent Exit) = True
 isExitCommand _otherwise          = False
-
-eventTime :: Event -> Time
-eventTime (NetworkEvent rawInput) = rawInputTime rawInput
