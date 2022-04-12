@@ -37,11 +37,12 @@ resetTimer (TimerWheel hr) clock nodeId secs = do
 
 expiredTimers :: TimerWheel -> Clock -> IO [(Time, NodeId)]
 expiredTimers (TimerWheel hr) clock  = do
-  h <- readIORef hr
   now <- cGetCurrentTime clock
-  return (go (toList h) now [])
+  atomicModifyIORef' hr (go now [] . toList)
     where
-      go :: [Entry Time NodeId] -> Time -> [(Time, NodeId)] -> [(Time, NodeId)]
-      go []                   _now acc             = reverse acc
-      go (Entry t nodeId : es) now acc | t <= now  = go es now ((t, nodeId) : acc)
-                                       | otherwise = reverse acc
+      go :: Time -> [(Time, NodeId)] -> [Entry Time NodeId]
+        -> (Heap (Entry Time NodeId), [(Time, NodeId)])
+      go _now acc [] = (Heap.empty, reverse acc)
+      go  now acc (Entry t nodeId : es)
+        | t <= now  = go now ((t, nodeId) : acc) es
+        | otherwise = (Heap.fromList es, reverse acc)
