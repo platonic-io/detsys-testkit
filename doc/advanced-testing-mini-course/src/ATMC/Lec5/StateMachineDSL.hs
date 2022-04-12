@@ -21,15 +21,14 @@ import ATMC.Lec5.Time
 ------------------------------------------------------------------------
 
 type SMM s msg resp a =
-  ContT () (StateT s (StateT StdGen (WriterT [Output resp msg] Maybe))) a
+  ContT () (StateT s (StateT StdGen (Writer [Output resp msg]))) a
 
 newtype Seed = Seed Int
 
 runSMM :: Seed -> SMM s msg resp () -> s -> ([Output resp msg], s)
 runSMM (Seed seed) m s =
-  case runWriterT (runStateT (runStateT (runContT m return) s) (Random.mkStdGen seed)) of
-    Nothing                              -> ([], s)
-    Just ((((), s'), stdGen'), outputs) -> (outputs, s')
+  case runWriter (runStateT (runStateT (runContT m return) s) (Random.mkStdGen seed)) of
+    ((((), s'), stdGen'), outputs) -> (outputs, s')
     -- ^ XXX: We shouldn't throw stdGen' away... Need to move the seed outwards
     -- to the event loop.
 
