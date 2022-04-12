@@ -107,6 +107,10 @@ runWorker config clock net cmdQ pids = go
           nRespond net clientId (cEncodeResponse codec response)
         handleOutput codec fromNodeId (InternalMessageOut toNodeId msg) =
           nSend net fromNodeId toNodeId (cEncodeMessage codec msg)
+        handleOutput _codec fromNodeId (RegisterTimerSeconds secs) =
+          undefined -- registerTimer timerWheel clock fromNodeId secs
+        handleOutput _codec fromNodeId (ResetTimerSeconds secs) =
+          undefined -- resetTimer timerWheel clock fromNodeId secs
 
     handleEvent (TimerEvent) = undefined
     handleEvent (CommandEvent Exit) = error "IMPOSSIBLE: this case has already been handled"
