@@ -64,6 +64,7 @@ library
     ATMC.Lec5.StateMachine
     ATMC.Lec5.StateMachineDSL
     ATMC.Lec5.Time
+    ATMC.Lec5.TimerWheel
     ATMC.Lec5.ViewstampReplication.Machine
     ATMC.Lec5.ViewstampReplication.Message
     ATMC.Lec5.ViewstampReplication.State

@@ -1,5 +1,6 @@
 module ATMC.Lec5.StateMachine where
 
+import Data.Fixed
 import Data.ByteString.Lazy (ByteString)
 
 import ATMC.Lec5.Time
@@ -27,6 +28,8 @@ data Input request message
 data Output response message
   = ClientResponse ClientId response
   | InternalMessageOut NodeId message
+  | RegisterTimerSeconds Pico
+  | ResetTimerSeconds Pico
   deriving (Eq, Show)
 
 echoSM :: SM () ByteString ByteString ByteString

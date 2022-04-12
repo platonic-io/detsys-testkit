@@ -6,6 +6,7 @@ module ATMC.Lec5.StateMachineDSL
   )
 where
 
+import Data.Fixed
 import System.Random (StdGen)
 import qualified System.Random as Random
 import Lens.Micro.Platform
@@ -26,13 +27,22 @@ runSMM :: Seed -> SMM s msg resp () -> s -> ([Output resp msg], s)
 runSMM (Seed seed) m s =
   case runWriterT (runStateT (runStateT m s) (Random.mkStdGen seed)) of
     Nothing                              -> ([], s)
-    Just ((((), s'), _stdGen'), outputs) -> (outputs, s')
+    Just ((((), s'), stdGen'), outputs) -> (outputs, s')
+    -- ^ XXX: We shouldn't throw stdGen' away... Need to move the seed outwards
+    -- to the event loop.
 
 send :: NodeId -> msg -> SMM s msg resp ()
 send nid msg = lift (lift (tell [InternalMessageOut nid msg]))
 
 respond :: ClientId -> resp -> SMM s msg resp ()
 respond cid resp = lift (lift (tell [ClientResponse cid resp]))
+
+registerTimerSeconds :: Pico -> SMM s msg resp ()
+registerTimerSeconds secs = lift (lift (tell [RegisterTimerSeconds secs]))
+
+resetTimerSeconds :: Pico -> SMM s msg resp ()
+resetTimerSeconds secs = lift (lift (tell [ResetTimerSeconds secs]))
+
 
 random :: SMM s msg resp Int
 random = do
