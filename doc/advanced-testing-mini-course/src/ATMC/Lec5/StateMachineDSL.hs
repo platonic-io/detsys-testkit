@@ -18,15 +18,15 @@ import ATMC.Lec5.Time
 
 ------------------------------------------------------------------------
 
-type SMM s msg resp a = StateT s (StateT StdGen (Writer [Output resp msg])) a
+type SMM s msg resp a = StateT s (StateT StdGen (WriterT [Output resp msg] Maybe)) a
 
 newtype Seed = Seed Int
 
 runSMM :: Seed -> SMM s msg resp () -> s -> ([Output resp msg], s)
-runSMM (Seed seed) m s = (outputs, s')
-  where
-    ((((), s'), _stdGen'), outputs) =
-      runWriter (runStateT (runStateT m s) (Random.mkStdGen seed))
+runSMM (Seed seed) m s =
+  case runWriterT (runStateT (runStateT m s) (Random.mkStdGen seed)) of
+    Nothing                              -> ([], s)
+    Just ((((), s'), _stdGen'), outputs) -> (outputs, s')
 
 send :: NodeId -> msg -> SMM s msg resp ()
 send nid msg = lift (lift (tell [InternalMessageOut nid msg]))
