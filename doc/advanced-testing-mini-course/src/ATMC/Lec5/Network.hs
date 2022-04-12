@@ -108,10 +108,6 @@ app awaiting clock incoming req respond =
           _otherwise -> Nothing
         _otherwise -> Nothing
 
-newtype History = History (TQueue (Either RawInput ByteString))
-
-data HEvent = HEClientReq
-
 fakeNetwork :: Agenda -> Clock -> TBQueue CommandEvent -> IO Network
 fakeNetwork a clock cmdQ = do
   agenda <- newTVarIO a
@@ -144,9 +140,7 @@ fakeNetwork a clock cmdQ = do
         (push (arrivalTime, RawInput to (InternalMessage arrivalTime from msg))))
 
     respond :: ClientId -> ByteString -> IO ()
-    respond clientId resp = do
-      -- XXX: actually append this to the history.
-      putStrLn ("History: " ++ show (clientId, resp))
+    respond _clientId _resp = return ()
 
 newNetwork :: Deployment -> Clock -> TBQueue CommandEvent -> IO Network
 newNetwork Production          = realNetwork

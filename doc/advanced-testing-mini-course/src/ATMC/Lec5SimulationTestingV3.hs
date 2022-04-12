@@ -17,6 +17,7 @@ import Data.Typeable
 
 import ATMC.Lec5.Agenda
 import ATMC.Lec5.Codec
+import ATMC.Lec5.History
 import ATMC.Lec5.Event
 import ATMC.Lec5.Network
 import ATMC.Lec5.Options
@@ -71,12 +72,11 @@ runWorker config clock net cmdQ pids = go
       event <- atomically
                   $  (NetworkEvent <$> nRecv net)
                  <|> (CommandEvent <$> readTBQueue cmdQ)
-           -- <|> TimerEvent <$>...
+              -- <|> (TimerEvent <$> ...)
       if isExitCommand event
       then exit
       else do
         cSetCurrentTime clock (eventTime event) -- This is a noop in production deployment.
-        print event
         handleEvent event
         go
 
@@ -97,14 +97,16 @@ runWorker config clock net cmdQ pids = go
               case r of
                 Left (e :: SomeException) ->
                   putStrLn ("step failed, error: " ++ displayException e)
-                Right (outputs, state') ->
+                Right (outputs, state') -> do
+                  -- XXX: Save this somewhere...
+                  let _e = HistEvent nodeId state input state' outputs
                   mapM_ (handleOutput codec nodeId) outputs
+      where
+        handleOutput :: Codec req msg resp -> NodeId -> Output resp msg -> IO ()
+        handleOutput codec _fromNodeId (ClientResponse clientId response) =
+          nRespond net clientId (cEncodeResponse codec response)
+        handleOutput codec fromNodeId (InternalMessageOut toNodeId msg) =
+          nSend net fromNodeId toNodeId (cEncodeMessage codec msg)
 
     handleEvent (TimerEvent) = undefined
     handleEvent (CommandEvent Exit) = error "IMPOSSIBLE: this case has already been handled"
-
-    handleOutput :: Codec req msg resp -> NodeId -> Output resp msg -> IO ()
-    handleOutput codec _fromNodeId (ClientResponse clientId response) =
-      nRespond net clientId (cEncodeResponse codec response)
-    handleOutput codec fromNodeId (InternalMessageOut toNodeId msg) =
-      nSend net fromNodeId toNodeId (cEncodeMessage codec msg)
