@@ -35,6 +35,9 @@ resetTimer (TimerWheel hr) clock nodeId secs = do
         | nodeId' == nodeId = Entry expires nodeId
         | otherwise         = e
 
+-- XXX: Possible future extension: if nothing has expired, sleep until either 1)
+-- min element on heap expires, or 2) we get woken up by register/reset timer.
+-- I.e. `Async.race (threadDelay minTime) (takeMVar wakeup)`.
 expiredTimers :: TimerWheel -> Clock -> IO [(Time, NodeId)]
 expiredTimers (TimerWheel hr) clock  = do
   now <- cGetCurrentTime clock
