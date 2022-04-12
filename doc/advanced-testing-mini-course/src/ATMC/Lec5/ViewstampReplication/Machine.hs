@@ -84,7 +84,7 @@ current view-number, m is the message it received
 from the client, n is the op-number it assigned to
 the request, and k is the commit-number.
   -}
-      tODO
+  tODO
 machine (InternalMessage time from iMsg) = case iMsg of
   Prepare v m n k -> do
     checkIsBackup
