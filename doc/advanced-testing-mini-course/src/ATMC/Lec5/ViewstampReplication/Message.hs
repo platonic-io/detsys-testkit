@@ -9,7 +9,7 @@ newtype RequestNumber = RequestNumber Int
 newtype ViewNumber = ViewNumber Int
   deriving newtype Num
 newtype OpNumber = OpNumber Int
-  deriving newtype Num
+  deriving newtype (Enum, Eq, Num)
 newtype CommitNumber = CommitNumber Int
   deriving newtype Num
 
