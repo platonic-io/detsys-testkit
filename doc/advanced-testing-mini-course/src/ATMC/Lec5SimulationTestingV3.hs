@@ -17,6 +17,7 @@ import ATMC.Lec5.Agenda
 import ATMC.Lec5.Codec
 import ATMC.Lec5.History
 import ATMC.Lec5.Event
+import ATMC.Lec5.EventQueue
 import ATMC.Lec5.Network
 import ATMC.Lec5.Options
 import ATMC.Lec5.StateMachine
@@ -24,10 +25,6 @@ import ATMC.Lec5.Time
 import ATMC.Lec5.Configuration
 
 ------------------------------------------------------------------------
-
-newClock :: Deployment -> IO Clock
-newClock Production           = realClock
-newClock (Simulation _agenda) = fakeClockEpoch
 
 eventLoopProduction :: [SomeCodecSM] -> IO ()
 eventLoopProduction = eventLoop (Options Production) <=< makeConfiguration
@@ -45,21 +42,33 @@ eventLoop opts config = do
   putStrLn ("Starting event loop in " ++ show (oDeployment opts) ++
             " mode on port: "  ++ show pORT)
   clock <- newClock (oDeployment opts)
-  cmdQ  <- newTBQueueIO 1
-  net   <- newNetwork (oDeployment opts) clock cmdQ
+  evQ   <- newEventQueue (oDeployment opts)
+  net   <- newNetwork (oDeployment opts) evQ clock
   withAsync (nRun net) $ \anet -> do
     link anet
-    runWorker config clock net cmdQ [anet]
+    runWorker config clock net evQ [anet]
 
-runWorker :: Configuration -> Clock -> Network -> TBQueue CommandEvent -> [Async ()] -> IO ()
-runWorker config clock net cmdQ pids = go
+data Deployment = Deployment
+  { dConfiguration :: Configuration
+  , dClock         :: Clock
+  , dNetwork       :: Network
+  , dEventQueue    :: EventQueue
+  }
+
+newDeployment :: DeploymentMode -> Configuration -> Deployment
+newDeployment = undefined
+
+newClock :: DeploymentMode -> IO Clock
+newClock Production           = realClock
+newClock (Simulation _agenda) = fakeClockEpoch
+
+
+runWorker :: Configuration -> Clock -> Network -> EventQueue -> [Async ()] -> IO ()
+runWorker config clock net evQ pids = go
   where
     go :: IO ()
     go = do
-      event <- atomically
-                  $  (NetworkEventE <$> nRecv net)
-                 <|> (CommandEventE <$> readTBQueue cmdQ)
-              -- <|> (TimerEvent <$> ...)
+      event <- eqDequeue evQ
       if isExitCommand event
       then exit
       else do
