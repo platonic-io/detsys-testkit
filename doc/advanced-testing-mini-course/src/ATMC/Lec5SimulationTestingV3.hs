@@ -35,14 +35,14 @@ eventLoopSimulation agenda =
 
 echoAgenda :: Agenda
 echoAgenda = makeAgenda
-  [(epoch, NetworkEvent (NodeId 0) (ClientRequest epoch (ClientId 0) "hi"))]
+  [(epoch, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest epoch (ClientId 0) "hi")))]
 
 eventLoop :: Options -> Configuration -> IO ()
 eventLoop opts config = do
   putStrLn ("Starting event loop in " ++ show (oDeployment opts) ++
             " mode on port: "  ++ show pORT)
   clock <- newClock (oDeployment opts)
-  evQ   <- newEventQueue (oDeployment opts)
+  evQ   <- newEventQueue (oDeployment opts) clock
   net   <- newNetwork (oDeployment opts) evQ clock
   withAsync (nRun net) $ \anet -> do
     link anet
@@ -72,7 +72,7 @@ runWorker config clock net evQ pids = go
       if isExitCommand event
       then exit
       else do
-        cSetCurrentTime clock (eventTime event) -- This is a noop in production deployment.
+        cSetCurrentTime clock (getEventTime event) -- This is a noop in production deployment.
         handleEvent event
         go
 
