@@ -100,4 +100,4 @@ t = runSMM (Seed 0) (example (ClientRequest epoch (ClientId 0) Req)) initExState
     == ([ClientResponse (ClientId 0) (Resp 6)], ExampleState {_esInt = 6})
 
 sm :: SM ExampleState Req Msg Resp
-sm = SM initExState (runSMM (Seed 0) . example)
+sm = SM initExState (runSMM (Seed 0) . example) noTimeouts

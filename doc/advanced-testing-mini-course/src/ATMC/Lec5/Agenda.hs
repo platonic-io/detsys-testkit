@@ -9,7 +9,7 @@ import Data.List (foldl')
 import Data.Foldable
 
 import ATMC.Lec5.Time
-import ATMC.Lec5.Event (RawInput)
+import ATMC.Lec5.Event (NetworkEvent)
 
 ------------------------------------------------------------------------
 
@@ -17,7 +17,7 @@ newtype Agenda' e = Agenda (Heap (Entry Time e))
   deriving newtype (Semigroup, Monoid)
   deriving stock Show
 
-type Agenda = Agenda' RawInput
+type Agenda = Agenda' NetworkEvent -- XXX: should be Event
 
 emptyAgenda :: Agenda' e
 emptyAgenda = Agenda Heap.empty

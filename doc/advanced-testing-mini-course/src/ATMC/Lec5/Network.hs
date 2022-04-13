@@ -33,7 +33,7 @@ pORT :: Int
 pORT = 8050
 
 data Network = Network
-  { nRecv    :: STM RawInput
+  { nRecv    :: STM NetworkEvent
   , nSend    :: NodeId -> NodeId -> ByteString -> IO ()
   , nRespond :: ClientId -> ByteString -> IO ()
   , nRun     :: IO ()
@@ -60,7 +60,7 @@ realNetwork clock _cmdQ = do
     , nRun     = run pORT (app ac clock incoming)
     }
 
-app :: AwaitingClients -> Clock -> TBQueue RawInput -> Application
+app :: AwaitingClients -> Clock -> TBQueue NetworkEvent -> Application
 app awaiting clock incoming req respond =
   case requestMethod req of
     "POST" -> case parseNodeId of
@@ -71,7 +71,7 @@ app awaiting clock incoming req respond =
                   time <- cGetCurrentTime clock
                   atomically
                     (writeTBQueue incoming
-                      (RawInput toNodeId (ClientRequest time fromClientId reqBody)))
+                      (NetworkEvent toNodeId (ClientRequest time fromClientId reqBody)))
                   mBs <- timeout (60_000_000) (takeMVar resp) -- 60s
                   removeAwaitingClient awaiting fromClientId
                   case mBs of
@@ -86,7 +86,7 @@ app awaiting clock incoming req respond =
                   time <- cGetCurrentTime clock
                   atomically
                     (writeTBQueue incoming
-                      (RawInput toNodeId (InternalMessage time fromNodeId reqBody)))
+                      (NetworkEvent toNodeId (InternalMessage time fromNodeId reqBody)))
                   respond (responseLBS status200 [] "")
 
     _otherwise -> respond (responseLBS status400 [] "Unsupported method")
@@ -118,7 +118,7 @@ fakeNetwork a clock cmdQ = do
     , nRun     = return ()
     }
   where
-    recv :: TVar Agenda -> STM RawInput
+    recv :: TVar Agenda -> STM NetworkEvent
     recv agenda = do
       a <- readTVar agenda
       case pop a of
@@ -127,9 +127,9 @@ fakeNetwork a clock cmdQ = do
           -- NOTE: We need to throw here, because merely retrying will rollback
           -- the write of the exit command.
           throwSTM ExitSuccess
-        Just ((_time, rawInput), a') -> do
+        Just ((_time, netEv), a') -> do
           writeTVar agenda a'
-          return rawInput
+          return netEv
 
     send :: TVar Agenda -> NodeId -> NodeId -> ByteString -> IO ()
     send agenda from to msg = do
@@ -137,7 +137,7 @@ fakeNetwork a clock cmdQ = do
       -- XXX: need seed to generate random arrival time
       let arrivalTime = addTime 1 now
       atomically (modifyTVar' agenda
-        (push (arrivalTime, RawInput to (InternalMessage arrivalTime from msg))))
+        (push (arrivalTime, (NetworkEvent to (InternalMessage arrivalTime from msg)))))
 
     respond :: ClientId -> ByteString -> IO ()
     respond _clientId _resp = return ()
