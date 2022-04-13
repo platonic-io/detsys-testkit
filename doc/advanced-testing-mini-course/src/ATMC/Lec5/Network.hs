@@ -103,39 +103,23 @@ app awaiting clock evQ req respond =
           _otherwise -> Nothing
         _otherwise -> Nothing
 
-fakeNetwork :: Agenda -> EventQueue -> Clock -> IO Network
-fakeNetwork a evQ clock = do
-  agenda <- newTVarIO a
+fakeNetwork :: EventQueue -> Clock -> IO Network
+fakeNetwork evQ _clock = do
   return Network
-    { nSend    = send agenda
+    { nSend    = send
     , nRespond = respond
     , nRun     = return ()
     }
   where
---    recv :: TVar Agenda -> STM NetworkEvent
---    recv agenda = do
---      a <- readTVar agenda
---      case pop a of
---        Nothing -> do
---          -- writeTBQueue cmdQ Exit
---          -- NOTE: We need to throw here, because merely retrying will rollback
---          -- the write of the exit command.
---          throwSTM ExitSuccess
---        Just ((_time, netEv), a') -> do
---          writeTVar agenda a'
---          return netEv
-
-    send :: TVar Agenda -> NodeId -> NodeId -> ByteString -> IO ()
-    send agenda from to msg = do
-      now <- cGetCurrentTime clock
-      -- XXX: need seed to generate random arrival time
-      let arrivalTime = addTime 1 now
-      atomically (modifyTVar' agenda
-        (push (arrivalTime, (NetworkEvent to (InternalMessage arrivalTime from msg)))))
+    send :: NodeId -> NodeId -> ByteString -> IO ()
+    send from to msg = eqEnqueue evQ
+      (NetworkEventE (NetworkEvent to (InternalMessage epoch from msg)))
+      -- ^ NOTE: `epoch` is just a placeholder, the actual arrival time will be
+      -- set by `eqEnqueue`.
 
     respond :: ClientId -> ByteString -> IO ()
     respond _clientId _resp = return ()
 
 newNetwork :: DeploymentMode -> EventQueue -> Clock -> IO Network
-newNetwork Production          = realNetwork
-newNetwork (Simulation agenda) = fakeNetwork agenda
+newNetwork Production           = realNetwork
+newNetwork (Simulation _agenda) = fakeNetwork

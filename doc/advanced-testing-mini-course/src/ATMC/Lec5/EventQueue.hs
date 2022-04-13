@@ -2,8 +2,11 @@ module ATMC.Lec5.EventQueue where
 
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TQueue
+import Data.IORef
 
+import ATMC.Lec5.Agenda
 import ATMC.Lec5.Event
+import ATMC.Lec5.Time
 import ATMC.Lec5.Options
 
 ------------------------------------------------------------------------
@@ -13,17 +16,38 @@ data EventQueue = EventQueue
   , eqDequeue :: IO Event
   }
 
-realEventQueue :: IO EventQueue
-realEventQueue = do
+realEventQueue :: Clock -> IO EventQueue
+realEventQueue _clock = do
   q <- newTQueueIO
   return EventQueue
     { eqEnqueue = atomically . writeTQueue q
     , eqDequeue = atomically (readTQueue q)
     }
 
-fakeEventQueue :: IO EventQueue
-fakeEventQueue = undefined
+fakeEventQueue :: Agenda -> Clock -> IO EventQueue
+fakeEventQueue a clock = do
+  agenda <- newIORef a
+  return EventQueue
+    { eqEnqueue = enqueue agenda
+    , eqDequeue = dequeue agenda
+    }
+  where
+    enqueue :: IORef Agenda -> Event -> IO ()
+    enqueue agenda event = do
+      now <- cGetCurrentTime clock
+      -- XXX: need seed to generate random arrival time
+      let arrivalTime = addTime 1 now
+      modifyIORef' agenda (push (arrivalTime, setEventTime arrivalTime event))
 
-newEventQueue :: DeploymentMode -> IO EventQueue
+    dequeue :: IORef Agenda -> IO Event
+    dequeue agenda = do
+      a <- readIORef agenda
+      case pop a of
+        Nothing -> return (CommandEventE Exit)
+        Just ((_time, event), a') -> do
+          writeIORef agenda a'
+          return event
+
+newEventQueue :: DeploymentMode -> Clock -> IO EventQueue
 newEventQueue Production          = realEventQueue
-newEventQueue (Simulation agenda) = fakeEventQueue
+newEventQueue (Simulation agenda) = fakeEventQueue agenda

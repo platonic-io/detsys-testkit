@@ -19,13 +19,23 @@ data NetworkEvent = NetworkEvent NodeId (Input ByteString ByteString)
 data TimerEvent = TimerEvent NodeId Time
   deriving Show
 
-eventTime :: Event -> Time
-eventTime (TimerEventE   (TimerEvent   _nodeId time))  = time
-eventTime (NetworkEventE (NetworkEvent _nodeId input)) = inputTime input
+getEventTime :: Event -> Time
+getEventTime (TimerEventE   (TimerEvent   _nodeId time))  = time
+getEventTime (NetworkEventE (NetworkEvent _nodeId input)) = getInputTime input
   where
-    inputTime :: Input request message -> Time
-    inputTime (ClientRequest   time _cid _req) = time
-    inputTime (InternalMessage time _nid _msg) = time
+    getInputTime :: Input request message -> Time
+    getInputTime (ClientRequest   time _cid _req) = time
+    getInputTime (InternalMessage time _nid _msg) = time
+
+setEventTime :: Time -> Event -> Event
+setEventTime time (TimerEventE (TimerEvent nodeId _time)) =
+                   TimerEventE (TimerEvent nodeId time)
+setEventTime time (NetworkEventE (NetworkEvent nodeId input)) =
+                   NetworkEventE (NetworkEvent nodeId (setInputTime time input))
+  where
+    setInputTime :: Time -> Input request message -> Input request message
+    setInputTime time (ClientRequest _time cid req)   = ClientRequest time cid req
+    setInputTime time (InternalMessage _time nid msg) = InternalMessage time nid msg
 
 data CommandEvent = Exit
   deriving Show
