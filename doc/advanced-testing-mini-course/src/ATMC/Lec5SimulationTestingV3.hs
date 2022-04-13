@@ -3,6 +3,7 @@
 
 module ATMC.Lec5SimulationTestingV3 where
 
+import Control.Monad
 import Control.Applicative
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
@@ -29,14 +30,11 @@ newClock Production           = realClock
 newClock (Simulation _agenda) = fakeClockEpoch
 
 eventLoopProduction :: [SomeCodecSM] -> IO ()
-eventLoopProduction
-  = eventLoop (Options Production)
-  . makeConfiguration
+eventLoopProduction = eventLoop (Options Production) <=< makeConfiguration
 
 eventLoopSimulation :: Agenda -> [SomeCodecSM] -> IO ()
-eventLoopSimulation agenda
-  = eventLoop (Options (Simulation agenda))
-  . makeConfiguration
+eventLoopSimulation agenda =
+  eventLoop (Options (Simulation agenda)) <=< makeConfiguration
 
 echoAgenda :: Agenda
 echoAgenda = makeAgenda
@@ -73,8 +71,9 @@ runWorker config clock net cmdQ pids = go
     exit = mapM_ cancel pids
 
     handleEvent :: Event -> IO ()
-    handleEvent (NetworkEventE (NetworkEvent nodeId rawInput)) =
-      case lookupReceiver nodeId config of
+    handleEvent (NetworkEventE (NetworkEvent nodeId rawInput)) = do
+      r <- lookupReceiver nodeId config
+      case r of
         Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state step _timeout)) ->
           case decodeInput codec rawInput of
@@ -89,10 +88,12 @@ runWorker config clock net cmdQ pids = go
                 Right (outputs, state') -> do
                   -- XXX: Save this somewhere...
                   let _e = HistEvent nodeId state input state' outputs
+                  updateReceiverState nodeId state' config
                   mapM_ (handleOutput codec nodeId) outputs
 
-    handleEvent (TimerEventE (TimerEvent nodeId time)) =
-      case lookupReceiver nodeId config of
+    handleEvent (TimerEventE (TimerEvent nodeId time)) = do
+      r <- lookupReceiver nodeId config
+      case r of
         Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state _step timeout)) -> do
           r <- try (evaluate (timeout time state))
@@ -100,7 +101,7 @@ runWorker config clock net cmdQ pids = go
             Left (e :: SomeException) ->
               putStrLn ("timeout failed, error: " ++ displayException e)
             Right (outputs, state') -> do
-              -- XXX: updateReceiverState nodeId
+              updateReceiverState nodeId state' config
               mapM_ (handleOutput codec nodeId) outputs
 
     handleEvent (CommandEventE Exit) = error "IMPOSSIBLE: this case has already been handled"
