@@ -6,7 +6,6 @@ module ATMC.Lec5.Network where
 
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TBQueue
 import Control.Exception
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Lazy (ByteString)
@@ -26,6 +25,7 @@ import ATMC.Lec5.Options
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Time
 import ATMC.Lec5.Event
+import ATMC.Lec5.EventQueue
 
 ------------------------------------------------------------------------
 
@@ -33,16 +33,14 @@ pORT :: Int
 pORT = 8050
 
 data Network = Network
-  { nRecv    :: STM NetworkEvent
-  , nSend    :: NodeId -> NodeId -> ByteString -> IO ()
+  { nSend    :: NodeId -> NodeId -> ByteString -> IO ()
   , nRespond :: ClientId -> ByteString -> IO ()
   , nRun     :: IO ()
   }
 
-realNetwork :: Clock -> TBQueue CommandEvent -> IO Network
-realNetwork clock _cmdQ = do
+realNetwork :: EventQueue -> Clock -> IO Network
+realNetwork evQ clock = do
   ac       <- newAwaitingClients
-  incoming <- newTBQueueIO 65536
   mgr      <- newManager defaultManagerSettings
   initReq  <- parseRequest ("http://localhost:" ++ show pORT)
   let sendReq = \fromNodeId toNodeId msg ->
@@ -55,13 +53,12 @@ realNetwork clock _cmdQ = do
                                    putStrLn ("send failed, error: " ++ show e))
   return Network
     { nSend    = send
-    , nRecv    = readTBQueue incoming
     , nRespond = respondToAwaitingClient ac
-    , nRun     = run pORT (app ac clock incoming)
+    , nRun     = run pORT (app ac clock evQ)
     }
 
-app :: AwaitingClients -> Clock -> TBQueue NetworkEvent -> Application
-app awaiting clock incoming req respond =
+app :: AwaitingClients -> Clock -> EventQueue -> Application
+app awaiting clock evQ req respond =
   case requestMethod req of
     "POST" -> case parseNodeId of
                 Nothing -> respond (responseLBS status400 [] "Missing receiver node id")
@@ -69,9 +66,8 @@ app awaiting clock incoming req respond =
                   reqBody <- consumeRequestBodyStrict req
                   (fromClientId, resp) <- addAwaitingClient awaiting
                   time <- cGetCurrentTime clock
-                  atomically
-                    (writeTBQueue incoming
-                      (NetworkEvent toNodeId (ClientRequest time fromClientId reqBody)))
+                  eqEnqueue evQ (NetworkEventE
+                    (NetworkEvent toNodeId (ClientRequest time fromClientId reqBody)))
                   mBs <- timeout (60_000_000) (takeMVar resp) -- 60s
                   removeAwaitingClient awaiting fromClientId
                   case mBs of
@@ -84,9 +80,8 @@ app awaiting clock incoming req respond =
                Just (fromNodeId, toNodeId) -> do
                   reqBody <- consumeRequestBodyStrict req
                   time <- cGetCurrentTime clock
-                  atomically
-                    (writeTBQueue incoming
-                      (NetworkEvent toNodeId (InternalMessage time fromNodeId reqBody)))
+                  eqEnqueue evQ (NetworkEventE
+                    (NetworkEvent toNodeId (InternalMessage time fromNodeId reqBody)))
                   respond (responseLBS status200 [] "")
 
     _otherwise -> respond (responseLBS status400 [] "Unsupported method")
@@ -108,28 +103,27 @@ app awaiting clock incoming req respond =
           _otherwise -> Nothing
         _otherwise -> Nothing
 
-fakeNetwork :: Agenda -> Clock -> TBQueue CommandEvent -> IO Network
-fakeNetwork a clock cmdQ = do
+fakeNetwork :: Agenda -> EventQueue -> Clock -> IO Network
+fakeNetwork a evQ clock = do
   agenda <- newTVarIO a
   return Network
-    { nRecv    = recv agenda
-    , nSend    = send agenda
+    { nSend    = send agenda
     , nRespond = respond
     , nRun     = return ()
     }
   where
-    recv :: TVar Agenda -> STM NetworkEvent
-    recv agenda = do
-      a <- readTVar agenda
-      case pop a of
-        Nothing -> do
-          writeTBQueue cmdQ Exit
-          -- NOTE: We need to throw here, because merely retrying will rollback
-          -- the write of the exit command.
-          throwSTM ExitSuccess
-        Just ((_time, netEv), a') -> do
-          writeTVar agenda a'
-          return netEv
+--    recv :: TVar Agenda -> STM NetworkEvent
+--    recv agenda = do
+--      a <- readTVar agenda
+--      case pop a of
+--        Nothing -> do
+--          -- writeTBQueue cmdQ Exit
+--          -- NOTE: We need to throw here, because merely retrying will rollback
+--          -- the write of the exit command.
+--          throwSTM ExitSuccess
+--        Just ((_time, netEv), a') -> do
+--          writeTVar agenda a'
+--          return netEv
 
     send :: TVar Agenda -> NodeId -> NodeId -> ByteString -> IO ()
     send agenda from to msg = do
@@ -142,6 +136,6 @@ fakeNetwork a clock cmdQ = do
     respond :: ClientId -> ByteString -> IO ()
     respond _clientId _resp = return ()
 
-newNetwork :: Deployment -> Clock -> TBQueue CommandEvent -> IO Network
+newNetwork :: DeploymentMode -> EventQueue -> Clock -> IO Network
 newNetwork Production          = realNetwork
 newNetwork (Simulation agenda) = fakeNetwork agenda

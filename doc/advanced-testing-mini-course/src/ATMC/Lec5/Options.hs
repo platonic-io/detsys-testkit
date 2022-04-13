@@ -1,16 +1,15 @@
 module ATMC.Lec5.Options where
 
 import ATMC.Lec5.Agenda
-import ATMC.Lec5.Event
 import ATMC.Lec5.StateMachine
 
 ------------------------------------------------------------------------
 
-data Deployment = Production | Simulation Agenda
+data DeploymentMode = Production | Simulation Agenda
   deriving Show
 
 data Options = Options
-  { oDeployment :: Deployment
+  { oDeployment :: DeploymentMode
   -- , oTimerFreq :: Double -- Hz (cycles per second)
   -- oClientTimeoutNanos :: Int
   }

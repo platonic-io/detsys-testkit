@@ -57,6 +57,7 @@ library
     ATMC.Lec5.Codec
     ATMC.Lec5.Configuration
     ATMC.Lec5.Event
+    ATMC.Lec5.EventQueue
     ATMC.Lec5.History
     ATMC.Lec5.Network
     ATMC.Lec5.Options

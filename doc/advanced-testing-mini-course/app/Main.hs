@@ -4,6 +4,7 @@ import System.Environment
 
 import ATMC.Lec5SimulationTestingV3
 import ATMC.Lec5.StateMachine
+import ATMC.Lec5.Configuration
 import ATMC.Lec5.Codec
 
 ------------------------------------------------------------------------
