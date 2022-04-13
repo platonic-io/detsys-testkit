@@ -1,5 +1,6 @@
 module ATMC.Lec5.TimerWheel where
 
+import Control.Concurrent (threadDelay)
 import Data.Time
 import Data.Fixed
 import Data.Foldable
@@ -8,6 +9,8 @@ import Data.Heap (Entry(Entry), Heap)
 import qualified Data.Heap as Heap
 
 import ATMC.Lec5.Time
+import ATMC.Lec5.Event
+import ATMC.Lec5.EventQueue
 import ATMC.Lec5.StateMachine
 
 ------------------------------------------------------------------------
@@ -38,14 +41,23 @@ resetTimer (TimerWheel hr) clock nodeId secs = do
 -- XXX: Possible future extension: if nothing has expired, sleep until either 1)
 -- min element on heap expires, or 2) we get woken up by register/reset timer.
 -- I.e. `Async.race (threadDelay minTime) (takeMVar wakeup)`.
-expiredTimers :: TimerWheel -> Clock -> IO [(Time, NodeId)]
+expiredTimers :: TimerWheel -> Clock -> IO [(NodeId, Time)]
 expiredTimers (TimerWheel hr) clock  = do
   now <- cGetCurrentTime clock
   atomicModifyIORef' hr (go now [] . toList)
     where
-      go :: Time -> [(Time, NodeId)] -> [Entry Time NodeId]
-        -> (Heap (Entry Time NodeId), [(Time, NodeId)])
+      go :: Time -> [(NodeId, Time)] -> [Entry Time NodeId]
+        -> (Heap (Entry Time NodeId), [(NodeId, Time)])
       go _now acc [] = (Heap.empty, reverse acc)
       go  now acc (Entry t nodeId : es)
-        | t <= now  = go now ((t, nodeId) : acc) es
+        | t <= now  = go now ((nodeId, t) : acc) es
         | otherwise = (Heap.fromList es, reverse acc)
+
+runTimerManager :: TimerWheel -> Clock -> EventQueue -> IO ()
+runTimerManager tw clock eventQueue = go
+  where
+    go = do
+      tos <- expiredTimers tw clock
+      mapM_ (eqEnqueue eventQueue . TimerEventE . uncurry TimerEvent) tos
+      threadDelay 1000 -- 1 ms
+      go

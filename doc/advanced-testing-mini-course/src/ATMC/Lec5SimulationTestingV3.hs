@@ -22,6 +22,7 @@ import ATMC.Lec5.Network
 import ATMC.Lec5.Options
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Time
+import ATMC.Lec5.TimerWheel
 import ATMC.Lec5.Configuration
 
 ------------------------------------------------------------------------
@@ -41,12 +42,15 @@ eventLoop :: Options -> Configuration -> IO ()
 eventLoop opts config = do
   putStrLn ("Starting event loop in " ++ show (oDeployment opts) ++
             " mode on port: "  ++ show pORT)
-  clock <- newClock (oDeployment opts)
-  evQ   <- newEventQueue (oDeployment opts) clock
-  net   <- newNetwork (oDeployment opts) evQ clock
+  clock      <- newClock (oDeployment opts)
+  evQ        <- newEventQueue (oDeployment opts) clock
+  net        <- newNetwork (oDeployment opts) evQ clock
+  timerWheel <- newTimerWheel
   withAsync (nRun net) $ \anet -> do
     link anet
-    runWorker config clock net evQ [anet]
+    withAsync (runTimerManager timerWheel clock evQ) $ \atm -> do
+      link atm
+      runWorker config clock net timerWheel evQ [anet, atm]
 
 data Deployment = Deployment
   { dConfiguration :: Configuration
@@ -63,8 +67,9 @@ newClock Production           = realClock
 newClock (Simulation _agenda) = fakeClockEpoch
 
 
-runWorker :: Configuration -> Clock -> Network -> EventQueue -> [Async ()] -> IO ()
-runWorker config clock net evQ pids = go
+runWorker :: Configuration -> Clock -> Network -> TimerWheel -> EventQueue -> [Async ()]
+          -> IO ()
+runWorker config clock net timerWheel evQ pids = go
   where
     go :: IO ()
     go = do
@@ -121,6 +126,6 @@ runWorker config clock net evQ pids = go
     handleOutput codec fromNodeId (InternalMessageOut toNodeId msg) =
       nSend net fromNodeId toNodeId (cEncodeMessage codec msg)
     handleOutput _codec fromNodeId (RegisterTimerSeconds secs) =
-      undefined -- registerTimer timerWheel clock fromNodeId secs
+      registerTimer timerWheel clock fromNodeId secs
     handleOutput _codec fromNodeId (ResetTimerSeconds secs) =
-      undefined -- resetTimer timerWheel clock fromNodeId secs
+      resetTimer timerWheel clock fromNodeId secs
