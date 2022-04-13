@@ -1,6 +1,6 @@
 module ATMC.Lec5.ViewstampReplication.Machine where
 
-import Control.Monad (forM_, unless)
+import Control.Monad (forM_, unless, when)
 import Data.Sequence ((|>))
 
 import ATMC.Lec5.StateMachine
@@ -39,6 +39,12 @@ broadCastReplicas msg = do
   ViewNumber cVn <- use currentViewNumber
   forM_ (zip [0..] nodes) $ \ (i, node) -> do
     unless (i == cVn `mod` length nodes) $ send node msg
+
+sendPrimary :: VRMessage VROp -> VR ()
+sendPrimary msg = do
+  nodes <- use configuration
+  ViewNumber cVn <- use currentViewNumber
+  send (nodes !! (cVn `mod` length nodes)) msg
 
 {- -- When we get ticks --
 6. Normally the primary informs backups about the
@@ -118,7 +124,20 @@ mary to indicate that this operation and all earlier
 ones have prepared locally.
     -}
     -- also look at step 7.
-    tODO
+    myK <- use opNumber
+    -- i <- use replicaNumber
+    when (succ myK /= n) $ do
+      -- We haven't processed earlier messages
+      -- should start state transfer.
+      -- TODO: for now we just drop
+      ereturn
+    opNumber += 1
+    theLog %= (|> n)
+    -- TODO: what should be added here? we don't know c or s?
+    -- should probably be in m shomehow?
+    -- clientTable.at c .= Just (InFlight s)
+    sendPrimary $ PrepareOk v n {- i -} -- we don't need to add i since
+                                        -- event-loop will add it automatically
   PrepareOk v n -> do
     let i = from
     checkIsPrimary
