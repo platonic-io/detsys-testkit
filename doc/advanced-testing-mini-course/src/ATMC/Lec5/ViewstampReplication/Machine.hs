@@ -1,5 +1,8 @@
 module ATMC.Lec5.ViewstampReplication.Machine where
 
+import Control.Monad (forM_, unless)
+import Data.Sequence ((|>))
+
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
 import ATMC.Lec5.ViewstampReplication.Message
@@ -29,6 +32,13 @@ checkIsPrimary = guardM isPrimary
 
 checkIsBackup :: VR ()
 checkIsBackup = guardM (not <$> isPrimary)
+
+broadCastReplicas :: VRMessage VROp -> VR ()
+broadCastReplicas msg = do
+  nodes <- use configuration
+  ViewNumber cVn <- use currentViewNumber
+  forM_ (zip [0..] nodes) $ \ (i, node) -> do
+    unless (i == cVn `mod` length nodes) $ send node msg
 
 {- -- When we get ticks --
 6. Normally the primary informs backups about the
@@ -62,8 +72,7 @@ has already been executed.
   -}
   clientStatus <- use (clientTable.at c)
   case clientStatus of
-    Nothing -> do
-      clientTable.at c .= Just (InFlight s)
+    Nothing -> return ()
     Just cs -> do
       guard (requestNumber cs <= s)
       case cs of
@@ -84,7 +93,13 @@ current view-number, m is the message it received
 from the client, n is the op-number it assigned to
 the request, and k is the commit-number.
   -}
-  tODO
+  opNumber += 1
+  cOp <- use opNumber
+  theLog %= (|> cOp)
+  clientTable.at c .= Just (InFlight s)
+  v <- use currentViewNumber
+  k <- use commitNumber -- ? should it be bumped?
+  broadCastReplicas $ Prepare v op cOp k
 machine (InternalMessage time from iMsg) = case iMsg of
   Prepare v m n k -> do
     checkIsBackup
