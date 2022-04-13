@@ -38,6 +38,7 @@ noTimeouts _time state = ([], state)
 
 echoSM :: SM () ByteString ByteString ByteString
 echoSM = SM
-  { smState = ()
-  , smStep  = \(ClientRequest _at cid req) () -> ([ClientResponse cid req], ())
+  { smState   = ()
+  , smStep    = \(ClientRequest _at cid req) () -> ([ClientResponse cid req], ())
+  , smTimeout = noTimeouts
   }
