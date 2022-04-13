@@ -14,7 +14,7 @@ Motivation
     suitable, obeys the rules, etc." -- Cambridge dictionary
 
   - In order to check that the software under test (SUT) obeys the rules we must
-    first write the rules down
+    first write down the rules
 
   - State machine specifications are one of many ways to formally "write down
     the rules"

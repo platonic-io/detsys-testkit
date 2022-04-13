@@ -107,4 +107,4 @@ initState :: SBFTState
 initState = tODO
 
 sm :: SM SBFTState SBFTRequest SBFTMessage Response
-sm = SM initState (runSMM (Seed 0) . machine)
+sm = SM initState (runSMM (Seed 0) . machine) noTimeouts

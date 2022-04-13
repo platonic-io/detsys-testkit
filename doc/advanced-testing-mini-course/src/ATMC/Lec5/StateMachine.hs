@@ -14,8 +14,9 @@ newtype ClientId = ClientId { unClientId :: Int }
   deriving (Eq, Ord, Show)
 
 data SM state request message response = SM
-  { smState :: state
-  , smStep  :: Input request message -> state -> ([Output response message], state)
+  { smState   :: state
+  , smStep    :: Input request message -> state -> ([Output response message], state)
+  , smTimeout :: Time -> state -> ([Output response message], state)
   -- smPredicate :: state -> [pred]
   -- smProcess :: pred -> state -> ([Output response message], state)
   }
@@ -31,6 +32,9 @@ data Output response message
   | RegisterTimerSeconds Pico
   | ResetTimerSeconds Pico
   deriving (Eq, Show)
+
+noTimeouts :: Time -> state -> ([Output response message], state)
+noTimeouts _time state = ([], state)
 
 echoSM :: SM () ByteString ByteString ByteString
 echoSM = SM

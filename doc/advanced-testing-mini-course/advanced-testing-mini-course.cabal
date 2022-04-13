@@ -54,6 +54,7 @@ library
     ATMC.Lec5.Agenda
     ATMC.Lec5.AwaitingClients
     ATMC.Lec5.Codec
+    ATMC.Lec5.Configuration
     ATMC.Lec5.Event
     ATMC.Lec5.History
     ATMC.Lec5.Network

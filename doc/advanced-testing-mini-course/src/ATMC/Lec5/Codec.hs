@@ -1,5 +1,3 @@
-{-# LANGUAGE ExistentialQuantification #-}
-
 module ATMC.Lec5.Codec where
 
 import Data.Typeable
@@ -15,10 +13,6 @@ data Codec request message response = Codec
   , cEncodeResponse :: response -> ByteString
   , cEncodeMessage  :: message  -> ByteString
   }
-
-data SomeCodecSM = forall state request message response. Typeable state =>
-                   SomeCodecSM (Codec request message response)
-                               (SM state request message response)
 
 decodeInput :: Codec req msg resp -> Input ByteString ByteString -> Maybe (Input req msg)
 decodeInput codec (ClientRequest at from bs) = do

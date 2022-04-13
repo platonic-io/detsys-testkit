@@ -8,27 +8,28 @@ import ATMC.Lec5.StateMachine
 ------------------------------------------------------------------------
 
 data Event
-  = NetworkEvent RawInput
-  | TimerEvent -- TimerEvent
-  | CommandEvent CommandEvent
+  = NetworkEventE NetworkEvent
+  | TimerEventE   TimerEvent
+  | CommandEventE CommandEvent
   deriving Show
 
-data RawInput = RawInput NodeId (Input ByteString ByteString)
+data NetworkEvent = NetworkEvent NodeId (Input ByteString ByteString)
   deriving Show
 
-inputTime :: Input request message -> Time
-inputTime (ClientRequest   time _cid _req) = time
-inputTime (InternalMessage time _nid _msg) = time
-
-rawInputTime :: RawInput -> Time
-rawInputTime (RawInput _to input) = inputTime input
+data TimerEvent = TimerEvent NodeId Time
+  deriving Show
 
 eventTime :: Event -> Time
-eventTime (NetworkEvent rawInput) = rawInputTime rawInput
+eventTime (TimerEventE   (TimerEvent   _nodeId time))  = time
+eventTime (NetworkEventE (NetworkEvent _nodeId input)) = inputTime input
+  where
+    inputTime :: Input request message -> Time
+    inputTime (ClientRequest   time _cid _req) = time
+    inputTime (InternalMessage time _nid _msg) = time
 
 data CommandEvent = Exit
   deriving Show
 
 isExitCommand :: Event -> Bool
-isExitCommand (CommandEvent Exit) = True
-isExitCommand _otherwise          = False
+isExitCommand (CommandEventE Exit) = True
+isExitCommand _otherwise           = False
