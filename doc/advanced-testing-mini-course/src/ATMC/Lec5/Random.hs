@@ -1,7 +1,8 @@
 module ATMC.Lec5.Random where
 
 import Data.IORef
-import System.Random (StdGen, setStdGen, getStdGen, mkStdGen)
+import System.Random (StdGen, setStdGen, getStdGen, mkStdGen, randomR)
+import qualified System.Random
 
 ------------------------------------------------------------------------
 
@@ -27,3 +28,10 @@ fakeRandom (Seed seed) = do
     { rGetStdGen = readIORef r
     , rSetStdGen = writeIORef r
     }
+
+randomInterval :: System.Random.Random a => Random -> (a, a) -> IO a
+randomInterval random range = do
+  g <- rGetStdGen random
+  let (x, g') = randomR range g
+  rSetStdGen random g'
+  return x
