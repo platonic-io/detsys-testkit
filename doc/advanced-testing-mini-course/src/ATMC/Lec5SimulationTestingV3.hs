@@ -24,15 +24,16 @@ import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Time
 import ATMC.Lec5.TimerWheel
 import ATMC.Lec5.Configuration
+import ATMC.Lec5.Deployment
 
 ------------------------------------------------------------------------
 
 eventLoopProduction :: [SomeCodecSM] -> IO ()
 eventLoopProduction = eventLoop (Options Production) <=< makeConfiguration
 
-eventLoopSimulation :: Agenda -> [SomeCodecSM] -> IO ()
-eventLoopSimulation agenda =
-  eventLoop (Options (Simulation agenda)) <=< makeConfiguration
+eventLoopSimulation :: Agenda -> History -> [SomeCodecSM] -> IO ()
+eventLoopSimulation agenda history =
+  eventLoop (Options (Simulation agenda history)) <=< makeConfiguration
 
 echoAgenda :: Agenda
 echoAgenda = makeAgenda
@@ -40,58 +41,37 @@ echoAgenda = makeAgenda
 
 eventLoop :: Options -> Configuration -> IO ()
 eventLoop opts config = do
-  putStrLn ("Starting event loop in " ++ show (oDeployment opts) ++
+  putStrLn ("Starting event loop in " ++ displayDeploymentMode (oDeployment opts) ++
             " mode on port: "  ++ show pORT)
-  clock      <- newClock (oDeployment opts)
-  evQ        <- newEventQueue (oDeployment opts) clock
-  net        <- newNetwork (oDeployment opts) evQ clock
-  timerWheel <- newTimerWheel
-  withAsync (nRun net) $ \anet -> do
+  d <- newDeployment (oDeployment opts) config
+  withAsync (nRun (dNetwork d)) $ \anet -> do
     link anet
-    withAsync (runTimerManager timerWheel clock evQ) $ \atm -> do
+    withAsync (runTimerManager (dTimerWheel d) (dClock d) (dEventQueue d)) $ \atm -> do
       link atm
-      runWorker config clock net timerWheel evQ (Pids [anet, atm])
-
-newtype Pids = Pids { unPids :: [Async ()] }
-
-data Deployment = Deployment
-  { dConfiguration :: Configuration
-  , dClock         :: Clock
-  , dNetwork       :: Network
-  , dEventQueue    :: EventQueue
-  , dPids          :: Pids
-  }
-
-newDeployment :: DeploymentMode -> Configuration -> Deployment
-newDeployment = undefined
-
-newClock :: DeploymentMode -> IO Clock
-newClock Production           = realClock
-newClock (Simulation _agenda) = fakeClockEpoch
+      runWorker (d { dPids = Pids [anet, atm] })
 
 -- XXX: Seed/Random
 -- XXX: Faults
 
-runWorker :: Configuration -> Clock -> Network -> TimerWheel -> EventQueue -> Pids
-          -> IO ()
-runWorker config clock net timerWheel evQ pids = go
+runWorker :: Deployment -> IO ()
+runWorker d = go
   where
     go :: IO ()
     go = do
-      event <- eqDequeue evQ
+      event <- eqDequeue (dEventQueue d)
       if isExitCommand event
       then exit
       else do
-        cSetCurrentTime clock (getEventTime event) -- This is a noop in production deployment.
+        cSetCurrentTime (dClock d) (getEventTime event) -- This is a noop in production deployment.
         handleEvent event
         go
 
     exit :: IO ()
-    exit = mapM_ cancel (unPids pids)
+    exit = mapM_ cancel (unPids (dPids d))
 
     handleEvent :: Event -> IO ()
     handleEvent (NetworkEventE (NetworkEvent nodeId rawInput)) = do
-      r <- lookupReceiver nodeId config
+      r <- lookupReceiver nodeId (dConfiguration d)
       case r of
         Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state step _timeout)) ->
@@ -105,13 +85,12 @@ runWorker config clock net timerWheel evQ pids = go
                 Left (e :: SomeException) ->
                   putStrLn ("step failed, error: " ++ displayException e)
                 Right (outputs, state') -> do
-                  -- XXX: Save this somewhere...
-                  let _e = HistEvent nodeId state input state' outputs
-                  updateReceiverState nodeId state' config
+                  dAppendHistory d (HistEvent nodeId state input state' outputs)
+                  updateReceiverState nodeId state' (dConfiguration d)
                   mapM_ (handleOutput codec nodeId) outputs
 
     handleEvent (TimerEventE (TimerEvent nodeId time)) = do
-      r <- lookupReceiver nodeId config
+      r <- lookupReceiver nodeId (dConfiguration d)
       case r of
         Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state _step timeout)) -> do
@@ -120,17 +99,18 @@ runWorker config clock net timerWheel evQ pids = go
             Left (e :: SomeException) ->
               putStrLn ("timeout failed, error: " ++ displayException e)
             Right (outputs, state') -> do
-              updateReceiverState nodeId state' config
+              -- XXX: Append to history
+              updateReceiverState nodeId state' (dConfiguration d)
               mapM_ (handleOutput codec nodeId) outputs
 
     handleEvent (CommandEventE Exit) = error "IMPOSSIBLE: this case has already been handled"
 
     handleOutput :: Codec req msg resp -> NodeId -> Output resp msg -> IO ()
     handleOutput codec _fromNodeId (ClientResponse clientId response) =
-      nRespond net clientId (cEncodeResponse codec response)
+      nRespond (dNetwork d) clientId (cEncodeResponse codec response)
     handleOutput codec fromNodeId (InternalMessageOut toNodeId msg) =
-      nSend net fromNodeId toNodeId (cEncodeMessage codec msg)
+      nSend (dNetwork d) fromNodeId toNodeId (cEncodeMessage codec msg)
     handleOutput _codec fromNodeId (RegisterTimerSeconds secs) =
-      registerTimer timerWheel clock fromNodeId secs
+      registerTimer (dTimerWheel d) (dClock d) fromNodeId secs
     handleOutput _codec fromNodeId (ResetTimerSeconds secs) =
-      resetTimer timerWheel clock fromNodeId secs
+      resetTimer (dTimerWheel d) (dClock d) fromNodeId secs

@@ -21,7 +21,6 @@ import System.Exit
 
 import ATMC.Lec5.Agenda
 import ATMC.Lec5.AwaitingClients
-import ATMC.Lec5.Options
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Time
 import ATMC.Lec5.Event
@@ -121,7 +120,3 @@ fakeNetwork evQ clock = do
 
     respond :: ClientId -> ByteString -> IO ()
     respond _clientId _resp = return ()
-
-newNetwork :: DeploymentMode -> EventQueue -> Clock -> IO Network
-newNetwork Production           = realNetwork
-newNetwork (Simulation _agenda) = fakeNetwork

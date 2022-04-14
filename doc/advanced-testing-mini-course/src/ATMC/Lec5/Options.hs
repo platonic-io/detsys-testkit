@@ -1,12 +1,8 @@
 module ATMC.Lec5.Options where
 
-import ATMC.Lec5.Agenda
-import ATMC.Lec5.StateMachine
+import ATMC.Lec5.Deployment
 
 ------------------------------------------------------------------------
-
-data DeploymentMode = Production | Simulation Agenda
-  deriving Show
 
 data Options = Options
   { oDeployment :: DeploymentMode

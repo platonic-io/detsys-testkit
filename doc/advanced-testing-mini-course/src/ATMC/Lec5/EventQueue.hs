@@ -7,7 +7,6 @@ import Data.IORef
 import ATMC.Lec5.Agenda
 import ATMC.Lec5.Event
 import ATMC.Lec5.Time
-import ATMC.Lec5.Options
 
 ------------------------------------------------------------------------
 
@@ -43,7 +42,3 @@ fakeEventQueue a clock = do
         Just ((_time, event), a') -> do
           writeIORef agenda a'
           return event
-
-newEventQueue :: DeploymentMode -> Clock -> IO EventQueue
-newEventQueue Production          = realEventQueue
-newEventQueue (Simulation agenda) = fakeEventQueue agenda
