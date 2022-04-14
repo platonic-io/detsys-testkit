@@ -4,6 +4,7 @@ module ATMC.Lec5.ViewstampReplication.State where
 import Data.List (sort)
 import Data.Map (Map)
 import Data.Sequence (Seq)
+import Data.Set (Set)
 
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
@@ -25,6 +26,8 @@ data VRState = VRState
   , _theLog :: Seq OpNumber
   , _commitNumber :: CommitNumber -- highe
   , _clientTable :: Map ClientId ClientStatus
+  -- not in paper
+  , _primaryPrepareOk :: Map OpNumber (Set NodeId)
   }
 
 makeLenses ''VRState
@@ -39,6 +42,8 @@ initState config me = VRState
   , _theLog = mempty
   , _commitNumber = 0 -- ?
   , _clientTable = mempty
+  -- not in paper
+  , _primaryPrepareOk = mempty
   }
   where
     topo = sort (me:config)
