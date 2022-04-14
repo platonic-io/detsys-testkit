@@ -33,11 +33,7 @@ fakeEventQueue a clock = do
     }
   where
     enqueue :: IORef Agenda -> Event -> IO ()
-    enqueue agenda event = do
-      now <- cGetCurrentTime clock
-      -- XXX: need seed to generate random arrival time
-      let arrivalTime = addTime 1 now
-      modifyIORef' agenda (push (arrivalTime, setEventTime arrivalTime event))
+    enqueue agenda event = modifyIORef' agenda (push (getEventTime event, event))
 
     dequeue :: IORef Agenda -> IO Event
     dequeue agenda = do

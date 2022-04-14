@@ -2,6 +2,7 @@
 
 > import Data.IORef
 > import Test.QuickCheck
+> import Test.QuickCheck.Monadic
 > import Test.HUnit
 
 State machine testing
@@ -35,8 +36,8 @@ SUT
 > get :: Counter -> IO Int
 > get (Counter ref) = readIORef ref
 
-Model
------
+State machine model/specification/fake
+--------------------------------------
 
 > newtype FakeCounter = FakeCounter Int
 
@@ -48,9 +49,10 @@ Model
 
 
 > data Command = Incr | Get
->   deriving Show
+>   deriving (Eq, Show)
 
 > data Response = Unit () | Int Int
+>   deriving (Eq, Show)
 
 > type Model = FakeCounter
 
@@ -63,7 +65,9 @@ Model
 >   Get  -> Int  <$> fakeGet m
 
 > exec :: Counter -> Command -> IO Response
-> exec = undefined
+> exec c cmd = case cmd of
+>   Incr -> Unit <$> incr c
+>   Get  -> Int  <$> get c
 
 > newtype Program = Program [Command]
 >   deriving Show
@@ -72,8 +76,18 @@ Model
 > genProgram = undefined
 
 > prop_counter :: Property
-> prop_counter = forAll (genProgram initModel) $ \(Program cmds) -> do
->   True
+> prop_counter = forAll (genProgram initModel) $ \(Program cmds) -> monadicIO $ do
+>   c <- run newCounter
+>   let m = initModel
+>   go c m cmds
+>   where
+>     go c m []           = return True
+>     go c m (cmd : cmds) = do
+>       resp <- run (exec c cmd)
+>       let (m', resp') = step m cmd
+>       if resp == resp'
+>       then go c m' cmds
+>       else return False
 
 Regression tests
 ----------------
@@ -89,15 +103,28 @@ Regression tests
 Excerises
 ---------
 
+0. Add a `Reset` `Command` which resets the counter to its initial value.
+
 1. Implement shrinking for programs.
 
-2. Collect timing information about how long each command takes to execute on
+2. Write a REPL for the state machine. Start with the initial state, prompt the
+   user for a command, apply the provided command to the step function and
+   display the response as well as the new state, rinse and repeat.
+
+   (For a SUT as simple as a counter this doesn't make much sense, but when the
+   SUT get more complicated it might make sense to develope the state machine
+   specification first, demo it using something like a REPL or some other simple
+   UI before even starting to implement the real thing.)
+
+3. Collect timing information about how long each command takes to execute on
    average.
 
 See also
 --------
 
-- Why state machines over other forms of specifications?
-  + Executable (we will use this later)
+- Why state machines over other forms of specifications? E.g. unit test-suite.
+  + Executable (as the REPL exercise shows, but also more on this later)
+  + Mental model
   + Gurevich's generalisation of the Church-Turing thesis
-  + Already heavily used in distributed systems
+  + Already heavily used in distributed systems (later we'll see how the model
+    becomes the implementation)

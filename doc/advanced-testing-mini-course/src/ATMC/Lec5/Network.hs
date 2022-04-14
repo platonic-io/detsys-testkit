@@ -104,7 +104,7 @@ app awaiting clock evQ req respond =
         _otherwise -> Nothing
 
 fakeNetwork :: EventQueue -> Clock -> IO Network
-fakeNetwork evQ _clock = do
+fakeNetwork evQ clock = do
   return Network
     { nSend    = send
     , nRespond = respond
@@ -112,10 +112,12 @@ fakeNetwork evQ _clock = do
     }
   where
     send :: NodeId -> NodeId -> ByteString -> IO ()
-    send from to msg = eqEnqueue evQ
-      (NetworkEventE (NetworkEvent to (InternalMessage epoch from msg)))
-      -- ^ NOTE: `epoch` is just a placeholder, the actual arrival time will be
-      -- set by `eqEnqueue`.
+    send from to msg = do
+      now <- cGetCurrentTime clock
+      -- XXX: need seed to generate random arrival time
+      let arrivalTime = addTime 1 now
+      eqEnqueue evQ
+        (NetworkEventE (NetworkEvent to (InternalMessage arrivalTime from msg)))
 
     respond :: ClientId -> ByteString -> IO ()
     respond _clientId _resp = return ()

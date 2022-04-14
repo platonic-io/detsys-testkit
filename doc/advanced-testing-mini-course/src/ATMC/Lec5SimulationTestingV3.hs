@@ -50,13 +50,16 @@ eventLoop opts config = do
     link anet
     withAsync (runTimerManager timerWheel clock evQ) $ \atm -> do
       link atm
-      runWorker config clock net timerWheel evQ [anet, atm]
+      runWorker config clock net timerWheel evQ (Pids [anet, atm])
+
+newtype Pids = Pids { unPids :: [Async ()] }
 
 data Deployment = Deployment
   { dConfiguration :: Configuration
   , dClock         :: Clock
   , dNetwork       :: Network
   , dEventQueue    :: EventQueue
+  , dPids          :: Pids
   }
 
 newDeployment :: DeploymentMode -> Configuration -> Deployment
@@ -66,8 +69,10 @@ newClock :: DeploymentMode -> IO Clock
 newClock Production           = realClock
 newClock (Simulation _agenda) = fakeClockEpoch
 
+-- XXX: Seed/Random
+-- XXX: Faults
 
-runWorker :: Configuration -> Clock -> Network -> TimerWheel -> EventQueue -> [Async ()]
+runWorker :: Configuration -> Clock -> Network -> TimerWheel -> EventQueue -> Pids
           -> IO ()
 runWorker config clock net timerWheel evQ pids = go
   where
@@ -82,7 +87,7 @@ runWorker config clock net timerWheel evQ pids = go
         go
 
     exit :: IO ()
-    exit = mapM_ cancel pids
+    exit = mapM_ cancel (unPids pids)
 
     handleEvent :: Event -> IO ()
     handleEvent (NetworkEventE (NetworkEvent nodeId rawInput)) = do
