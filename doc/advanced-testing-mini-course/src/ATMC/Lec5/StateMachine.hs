@@ -1,6 +1,7 @@
 module ATMC.Lec5.StateMachine where
 
 import Data.Fixed
+import System.Random
 import Data.ByteString.Lazy (ByteString)
 
 import ATMC.Lec5.Time
@@ -15,7 +16,8 @@ newtype ClientId = ClientId { unClientId :: Int }
 
 data SM state request message response = SM
   { smState   :: state
-  , smStep    :: Input request message -> state -> ([Output response message], state)
+  , smStep    :: Input request message -> state -> StdGen
+              -> ([Output response message], state, StdGen)
   , smTimeout :: Time -> state -> ([Output response message], state)
   -- smPredicate :: state -> [pred]
   -- smProcess :: pred -> state -> ([Output response message], state)
@@ -39,6 +41,6 @@ noTimeouts _time state = ([], state)
 echoSM :: SM () ByteString ByteString ByteString
 echoSM = SM
   { smState   = ()
-  , smStep    = \(ClientRequest _at cid req) () -> ([ClientResponse cid req], ())
+  , smStep    = \(ClientRequest _at cid req) () gen -> ([ClientResponse cid req], (), gen)
   , smTimeout = noTimeouts
   }

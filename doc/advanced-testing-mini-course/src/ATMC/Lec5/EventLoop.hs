@@ -20,6 +20,7 @@ import ATMC.Lec5.Event
 import ATMC.Lec5.EventQueue
 import ATMC.Lec5.Network
 import ATMC.Lec5.Options
+import ATMC.Lec5.Random
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Time
 import ATMC.Lec5.TimerWheel
@@ -31,9 +32,9 @@ import ATMC.Lec5.Deployment
 eventLoopProduction :: [SomeCodecSM] -> IO ()
 eventLoopProduction = eventLoop (Options Production) <=< makeConfiguration
 
-eventLoopSimulation :: Agenda -> History -> [SomeCodecSM] -> IO ()
-eventLoopSimulation agenda history =
-  eventLoop (Options (Simulation agenda history)) <=< makeConfiguration
+eventLoopSimulation :: Seed -> Agenda -> History -> [SomeCodecSM] -> IO ()
+eventLoopSimulation seed agenda history =
+  eventLoop (Options (Simulation seed agenda history)) <=< makeConfiguration
 
 echoAgenda :: Agenda
 echoAgenda = makeAgenda
@@ -50,7 +51,6 @@ eventLoop opts config = do
       link atm
       runWorker (d { dPids = Pids [anet, atm] })
 
--- XXX: Seed/Random
 -- XXX: Faults
 
 runWorker :: Deployment -> IO ()
@@ -80,13 +80,15 @@ runWorker d = go
                                   show (unNodeId nodeId)) ++ ", input: " ++
                                   show rawInput)
             Just input -> do
-              r <- try (evaluate (step input state))
+              gen <- rGetStdGen (dRandom d)
+              r <- try (evaluate (step input state gen))
               case r of
                 Left (e :: SomeException) ->
                   putStrLn ("step failed, error: " ++ displayException e)
-                Right (outputs, state') -> do
+                Right (outputs, state', gen') -> do
                   dAppendHistory d (HistEvent nodeId state input state' outputs)
                   updateReceiverState nodeId state' (dConfiguration d)
+                  rSetStdGen (dRandom d) gen'
                   mapM_ (handleOutput codec nodeId) outputs
 
     handleEvent (TimerEventE (TimerEvent nodeId time)) = do

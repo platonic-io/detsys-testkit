@@ -16,7 +16,7 @@ main = do
   case args of
     ["--simulation"] -> do
       h <- newHistory
-      eventLoopSimulation echoAgenda h [SomeCodecSM idCodec echoSM]
+      eventLoopSimulation (Seed 0) echoAgenda h [SomeCodecSM idCodec echoSM]
       _history <- readHistory h
       putStrLn "Can't print history yet, need Show/Pretty constraints for parameters..."
     _otherwise       -> eventLoopProduction [SomeCodecSM idCodec echoSM]

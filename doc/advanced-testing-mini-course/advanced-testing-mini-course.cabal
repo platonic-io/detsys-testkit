@@ -66,6 +66,7 @@ library
     ATMC.Lec5.SmartBFT.Machine
     ATMC.Lec5.SmartBFT.Messages
     ATMC.Lec5.SmartBFT.State
+    ATMC.Lec5.Random
     ATMC.Lec5.StateMachine
     ATMC.Lec5.StateMachineDSL
     ATMC.Lec5.Time
