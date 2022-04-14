@@ -6,6 +6,7 @@ import ATMC.Lec5.EventLoop
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Configuration
 import ATMC.Lec5.Codec
+import ATMC.Lec5.Random
 import ATMC.Lec5.History
 
 ------------------------------------------------------------------------

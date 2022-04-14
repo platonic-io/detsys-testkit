@@ -1,7 +1,7 @@
 module ATMC.Lec5.Random where
 
 import Data.IORef
-import System.Random (StdGen, newStdGen, mkStdGen)
+import System.Random (StdGen, setStdGen, getStdGen, mkStdGen)
 
 ------------------------------------------------------------------------
 
@@ -13,12 +13,10 @@ data Random = Random
 newtype Seed = Seed { unSeed :: Int }
 
 realRandom :: IO Random
-realRandom = do
-  g <- newStdGen
-  r <- newIORef g
+realRandom =
   return Random
-    { rGetStdGen = readIORef r
-    , rSetStdGen = writeIORef r
+    { rGetStdGen = getStdGen
+    , rSetStdGen = setStdGen
     }
 
 fakeRandom :: Seed -> IO Random
