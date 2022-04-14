@@ -14,8 +14,11 @@ data Status = Normal | ViewChange | Recovering
 
 -- I think here is where the bug is
 data ClientStatus
-  = InFlight  {requestNumber :: RequestNumber}
-  | Completed {requestNumber :: RequestNumber, theResult :: Result, theViewNumber :: ViewNumber}
+  = InFlight  { requestNumber :: RequestNumber
+              , copNumber :: OpNumber }
+  | Completed { requestNumber :: RequestNumber
+              , copNumber :: OpNumber
+              , theResult :: Result, theViewNumber :: ViewNumber}
 
 data VRState = VRState
   { _configuration :: [NodeId]

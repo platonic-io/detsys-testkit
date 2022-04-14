@@ -105,7 +105,7 @@ has already been executed.
     Just cs -> do
       guard (requestNumber cs <= s)
       case cs of
-        Completed s' r vn
+        Completed s' v r vn
           | s' == s -> do
               -- should check that it has been executed?
               respond c (VRReply vn s r)
@@ -125,7 +125,7 @@ the request, and k is the commit-number.
   opNumber += 1
   cOp <- use opNumber
   theLog %= (|> cOp)
-  clientTable.at c .= Just (InFlight s)
+  clientTable.at c .= Just (InFlight s cOp)
   v <- use currentViewNumber
   k <- use commitNumber
   broadCastReplicas $ Prepare v op cOp k
