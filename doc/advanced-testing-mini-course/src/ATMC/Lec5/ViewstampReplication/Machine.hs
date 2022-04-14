@@ -1,6 +1,7 @@
 module ATMC.Lec5.ViewstampReplication.Machine where
 
 import Control.Monad (forM_, unless, when)
+import qualified Data.Map as Map
 import Data.Sequence ((|>))
 import qualified Data.Set as Set
 
@@ -69,6 +70,10 @@ isQuorum x = do
   let f = (n - 1) `div` 2
   return (f <= x)
 
+findClientInfoForOp :: OpNumber -> VR (ClientId, RequestNumber)
+findClientInfoForOp on = use $
+  clientTable.to (Map.filter (\cs -> copNumber cs == on)).to Map.findMin.to (fmap requestNumber)
+
 {- -- When we get ticks --
 6. Normally the primary informs backups about the
 commit when it sends the next PREPARE message;
@@ -105,7 +110,7 @@ has already been executed.
     Just cs -> do
       guard (requestNumber cs <= s)
       case cs of
-        Completed s' r vn
+        Completed s' v r vn
           | s' == s -> do
               -- should check that it has been executed?
               respond c (VRReply vn s r)
@@ -125,7 +130,7 @@ the request, and k is the commit-number.
   opNumber += 1
   cOp <- use opNumber
   theLog %= (|> cOp)
-  clientTable.at c .= Just (InFlight s)
+  clientTable.at c .= Just (InFlight s cOp)
   v <- use currentViewNumber
   k <- use commitNumber
   broadCastReplicas $ Prepare v op cOp k
@@ -185,8 +190,7 @@ entry in the client-table to contain the result.
         -- should execute machine
         result <- tODO
         commitNumber .= let OpNumber x = n in CommitNumber x
-        clientId <- tODO -- we currently don't have information to go from op-number to clientId
-        requestNumber <- tODO
+        (clientId, requestNumber) <- findClientInfoForOp n
         respond clientId (VRReply v requestNumber result)
       else ereturn
   Commit v k -> do
