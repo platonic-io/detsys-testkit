@@ -55,9 +55,9 @@ newDeployment mode config = case mode of
   Simulation seed agenda history -> do
     clock      <- fakeClockEpoch
     eventQueue <- fakeEventQueue agenda clock
-    network    <- fakeNetwork eventQueue clock
-    timerWheel <- newTimerWheel
     random     <- fakeRandom seed
+    network    <- fakeNetwork eventQueue clock random
+    timerWheel <- newTimerWheel
     return Deployment
       { dMode          = mode
       , dConfiguration = config

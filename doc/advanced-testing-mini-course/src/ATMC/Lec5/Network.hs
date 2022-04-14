@@ -11,6 +11,7 @@ import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Lazy (ByteString)
 import Data.Functor
 import Data.Text.Read (decimal)
+import Data.Time.Clock
 import Data.Typeable
 import Network.HTTP.Client
 import Network.HTTP.Types.Status
@@ -21,6 +22,7 @@ import System.Exit
 
 import ATMC.Lec5.Agenda
 import ATMC.Lec5.AwaitingClients
+import ATMC.Lec5.Random
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Time
 import ATMC.Lec5.Event
@@ -102,8 +104,8 @@ app awaiting clock evQ req respond =
           _otherwise -> Nothing
         _otherwise -> Nothing
 
-fakeNetwork :: EventQueue -> Clock -> IO Network
-fakeNetwork evQ clock = do
+fakeNetwork :: EventQueue -> Clock -> Random -> IO Network
+fakeNetwork evQ clock random = do
   return Network
     { nSend    = send
     , nRespond = respond
@@ -113,8 +115,9 @@ fakeNetwork evQ clock = do
     send :: NodeId -> NodeId -> ByteString -> IO ()
     send from to msg = do
       now <- cGetCurrentTime clock
-      -- XXX: need seed to generate random arrival time
-      let arrivalTime = addTime 1 now
+      -- XXX: Exponential distribution?
+      d <- randomInterval random (1.0, 20.0) :: IO Double
+      let arrivalTime = addTime (fromRational (toRational d)) now
       eqEnqueue evQ
         (NetworkEventE (NetworkEvent to (InternalMessage arrivalTime from msg)))
 
