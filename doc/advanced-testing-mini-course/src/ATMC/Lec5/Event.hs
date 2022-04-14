@@ -27,16 +27,6 @@ getEventTime (NetworkEventE (NetworkEvent _nodeId input)) = getInputTime input
     getInputTime (ClientRequest   time _cid _req) = time
     getInputTime (InternalMessage time _nid _msg) = time
 
-setEventTime :: Time -> Event -> Event
-setEventTime time (TimerEventE (TimerEvent nodeId _time)) =
-                   TimerEventE (TimerEvent nodeId time)
-setEventTime time (NetworkEventE (NetworkEvent nodeId input)) =
-                   NetworkEventE (NetworkEvent nodeId (setInputTime time input))
-  where
-    setInputTime :: Time -> Input request message -> Input request message
-    setInputTime time (ClientRequest _time cid req)   = ClientRequest time cid req
-    setInputTime time (InternalMessage _time nid msg) = InternalMessage time nid msg
-
 data CommandEvent = Exit
   deriving Show
 
