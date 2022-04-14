@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module ATMC.Lec5SimulationTestingV3 where
+module ATMC.Lec5.EventLoop where
 
 import Control.Monad
 import Control.Applicative

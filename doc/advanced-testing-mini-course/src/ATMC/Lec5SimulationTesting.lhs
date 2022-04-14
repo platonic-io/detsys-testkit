@@ -1,5 +1,7 @@
 > module ATMC.Lec5SimulationTesting where
 
+> import ATMC.Lec5.EventLoop
+
 Simulation testing
 ==================
 
@@ -44,43 +46,15 @@ and simulation by merely switching between different implementations of the
 event loops interface (`send` and `deliver`).
 
 
-```haskell
-data Network = Network
-  { deploy  :: Addr -> IO () -- bind and listen
-  , connect :: Addr -> IO ()
-  , select  :: [(Addr, Msg)] -> IO (Addr, Msg, Time) -- send, accept and recv
-  }
+Exercises
+---------
 
-eventLoop :: Network -> [(Addr, StateMachine)] -> IO ()
-eventLoop nw nodes = do
-  socks <- mapM (deploy nw) (map fst nodes)
-  connectAllNodesToEachOther nw nodes
-  -- ^ Or do this as part of creating `Network`.
-  let env = nodes `zip` initialStates
-  go env []
-    where
-      go env outgoing = do
-        (receiver, msg, time) <- select outgoing
-        (outgoing', env') <- step env receiver msg time
-        go env' outgoing'
+0. Add a way to record all inputs during production deployment
+1. Add a way to produce a history from the recorded inputs
+2. Add a debugger that works on the history, similar to the REPL from the first
+   lecture
 
-fakeSend :: Heap -> Addr -> Msg -> (Heap, ())
-fakeSend heap addr msg = do
-  t <- genArrivalTime
-  (enqueue (addr, msg, t) heap, ())
-
-fakeRecv :: Heap -> (Heap, (Addr, Msg, Time))
-fakeRecv = dequeue -- XXX: partial function
-
-newFakeNetwork :: IO Network
-newFakeNetwork = do
-  heap <- newIORef emptyHeap
-  let select outgoing = do
-        h <- readIORef heap
-        let h' = fakeSendAll h outgoing
-            (h'', incoming) = fakeRecv h'
-        writeIORef heap h''
-        return incoming
-  ...
-  return Network {..}
-```
+3. Write a checker that works on histories that ensures that the safety
+   properites from section 8 on correctness from [*Viewstamped Replication
+   Revisited*](https://pmg.csail.mit.edu/papers/vr-revisited.pdf) by Barbara
+   (2012) Liskov and James Cowling
