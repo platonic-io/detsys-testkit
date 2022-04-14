@@ -2,6 +2,7 @@ module ATMC.Lec5.ViewstampReplication.Machine where
 
 import Control.Monad (forM_, unless, when)
 import Data.Sequence ((|>))
+import qualified Data.Set as Set
 
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
@@ -30,8 +31,18 @@ isPrimary = do
 checkIsPrimary :: VR ()
 checkIsPrimary = guardM isPrimary
 
-checkIsBackup :: VR ()
-checkIsBackup = guardM (not <$> isPrimary)
+checkIsBackup :: ViewNumber -> VR ()
+checkIsBackup msgVN = do
+  guardM (not <$> isPrimary)
+  {-
+Replicas only process normal protocol mes-
+sages containing a view-number that matches the view-
+number they know. If the sender is behind, the receiver
+drops the message. If the sender is ahead, the replica
+performs a state transfer§
+  -}
+  -- TODO start state transfer if msgVN > currentViewNumber
+  guardM ((== msgVN) <$> use currentViewNumber)
 
 broadCastReplicas :: VRMessage VROp -> VR ()
 broadCastReplicas msg = do
@@ -45,6 +56,18 @@ sendPrimary msg = do
   nodes <- use configuration
   ViewNumber cVn <- use currentViewNumber
   send (nodes !! (cVn `mod` length nodes)) msg
+
+addPrepareOk :: OpNumber -> NodeId -> VR Int
+addPrepareOk n i = do
+  s <- primaryPrepareOk.at n <%= Just . maybe (Set.singleton i) (Set.insert i)
+  return (maybe 0 Set.size s)
+
+isQuorum :: Int -> VR Bool
+isQuorum x = do
+  n <- use (configuration.to length)
+  -- `f` is the largest number s.t 2f+1<=n
+  let f = (n - 1) `div` 2
+  return (f <= x)
 
 {- -- When we get ticks --
 6. Normally the primary informs backups about the
@@ -104,11 +127,11 @@ the request, and k is the commit-number.
   theLog %= (|> cOp)
   clientTable.at c .= Just (InFlight s)
   v <- use currentViewNumber
-  k <- use commitNumber -- ? should it be bumped?
+  k <- use commitNumber
   broadCastReplicas $ Prepare v op cOp k
 machine (InternalMessage time from iMsg) = case iMsg of
   Prepare v m n k -> do
-    checkIsBackup
+    checkIsBackup v
     {-
 4. Backups process PREPARE messages in order: a
 backup won’t accept a prepare with op-number n
@@ -155,9 +178,19 @@ the client provided in the request, and x is the result
 of the up-call. The primary also updates the client’s
 entry in the client-table to contain the result.
     -}
-    tODO
+    howMany <- addPrepareOk n from
+    isQ <- isQuorum howMany
+    if isQ
+      then do
+        -- should execute machine
+        result <- tODO
+        commitNumber .= let OpNumber x = n in CommitNumber x
+        clientId <- tODO -- we currently don't have information to go from op-number to clientId
+        requestNumber <- tODO
+        respond clientId (VRReply v requestNumber result)
+      else ereturn
   Commit v k -> do
-    checkIsBackup
+    checkIsBackup v
     {-
 7. When a backup learns of a commit, it waits un-
 til it has the request in its log (which may require

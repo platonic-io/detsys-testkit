@@ -7,9 +7,9 @@ import ATMC.Lec5.StateMachine
 newtype RequestNumber = RequestNumber Int
   deriving newtype (Eq, Num, Ord)
 newtype ViewNumber = ViewNumber Int
-  deriving newtype Num
+  deriving newtype (Eq, Num)
 newtype OpNumber = OpNumber Int
-  deriving newtype (Enum, Eq, Num)
+  deriving newtype (Enum, Eq, Ord, Num)
 newtype CommitNumber = CommitNumber Int
   deriving newtype Num
 
