@@ -111,7 +111,7 @@ library dumblog-lib-journal
     , journal
     , optparse-generic
     , text
-    , tree-diff
+    , tree-diff ==0.0.2.1
     , vector
     , wai
     , warp
