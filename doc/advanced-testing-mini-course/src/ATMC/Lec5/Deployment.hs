@@ -6,13 +6,14 @@ import ATMC.Lec5.History
 import ATMC.Lec5.Agenda
 import ATMC.Lec5.EventQueue
 import ATMC.Lec5.Configuration
+import ATMC.Lec5.Random
 import ATMC.Lec5.Time
 import ATMC.Lec5.TimerWheel
 import ATMC.Lec5.Network
 
 ------------------------------------------------------------------------
 
-data DeploymentMode = Production | Simulation Agenda History
+data DeploymentMode = Production | Simulation Seed Agenda History
 
 displayDeploymentMode :: DeploymentMode -> String
 displayDeploymentMode Production    = "production"
@@ -25,6 +26,7 @@ data Deployment = Deployment
   , dEventQueue    :: EventQueue
   , dNetwork       :: Network
   , dTimerWheel    :: TimerWheel
+  , dRandom        :: Random
   , dPids          :: Pids
   , dAppendHistory :: HistEvent -> IO ()
   }
@@ -38,6 +40,7 @@ newDeployment mode config = case mode of
     eventQueue <- realEventQueue clock
     network    <- realNetwork eventQueue clock
     timerWheel <- newTimerWheel
+    random     <- realRandom
     return Deployment
       { dMode          = mode
       , dConfiguration = config
@@ -45,14 +48,16 @@ newDeployment mode config = case mode of
       , dEventQueue    = eventQueue
       , dNetwork       = network
       , dTimerWheel    = timerWheel
+      , dRandom        = random
       , dPids          = Pids []
       , dAppendHistory = \_ -> return ()
       }
-  Simulation agenda history -> do
+  Simulation seed agenda history -> do
     clock      <- fakeClockEpoch
     eventQueue <- fakeEventQueue agenda clock
     network    <- fakeNetwork eventQueue clock
     timerWheel <- newTimerWheel
+    random     <- fakeRandom seed
     return Deployment
       { dMode          = mode
       , dConfiguration = config
@@ -60,6 +65,7 @@ newDeployment mode config = case mode of
       , dEventQueue    = eventQueue
       , dNetwork       = network
       , dTimerWheel    = timerWheel
+      , dRandom        = random
       , dPids          = Pids []
       , dAppendHistory = appendHistory history
       }

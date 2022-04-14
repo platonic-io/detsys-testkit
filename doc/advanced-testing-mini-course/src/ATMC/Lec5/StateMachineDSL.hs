@@ -7,7 +7,7 @@ module ATMC.Lec5.StateMachineDSL
 where
 
 import Data.Fixed
-import System.Random (StdGen)
+import System.Random (StdGen, mkStdGen)
 import qualified System.Random as Random
 import Lens.Micro.Platform
 import Control.Monad.Trans.Class
@@ -25,17 +25,11 @@ type SMM s msg resp a =
 
 data Guard = Keep | Drop
 
-newtype Seed = Seed Int
-
-runSMM :: Seed -> SMM s msg resp () -> s -> ([Output resp msg], s)
-runSMM (Seed seed) m s =
-  case runWriter (runStateT (runStateT (runContT m (const (return Keep))) s) g) of
-    (((Keep,  s'),  stdGen'),  outputs) -> (outputs, s')
-    (((Drop, _s'), _stdGen'), _outputs) -> ([], s)
-    -- ^ XXX: We shouldn't throw stdGen' away... Need to move the seed outwards
-    -- to the event loop.
-  where
-    g = Random.mkStdGen seed
+runSMM :: SMM s msg resp () -> s -> StdGen -> ([Output resp msg], s, StdGen)
+runSMM m s gen =
+  case runWriter (runStateT (runStateT (runContT m (const (return Keep))) s) gen) of
+    (((Keep,  s'),  gen'),  outputs) -> (outputs, s', gen')
+    (((Drop, _s'), _gen'), _outputs) -> ([], s, gen)
 
 send :: NodeId -> msg -> SMM s msg resp ()
 send nid msg = lift (lift (lift (tell [InternalMessageOut nid msg])))
@@ -96,8 +90,8 @@ example (ClientRequest at cid req) = do
   respond cid (Resp s)
 
 t :: Bool
-t = runSMM (Seed 0) (example (ClientRequest epoch (ClientId 0) Req)) initExState
-    == ([ClientResponse (ClientId 0) (Resp 6)], ExampleState {_esInt = 6})
+t = runSMM (example (ClientRequest epoch (ClientId 0) Req)) initExState (mkStdGen 0)
+    == ([ClientResponse (ClientId 0) (Resp 6)], ExampleState {_esInt = 6}, (mkStdGen 1))
 
 sm :: SM ExampleState Req Msg Resp
-sm = SM initExState (runSMM (Seed 0) . example) noTimeouts
+sm = SM initExState (\i s g -> runSMM (example i) s g) noTimeouts

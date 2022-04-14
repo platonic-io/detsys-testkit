@@ -12,6 +12,8 @@ Motivation
     waaaay more rigorous than mine." -- Kyle
     ["aphyr"](https://twitter.com/aphyr/status/405017101804396546) Kingsbury
 
+  - ["Jepsen-proof engineering"](https://sled.rs/simulation.html)
+
 Idea
 ----
 

@@ -6,6 +6,7 @@ import ATMC.Lec5.EventLoop
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Configuration
 import ATMC.Lec5.Codec
+import ATMC.Lec5.Random
 import ATMC.Lec5.History
 
 ------------------------------------------------------------------------
@@ -16,7 +17,7 @@ main = do
   case args of
     ["--simulation"] -> do
       h <- newHistory
-      eventLoopSimulation echoAgenda h [SomeCodecSM idCodec echoSM]
+      eventLoopSimulation (Seed 0) echoAgenda h [SomeCodecSM idCodec echoSM]
       _history <- readHistory h
       putStrLn "Can't print history yet, need Show/Pretty constraints for parameters..."
     _otherwise       -> eventLoopProduction [SomeCodecSM idCodec echoSM]

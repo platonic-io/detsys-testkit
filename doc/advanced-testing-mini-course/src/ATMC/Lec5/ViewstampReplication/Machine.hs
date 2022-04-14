@@ -203,4 +203,4 @@ client-table, but does not send the reply to the client.
     tODO
 
 sm :: [NodeId] -> NodeId -> SM VRState (VRRequest VROp) (VRMessage VROp) VRResponse
-sm otherNodes me = SM (initState otherNodes me) (runSMM (Seed 0) . machine) noTimeouts
+sm otherNodes me = SM (initState otherNodes me) (\i s g -> runSMM (machine i) s g) noTimeouts
