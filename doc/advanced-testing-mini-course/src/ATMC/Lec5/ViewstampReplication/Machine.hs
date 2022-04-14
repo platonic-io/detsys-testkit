@@ -133,7 +133,7 @@ the request, and k is the commit-number.
   clientTable.at c .= Just (InFlight s cOp)
   v <- use currentViewNumber
   k <- use commitNumber
-  broadCastReplicas $ Prepare v op cOp k
+  broadCastReplicas $ Prepare v (InternalClientMessage op c s) cOp k
 machine (InternalMessage time from iMsg) = case iMsg of
   Prepare v m n k -> do
     checkIsBackup v
@@ -161,9 +161,7 @@ ones have prepared locally.
       ereturn
     opNumber += 1
     theLog %= (|> n)
-    -- TODO: what should be added here? we don't know c or s?
-    -- should probably be in m shomehow?
-    -- clientTable.at c .= Just (InFlight s)
+    clientTable.at (m^.clientId) .= Just (InFlight (m^.clientRequestNumber) n)
     sendPrimary $ PrepareOk v n {- i -} -- we don't need to add i since
                                         -- event-loop will add it automatically
   PrepareOk v n -> do
