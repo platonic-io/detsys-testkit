@@ -18,10 +18,8 @@ newtype CommitNumber = CommitNumber Int
 data VRRequest op
   = VRRequest op RequestNumber -- ClientId in `ClientRequest`
 
-type Result = ()
-
-data VRResponse
-  = VRReply ViewNumber RequestNumber Result
+data VRResponse result
+  = VRReply ViewNumber RequestNumber result
 
 data InternalClientMessage op = InternalClientMessage
   { _operation :: op

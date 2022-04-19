@@ -16,8 +16,17 @@ Following the `Viewstamped Replication Revisited`
 https://pmg.csail.mit.edu/papers/vr-revisited.pdf
 -}
 
-type VROp = () -- ?
-type VR a = SMM VRState (VRMessage VROp) VRResponse a
+-- Types for the inner state machine.. should be parametrised somehow
+type InnerOp = ()
+type InnerState = ()
+type InnerResult = ()
+
+type VRState' = VRState InnerState InnerOp InnerResult
+type VRMessage' = VRMessage InnerOp
+type VRRequest' = VRRequest InnerOp
+type VRResponse' = VRResponse InnerResult
+
+type VR a = SMM VRState' VRMessage' VRResponse' a
 
 tODO :: a
 tODO = error "Not implemented yet"
@@ -45,14 +54,14 @@ performs a state transfer§
   -- TODO start state transfer if msgVN > currentViewNumber
   guardM ((== msgVN) <$> use currentViewNumber)
 
-broadCastReplicas :: VRMessage VROp -> VR ()
+broadCastReplicas :: VRMessage' -> VR ()
 broadCastReplicas msg = do
   nodes <- use configuration
   ViewNumber cVn <- use currentViewNumber
   forM_ (zip [0..] nodes) $ \ (i, node) -> do
     unless (i == cVn `mod` length nodes) $ send node msg
 
-sendPrimary :: VRMessage VROp -> VR ()
+sendPrimary :: VRMessage' -> VR ()
 sendPrimary msg = do
   nodes <- use configuration
   ViewNumber cVn <- use currentViewNumber
@@ -86,7 +95,7 @@ is commit-number (note that in this case commit-
 number = op-number).
 -}
 
-machine :: Input (VRRequest VROp) (VRMessage VROp) -> VR ()
+machine :: Input VRRequest' VRMessage' -> VR ()
 machine (ClientRequest time c (VRRequest op s)) = do
   {-
 1. The client sends a 〈REQUEST op, c, s〉 message to
@@ -204,5 +213,6 @@ client-table, but does not send the reply to the client.
     -}
     tODO
 
-sm :: [NodeId] -> NodeId -> SM VRState (VRRequest VROp) (VRMessage VROp) VRResponse
-sm otherNodes me = SM (initState otherNodes me) (\i s g -> runSMM (machine i) s g) noTimeouts
+sm :: [NodeId] -> NodeId -> InnerState -> InnerStateMachine InnerState InnerOp InnerResult
+  -> SM VRState' VRRequest' VRMessage' VRResponse'
+sm otherNodes me iState iSM = SM (initState otherNodes me iState iSM) (\i s g -> runSMM (machine i) s g) noTimeouts
