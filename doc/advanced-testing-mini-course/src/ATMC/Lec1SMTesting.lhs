@@ -1,5 +1,6 @@
 > module ATMC.Lec1SMTesting where
 
+> import Control.Monad.IO.Class
 > import Data.IORef
 > import Test.QuickCheck
 > import Test.QuickCheck.Monadic
@@ -73,31 +74,33 @@ State machine model/specification/fake
 >   deriving Show
 
 > genProgram :: Model -> Gen Program
-> genProgram = undefined
+> genProgram _m = Program <$> listOf (elements [Incr, Get])
 
 > prop_counter :: Property
-> prop_counter = forAll (genProgram initModel) $ \(Program cmds) -> monadicIO $ do
+> prop_counter = forAll (genProgram initModel) $ \prog -> monadicIO $ do
 >   c <- run newCounter
 >   let m = initModel
->   go c m cmds
+>   runProgram c m prog
+
+> runProgram :: MonadIO m => Counter -> Model -> Program -> m Bool
+> runProgram c0 m0 (Program cmds) = go c0 m0 cmds
 >   where
->     go c m []           = return True
->     go c m (cmd : cmds) = do
->       resp <- run (exec c cmd)
->       let (m', resp') = step m cmd
->       if resp == resp'
->       then go c m' cmds
->       else return False
+>      go _c _m []           = return True
+>      go  c  m (cmd : cmds) = do
+>        resp <- liftIO (exec c cmd)
+>        let (m', resp') = step m cmd
+>        if resp == resp'
+>        then go c m' cmds
+>        else return False
 
 Regression tests
 ----------------
 
-> runProgram :: Program -> IO Bool
-> runProgram = undefined
-
 > assertProgram :: String -> Program -> Assertion
 > assertProgram msg prog = do
->   b <- runProgram prog
+>   c <- newCounter
+>   let m = initModel
+>   b <- runProgram c m prog
 >   assertBool msg b
 
 Excerises
