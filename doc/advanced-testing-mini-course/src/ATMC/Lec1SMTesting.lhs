@@ -32,7 +32,9 @@ SUT
 >   return (Counter ref)
 
 > incr :: Counter -> IO ()
-> incr (Counter ref) = modifyIORef ref (+ 1)
+> incr (Counter ref) = do
+>   n <- readIORef ref
+>   writeIORef ref (n + 1)
 
 > get :: Counter -> IO Int
 > get (Counter ref) = readIORef ref
@@ -73,8 +75,20 @@ State machine model/specification/fake
 > newtype Program = Program [Command]
 >   deriving Show
 
+> genCommand :: Gen Command
+> genCommand = elements [Incr, Get]
+
 > genProgram :: Model -> Gen Program
-> genProgram _m = Program <$> listOf (elements [Incr, Get])
+> genProgram _m = Program <$> listOf genCommand
+
+> validProgram :: Model -> [Command] -> Bool
+> validProgram _mode _cmds = True
+
+> shrinkCommand :: Command -> [Command]
+> shrinkCommand _cmd = []
+
+> shrinkProgram :: Program -> [Program]
+> shrinkProgram _prog = [] -- Exercises.
 
 > prop_counter :: Property
 > prop_counter = forAll (genProgram initModel) $ \prog -> monadicIO $ do

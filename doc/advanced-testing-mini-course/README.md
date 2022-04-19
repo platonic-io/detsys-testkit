@@ -6,7 +6,7 @@ Advanced property-based testing mini-course
 ===========================================
 
 -   Goals:
-    -   Show how to test stateful (i.e. impure/monadic) programs using property-based testing in general;
+    -   Show how to test stateful (i.e. impure/monadic) programs using property-based testing in general;
     -   Show how to use fault injection and so called simulation testing to test distributed systems in particular;
     -   Introduce the reader to related work and open problems in the area.
 -   Pre-requisites:
@@ -76,8 +76,10 @@ module ATMC.Lec1SMTesting where
 ```
 
 ``` {.haskell .literate}
+import Control.Monad.IO.Class
 import Data.IORef
 import Test.QuickCheck
+import Test.QuickCheck.Monadic
 import Test.HUnit
 ```
 
@@ -89,7 +91,7 @@ Motivation
 
 -   Testing: "the process of using or trying something to see if it works, is suitable, obeys the rules, etc." -- Cambridge dictionary
 
--   In order to check that the software under test (SUT) obeys the rules we must first write the rules down
+-   In order to check that the software under test (SUT) obeys the rules we must first write down the rules
 
 -   State machine specifications are one of many ways to formally "write down the rules"
 
@@ -117,8 +119,8 @@ get :: Counter -> IO Int
 get (Counter ref) = readIORef ref
 ```
 
-Model
------
+State machine model/specification/fake
+--------------------------------------
 
 ``` {.haskell .literate}
 newtype FakeCounter = FakeCounter Int
@@ -136,11 +138,12 @@ fakeGet (FakeCounter i) = (FakeCounter i, i)
 
 ``` {.haskell .literate}
 data Command = Incr | Get
-  deriving Show
+  deriving (Eq, Show)
 ```
 
 ``` {.haskell .literate}
 data Response = Unit () | Int Int
+  deriving (Eq, Show)
 ```
 
 ``` {.haskell .literate}
@@ -161,7 +164,9 @@ step m cmd = case cmd of
 
 ``` {.haskell .literate}
 exec :: Counter -> Command -> IO Response
-exec = undefined
+exec c cmd = case cmd of
+  Incr -> Unit <$> incr c
+  Get  -> Int  <$> get c
 ```
 
 ``` {.haskell .literate}
@@ -171,44 +176,63 @@ newtype Program = Program [Command]
 
 ``` {.haskell .literate}
 genProgram :: Model -> Gen Program
-genProgram = undefined
+genProgram _m = Program <$> listOf (elements [Incr, Get])
 ```
 
 ``` {.haskell .literate}
 prop_counter :: Property
-prop_counter = forAll (genProgram initModel) $ \(Program cmds) -> do
-  True
+prop_counter = forAll (genProgram initModel) $ \prog -> monadicIO $ do
+  c <- run newCounter
+  let m = initModel
+  runProgram c m prog
+```
+
+``` {.haskell .literate}
+runProgram :: MonadIO m => Counter -> Model -> Program -> m Bool
+runProgram c0 m0 (Program cmds) = go c0 m0 cmds
+  where
+     go _c _m []           = return True
+     go  c  m (cmd : cmds) = do
+       resp <- liftIO (exec c cmd)
+       let (m', resp') = step m cmd
+       if resp == resp'
+       then go c m' cmds
+       else return False
 ```
 
 Regression tests
 ----------------
 
 ``` {.haskell .literate}
-runProgram :: Program -> IO Bool
-runProgram = undefined
-```
-
-``` {.haskell .literate}
 assertProgram :: String -> Program -> Assertion
 assertProgram msg prog = do
-  b <- runProgram prog
+  c <- newCounter
+  let m = initModel
+  b <- runProgram c m prog
   assertBool msg b
 ```
 
 Excerises
 ---------
 
+0.  Add a `Reset` `Command` which resets the counter to its initial value.
+
 1.  Implement shrinking for programs.
 
-2.  Collect timing information about how long each command takes to execute on average.
+2.  Write a REPL for the state machine. Start with the initial state, prompt the user for a command, apply the provided command to the step function and display the response as well as the new state, rinse and repeat.
+
+    (For a SUT as simple as a counter this doesn't make much sense, but when the SUT get more complicated it might make sense to develope the state machine specification first, demo it using something like a REPL or some other simple UI before even starting to implement the real thing.)
+
+3.  Collect timing information about how long each command takes to execute on average.
 
 See also
 --------
 
--   Why state machines over other forms of specifications?
-    -   Executable (we will use this later)
+-   Why state machines over other forms of specifications? E.g. unit test-suite.
+    -   Executable (as the REPL exercise shows, but also more on this later)
+    -   Mental model
     -   Gurevich's generalisation of the Church-Turing thesis
-    -   Already heavily used in distributed systems
+    -   Already heavily used in distributed systems (later we'll see how the model becomes the implementation)
 
 ---
 
@@ -310,6 +334,10 @@ Motivation
 module ATMC.Lec5SimulationTesting where
 ```
 
+``` {.haskell .literate}
+import ATMC.Lec5.EventLoop
+```
+
 Simulation testing
 ==================
 
@@ -317,6 +345,8 @@ Motivation
 ----------
 
 -   "haven't tested foundation\[db\] in part because their testing appears to be waaaay more rigorous than mine." -- Kyle ["aphyr"](https://twitter.com/aphyr/status/405017101804396546) Kingsbury
+
+-   ["Jepsen-proof engineering"](https://sled.rs/simulation.html)
 
 Idea
 ----
@@ -341,45 +371,18 @@ The following pseudo code implementation of the event loop works for both the "r
 
 by switching out the implementation of `send` from sending messages over the network to merely adding the message to priority queue, and switching out the implementation of `deliever` from listning on a socket to merely popping messages off the priority queue, then we can switch between a "real" deployment and simulation by merely switching between different implementations of the event loops interface (`send` and `deliver`).
 
-``` {.haskell}
-data Network = Network
-  { deploy  :: Addr -> IO () -- bind and listen
-  , connect :: Addr -> IO ()
-  , select  :: [(Addr, Msg)] -> IO (Addr, Msg, Time) -- send, accept and recv
-  }
+Exercises
+---------
 
-eventLoop :: Network -> [(Addr, StateMachine)] -> IO ()
-eventLoop nw nodes = do
-  socks <- mapM (deploy nw) (map fst nodes)
-  connectAllNodesToEachOther nw nodes
-  -- ^ Or do this as part of creating `Network`.
-  let env = nodes `zip` initialStates
-  go env []
-    where
-      go env outgoing = do
-        (receiver, msg, time) <- select outgoing
-        (outgoing', env') <- step env receiver msg time
-        go env' outgoing'
+0.  Add a way to record all inputs during production deployment
 
-fakeSend :: Heap -> Addr -> Msg -> (Heap, ())
-fakeSend heap addr msg = do
-  t <- genArrivalTime
-  (enqueue (addr, msg, t) heap, ())
+1.  Add a way to produce a history from the recorded inputs
 
-fakeRecv :: Heap -> (Heap, (Addr, Msg, Time))
-fakeRecv = dequeue -- XXX: partial function
+2.  Add a debugger that works on the history, similar to the REPL from the first lecture
 
-newFakeNetwork :: IO Network
-newFakeNetwork = do
-  heap <- newIORef emptyHeap
-  let select outgoing = do
-        h <- readIORef heap
-        let h' = fakeSendAll h outgoing
-            (h'', incoming) = fakeRecv h'
-        writeIORef heap h''
-        return incoming
-  ...
-  return Network {..}
-```
+3.  Write a checker that works on histories that ensures that the safety properites from section 8 on correctness from [*Viewstamped Replication Revisited*](https://pmg.csail.mit.edu/papers/vr-revisited.pdf) by Barbara
+
+    (2012)  Liskov and James Cowling
 
 ---
+
