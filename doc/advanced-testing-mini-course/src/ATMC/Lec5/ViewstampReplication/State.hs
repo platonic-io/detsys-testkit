@@ -20,7 +20,7 @@ data ClientStatus result
               , copNumber :: OpNumber
               , theResult :: result, theViewNumber :: ViewNumber}
 
-type InnerStateMachine state op result = state -> op -> (result, state)
+type ReplicatedStateMachine state op result = state -> op -> (result, state)
 
 data VRState state op result = VRState
   { _configuration :: [NodeId]
@@ -54,12 +54,12 @@ data VRState state op result = VRState
   , _primaryPrepareOk :: Map OpNumber (Set NodeId)
   -- so the actual state machine is not listed
   , _currentState :: state
-  , _stateMachine :: InnerStateMachine state op result
+  , _stateMachine :: ReplicatedStateMachine state op result
   }
 
 makeLenses ''VRState
 
-initState :: [NodeId] -> NodeId -> state -> InnerStateMachine state op result
+initState :: [NodeId] -> NodeId -> state -> ReplicatedStateMachine state op result
   -> VRState state op result
 initState config me state stateInterface = VRState
   { _configuration = topo

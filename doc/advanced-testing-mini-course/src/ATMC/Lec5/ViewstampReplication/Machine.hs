@@ -17,14 +17,14 @@ https://pmg.csail.mit.edu/papers/vr-revisited.pdf
 -}
 
 -- Types for the inner state machine.. should be parametrised somehow
-type InnerOp = ()
-type InnerState = ()
-type InnerResult = ()
+type ReplicatedOp = ()
+type ReplicatedState = ()
+type ReplicatedResult = ()
 
-type VRState' = VRState InnerState InnerOp InnerResult
-type VRMessage' = VRMessage InnerOp
-type VRRequest' = VRRequest InnerOp
-type VRResponse' = VRResponse InnerResult
+type VRState' = VRState ReplicatedState ReplicatedOp ReplicatedResult
+type VRMessage' = VRMessage ReplicatedOp
+type VRRequest' = VRRequest ReplicatedOp
+type VRResponse' = VRResponse ReplicatedResult
 
 type VR a = SMM VRState' VRMessage' VRResponse' a
 
@@ -213,6 +213,7 @@ client-table, but does not send the reply to the client.
     -}
     tODO
 
-sm :: [NodeId] -> NodeId -> InnerState -> InnerStateMachine InnerState InnerOp InnerResult
+sm :: [NodeId] -> NodeId
+  -> ReplicatedState -> ReplicatedStateMachine ReplicatedState ReplicatedOp ReplicatedResult
   -> SM VRState' VRRequest' VRMessage' VRResponse'
 sm otherNodes me iState iSM = SM (initState otherNodes me iState iSM) (\i s g -> runSMM (machine i) s g) noTimeouts
