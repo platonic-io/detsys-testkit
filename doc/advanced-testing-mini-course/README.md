@@ -111,7 +111,9 @@ newCounter = do
 
 ``` {.haskell .literate}
 incr :: Counter -> IO ()
-incr (Counter ref) = modifyIORef ref (+ 1)
+incr (Counter ref) = do
+  n <- readIORef ref
+  writeIORef ref (n + 1)
 ```
 
 ``` {.haskell .literate}
@@ -175,8 +177,28 @@ newtype Program = Program [Command]
 ```
 
 ``` {.haskell .literate}
+genCommand :: Gen Command
+genCommand = elements [Incr, Get]
+```
+
+``` {.haskell .literate}
 genProgram :: Model -> Gen Program
-genProgram _m = Program <$> listOf (elements [Incr, Get])
+genProgram _m = Program <$> listOf genCommand
+```
+
+``` {.haskell .literate}
+validProgram :: Model -> [Command] -> Bool
+validProgram _mode _cmds = True
+```
+
+``` {.haskell .literate}
+shrinkCommand :: Command -> [Command]
+shrinkCommand _cmd = []
+```
+
+``` {.haskell .literate}
+shrinkProgram :: Program -> [Program]
+shrinkProgram _prog = [] -- Exercises.
 ```
 
 ``` {.haskell .literate}
@@ -237,11 +259,30 @@ See also
 ---
 
 ``` {.haskell .literate}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+```
+
+``` {.haskell .literate}
 module ATMC.Lec2ConcurrentSMTesting where
 ```
 
 ``` {.haskell .literate}
+import Control.Concurrent
+import Control.Concurrent.Async
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TQueue
+import Control.Monad
+import Data.List (permutations)
+import Data.Tree (Forest, Tree(Node))
+import System.Random
 import Test.QuickCheck
+import Test.QuickCheck.Monadic
+import Test.HUnit hiding (assert)
+```
+
+``` {.haskell .literate}
+import ATMC.Lec1SMTesting
 ```
 
 Concurrent state machine testing with linearisability
@@ -257,42 +298,217 @@ Motivation
 -   E.g. counters are often shared among different threads, how can we test that the counter implementation is thread-safe?
 
 ``` {.haskell .literate}
-data Command = C
-data Model = M
-data Op = O
-type Precondition = Command -> Bool
+newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
+  deriving Show
 ```
 
 ``` {.haskell .literate}
-newtype Program = Program [Command]
-```
-
-``` {.haskell .literate}
-newtype ConcProgram = ConcProgram [[Command]]
+forAllConcProgram :: (ConcProgram -> Property) -> Property
+forAllConcProgram k =
+  forAllShrinkShow (genConcProgram m) (shrinkConcProgram m) prettyConcProgram k
+  where
+    m = initModel
 ```
 
 ``` {.haskell .literate}
 genConcProgram :: Model -> Gen ConcProgram
-genConcProgram = undefined
+genConcProgram m0 = sized (go m0 [])
+  where
+    go :: Model -> [[Command]] -> Int -> Gen ConcProgram
+    go m acc sz | sz <= 0   = return (ConcProgram (reverse acc))
+                | otherwise = do
+                    n <- chooseInt (2, 5)
+                    cmds <- vectorOf n genCommand `suchThat` concSafe m
+                    go (advanceModel m cmds) (cmds : acc) (sz - n)
 ```
 
 ``` {.haskell .literate}
-validConcProgram :: Model -> Precondition -> ConcProgram -> Bool
-validConcProgram = undefined
+advanceModel :: Model -> [Command] -> Model
+advanceModel m cmds = foldl (\ih cmd -> fst (step ih cmd)) m cmds
 ```
 
 ``` {.haskell .literate}
-data History = History Op
+concSafe :: Model -> [Command] -> Bool
+concSafe m0 = all (validProgram m0) . permutations
 ```
 
 ``` {.haskell .literate}
-execConc :: ConcProgram -> IO History
-execConc = undefined
+validConcProgram :: Model -> ConcProgram -> Bool
+validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
+  where
+    go :: Model -> Bool -> [[Command]] -> Bool
+    go m False _              = False
+    go m acc   []             = acc
+    go m acc   (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
 ```
 
 ``` {.haskell .literate}
-linearisable :: History -> Bool
-linearisable = undefined
+shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
+shrinkConcProgram m
+  = filter (validConcProgram m)
+  . map ConcProgram
+  . filter (not . null)
+  . shrinkList (shrinkList shrinkCommand)
+  . unConcProgram
+```
+
+``` {.haskell .literate}
+prettyConcProgram :: ConcProgram -> String
+prettyConcProgram = show
+```
+
+``` {.haskell .literate}
+newtype History' cmd resp = History [Operation' cmd resp]
+  deriving (Show, Functor, Foldable)
+```
+
+``` {.haskell .literate}
+type History = History' Command Response
+```
+
+``` {.haskell .literate}
+newtype Pid = Pid Int
+  deriving (Eq, Ord, Show)
+```
+
+``` {.haskell .literate}
+data Operation' cmd resp
+  = Invoke Pid cmd
+  | Ok     Pid resp
+  deriving (Show, Functor, Foldable)
+```
+
+``` {.haskell .literate}
+type Operation = Operation' Command Response
+```
+
+``` {.haskell .literate}
+toPid :: ThreadId -> Pid
+toPid tid = Pid (read (drop (length ("ThreadId " :: String)) (show tid)))
+```
+
+``` {.haskell .literate}
+concExec :: TQueue Operation -> Counter -> Command -> IO ()
+concExec queue counter cmd = do
+  pid <- toPid <$> myThreadId
+  atomically (writeTQueue queue (Invoke pid cmd))
+  -- Adds some entropy to the possible interleavings.
+  sleep <- randomRIO (0, 5)
+  threadDelay sleep
+  resp <- exec counter cmd
+  atomically (writeTQueue queue (Ok pid resp))
+```
+
+Generate all possible single-threaded executions from the concurrent history.
+
+``` {.haskell .literate}
+interleavings :: History -> Forest (Command, Response)
+interleavings (History [])  = []
+interleavings (History ops) =
+  [ Node (cmd, resp) (interleavings (History ops'))
+  | (tid, cmd)   <- takeInvocations ops
+  , (resp, ops') <- findResponse tid
+                      (filter1 (not . matchInvocation tid) ops)
+  ]
+  where
+    takeInvocations :: [Operation] -> [(Pid, Command)]
+    takeInvocations []                         = []
+    takeInvocations ((Invoke pid cmd)   : ops) = (pid, cmd) : takeInvocations ops
+    takeInvocations ((Ok    _pid _resp) : _)   = []
+```
+
+``` {.haskell .literate}
+    findResponse :: Pid -> [Operation] -> [(Response, [Operation])]
+    findResponse _pid []                                   = []
+    findResponse  pid ((Ok pid' resp) : ops) | pid == pid' = [(resp, ops)]
+    findResponse  pid (op             : ops)               =
+      [ (resp, op : ops') | (resp, ops') <- findResponse pid ops ]
+```
+
+``` {.haskell .literate}
+    matchInvocation :: Pid -> Operation -> Bool
+    matchInvocation pid (Invoke pid' _cmd) = pid == pid'
+    matchInvocation _   _                  = False
+```
+
+``` {.haskell .literate}
+    filter1 :: (a -> Bool) -> [a] -> [a]
+    filter1 _ []                   = []
+    filter1 p (x : xs) | p x       = x : filter1 p xs
+                       | otherwise = xs
+```
+
+If any one of the single-threaded executions respects the state machine model, then the concurrent execution is correct.
+
+``` {.haskell .literate}
+linearisable :: Forest (Command, Response) -> Bool
+linearisable = any' (go initModel)
+  where
+    go :: Model -> Tree (Command, Response) -> Bool
+    go model (Node (cmd, resp) ts) =
+      let
+        (model', resp') = step model cmd
+      in
+        resp == resp' && any' (go model') ts
+```
+
+``` {.haskell .literate}
+    any' :: (a -> Bool) -> [a] -> Bool
+    any' _p [] = True
+    any'  p xs = any p xs
+```
+
+``` {.haskell .literate}
+prop_concurrent :: Property
+prop_concurrent = mapSize (min 20) $
+  forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
+    monitor (classifyCommandsLength (concat cmdss))
+    -- Rerun a couple of times, to avoid being lucky with the interleavings.
+    monitor (tabulate "Commands" (map constructorString (concat cmdss)))
+    monitor (tabulate "Number of concurrent commands" (map (show . length) cmdss))
+    replicateM_ 10 $ do
+      counter <- run newCounter
+      queue <- run newTQueueIO
+      run (mapM_ (mapConcurrently (concExec queue counter)) cmdss)
+      hist <- History <$> run (atomically (flushTQueue queue))
+      assertWithFail (linearisable (interleavings hist)) (prettyHistory hist)
+```
+
+``` {.haskell .literate}
+classifyCommandsLength :: [Command] -> Property -> Property
+classifyCommandsLength cmds
+  = classify (length cmds == 0)                        "length commands: 0"
+  . classify (0   < length cmds && length cmds <= 10)  "length commands: 1-10"
+  . classify (10  < length cmds && length cmds <= 50)  "length commands: 11-50"
+  . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
+  . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
+  . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
+  . classify (500 < length cmds)                       "length commands: >501"
+```
+
+``` {.haskell .literate}
+constructorString :: Command -> String
+constructorString Incr {} = "Incr"
+constructorString Get  {} = "Get"
+```
+
+``` {.haskell .literate}
+assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
+assertWithFail condition msg = do
+  unless condition $
+    monitor (counterexample ("Failed: " ++ msg))
+  assert condition
+```
+
+``` {.haskell .literate}
+prettyHistory :: History -> String
+prettyHistory = show
+```
+
+``` {.haskell .literate}
+assertHistory :: String -> History -> Assertion
+assertHistory msg hist =
+  assertBool (prettyHistory hist) (linearisable (interleavings hist))
 ```
 
 ---
@@ -309,9 +525,59 @@ Motivation
 
 -   Components rarely exist in isolation, they almost always depend on some other component;
 
--   When we test we often want to test as if the component existed in isolation, e.g. if component A depends on component B, we'd like to test B first and then *assume* that B is working when testing A;
+-   When we test we often want to test as if the component existed in isolation though, e.g. if component A depends on component B, we'd like to test B first and then *assume* that B is working when testing A;
 
 -   Assumptions like these can be justified using so called *contract tests*.
+
+Plan
+----
+
+-   Following the pattern from lecture 1: make a SM based fake for B, use the fake as model to SM test the real implementation of B;
+
+-   Use the fake of B in place of the real implementation of B inside the real implementation of A;
+
+-   Make a SM model for A which contains the model of B and test the real implementaiton of A.
+
+SUT B
+-----
+
+``` {.haskell .literate}
+sutB = undefined
+```
+
+SUT A
+-----
+
+``` {.haskell .literate}
+sutA = undefined
+```
+
+Consumer-driven contract tests
+------------------------------
+
+If component A and B are developed in different repos or by different teams, then the consumer of the API (in our case A consumes B's API) should write the contract test (hence *consumer-driven*).
+
+That way:
+
+1.  the fake of the consumed API is more to encode the assumptions that the consumer makes;
+
+2.  if the implementation of the consumed API changes in a way that break the contract test that ensures that the fake is faithfully with regards to the real implementation, then the developers of the consumed API will get a failing test and thus a warning about the fact that some assumptions of the comsumer might have been broken.
+
+Discussion
+----------
+
+-   Why not just spin up the real component B when testing component A?
+
+    -   Imagine B is a queue and the real implementation uses Kafka, then we'd need to start several processes...
+
+    -   Sometimes component B is a third-party component...
+
+    -   Often we want to be resilient at the level of component A in case component B fails, injecting faults in B to test this is much easier on a fake of B rather than on the real implementation of B (more on this in the next lecture).
+
+See also
+--------
+
+-   [*Integrated Tests Are A Scam*](https://www.youtube.com/watch?v=fhFa4tkFUFw) talk by J.B. Rainsberger (2022)
 
 ---
 
