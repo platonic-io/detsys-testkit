@@ -9,10 +9,10 @@ import ATMC.Lec5.Time
 ------------------------------------------------------------------------
 
 newtype NodeId = NodeId { unNodeId :: Int }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Read, Show)
 
 newtype ClientId = ClientId { unClientId :: Int }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Read, Show)
 
 data SM state request message response = SM
   { smState   :: state
