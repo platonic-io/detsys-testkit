@@ -2,6 +2,9 @@ module ATMC.Lec5.Codec where
 
 import Data.Typeable
 import Data.ByteString.Lazy (ByteString)
+import Data.Text.Lazy (pack, unpack)
+import Data.Text.Lazy.Encoding (decodeUtf8, encodeUtf8)
+import Text.Read (readMaybe)
 
 import ATMC.Lec5.StateMachine
 
@@ -28,4 +31,23 @@ idCodec = Codec
   , cDecodeMessage  = Just
   , cEncodeResponse = id
   , cEncodeMessage  = id
+  }
+
+encShow :: Show a => a -> ByteString
+encShow = encodeUtf8 . pack . show
+
+decRead :: Read a => ByteString -> Maybe a
+decRead = readMaybe . unpack . decodeUtf8
+
+-- not performant but good for quickly getting something up and running
+showReadCodec
+  :: (Read request)
+  => (Read message, Show message)
+  => (Show response)
+  => Codec request message response
+showReadCodec = Codec
+  { cDecodeRequest  = decRead
+  , cDecodeMessage  = decRead
+  , cEncodeResponse = encShow
+  , cEncodeMessage  = encShow
   }
