@@ -6,6 +6,7 @@ import ATMC.Lec5.EventLoop
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.Configuration
 import ATMC.Lec5.Codec
+import ATMC.Lec5.Debug
 import ATMC.Lec5.Random
 import ATMC.Lec5.History
 
@@ -23,7 +24,7 @@ main = do
       eventLoopSimulation (Seed 0) echoAgenda h [SomeCodecSM idCodec echoSM]
       _history <- readHistory h
       putStrLn "Can't print history yet, need Show/Pretty constraints for parameters..."
-    ["--vrr", "--simulation"] -> do
+    ["vr", "--simulation", fp] -> do
       h <- newHistory
       let
         nodes = map NodeId [0..4]
@@ -43,4 +44,5 @@ main = do
                                                | me <- nodes]
       history <- readHistory h
       mapM_ printE history
+      writeDebugFile fp history
     _otherwise       -> eventLoopProduction [SomeCodecSM idCodec echoSM]
