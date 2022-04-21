@@ -4,9 +4,14 @@ import Control.Monad (forM_, unless, when)
 import qualified Data.Map as Map
 import Data.Sequence ((|>))
 import qualified Data.Set as Set
+import GHC.Stack (HasCallStack)
 
+import ATMC.Lec5.Agenda
+import ATMC.Lec5.Codec
+import ATMC.Lec5.Event
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
+import ATMC.Lec5.Time (epoch)
 import ATMC.Lec5.ViewstampReplication.Message
 import ATMC.Lec5.ViewstampReplication.State
 
@@ -28,7 +33,7 @@ type VRResponse' = VRResponse ReplicatedResult
 
 type VR a = SMM VRState' VRMessage' VRResponse' a
 
-tODO :: a
+tODO :: HasCallStack => a
 tODO = error "Not implemented yet"
 
 isPrimary :: VR Bool
@@ -194,8 +199,9 @@ entry in the client-table to contain the result.
     isQ <- isQuorum howMany
     if isQ
       then do
-        -- should execute machine
-        result <- tODO
+        -- TODO should execute machine
+        -- result <- tODO
+        let result = ()
         commitNumber .= let OpNumber x = n in CommitNumber x
         (clientId, requestNumber) <- findClientInfoForOp n
         respond clientId (VRReply v requestNumber result)
@@ -217,3 +223,16 @@ sm :: [NodeId] -> NodeId
   -> ReplicatedState -> ReplicatedStateMachine ReplicatedState ReplicatedOp ReplicatedResult
   -> SM VRState' VRRequest' VRMessage' VRResponse'
 sm otherNodes me iState iSM = SM (initState otherNodes me iState iSM) (\i s g -> runSMM (machine i) s g) noTimeouts
+
+--------------------------------------------------------------------------------
+-- For testing
+--------------------------------------------------------------------------------
+
+vrCodec :: Codec VRRequest' VRMessage' VRResponse'
+vrCodec = showReadCodec
+
+agenda :: Agenda
+agenda = makeAgenda
+  [(epoch, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest epoch (ClientId 0) req)))]
+  where
+    req = encShow $ VRRequest () 0
