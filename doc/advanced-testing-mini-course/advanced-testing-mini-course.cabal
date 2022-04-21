@@ -29,6 +29,7 @@ library
   hs-source-dirs:   src
   build-depends:
     , async
+    , aeson
     , bytestring
     , containers
     , heaps
@@ -56,6 +57,7 @@ library
     ATMC.Lec5.AwaitingClients
     ATMC.Lec5.Codec
     ATMC.Lec5.Configuration
+    ATMC.Lec5.Debug
     ATMC.Lec5.Deployment
     ATMC.Lec5.Event
     ATMC.Lec5.EventLoop
