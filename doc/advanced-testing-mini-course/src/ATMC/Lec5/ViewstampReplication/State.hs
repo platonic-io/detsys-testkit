@@ -11,6 +11,7 @@ import ATMC.Lec5.StateMachineDSL
 import ATMC.Lec5.ViewstampReplication.Message
 
 data Status = Normal | ViewChange | Recovering
+  deriving Show
 
 -- I think here is where the bug is
 data ClientStatus result
@@ -19,8 +20,12 @@ data ClientStatus result
   | Completed { requestNumber :: RequestNumber
               , copNumber :: OpNumber
               , theResult :: result, theViewNumber :: ViewNumber}
+  deriving Show
 
-type ReplicatedStateMachine state op result = state -> op -> (result, state)
+newtype ReplicatedStateMachine state op result = ReplicatedStateMachine {runReplicated :: state -> op -> (result, state)}
+
+instance Show (ReplicatedStateMachine s o r) where
+  show _ = "RSM"
 
 data VRState state op result = VRState
   { _configuration :: [NodeId]
@@ -56,6 +61,7 @@ data VRState state op result = VRState
   , _currentState :: state
   , _stateMachine :: ReplicatedStateMachine state op result
   }
+  deriving Show
 
 makeLenses ''VRState
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module ATMC.Lec5.History where
 
@@ -12,7 +13,9 @@ import ATMC.Lec5.StateMachine
 newtype History = History (TQueue HistEvent)
 
 data HistEvent = forall state req msg resp.
+  (Show state, Show req, Show msg, Show resp) =>
   HistEvent NodeId state (Input req msg) state [Output resp msg]
+deriving instance Show HistEvent
 
 newHistory :: IO History
 newHistory = do
