@@ -13,9 +13,11 @@ import ATMC.Lec5.StateMachine
 
 newtype Configuration = Configuration (IOVector SomeCodecSM)
 
-data SomeCodecSM = forall state request message response. (Show state, Show request, Show message, Show response, Typeable state)=>
-                   SomeCodecSM (Codec request message response)
-                               (SM state request message response)
+data SomeCodecSM = forall state request message response.
+  ( Show state, Show request, Show message, Show response
+  , Typeable state, Typeable request, Typeable response, Typeable message
+  ) => SomeCodecSM (Codec request message response)
+                   (SM state request message response)
 
 makeConfiguration :: [SomeCodecSM] -> IO Configuration
 makeConfiguration sms = Configuration <$> Vector.generate (length sms) (sms !!)

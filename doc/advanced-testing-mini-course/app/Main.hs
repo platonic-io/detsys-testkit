@@ -1,6 +1,9 @@
+{-# LANGUAGE TypeApplications #-}
+
 module Main where
 
 import System.Environment
+import Control.Exception (assert)
 
 import ATMC.Lec5.EventLoop
 import ATMC.Lec5.StateMachine
@@ -10,8 +13,11 @@ import ATMC.Lec5.Debug
 import ATMC.Lec5.Random
 import ATMC.Lec5.History
 
+import ATMC.Lec2ConcurrentSMTesting
+
 import ATMC.Lec5.ViewstampReplication.State (ReplicatedStateMachine(..))
 import qualified ATMC.Lec5.ViewstampReplication.Machine as VR
+import ATMC.Lec5.ViewstampReplication.Message
 
 ------------------------------------------------------------------------
 
@@ -45,4 +51,10 @@ main = do
       history <- readHistory h
       mapM_ printE history
       writeDebugFile fp history
+      let bbHistory = blackboxHistory @_ @_ @(VRMessage ()) history
+          -- ^ XXX: Annoying that we need to provide the type of msg...
+          step :: () -> VRRequest () -> ((), VRResponse ())
+          step = undefined
+          initModel = undefined
+      assert (linearisable step initModel (interleavings bbHistory)) (return ())
     _otherwise       -> eventLoopProduction [SomeCodecSM idCodec echoSM]

@@ -59,4 +59,4 @@ Exercises
 3. Write a checker that works on histories that ensures that the safety
    properites from section 8 on correctness from [*Viewstamped Replication
    Revisited*](https://pmg.csail.mit.edu/papers/vr-revisited.pdf) by Barbara
-   (2012) Liskov and James Cowling
+   Liskov and James Cowling (2012)

@@ -17,11 +17,11 @@ newtype CommitNumber = CommitNumber Int
 
 data VRRequest op
   = VRRequest op RequestNumber -- ClientId in `ClientRequest`
-  deriving (Read, Show)
+  deriving (Eq, Read, Show)
 
 data VRResponse result
   = VRReply ViewNumber RequestNumber result
-  deriving (Read, Show)
+  deriving (Eq, Read, Show)
 
 data InternalClientMessage op = InternalClientMessage
   { _operation :: op
