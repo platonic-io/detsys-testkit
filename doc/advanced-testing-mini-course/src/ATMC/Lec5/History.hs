@@ -19,7 +19,7 @@ newtype History = History (TQueue HistEvent)
 
 data HistEvent = forall state req msg resp.
   ( Show state, Show req, Show msg, Show resp
-  , Typeable req, Typeable resp, Typeable msg
+  , Typeable req, Typeable resp
   ) => HistEvent NodeId state (Input req msg) state [Output resp msg]
 deriving instance Show HistEvent
 
@@ -36,29 +36,24 @@ readHistory (History q) = atomically (flushTQueue q)
 
 ------------------------------------------------------------------------
 
-blackboxHistory :: forall req resp msg. (Typeable req, Typeable resp, Typeable msg)
+blackboxHistory :: forall req resp. (Typeable req, Typeable resp)
                 => [HistEvent] -> History' req resp
 blackboxHistory = Lec2.History . go []
   where
     go :: [Operation' req resp] -> [HistEvent] -> [Operation' req resp]
     go acc [] = reverse acc
     go acc (HistEvent _nodeId _state input _state' outputs : evs) =
-      case (cast input, gcast outputs) of
-        (Just input', Just outputs') ->
-          go (clientRequest input' ++ concatMap clientResponse outputs' ++ acc) evs
-        (Just input', Nothing) ->
-          go (clientRequest input' ++ acc) evs
-        (Nothing, Just outputs') ->
-          go (concatMap clientResponse outputs' ++ acc) evs
-        _otherwise -> go acc evs
+      go (clientRequest input ++ foldMap clientResponse outputs ++ acc) evs
 
-    clientRequest :: Input req msg -> [Operation' req resp]
-    clientRequest (ClientRequest _time clientId req) = [Invoke (clientIdToPid clientId) req]
+    clientRequest :: Typeable req' => Input req' msg -> [Operation' req resp]
+    clientRequest (ClientRequest _time clientId req) = case cast req of
+      Just req' -> [Invoke (clientIdToPid clientId) req']
+      Nothing   -> []
     clientRequest _otherwise = []
 
-    clientResponse :: Output resp msg -> [Operation' req resp]
-    clientResponse (ClientResponse clientId resp) = [Ok (clientIdToPid clientId) resp]
-    clientResponse _otherwise = []
+    clientResponse :: Typeable resp' => Output resp' msg -> [Operation' req resp]
+    clientResponse (ClientResponse clientId resp) = case cast resp of
+      Just resp' -> [Ok (clientIdToPid clientId) resp']
 
     clientIdToPid :: ClientId -> Pid
     clientIdToPid (ClientId cid) = Pid cid

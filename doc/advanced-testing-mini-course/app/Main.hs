@@ -51,8 +51,7 @@ main = do
       history <- readHistory h
       mapM_ printE history
       writeDebugFile fp history
-      let bbHistory = blackboxHistory @_ @_ @(VRMessage ()) history
-          -- ^ XXX: Annoying that we need to provide the type of msg...
+      let bbHistory = blackboxHistory history
           step :: () -> VRRequest () -> ((), VRResponse ())
           step = undefined
           initModel = undefined

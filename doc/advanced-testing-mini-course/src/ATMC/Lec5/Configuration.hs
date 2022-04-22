@@ -15,7 +15,7 @@ newtype Configuration = Configuration (IOVector SomeCodecSM)
 
 data SomeCodecSM = forall state request message response.
   ( Show state, Show request, Show message, Show response
-  , Typeable state, Typeable request, Typeable response, Typeable message
+  , Typeable state, Typeable request, Typeable response
   ) => SomeCodecSM (Codec request message response)
                    (SM state request message response)
 
