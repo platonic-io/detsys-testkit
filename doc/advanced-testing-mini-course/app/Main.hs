@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeApplications #-}
-
 module Main where
 
 import System.Environment
@@ -51,9 +49,9 @@ main = do
       history <- readHistory h
       mapM_ printE history
       writeDebugFile fp history
-      let bbHistory = blackboxHistory history
-          step :: () -> VRRequest () -> ((), VRResponse ())
+      let step :: () -> VRRequest () -> ((), VRResponse ())
           step = undefined
           initModel = undefined
-      assert (linearisable step initModel (interleavings bbHistory)) (return ())
+      assert (linearisable step initModel (interleavings (blackboxHistory history)))
+             (return ())
     _otherwise       -> eventLoopProduction [SomeCodecSM idCodec echoSM]
