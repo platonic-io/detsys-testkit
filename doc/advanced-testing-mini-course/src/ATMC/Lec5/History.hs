@@ -54,6 +54,8 @@ blackboxHistory = Lec2.History . go []
     clientResponse :: Typeable resp' => Output resp' msg -> [Operation' req resp]
     clientResponse (ClientResponse clientId resp) = case cast resp of
       Just resp' -> [Ok (clientIdToPid clientId) resp']
+      Nothing    -> []
+    clientResponse _otherwise = []
 
     clientIdToPid :: ClientId -> Pid
     clientIdToPid (ClientId cid) = Pid cid
