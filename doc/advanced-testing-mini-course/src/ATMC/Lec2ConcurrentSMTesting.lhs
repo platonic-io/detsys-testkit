@@ -167,29 +167,32 @@ then the concurrent execution is correct.
 >       run (mapM_ (mapConcurrently (concExec queue counter)) cmdss)
 >       hist <- History <$> run (atomically (flushTQueue queue))
 >       assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
+>   where
+>     classifyCommandsLength :: [Command] -> Property -> Property
+>     classifyCommandsLength cmds
+>       = classify (length cmds == 0)                        "length commands: 0"
+>       . classify (0   < length cmds && length cmds <= 10)  "length commands: 1-10"
+>       . classify (10  < length cmds && length cmds <= 50)  "length commands: 11-50"
+>       . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
+>       . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
+>       . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
+>       . classify (500 < length cmds)                       "length commands: >501"
 
-> classifyCommandsLength :: [Command] -> Property -> Property
-> classifyCommandsLength cmds
->   = classify (length cmds == 0)                        "length commands: 0"
->   . classify (0   < length cmds && length cmds <= 10)  "length commands: 1-10"
->   . classify (10  < length cmds && length cmds <= 50)  "length commands: 11-50"
->   . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
->   . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
->   . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
->   . classify (500 < length cmds)                       "length commands: >501"
+>     constructorString :: Command -> String
+>     constructorString Incr {} = "Incr"
+>     constructorString Get  {} = "Get"
 
-> constructorString :: Command -> String
-> constructorString Incr {} = "Incr"
-> constructorString Get  {} = "Get"
-
-> assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
-> assertWithFail condition msg = do
->   unless condition $
->     monitor (counterexample ("Failed: " ++ msg))
->   assert condition
+>     assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
+>     assertWithFail condition msg = do
+>       unless condition $
+>         monitor (counterexample ("Failed: " ++ msg))
+>       assert condition
 
 > prettyHistory :: History -> String
 > prettyHistory = show
+
+Regression testing
+------------------
 
 > assertHistory :: String -> History -> Assertion
 > assertHistory msg hist =
@@ -199,5 +202,13 @@ then the concurrent execution is correct.
 Exercises
 ---------
 
-0. Can you figure out ways to improve the shrinking?
-1. How can you test that the shrinking is optimal?
+0. Can you figure out ways to improve the shrinking? (Hint: see parallel
+   shrinking in
+   [`quickcheck-state-machine`](https://hackage.haskell.org/package/quickcheck-state-machine).)
+
+1. How can you test that the shrinking is good/optimal? (Hint: see how
+   `labelledExamples` is used in the [*An in-depth look at
+   quickcheck-state-machine*](https://www.well-typed.com/blog/2019/01/qsm-in-depth/)
+   blog post by Edsko de Vries and [*Building on developers' intuitions to
+   create effective property-based
+   tests*](https://www.youtube.com/watch?v=NcJOiQlzlXQ) talk by John Hughes)
