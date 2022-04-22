@@ -1,4 +1,5 @@
 > {-# LANGUAGE DeriveFunctor #-}
+> {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE DeriveFoldable #-}
 
 > module ATMC.Lec2ConcurrentSMTesting where
@@ -106,7 +107,7 @@ Motivation
 
 Generate all possible single-threaded executions from the concurrent history.
 
-> interleavings :: History -> Forest (Command, Response)
+> interleavings :: History' cmd resp -> Forest (cmd, resp)
 > interleavings (History [])  = []
 > interleavings (History ops) =
 >   [ Node (cmd, resp) (interleavings (History ops'))
@@ -115,18 +116,18 @@ Generate all possible single-threaded executions from the concurrent history.
 >                       (filter1 (not . matchInvocation tid) ops)
 >   ]
 >   where
->     takeInvocations :: [Operation] -> [(Pid, Command)]
+>     takeInvocations :: [Operation' cmd resp] -> [(Pid, cmd)]
 >     takeInvocations []                         = []
 >     takeInvocations ((Invoke pid cmd)   : ops) = (pid, cmd) : takeInvocations ops
 >     takeInvocations ((Ok    _pid _resp) : _)   = []
 
->     findResponse :: Pid -> [Operation] -> [(Response, [Operation])]
+>     findResponse :: Pid -> [Operation' cmd resp] -> [(resp, [Operation' cmd resp])]
 >     findResponse _pid []                                   = []
 >     findResponse  pid ((Ok pid' resp) : ops) | pid == pid' = [(resp, ops)]
 >     findResponse  pid (op             : ops)               =
 >       [ (resp, op : ops') | (resp, ops') <- findResponse pid ops ]
 
->     matchInvocation :: Pid -> Operation -> Bool
+>     matchInvocation :: Pid -> Operation' cmd resp -> Bool
 >     matchInvocation pid (Invoke pid' _cmd) = pid == pid'
 >     matchInvocation _   _                  = False
 
@@ -138,13 +139,14 @@ Generate all possible single-threaded executions from the concurrent history.
 If any one of the single-threaded executions respects the state machine model,
 then the concurrent execution is correct.
 
-> linearisable :: Forest (Command, Response) -> Bool
-> linearisable = any' (go initModel)
+> linearisable :: forall model cmd resp. Eq resp
+>              => (model -> cmd -> (model, resp)) -> model -> Forest (cmd, resp) -> Bool
+> linearisable step0 model0 = any' (go model0)
 >   where
->     go :: Model -> Tree (Command, Response) -> Bool
+>     go :: model -> Tree (cmd, resp) -> Bool
 >     go model (Node (cmd, resp) ts) =
 >       let
->         (model', resp') = step model cmd
+>         (model', resp') = step0 model cmd
 >       in
 >         resp == resp' && any' (go model') ts
 
@@ -164,7 +166,7 @@ then the concurrent execution is correct.
 >       queue <- run newTQueueIO
 >       run (mapM_ (mapConcurrently (concExec queue counter)) cmdss)
 >       hist <- History <$> run (atomically (flushTQueue queue))
->       assertWithFail (linearisable (interleavings hist)) (prettyHistory hist)
+>       assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
 
 > classifyCommandsLength :: [Command] -> Property -> Property
 > classifyCommandsLength cmds
@@ -191,4 +193,11 @@ then the concurrent execution is correct.
 
 > assertHistory :: String -> History -> Assertion
 > assertHistory msg hist =
->   assertBool (prettyHistory hist) (linearisable (interleavings hist))
+>   assertBool (prettyHistory hist) (linearisable step initModel (interleavings hist))
+
+
+Exercises
+---------
+
+0. Can you figure out ways to improve the shrinking?
+1. How can you test that the shrinking is optimal?
