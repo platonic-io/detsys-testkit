@@ -11,16 +11,23 @@ import ATMC.Lec5.StateMachineDSL
 import ATMC.Lec5.ViewstampReplication.Message
 
 data Status = Normal | ViewChange | Recovering
+  deriving Show
 
 -- I think here is where the bug is
-data ClientStatus
+data ClientStatus result
   = InFlight  { requestNumber :: RequestNumber
               , copNumber :: OpNumber }
   | Completed { requestNumber :: RequestNumber
               , copNumber :: OpNumber
-              , theResult :: Result, theViewNumber :: ViewNumber}
+              , theResult :: result, theViewNumber :: ViewNumber}
+  deriving Show
 
-data VRState = VRState
+newtype ReplicatedStateMachine state op result = ReplicatedStateMachine {runReplicated :: state -> op -> (result, state)}
+
+instance Show (ReplicatedStateMachine s o r) where
+  show _ = "RSM"
+
+data VRState state op result = VRState
   { _configuration :: [NodeId]
   -- ^ The configuration. This is a sorted array containing
   --the IP addresses of each of the 2f + 1 replicas.
@@ -42,7 +49,7 @@ data VRState = VRState
   , _commitNumber :: CommitNumber
   -- ^ The commit-number is the op-number of the most
   -- recently committed operation.
-  , _clientTable :: Map ClientId ClientStatus
+  , _clientTable :: Map ClientId (ClientStatus result)
   -- ^ The client-table. This records for each client the
   -- number of its most recent request, plus, if the re-
   -- quest has been executed, the result sent for that re-
@@ -50,12 +57,17 @@ data VRState = VRState
 
   -- not in paper
   , _primaryPrepareOk :: Map OpNumber (Set NodeId)
+  -- so the actual state machine is not listed
+  , _currentState :: state
+  , _stateMachine :: ReplicatedStateMachine state op result
   }
+  deriving Show
 
 makeLenses ''VRState
 
-initState :: [NodeId] -> NodeId -> VRState
-initState config me = VRState
+initState :: [NodeId] -> NodeId -> state -> ReplicatedStateMachine state op result
+  -> VRState state op result
+initState config me state stateInterface = VRState
   { _configuration = topo
   , _replicaNumber = fst $ head $ filter ((== me) . snd) $ zip [0..] topo
   , _currentViewNumber = 0
@@ -66,6 +78,8 @@ initState config me = VRState
   , _clientTable = mempty
   -- not in paper
   , _primaryPrepareOk = mempty
+  , _currentState = state
+  , _stateMachine = stateInterface
   }
   where
     topo = sort (me:config)

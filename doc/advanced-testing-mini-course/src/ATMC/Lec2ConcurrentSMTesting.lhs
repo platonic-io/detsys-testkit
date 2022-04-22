@@ -1,4 +1,5 @@
 > {-# LANGUAGE DeriveFunctor #-}
+> {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE DeriveFoldable #-}
 
 > module ATMC.Lec2ConcurrentSMTesting where
@@ -106,7 +107,7 @@ Motivation
 
 Generate all possible single-threaded executions from the concurrent history.
 
-> interleavings :: History -> Forest (Command, Response)
+> interleavings :: History' cmd resp -> Forest (cmd, resp)
 > interleavings (History [])  = []
 > interleavings (History ops) =
 >   [ Node (cmd, resp) (interleavings (History ops'))
@@ -115,18 +116,18 @@ Generate all possible single-threaded executions from the concurrent history.
 >                       (filter1 (not . matchInvocation tid) ops)
 >   ]
 >   where
->     takeInvocations :: [Operation] -> [(Pid, Command)]
+>     takeInvocations :: [Operation' cmd resp] -> [(Pid, cmd)]
 >     takeInvocations []                         = []
 >     takeInvocations ((Invoke pid cmd)   : ops) = (pid, cmd) : takeInvocations ops
 >     takeInvocations ((Ok    _pid _resp) : _)   = []
 
->     findResponse :: Pid -> [Operation] -> [(Response, [Operation])]
+>     findResponse :: Pid -> [Operation' cmd resp] -> [(resp, [Operation' cmd resp])]
 >     findResponse _pid []                                   = []
 >     findResponse  pid ((Ok pid' resp) : ops) | pid == pid' = [(resp, ops)]
 >     findResponse  pid (op             : ops)               =
 >       [ (resp, op : ops') | (resp, ops') <- findResponse pid ops ]
 
->     matchInvocation :: Pid -> Operation -> Bool
+>     matchInvocation :: Pid -> Operation' cmd resp -> Bool
 >     matchInvocation pid (Invoke pid' _cmd) = pid == pid'
 >     matchInvocation _   _                  = False
 
@@ -138,13 +139,14 @@ Generate all possible single-threaded executions from the concurrent history.
 If any one of the single-threaded executions respects the state machine model,
 then the concurrent execution is correct.
 
-> linearisable :: Forest (Command, Response) -> Bool
-> linearisable = any' (go initModel)
+> linearisable :: forall model cmd resp. Eq resp
+>              => (model -> cmd -> (model, resp)) -> model -> Forest (cmd, resp) -> Bool
+> linearisable step0 model0 = any' (go model0)
 >   where
->     go :: Model -> Tree (Command, Response) -> Bool
+>     go :: model -> Tree (cmd, resp) -> Bool
 >     go model (Node (cmd, resp) ts) =
 >       let
->         (model', resp') = step model cmd
+>         (model', resp') = step0 model cmd
 >       in
 >         resp == resp' && any' (go model') ts
 
@@ -164,31 +166,49 @@ then the concurrent execution is correct.
 >       queue <- run newTQueueIO
 >       run (mapM_ (mapConcurrently (concExec queue counter)) cmdss)
 >       hist <- History <$> run (atomically (flushTQueue queue))
->       assertWithFail (linearisable (interleavings hist)) (prettyHistory hist)
+>       assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
+>   where
+>     classifyCommandsLength :: [Command] -> Property -> Property
+>     classifyCommandsLength cmds
+>       = classify (length cmds == 0)                        "length commands: 0"
+>       . classify (0   < length cmds && length cmds <= 10)  "length commands: 1-10"
+>       . classify (10  < length cmds && length cmds <= 50)  "length commands: 11-50"
+>       . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
+>       . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
+>       . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
+>       . classify (500 < length cmds)                       "length commands: >501"
 
-> classifyCommandsLength :: [Command] -> Property -> Property
-> classifyCommandsLength cmds
->   = classify (length cmds == 0)                        "length commands: 0"
->   . classify (0   < length cmds && length cmds <= 10)  "length commands: 1-10"
->   . classify (10  < length cmds && length cmds <= 50)  "length commands: 11-50"
->   . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
->   . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
->   . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
->   . classify (500 < length cmds)                       "length commands: >501"
+>     constructorString :: Command -> String
+>     constructorString Incr {} = "Incr"
+>     constructorString Get  {} = "Get"
 
-> constructorString :: Command -> String
-> constructorString Incr {} = "Incr"
-> constructorString Get  {} = "Get"
-
-> assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
-> assertWithFail condition msg = do
->   unless condition $
->     monitor (counterexample ("Failed: " ++ msg))
->   assert condition
+>     assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
+>     assertWithFail condition msg = do
+>       unless condition $
+>         monitor (counterexample ("Failed: " ++ msg))
+>       assert condition
 
 > prettyHistory :: History -> String
 > prettyHistory = show
 
+Regression testing
+------------------
+
 > assertHistory :: String -> History -> Assertion
 > assertHistory msg hist =
->   assertBool (prettyHistory hist) (linearisable (interleavings hist))
+>   assertBool (prettyHistory hist) (linearisable step initModel (interleavings hist))
+
+
+Exercises
+---------
+
+0. Can you figure out ways to improve the shrinking? (Hint: see parallel
+   shrinking in
+   [`quickcheck-state-machine`](https://hackage.haskell.org/package/quickcheck-state-machine).)
+
+1. How can you test that the shrinking is good/optimal? (Hint: see how
+   `labelledExamples` is used in the [*An in-depth look at
+   quickcheck-state-machine*](https://www.well-typed.com/blog/2019/01/qsm-in-depth/)
+   blog post by Edsko de Vries and [*Building on developers' intuitions to
+   create effective property-based
+   tests*](https://www.youtube.com/watch?v=NcJOiQlzlXQ) talk by John Hughes)

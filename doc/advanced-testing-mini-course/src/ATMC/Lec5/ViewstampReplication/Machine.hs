@@ -4,9 +4,14 @@ import Control.Monad (forM_, unless, when)
 import qualified Data.Map as Map
 import Data.Sequence ((|>))
 import qualified Data.Set as Set
+import GHC.Stack (HasCallStack)
 
+import ATMC.Lec5.Agenda
+import ATMC.Lec5.Codec
+import ATMC.Lec5.Event
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
+import ATMC.Lec5.Time (epoch)
 import ATMC.Lec5.ViewstampReplication.Message
 import ATMC.Lec5.ViewstampReplication.State
 
@@ -16,10 +21,19 @@ Following the `Viewstamped Replication Revisited`
 https://pmg.csail.mit.edu/papers/vr-revisited.pdf
 -}
 
-type VROp = () -- ?
-type VR a = SMM VRState (VRMessage VROp) VRResponse a
+-- Types for the inner state machine.. should be parametrised somehow
+type ReplicatedOp = ()
+type ReplicatedState = ()
+type ReplicatedResult = ()
 
-tODO :: a
+type VRState' = VRState ReplicatedState ReplicatedOp ReplicatedResult
+type VRMessage' = VRMessage ReplicatedOp
+type VRRequest' = VRRequest ReplicatedOp
+type VRResponse' = VRResponse ReplicatedResult
+
+type VR a = SMM VRState' VRMessage' VRResponse' a
+
+tODO :: HasCallStack => a
 tODO = error "Not implemented yet"
 
 isPrimary :: VR Bool
@@ -45,14 +59,14 @@ performs a state transfer§
   -- TODO start state transfer if msgVN > currentViewNumber
   guardM ((== msgVN) <$> use currentViewNumber)
 
-broadCastReplicas :: VRMessage VROp -> VR ()
+broadCastReplicas :: VRMessage' -> VR ()
 broadCastReplicas msg = do
   nodes <- use configuration
   ViewNumber cVn <- use currentViewNumber
   forM_ (zip [0..] nodes) $ \ (i, node) -> do
     unless (i == cVn `mod` length nodes) $ send node msg
 
-sendPrimary :: VRMessage VROp -> VR ()
+sendPrimary :: VRMessage' -> VR ()
 sendPrimary msg = do
   nodes <- use configuration
   ViewNumber cVn <- use currentViewNumber
@@ -86,7 +100,7 @@ is commit-number (note that in this case commit-
 number = op-number).
 -}
 
-machine :: Input (VRRequest VROp) (VRMessage VROp) -> VR ()
+machine :: Input VRRequest' VRMessage' -> VR ()
 machine (ClientRequest time c (VRRequest op s)) = do
   {-
 1. The client sends a 〈REQUEST op, c, s〉 message to
@@ -185,8 +199,9 @@ entry in the client-table to contain the result.
     isQ <- isQuorum howMany
     if isQ
       then do
-        -- should execute machine
-        result <- tODO
+        -- TODO should execute machine
+        -- result <- tODO
+        let result = ()
         commitNumber .= let OpNumber x = n in CommitNumber x
         (clientId, requestNumber) <- findClientInfoForOp n
         respond clientId (VRReply v requestNumber result)
@@ -204,5 +219,20 @@ client-table, but does not send the reply to the client.
     -}
     tODO
 
-sm :: [NodeId] -> NodeId -> SM VRState (VRRequest VROp) (VRMessage VROp) VRResponse
-sm otherNodes me = SM (initState otherNodes me) (\i s g -> runSMM (machine i) s g) noTimeouts
+sm :: [NodeId] -> NodeId
+  -> ReplicatedState -> ReplicatedStateMachine ReplicatedState ReplicatedOp ReplicatedResult
+  -> SM VRState' VRRequest' VRMessage' VRResponse'
+sm otherNodes me iState iSM = SM (initState otherNodes me iState iSM) (\i s g -> runSMM (machine i) s g) noTimeouts
+
+--------------------------------------------------------------------------------
+-- For testing
+--------------------------------------------------------------------------------
+
+vrCodec :: Codec VRRequest' VRMessage' VRResponse'
+vrCodec = showReadCodec
+
+agenda :: Agenda
+agenda = makeAgenda
+  [(epoch, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest epoch (ClientId 0) req)))]
+  where
+    req = encShow $ VRRequest () 0

@@ -1,10 +1,12 @@
 {-# LANGUAGE DerivingStrategies #-}
-
+{-# LANGUAGE NumericUnderscores #-}
 module ATMC.Lec5.Time where
 
+import Data.Int (Int64)
 import Data.IORef
 import Data.Time
 import Data.Time.Clock
+import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Data.Time.Calendar.OrdinalDate
 
 ------------------------------------------------------------------------
@@ -36,6 +38,12 @@ fakeClock t0 = do
 
 epoch :: Time
 epoch = Time (UTCTime (fromOrdinalDate 1970 0) 0)
+
+fromEpoch :: Time -> Int64
+fromEpoch (Time t) = truncate
+  . (*1_000_000_000)
+  . toRational
+  $ utcTimeToPOSIXSeconds t
 
 fakeClockEpoch :: IO Clock
 fakeClockEpoch = fakeClock epoch
