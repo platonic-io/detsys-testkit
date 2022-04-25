@@ -80,6 +80,8 @@ library
     ATMC.Lec6WhiteboxCheckers
     ATMC.Lec7EfficientEventLoop
     ATMC.Lec8AsyncFileSystemIO
+    ATMC.Lec9SMUpgrades
+    ATMC.Lec10LibraryOrFramework
     Experiment.Simulation
 
   default-language: Haskell2010
