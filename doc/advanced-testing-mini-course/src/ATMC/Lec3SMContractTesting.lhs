@@ -27,6 +27,20 @@ Plan
   - Make a SM model for A which contains the model of B and test the real
     implementaiton of A.
 
+Picture
+-------
+
+XXX:
+
+```
+                interface     
+                   |
+  Consumer         |   /----\      Producer
+          -------> x--+      +-->
+                   |
+                   |
+```
+
 SUT B
 -----
 

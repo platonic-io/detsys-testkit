@@ -212,3 +212,33 @@ Exercises
    blog post by Edsko de Vries and [*Building on developers' intuitions to
    create effective property-based
    tests*](https://www.youtube.com/watch?v=NcJOiQlzlXQ) talk by John Hughes)
+
+
+See also
+--------
+
+- [*Finding Race Conditions in Erlang with QuickCheck and
+  PULSE*](http://www.cse.chalmers.se/~nicsma/papers/finding-race-conditions.pdf)
+  ([video](https://vimeo.com/6638041)) -- this is the first paper to describe
+  how Erlang's (closed source) QuickCheck works (including the parallel
+  testing);
+
+- [*Linearizability: a correctness condition for concurrent
+  objects*](https://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf)], this is a
+  classic paper that describes the main technique of the parallel property;
+
+- Kyle "aphyr" Kingsbury's blogposts about Jepsen, which also uses
+  linearisability, and has found [bugs](http://jepsen.io/analyses) in many
+  distributed systems:
+
+    + [Knossos: Redis and
+      linearizability](https://aphyr.com/posts/309-knossos-redis-and-linearizability);
+
+    + [Strong consistency
+      models](https://aphyr.com/posts/313-strong-consistency-models);
+
+    + [Computational techniques in
+      Knossos](https://aphyr.com/posts/314-computational-techniques-in-knossos);
+
+    + [Serializability, linearizability, and
+      locality](https://aphyr.com/posts/333-serializability-linearizability-and-locality).

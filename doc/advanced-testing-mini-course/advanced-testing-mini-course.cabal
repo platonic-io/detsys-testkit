@@ -77,6 +77,9 @@ library
     ATMC.Lec5.ViewstampReplication.Message
     ATMC.Lec5.ViewstampReplication.State
     ATMC.Lec5SimulationTesting
+    ATMC.Lec6WhiteboxCheckers
+    ATMC.Lec7EfficientEventLoop
+    ATMC.Lec8AsyncFileSystemIO
     Experiment.Simulation
 
   default-language: Haskell2010
