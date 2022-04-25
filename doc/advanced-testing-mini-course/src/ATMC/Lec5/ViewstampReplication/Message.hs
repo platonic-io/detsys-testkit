@@ -18,7 +18,7 @@ newtype CommitNumber = CommitNumber Int
   deriving newtype (Num, Read, Show)
 newtype Nonce = Nonce Int
   deriving newtype (Read, Show)
-type Log = Seq OpNumber
+type Log op = Seq op
 
 data VRRequest op
   = VRRequest op RequestNumber -- ClientId in `ClientRequest`
@@ -44,5 +44,5 @@ data VRMessage op
   | Commit ViewNumber CommitNumber
   -- 4.3 Recovery
   | Recovery Nonce {- i which is node-id -}
-  | RecoveryResponse ViewNumber Nonce Log OpNumber CommitNumber
+  | RecoveryResponse ViewNumber Nonce (Log op) OpNumber CommitNumber
   deriving (Read, Show)

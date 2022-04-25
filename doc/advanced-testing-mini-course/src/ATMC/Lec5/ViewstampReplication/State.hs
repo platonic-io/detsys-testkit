@@ -42,7 +42,7 @@ data VRState state op result = VRState
   , _opNumber :: OpNumber
   -- ^ The op-number assigned to the most recently re-
   -- ceived request, initially 0.
-  , _theLog :: Log
+  , _theLog :: Log op
   -- ^ The log. This is an array containing op-number
   -- entries. The entries contain the requests that have
   -- been received so far in their assigned order.

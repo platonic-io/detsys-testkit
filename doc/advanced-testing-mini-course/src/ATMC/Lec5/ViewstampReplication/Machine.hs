@@ -143,7 +143,7 @@ the request, and k is the commit-number.
   -}
   opNumber += 1
   cOp <- use opNumber
-  theLog %= (|> cOp)
+  theLog %= (|> op)
   clientTable.at c .= Just (InFlight s cOp)
   v <- use currentViewNumber
   k <- use commitNumber
@@ -174,7 +174,7 @@ ones have prepared locally.
       -- TODO: for now we just drop
       ereturn
     opNumber += 1
-    theLog %= (|> n)
+    theLog %= (|> (m^.operation))
     clientTable.at (m^.clientId) .= Just (InFlight (m^.clientRequestNumber) n)
     sendPrimary $ PrepareOk v n {- i -} -- we don't need to add i since
                                         -- event-loop will add it automatically
