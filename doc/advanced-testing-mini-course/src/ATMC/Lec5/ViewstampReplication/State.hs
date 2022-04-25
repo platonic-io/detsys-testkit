@@ -11,7 +11,7 @@ import ATMC.Lec5.StateMachineDSL
 import ATMC.Lec5.ViewstampReplication.Message
 
 data Status = Normal | ViewChange | Recovering
-  deriving Show
+  deriving (Eq, Show)
 
 -- I think here is where the bug is
 data ClientStatus result
