@@ -3,6 +3,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 module ATMC.Lec5.ViewstampReplication.Message where
 
+import Data.Sequence (Seq)
+
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
 
@@ -14,6 +16,9 @@ newtype OpNumber = OpNumber Int
   deriving newtype (Enum, Eq, Ord, Num, Read, Show)
 newtype CommitNumber = CommitNumber Int
   deriving newtype (Num, Read, Show)
+newtype Nonce = Nonce Int
+  deriving newtype (Read, Show)
+type Log = Seq OpNumber
 
 data VRRequest op
   = VRRequest op RequestNumber -- ClientId in `ClientRequest`
@@ -33,7 +38,11 @@ data InternalClientMessage op = InternalClientMessage
 makeLenses ''InternalClientMessage
 
 data VRMessage op
+  -- 4.1 Normal Operation
   = Prepare ViewNumber (InternalClientMessage op) OpNumber CommitNumber
   | PrepareOk ViewNumber OpNumber {- i which is node-id -}
   | Commit ViewNumber CommitNumber
+  -- 4.3 Recovery
+  | Recovery Nonce {- i which is node-id -}
+  | RecoveryResponse ViewNumber Nonce Log OpNumber CommitNumber
   deriving (Read, Show)
