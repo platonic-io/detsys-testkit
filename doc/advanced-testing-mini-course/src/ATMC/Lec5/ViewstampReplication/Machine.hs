@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf #-}
 module ATMC.Lec5.ViewstampReplication.Machine where
 
 import Control.Monad (forM_, unless, when)
@@ -56,8 +57,11 @@ number they know. If the sender is behind, the receiver
 drops the message. If the sender is ahead, the replica
 performs a state transfer§
   -}
-  -- TODO start state transfer if msgVN > currentViewNumber
-  guardM ((== msgVN) <$> use currentViewNumber)
+  cVn <- use currentViewNumber
+  if
+    | cVn == msgVN -> return ()
+    | cVn >  msgVN -> ereturn -- drop the message
+    | cVn <  msgVN -> initStateTransfer
 
 broadCastReplicas :: VRMessage' -> VR ()
 broadCastReplicas msg = do
@@ -65,6 +69,14 @@ broadCastReplicas msg = do
   ViewNumber cVn <- use currentViewNumber
   forM_ (zip [0..] nodes) $ \ (i, node) -> do
     unless (i == cVn `mod` length nodes) $ send node msg
+
+broadCastOtherReplicas :: VRMessage' -> VR ()
+broadCastOtherReplicas msg = do
+  nodes <- use configuration
+  ViewNumber cVn <- use currentViewNumber
+  me <- use replicaNumber
+  forM_ (zip [0..] nodes) $ \ (i, node) -> do
+    unless (i == cVn `mod` length nodes || i == me) $ send node msg
 
 sendPrimary :: VRMessage' -> VR ()
 sendPrimary msg = do
@@ -87,6 +99,17 @@ isQuorum x = do
 findClientInfoForOp :: OpNumber -> VR (ClientId, RequestNumber)
 findClientInfoForOp on = use $
   clientTable.to (Map.filter (\cs -> copNumber cs == on)).to Map.findMin.to (fmap requestNumber)
+
+generateNonce :: VR Nonce
+generateNonce = Nonce <$> random
+
+initStateTransfer :: VR ()
+initStateTransfer = do
+  guardM $ use (currentStatus.to (== Normal))
+  currentStatus .= Recovering
+  nonce <- generateNonce
+  broadCastOtherReplicas $ Recovery nonce
+  ereturn
 
 {- -- When we get ticks --
 6. Normally the primary informs backups about the

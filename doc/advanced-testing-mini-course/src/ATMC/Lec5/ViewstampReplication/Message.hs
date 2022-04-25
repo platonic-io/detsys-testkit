@@ -11,7 +11,7 @@ import ATMC.Lec5.StateMachineDSL
 newtype RequestNumber = RequestNumber Int
   deriving newtype (Eq, Num, Ord, Read, Show)
 newtype ViewNumber = ViewNumber Int
-  deriving newtype (Eq, Num, Read, Show)
+  deriving newtype (Eq, Num, Ord, Read, Show)
 newtype OpNumber = OpNumber Int
   deriving newtype (Enum, Eq, Ord, Num, Read, Show)
 newtype CommitNumber = CommitNumber Int
