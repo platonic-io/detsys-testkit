@@ -21,32 +21,22 @@ Following the `Viewstamped Replication Revisited`
 https://pmg.csail.mit.edu/papers/vr-revisited.pdf
 -}
 
--- Types for the inner state machine.. should be parametrised somehow
-type ReplicatedOp = ()
-type ReplicatedState = ()
-type ReplicatedResult = ()
-
-type VRState' = VRState ReplicatedState ReplicatedOp ReplicatedResult
-type VRMessage' = VRMessage ReplicatedOp
-type VRRequest' = VRRequest ReplicatedOp
-type VRResponse' = VRResponse ReplicatedResult
-
-type VR a = SMM VRState' VRMessage' VRResponse' a
+type VR s o r a = SMM (VRState s o r) (VRMessage o) (VRResponse r) a
 
 tODO :: HasCallStack => a
 tODO = error "Not implemented yet"
 
-isPrimary :: VR Bool
+isPrimary :: VR s o r Bool
 isPrimary = do
   ViewNumber cVn <- use currentViewNumber
   nodes <- use (configuration.to length)
   rn <- use replicaNumber
   return (rn == cVn `mod` nodes)
 
-checkIsPrimary :: VR ()
+checkIsPrimary :: VR s o r ()
 checkIsPrimary = guardM isPrimary
 
-checkIsBackup :: ViewNumber -> VR ()
+checkIsBackup :: ViewNumber -> VR s o r ()
 checkIsBackup msgVN = do
   guardM (not <$> isPrimary)
   {-
@@ -62,14 +52,14 @@ performs a state transfer§
     | cVn >  msgVN -> ereturn -- drop the message
     | cVn <  msgVN -> initStateTransfer
 
-broadCastReplicas :: VRMessage' -> VR ()
+broadCastReplicas :: VRMessage o -> VR s o r ()
 broadCastReplicas msg = do
   nodes <- use configuration
   ViewNumber cVn <- use currentViewNumber
   forM_ (zip [0..] nodes) $ \ (i, node) -> do
     unless (i == cVn `mod` length nodes) $ send node msg
 
-broadCastOtherReplicas :: VRMessage' -> VR ()
+broadCastOtherReplicas :: VRMessage o -> VR s o r ()
 broadCastOtherReplicas msg = do
   nodes <- use configuration
   ViewNumber cVn <- use currentViewNumber
@@ -77,32 +67,32 @@ broadCastOtherReplicas msg = do
   forM_ (zip [0..] nodes) $ \ (i, node) -> do
     unless (i == cVn `mod` length nodes || i == me) $ send node msg
 
-sendPrimary :: VRMessage' -> VR ()
+sendPrimary :: VRMessage o -> VR s o r ()
 sendPrimary msg = do
   nodes <- use configuration
   ViewNumber cVn <- use currentViewNumber
   send (nodes !! (cVn `mod` length nodes)) msg
 
-addPrepareOk :: OpNumber -> NodeId -> VR Int
+addPrepareOk :: OpNumber -> NodeId -> VR s o r Int
 addPrepareOk n i = do
   s <- primaryPrepareOk.at n <%= Just . maybe (Set.singleton i) (Set.insert i)
   return (maybe 0 Set.size s)
 
-isQuorum :: Int -> VR Bool
+isQuorum :: Int -> VR s o r Bool
 isQuorum x = do
   n <- use (configuration.to length)
   -- `f` is the largest number s.t 2f+1<=n
   let f = (n - 1) `div` 2
   return (f <= x)
 
-findClientInfoForOp :: OpNumber -> VR (ClientId, RequestNumber)
+findClientInfoForOp :: OpNumber -> VR s o r (ClientId, RequestNumber)
 findClientInfoForOp on = use $
   clientTable.to (Map.filter (\cs -> copNumber cs == on)).to Map.findMin.to (fmap requestNumber)
 
-generateNonce :: VR Nonce
+generateNonce :: VR s o r Nonce
 generateNonce = Nonce <$> random
 
-initStateTransfer :: VR ()
+initStateTransfer :: VR s o r ()
 initStateTransfer = do
   guardM $ use (currentStatus.to (== Normal))
   currentStatus .= Recovering
@@ -110,7 +100,7 @@ initStateTransfer = do
   broadCastOtherReplicas $ Recovery nonce
   ereturn
 
-executeReplicatedMachine :: ReplicatedOp -> VR ReplicatedResult
+executeReplicatedMachine :: o -> VR s o r r
 executeReplicatedMachine op = do
   cs <- use currentState
   sm <- use (stateMachine.to runReplicated)
@@ -130,7 +120,7 @@ is commit-number (note that in this case commit-
 number = op-number).
 -}
 
-machine :: Input VRRequest' VRMessage' -> VR ()
+machine :: Input (VRRequest o) (VRMessage o) -> VR s o r ()
 machine (ClientRequest time c (VRRequest op s)) = do
   {-
 1. The client sends a 〈REQUEST op, c, s〉 message to
@@ -254,15 +244,15 @@ client-table, but does not send the reply to the client.
     tODO
 
 sm :: [NodeId] -> NodeId
-  -> ReplicatedState -> ReplicatedStateMachine ReplicatedState ReplicatedOp ReplicatedResult
-  -> SM VRState' VRRequest' VRMessage' VRResponse'
+  -> s -> ReplicatedStateMachine s o r
+  -> SM (VRState s o r) (VRRequest o) (VRMessage o) (VRResponse r)
 sm otherNodes me iState iSM = SM (initState otherNodes me iState iSM) (\i s g -> runSMM (machine i) s g) noTimeouts
 
 --------------------------------------------------------------------------------
 -- For testing
 --------------------------------------------------------------------------------
 
-vrCodec :: Codec VRRequest' VRMessage' VRResponse'
+vrCodec :: (Read m, Show m, Show r) => Codec (VRRequest m) (VRMessage m) (VRResponse r)
 vrCodec = showReadCodec
 
 agenda :: Agenda

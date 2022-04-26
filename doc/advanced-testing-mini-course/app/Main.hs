@@ -32,6 +32,7 @@ main = do
       h <- newHistory
       let
         nodes = map NodeId [0..4]
+        smI :: ReplicatedStateMachine () () ()
         smI = ReplicatedStateMachine $ \ s o -> (o, s)
         vrSM me = VR.sm (filter (/= me) nodes) me () smI
         printItem label prefix thing =
