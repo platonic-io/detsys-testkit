@@ -1,5 +1,7 @@
 > module ATMC.Lec3SMContractTesting where
 
+> import Data.IORef
+
 Consumer-driven contract testing using state machines
 =====================================================
 
@@ -33,7 +35,8 @@ Picture
 XXX:
 
 ```
-                interface     
+                Interface
+                   |
                    |
   Consumer         |   /----\      Producer
           -------> x--+      +-->
@@ -41,18 +44,50 @@ XXX:
                    |
 ```
 
-SUT B
------
+SUT B: a queue
+--------------
 
-> sutB = undefined
+> import ATMC.Lec3.Queue
+> import ATMC.Lec3.QueueTest
 
-SUT A
------
+> data QueueI a = QueueI
+>   { qiEnqueue :: a -> IO Bool
+>   , qiDequeue :: IO (Maybe a)
+>   }
+
+> realQueue :: Int -> IO (QueueI a)
+> realQueue size = do
+>   q <- newQueue size
+>   return QueueI
+>     { qiEnqueue = enqueue q
+>     , qiDequeue = dequeue q
+>     }
+
+> fakeQueue :: Int -> IO (QueueI a)
+> fakeQueue size = do
+>   ref <- newIORef (newModel size)
+>   return QueueI
+>     { qiEnqueue = \x -> atomicModifyIORef' ref (fakeEnqueue x)
+>     , qiDequeue = atomicModifyIORef' ref fakeDequeue
+>     }
+
+
+SUT A: web service that depends on the queue
+--------------------------------------------
 
 > sutA = undefined
 
+
+---
+
 Consumer-driven contract tests
 ------------------------------
+
+The job of contract tests are to ensure the accuracy of the mocks/test doubles
+you use of other components in your fast and deterministic integration tests.
+
+Consumer-driven contract tests just means that the consumer of the mocked API
+writes the contract test inside the testsuite of the producer.
 
 If component A and B are developed in different repos or by different teams,
 then the consumer of the API (in our case A consumes B's API) should write the
@@ -72,22 +107,59 @@ That way:
 Discussion
 ----------
 
-  - Why not just spin up the real component B when testing component A?
+Why not just spin up the real component B when testing component A?
 
-    + Imagine B is a queue and the real implementation uses Kafka, then we'd
-      need to start several processes...
+- Imagine B is a queue and the real implementation uses Kafka, then we'd need to
+  start several processes...
 
-    + Sometimes component B is slow to use (uses disk or network I/O)...
+- Sometimes component B is slow to use (uses disk or network I/O)...
 
-    + Sometimes component B is a third-party component...
+- Sometimes component B is a third-party component which we can't redeploy or
+  reset between test runs...
 
-    + Often we want to be resilient at the level of component A in case
-      component B fails, injecting faults in B to test this is much easier on a
-      fake of B rather than on the real implementation of B (more on this in the
-      next lecture).
+- Often we want to be resilient at the level of component A in case component B
+  fails, injecting faults in B to test this is much easier on a fake of B rather
+  than on the real implementation of B (more on this in the next lecture).
+
+- Basically this is how the road towards slow and flaky tests starts. Don't go
+  down that path! If you are thinking: "but some code is only exercised when the
+  real component is deployed, e.g. configuration", then use [smoke
+  tests](https://en.wikipedia.org/wiki/Smoke_testing_%28software%29) rather than
+  integration tests with real components.
+
+  Origin of the terminology: "The phrase smoke test comes from electronic
+  hardware testing. You plug in a new board and turn on the power. If you see
+  smoke coming from the board, turn off the power. You don’t have to do any more
+  testing."
+
+  The software analogue: spin up component(s), wait for their status to become
+  "ready", make some basic requests and see if they succeed.
+
+  Acceptable if these are a bit flaky:
+
+    + Component spin up happens relatively rarely in production
+    + These tests will likely involve docker containers and networking, i.e.
+      third-party infrastructure that sometimes is flaky
+
+  "After code reviews, smoke testing is the most cost effective method for
+  identifying and fixing defects in software." --
+  [Microsoft](https://docs.microsoft.com/en-us/previous-versions/ms182613(v=vs.80))
+
+  For most software systems, between good contract tests and smoke tests there
+  shouldn't be much of a gap for bugs to sneak in. For special cases, such as
+  distributed systems, we will cover more comprehensive techniques in lecture 5.
 
 See also
 --------
 
-* [*Integrated Tests Are A Scam*](https://www.youtube.com/watch?v=fhFa4tkFUFw)
-  talk by J.B. Rainsberger (2022)
+- For the difference between a fake and e.g. a mock see the following
+  [article](https://www.martinfowler.com/bliki/TestDouble.html) by Martin
+  Fowler;
+
+- For more on contract testing see this
+  [article](https://martinfowler.com/bliki/ContractTest.html) and for more on
+  their consumer-driven variant see the following
+  [artcile](https://martinfowler.com/articles/consumerDrivenContracts.html);
+
+- [*Integrated Tests Are A Scam*](https://www.youtube.com/watch?v=fhFa4tkFUFw)
+  talk by J.B. Rainsberger (2022).

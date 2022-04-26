@@ -26,6 +26,9 @@ Plan
 
 XXX: ...
 
+- Use a state machine (pure function from input and state to output and an
+  updated state) to model stateful (impure) systems
+
 
 SUT
 ---
@@ -132,6 +135,10 @@ Regression tests
 
 Discussion
 ----------
+
+- The specification is longer than the SUT!? For something as simple as a
+  counter, this is true, but for any "real world" system that e.g. persists to
+  disk the model will likely be smaller by an order of magnitude or more.
 
 - Why state machines over other forms of specifications? E.g. unit test-suite.
 
