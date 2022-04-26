@@ -261,4 +261,4 @@ agenda :: Agenda
 agenda = makeAgenda
   [(epoch, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest epoch (ClientId 0) req)))]
   where
-    req = encShow $ VRRequest () 0
+    req = encShow $ VRRequest "first" 0

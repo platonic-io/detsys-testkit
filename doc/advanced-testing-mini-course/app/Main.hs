@@ -32,9 +32,9 @@ main = do
       h <- newHistory
       let
         nodes = map NodeId [0..4]
-        smI :: ReplicatedStateMachine () () ()
-        smI = ReplicatedStateMachine $ \ s o -> (o, s)
-        vrSM me = VR.sm (filter (/= me) nodes) me () smI
+        smI :: ReplicatedStateMachine [String] String ()
+        smI = ReplicatedStateMachine $ \ s o -> ((), o:s)
+        vrSM me = VR.sm (filter (/= me) nodes) me [] smI
         printItem label prefix thing =
           putStrLn $ "\x1b[31m" <> label <> ":\x1b[0m " <> prefix <> show thing
         printE (HistEvent n bs inp as msgs) = do
