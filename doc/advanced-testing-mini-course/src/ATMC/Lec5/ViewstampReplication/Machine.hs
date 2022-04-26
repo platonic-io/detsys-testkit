@@ -215,6 +215,8 @@ the client provided in the request, and x is the result
 of the up-call. The primary also updates the client’s
 entry in the client-table to contain the result.
     -}
+    let cn = let OpNumber x = n in CommitNumber x
+    guardM $ use (commitNumber.to (== pred cn))
     howMany <- addPrepareOk n from
     isQ <- isQuorum howMany
     if isQ
@@ -226,7 +228,7 @@ entry in the client-table to contain the result.
             ereturn
           Just op -> do
             result <- executeReplicatedMachine op
-            commitNumber .= let OpNumber x = n in CommitNumber x
+            commitNumber .= cn
             (clientId, requestNumber) <- findClientInfoForOp n
             respond clientId (VRReply v requestNumber result)
       else ereturn
