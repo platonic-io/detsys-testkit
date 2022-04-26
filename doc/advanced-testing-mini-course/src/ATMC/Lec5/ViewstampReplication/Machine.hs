@@ -4,6 +4,7 @@ module ATMC.Lec5.ViewstampReplication.Machine where
 import Control.Monad (forM_, unless, when)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Time.Clock (secondsToNominalDiffTime)
 import GHC.Stack (HasCallStack)
 
 import ATMC.Lec5.Agenda
@@ -11,7 +12,7 @@ import ATMC.Lec5.Codec
 import ATMC.Lec5.Event
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
-import ATMC.Lec5.Time (epoch)
+import ATMC.Lec5.Time (addTime, epoch)
 import ATMC.Lec5.ViewstampReplication.Message
 import ATMC.Lec5.ViewstampReplication.State
 
@@ -259,6 +260,11 @@ vrCodec = showReadCodec
 
 agenda :: Agenda
 agenda = makeAgenda
-  [(epoch, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest epoch (ClientId 0) req)))]
+  [(t0, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest t0 (ClientId 0) req1)))
+  ,(t1, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest t1 (ClientId 0) req2)))
+  ]
   where
-    req = encShow $ VRRequest "first" 0
+    t0 = epoch
+    t1 = addTime (secondsToNominalDiffTime 20) t0
+    req1 = encShow $ VRRequest "first" 0
+    req2 = encShow $ VRRequest "second" 1
