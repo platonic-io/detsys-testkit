@@ -3,7 +3,6 @@ module ATMC.Lec5.ViewstampReplication.Machine where
 
 import Control.Monad (forM_, unless, when)
 import qualified Data.Map as Map
-import Data.Sequence ((|>))
 import qualified Data.Set as Set
 import GHC.Stack (HasCallStack)
 
@@ -110,6 +109,14 @@ initStateTransfer = do
   nonce <- generateNonce
   broadCastOtherReplicas $ Recovery nonce
   ereturn
+
+executeReplicatedMachine :: ReplicatedOp -> VR ReplicatedResult
+executeReplicatedMachine op = do
+  cs <- use currentState
+  sm <- use (stateMachine.to runReplicated)
+  let (result, cs') = sm cs op
+  currentState .= cs'
+  return result
 
 {- -- When we get ticks --
 6. Normally the primary informs backups about the
@@ -222,12 +229,16 @@ entry in the client-table to contain the result.
     isQ <- isQuorum howMany
     if isQ
       then do
-        -- TODO should execute machine
-        -- result <- tODO
-        let result = ()
-        commitNumber .= let OpNumber x = n in CommitNumber x
-        (clientId, requestNumber) <- findClientInfoForOp n
-        respond clientId (VRReply v requestNumber result)
+        l <- use theLog
+        case logLookup n l of
+          Nothing -> do
+            -- shouldn't happen, we get a confirmation but don't remember the op
+            ereturn
+          Just op -> do
+            result <- executeReplicatedMachine op
+            commitNumber .= let OpNumber x = n in CommitNumber x
+            (clientId, requestNumber) <- findClientInfoForOp n
+            respond clientId (VRReply v requestNumber result)
       else ereturn
   Commit v k -> do
     checkIsBackup v

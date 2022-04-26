@@ -4,6 +4,7 @@
 module ATMC.Lec5.ViewstampReplication.Message where
 
 import Data.Sequence (Seq)
+import qualified Data.Sequence as S
 
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
@@ -18,7 +19,8 @@ newtype CommitNumber = CommitNumber Int
   deriving newtype (Num, Read, Show)
 newtype Nonce = Nonce Int
   deriving newtype (Read, Show)
-type Log op = Seq op
+newtype Log op = Log (Seq op)
+  deriving newtype (Monoid, Read, Semigroup, Show)
 
 data VRRequest op
   = VRRequest op RequestNumber -- ClientId in `ClientRequest`
@@ -46,3 +48,9 @@ data VRMessage op
   | Recovery Nonce {- i which is node-id -}
   | RecoveryResponse ViewNumber Nonce (Log op) OpNumber CommitNumber
   deriving (Read, Show)
+
+(|>) :: Log op -> op -> Log op
+(Log l) |> o = Log (l S.|> o)
+
+logLookup :: OpNumber -> Log op -> Maybe op
+logLookup (OpNumber i) (Log l) = S.lookup i l
