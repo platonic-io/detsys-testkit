@@ -52,8 +52,11 @@ library
     ATMC.Lec1SMTesting
     ATMC.Lec2ConcurrentSMTesting
     ATMC.Lec3SMContractTesting
+    ATMC.Lec3.QueueInterface
     ATMC.Lec3.Queue
     ATMC.Lec3.QueueTest
+    ATMC.Lec3.Service
+    ATMC.Lec3.ServiceTest
     ATMC.Lec4FaultInjection
     ATMC.Lec5.Agenda
     ATMC.Lec5.AwaitingClients

@@ -32,48 +32,29 @@ Plan
 Picture
 -------
 
-XXX:
+```
+               Interface
+                   |
+    Consumer       |     Producer
+                   |
+       ----------> x-------->
+                   |
+  "Collaboration   |  Contract tests
+      tests"       |
 
 ```
-                Interface
-                   |
-                   |
-  Consumer         |   /----\      Producer
-          -------> x--+      +-->
-                   |
-                   |
-```
 
-SUT B: a queue
---------------
+SUT B: a queue (producer of the interface)
+------------------------------------------
 
+> import ATMC.Lec3.QueueInterface
 > import ATMC.Lec3.Queue
 > import ATMC.Lec3.QueueTest
-
-> data QueueI a = QueueI
->   { qiEnqueue :: a -> IO Bool
->   , qiDequeue :: IO (Maybe a)
->   }
-
-> realQueue :: Int -> IO (QueueI a)
-> realQueue size = do
->   q <- newQueue size
->   return QueueI
->     { qiEnqueue = enqueue q
->     , qiDequeue = dequeue q
->     }
-
-> fakeQueue :: Int -> IO (QueueI a)
-> fakeQueue size = do
->   ref <- newIORef (newModel size)
->   return QueueI
->     { qiEnqueue = \x -> atomicModifyIORef' ref (fakeEnqueue x)
->     , qiDequeue = atomicModifyIORef' ref fakeDequeue
->     }
+> import ATMC.Lec3.Service
 
 
-SUT A: web service that depends on the queue
---------------------------------------------
+SUT A: web service (consumer of the interface)
+----------------------------------------------
 
 > sutA = undefined
 
@@ -148,6 +129,12 @@ Why not just spin up the real component B when testing component A?
   For most software systems, between good contract tests and smoke tests there
   shouldn't be much of a gap for bugs to sneak in. For special cases, such as
   distributed systems, we will cover more comprehensive techniques in lecture 5.
+
+Exercises
+---------
+
+0. The fake/model of the queue is thread-safe, but the real implementation
+   isn't! Fix that and do concurrent contract testing.
 
 See also
 --------
