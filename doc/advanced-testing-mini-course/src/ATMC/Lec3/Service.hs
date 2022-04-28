@@ -23,8 +23,6 @@ mAX_QUEUE_SIZE = 128
 pORT :: Int
 pORT = 8050
 
-data Mode = Testing | Production
-
 ------------------------------------------------------------------------
 
 realQueue :: Int -> IO (QueueI a)
@@ -47,18 +45,16 @@ fakeQueue size = do
 
 main :: IO ()
 main = do
-  args <- getArgs
-  case args of
-    ["--testing"] -> service Testing
-    _otherwise    -> service Production
+  args  <- getArgs
+  queue <- case args of
+             ["--testing"] -> fakeQueue mAX_QUEUE_SIZE
+             _otherwise    -> realQueue mAX_QUEUE_SIZE
+  service queue
 
-service :: Mode -> IO ()
-service mode = do
-  queue <- case mode of
-             Testing -> fakeQueue mAX_QUEUE_SIZE
-  ready <- newEmptyMVar
-  withAsync (worker queue) $ \_async ->
-    runFrontEnd queue pORT ready
+service :: QueueI Command -> IO ()
+service queue = do
+  withAsync (worker queue) $ \_a ->
+    runFrontEnd queue pORT
 
 worker :: QueueI Command -> IO ()
 worker queue = go initState
@@ -122,10 +118,5 @@ httpFrontend queue req respond =
         _otherwise   -> Left (BS8.pack "parseIndex: GET /:ix, :ix missing")
 -}
 
-runFrontEnd :: QueueI Command -> Port -> MVar () -> IO ()
-runFrontEnd queue port ready = runSettings settings (httpFrontend queue)
-  where
-    settings
-      = setPort port
-      $ setBeforeMainLoop (putMVar ready ())
-      $ defaultSettings
+runFrontEnd :: QueueI Command -> Port -> IO ()
+runFrontEnd queue port = run port (httpFrontend queue)

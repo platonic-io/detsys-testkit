@@ -60,6 +60,8 @@ Exercises
    properites from section 8 on correctness from [*Viewstamped Replication
    Revisited*](https://pmg.csail.mit.edu/papers/vr-revisited.pdf) by Barbara
    Liskov and James Cowling (2012)
+- https://making.pusher.com/fuzz-testing-distributed-systems-with-quickcheck/
+- https://fractalscapeblog.wordpress.com/2017/05/05/quickcheck-for-paxos/
 
 See also
 --------
