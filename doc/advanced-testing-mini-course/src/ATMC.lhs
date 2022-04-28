@@ -11,20 +11,21 @@ Advanced property-based testing mini-course
   - Introduce the reader to related work and open problems in the area.
 
 + Pre-requisites:
-  - Enough familiarity with Haskell to be able to read simple programs;
-  - Basic knowledge of state machines (i.e. Mealy and Moore machines)
 
-    + https://en.wikipedia.org/wiki/Finite-state_transducer
-    + [Computation and State
-      Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
-      (2008) by Leslie Lamport
+  - Enough familiarity with Haskell to be able to read simple programs, for
+    example if you can follow along in the *Learn You a Haskell for Great Good!*
+    [tutorial](http://learnyouahaskell.com/chapters), then you should be fine;
+
+  - Basic knowledge of state machines (i.e.
+    [Mealy](https://en.wikipedia.org/wiki/Mealy_machine) / [Moore
+    machines](https://en.wikipedia.org/wiki/Moore_machine) and
+    [transducers](https://en.wikipedia.org/wiki/Finite-state_transducer)).
 
   - Some experience with property-based testing of non-stateful (i.e. pure)
-    programs.
-    + The original paper: [QuickCheck: a lightweight tool for random testing of
-      Haskell
-      programs](http://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf)
-      (2000) by Koen Claessen and John Hughes
+    programs. For example as explained in the official QuickCheck
+    [manual](http://www.cse.chalmers.se/~rjmh/QuickCheck/manual.html) or in the
+    following
+    [tutorial](https://begriffs.com/posts/2017-01-14-design-use-quickcheck.html).
 
 Structure
 ---------
