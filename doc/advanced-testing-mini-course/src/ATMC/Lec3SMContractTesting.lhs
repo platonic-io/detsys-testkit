@@ -50,14 +50,12 @@ SUT B: a queue (producer of the interface)
 > import ATMC.Lec3.QueueInterface
 > import ATMC.Lec3.Queue
 > import ATMC.Lec3.QueueTest
-> import ATMC.Lec3.Service
 
 
 SUT A: web service (consumer of the interface)
 ----------------------------------------------
 
-> sutA = undefined
-
+> import ATMC.Lec3.Service
 
 ---
 
@@ -136,6 +134,19 @@ Exercises
 0. The fake/model of the queue is thread-safe, but the real implementation
    isn't! Fix that and do concurrent contract testing.
 
+1. Introduce an interface for all database interaction, move the current
+   database implementation to `realDb` and introduce fake database instance of
+   the interface.
+
+2. Write contract tests that ensure that the fake database faithfully represents
+   the real one.
+
+3. Once the contract tests pass, switch out the real database for the fake one
+   in the collabortation tests (the testsuite of the web service). Enable timing
+   output in `ghci` with `:set +s`, crank up the number of tests that
+   `QuickCheck` generates, and see if you notice any speed up in the test
+   execution time.
+
 See also
 --------
 
@@ -149,4 +160,15 @@ See also
   [artcile](https://martinfowler.com/articles/consumerDrivenContracts.html);
 
 - [*Integrated Tests Are A Scam*](https://www.youtube.com/watch?v=fhFa4tkFUFw)
-  talk by J.B. Rainsberger (2022).
+  talk by J.B. Rainsberger (2022), this a less ranty version of a talk with the
+  same title that he [gave](https://www.youtube.com/watch?v=VDfX44fZoMc) at
+  DevConFu in 2013.
+
+Summary
+-------
+
+- Using fakes enables to fast and determinstic integration tests and, as we
+  shall see next, makes it easier to introduce faults when testing;
+
+- Contract tests justify the use of fakes, inplace of the real dependencies,
+  when testing a SUT.

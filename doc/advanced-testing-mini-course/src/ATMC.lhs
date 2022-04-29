@@ -1,5 +1,3 @@
-> module ATMC where
-
 Advanced property-based testing mini-course
 ===========================================
 
@@ -74,6 +72,8 @@ Table of contents
 3. Consumer-driven contract tests using state machines
 4. Fault-injection
 5. Simulation testing
+
+> module ATMC where
 
 > import ATMC.Lec1SMTesting
 > import ATMC.Lec2ConcurrentSMTesting
