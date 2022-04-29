@@ -40,6 +40,7 @@ library
     , QuickCheck
     , random
     , stm
+    , sqlite-simple
     , text
     , time
     , transformers

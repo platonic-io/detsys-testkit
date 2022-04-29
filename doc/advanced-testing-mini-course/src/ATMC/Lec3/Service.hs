@@ -1,19 +1,35 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module ATMC.Lec3.Service where
 
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
+import Control.Exception (bracket)
+import Control.Monad (forM_)
 import Data.ByteString.Lazy (ByteString)
-import Data.IORef
 import qualified Data.ByteString.Lazy.Char8 as BS8
+import Data.IORef
+import Data.String (fromString)
+import Data.Text.Read (decimal)
+import Database.SQLite.Simple
+       ( Connection
+       , Only(Only)
+       , close
+       , execute
+       , execute_
+       , lastInsertRowId
+       , open
+       , query
+       )
 import Network.HTTP.Types.Status
 import Network.Wai
 import Network.Wai.Handler.Warp
 import System.Environment
 
 import ATMC.Lec3.Queue
-import ATMC.Lec3.QueueTest (fakeEnqueue, fakeDequeue, newModel)
 import ATMC.Lec3.QueueInterface
+import ATMC.Lec3.QueueTest (fakeDequeue, fakeEnqueue, newModel)
 
 ------------------------------------------------------------------------
 
@@ -49,51 +65,51 @@ main = do
   queue <- case args of
              ["--testing"] -> fakeQueue mAX_QUEUE_SIZE
              _otherwise    -> realQueue mAX_QUEUE_SIZE
+
   service queue
 
 service :: QueueI Command -> IO ()
 service queue = do
-  withAsync (worker queue) $ \_a ->
-    runFrontEnd queue pORT
+  bracket initDB closeDB $ \conn ->
+    withAsync (worker queue conn) $ \_a ->
+      runFrontEnd queue pORT
 
-worker :: QueueI Command -> IO ()
-worker queue = go initState
+worker :: QueueI Command -> Connection -> IO ()
+worker queue conn = go
   where
-    go :: State -> IO ()
-    go state = do
-      cmd <- undefined -- atomically (readTBQueue queue)
-      state' <- execute cmd state
-      go state'
+    go :: IO ()
+    go = do
+      mCmd <- qiDequeue queue
+      case mCmd of
+        Nothing -> do
+          threadDelay 1000 -- 1 ms
+          go
+        Just cmd -> do
+          exec cmd conn
+          go
 
 data Command
   = Write ByteString (MVar Int)
   | Read Int (MVar (Maybe ByteString))
 
-data State = State
-
-initState :: State
-initState = State
-
-execute :: Command -> State -> IO State
-execute (Read ix response) state = do
-  bs <- undefined -- readDB conn ix
+exec :: Command -> Connection -> IO ()
+exec (Read ix response) conn = do
+  bs <- readDB conn ix
   putMVar response bs
-  undefined
-execute (Write bs response) state = do
-  ix <- undefined -- writeDB conn bs
+exec (Write bs response) conn = do
+  ix <- writeDB conn bs
   putMVar response ix
-  undefined
 
 httpFrontend :: QueueI Command -> Application
 httpFrontend queue req respond =
   case requestMethod req of
     "GET" -> do
       case parseIndex of
-        Left err -> do
-          respond (responseLBS status400 [] err)
-        Right ix -> do
+        Nothing -> do
+          respond (responseLBS status400 [] "Couldn't parse index")
+        Just ix -> do
           response <- newEmptyMVar
-          -- atomically (writeTBQueue queue (Read ix response))
+          qiEnqueue queue (Read ix response)
           mbs <- takeMVar response
           case mbs of
             Nothing ->
@@ -102,21 +118,57 @@ httpFrontend queue req respond =
     "POST" -> do
       bs <- consumeRequestBodyStrict req
       response <- newEmptyMVar
-      -- atomically (writeTBQueue queue (Write bs response))
-      ix <- takeMVar response :: IO Int
+      qiEnqueue queue (Write bs response)
+      ix <- takeMVar response
       respond (responseLBS status200 [] (BS8.pack (show ix)))
     _otherwise -> do
       respond (responseLBS status400 [] "Invalid method")
   where
-    parseIndex :: Either ByteString Int
-    parseIndex = undefined
-  {-
-      case pathInfo req of
-        [txt] -> case decimal txt of
-          Right (ix, _rest) -> Right ix
-          _otherwise -> Left (BS8.pack "parseIndex: GET /:ix, :ix isn't an integer")
-        _otherwise   -> Left (BS8.pack "parseIndex: GET /:ix, :ix missing")
--}
+    parseIndex :: Maybe Int
+    parseIndex = case pathInfo req of
+                   [txt] -> case decimal txt of
+                     Right (ix, _rest) -> Just ix
+                     _otherwise -> Nothing
+                   _otherwise   -> Nothing
 
 runFrontEnd :: QueueI Command -> Port -> IO ()
 runFrontEnd queue port = run port (httpFrontend queue)
+
+------------------------------------------------------------------------
+
+sQLITE_DB_PATH :: FilePath
+sQLITE_DB_PATH = "/tmp/lec3_webservice.sqlite3"
+
+sQLITE_FLAGS :: [String]
+sQLITE_FLAGS = ["fullfsync=1", "journal_mode=WAL", "synchronous=NORMAL"]
+
+sqlitePath :: String
+sqlitePath =
+  let
+    flags = map (++ ";") sQLITE_FLAGS
+  in
+    sQLITE_DB_PATH ++ "?" ++ concat flags
+
+initDB :: IO Connection
+initDB = do
+  conn <- open sqlitePath
+  let flags = map (++ ";") sQLITE_FLAGS
+  forM_ flags $ \flag -> do
+    execute_ conn ("PRAGMA " <> fromString flag)
+  execute_ conn "CREATE TABLE IF NOT EXISTS lec3_webservice (ix INTEGER PRIMARY KEY, value BLOB)"
+  return conn
+
+writeDB :: Connection -> ByteString -> IO Int
+writeDB conn bs = do
+  execute conn "INSERT INTO lec3_webservice (value) VALUES (?)" (Only bs)
+  fromIntegral . pred <$> lastInsertRowId conn
+
+readDB :: Connection -> Int -> IO (Maybe ByteString)
+readDB conn ix = do
+  result <- query conn "SELECT value from lec3_webservice WHERE ix = ?" (Only (ix + 1))
+  case result of
+    [[bs]]     -> return (Just bs)
+    _otherwise -> return Nothing
+
+closeDB :: Connection -> IO ()
+closeDB = close
