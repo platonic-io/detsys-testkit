@@ -21,7 +21,7 @@ toI (i, HistEvent n bs inp as msgs) = object
     , "to" .= showN n
     , "event" .= ("" :: String) -- we don't have this? TODO
     , "receivedLogical" .= i
-    , "message" .= show m
+    , "message" .= m
     ]
   , "runningVersion" .= (1 :: Int64) -- TODO
   , "receivedTime" .= fromEpoch t
