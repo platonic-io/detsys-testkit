@@ -8,6 +8,7 @@ module ATMC.Lec5.History where
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TQueue
 import Data.Typeable
+import Data.TreeDiff (ToExpr)
 
 import ATMC.Lec2ConcurrentSMTesting (History', Operation'(..), Pid(Pid))
 import qualified ATMC.Lec2ConcurrentSMTesting as Lec2
@@ -19,6 +20,7 @@ newtype History = History (TQueue HistEvent)
 
 data HistEvent = forall state req msg resp.
   ( Show state, Show req, Show msg, Show resp
+  , ToExpr state
   , Typeable req, Typeable resp
   ) => HistEvent NodeId state (Input req msg) state [Output resp msg]
 deriving instance Show HistEvent

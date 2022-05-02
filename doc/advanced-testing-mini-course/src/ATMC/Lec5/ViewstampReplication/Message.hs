@@ -5,22 +5,23 @@ module ATMC.Lec5.ViewstampReplication.Message where
 
 import Data.Sequence (Seq)
 import qualified Data.Sequence as S
+import Data.TreeDiff (ToExpr)
 
 import ATMC.Lec5.StateMachine
 import ATMC.Lec5.StateMachineDSL
 
 newtype RequestNumber = RequestNumber Int
-  deriving newtype (Eq, Num, Ord, Read, Show)
+  deriving newtype (Eq, Num, Ord, Read, Show, ToExpr)
 newtype ViewNumber = ViewNumber Int
-  deriving newtype (Eq, Num, Ord, Read, Show)
+  deriving newtype (Eq, Num, Ord, Read, Show, ToExpr)
 newtype OpNumber = OpNumber Int
-  deriving newtype (Enum, Eq, Ord, Num, Read, Show)
+  deriving newtype (Enum, Eq, Ord, Num, Read, Show, ToExpr)
 newtype CommitNumber = CommitNumber Int
-  deriving newtype (Enum, Eq, Num, Read, Show)
+  deriving newtype (Enum, Eq, Num, Read, Show, ToExpr)
 newtype Nonce = Nonce Int
   deriving newtype (Read, Show)
 newtype Log op = Log (Seq op)
-  deriving newtype (Monoid, Read, Semigroup, Show)
+  deriving newtype (ToExpr, Monoid, Read, Semigroup, Show)
 
 data VRRequest op
   = VRRequest op RequestNumber -- ClientId in `ClientRequest`

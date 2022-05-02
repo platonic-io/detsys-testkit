@@ -1,18 +1,23 @@
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module ATMC.Lec5.StateMachine where
 
 import Data.Fixed
 import System.Random
 import Data.ByteString.Lazy (ByteString)
+import Data.TreeDiff (ToExpr)
 
 import ATMC.Lec5.Time
 
 ------------------------------------------------------------------------
 
 newtype NodeId = NodeId { unNodeId :: Int }
-  deriving (Eq, Ord, Read, Show)
+  deriving stock (Eq, Ord)
+  deriving newtype (Read, Show, ToExpr)
 
 newtype ClientId = ClientId { unClientId :: Int }
-  deriving (Eq, Ord, Read, Show)
+  deriving stock (Eq, Ord)
+  deriving newtype (Read, Show, ToExpr)
 
 data SM state request message response = SM
   { smState   :: state
