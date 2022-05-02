@@ -1,9 +1,10 @@
+{-# LANGUAGE MultiWayIf #-}
 module ATMC.Lec05.ViewstampReplication.Machine where
 
 import Control.Monad (forM_, unless, when)
 import qualified Data.Map as Map
-import Data.Sequence ((|>))
 import qualified Data.Set as Set
+import Data.Time.Clock (secondsToNominalDiffTime)
 import GHC.Stack (HasCallStack)
 
 import ATMC.Lec05.Agenda
@@ -11,7 +12,7 @@ import ATMC.Lec05.Codec
 import ATMC.Lec05.Event
 import ATMC.Lec05.StateMachine
 import ATMC.Lec05.StateMachineDSL
-import ATMC.Lec05.Time (epoch)
+import ATMC.Lec05.Time (addTime, epoch)
 import ATMC.Lec05.ViewstampReplication.Message
 import ATMC.Lec05.ViewstampReplication.State
 
@@ -21,32 +22,22 @@ Following the `Viewstamped Replication Revisited`
 https://pmg.csail.mit.edu/papers/vr-revisited.pdf
 -}
 
--- Types for the inner state machine.. should be parametrised somehow
-type ReplicatedOp = ()
-type ReplicatedState = ()
-type ReplicatedResult = ()
-
-type VRState' = VRState ReplicatedState ReplicatedOp ReplicatedResult
-type VRMessage' = VRMessage ReplicatedOp
-type VRRequest' = VRRequest ReplicatedOp
-type VRResponse' = VRResponse ReplicatedResult
-
-type VR a = SMM VRState' VRMessage' VRResponse' a
+type VR s o r a = SMM (VRState s o r) (VRMessage o) (VRResponse r) a
 
 tODO :: HasCallStack => a
 tODO = error "Not implemented yet"
 
-isPrimary :: VR Bool
+isPrimary :: VR s o r Bool
 isPrimary = do
   ViewNumber cVn <- use currentViewNumber
   nodes <- use (configuration.to length)
   rn <- use replicaNumber
   return (rn == cVn `mod` nodes)
 
-checkIsPrimary :: VR ()
+checkIsPrimary :: VR s o r ()
 checkIsPrimary = guardM isPrimary
 
-checkIsBackup :: ViewNumber -> VR ()
+checkIsBackup :: ViewNumber -> VR s o r ()
 checkIsBackup msgVN = do
   guardM (not <$> isPrimary)
   {-
@@ -56,37 +47,67 @@ number they know. If the sender is behind, the receiver
 drops the message. If the sender is ahead, the replica
 performs a state transfer§
   -}
-  -- TODO start state transfer if msgVN > currentViewNumber
-  guardM ((== msgVN) <$> use currentViewNumber)
+  cVn <- use currentViewNumber
+  if
+    | cVn == msgVN -> return ()
+    | cVn >  msgVN -> ereturn -- drop the message
+    | cVn <  msgVN -> initStateTransfer
 
-broadCastReplicas :: VRMessage' -> VR ()
+broadCastReplicas :: VRMessage o -> VR s o r ()
 broadCastReplicas msg = do
   nodes <- use configuration
   ViewNumber cVn <- use currentViewNumber
   forM_ (zip [0..] nodes) $ \ (i, node) -> do
     unless (i == cVn `mod` length nodes) $ send node msg
 
-sendPrimary :: VRMessage' -> VR ()
+broadCastOtherReplicas :: VRMessage o -> VR s o r ()
+broadCastOtherReplicas msg = do
+  nodes <- use configuration
+  ViewNumber cVn <- use currentViewNumber
+  me <- use replicaNumber
+  forM_ (zip [0..] nodes) $ \ (i, node) -> do
+    unless (i == cVn `mod` length nodes || i == me) $ send node msg
+
+sendPrimary :: VRMessage o -> VR s o r ()
 sendPrimary msg = do
   nodes <- use configuration
   ViewNumber cVn <- use currentViewNumber
   send (nodes !! (cVn `mod` length nodes)) msg
 
-addPrepareOk :: OpNumber -> NodeId -> VR Int
+addPrepareOk :: OpNumber -> NodeId -> VR s o r Int
 addPrepareOk n i = do
   s <- primaryPrepareOk.at n <%= Just . maybe (Set.singleton i) (Set.insert i)
   return (maybe 0 Set.size s)
 
-isQuorum :: Int -> VR Bool
+isQuorum :: Int -> VR s o r Bool
 isQuorum x = do
   n <- use (configuration.to length)
   -- `f` is the largest number s.t 2f+1<=n
   let f = (n - 1) `div` 2
   return (f <= x)
 
-findClientInfoForOp :: OpNumber -> VR (ClientId, RequestNumber)
+findClientInfoForOp :: OpNumber -> VR s o r (ClientId, RequestNumber)
 findClientInfoForOp on = use $
   clientTable.to (Map.filter (\cs -> copNumber cs == on)).to Map.findMin.to (fmap requestNumber)
+
+generateNonce :: VR s o r Nonce
+generateNonce = Nonce <$> random
+
+initStateTransfer :: VR s o r ()
+initStateTransfer = do
+  guardM $ use (currentStatus.to (== Normal))
+  currentStatus .= Recovering
+  nonce <- generateNonce
+  broadCastOtherReplicas $ Recovery nonce
+  ereturn
+
+executeReplicatedMachine :: o -> VR s o r r
+executeReplicatedMachine op = do
+  cs <- use currentState
+  sm <- use (stateMachine.to runReplicated)
+  let (result, cs') = sm cs op
+  currentState .= cs'
+  return result
 
 {- -- When we get ticks --
 6. Normally the primary informs backups about the
@@ -100,7 +121,7 @@ is commit-number (note that in this case commit-
 number = op-number).
 -}
 
-machine :: Input VRRequest' VRMessage' -> VR ()
+machine :: Input (VRRequest o) (VRMessage o) -> VR s o r ()
 machine (ClientRequest time c (VRRequest op s)) = do
   {-
 1. The client sends a 〈REQUEST op, c, s〉 message to
@@ -143,7 +164,7 @@ the request, and k is the commit-number.
   -}
   opNumber += 1
   cOp <- use opNumber
-  theLog %= (|> cOp)
+  theLog %= (|> op)
   clientTable.at c .= Just (InFlight s cOp)
   v <- use currentViewNumber
   k <- use commitNumber
@@ -174,7 +195,7 @@ ones have prepared locally.
       -- TODO: for now we just drop
       ereturn
     opNumber += 1
-    theLog %= (|> n)
+    theLog %= (|> (m^.operation))
     clientTable.at (m^.clientId) .= Just (InFlight (m^.clientRequestNumber) n)
     sendPrimary $ PrepareOk v n {- i -} -- we don't need to add i since
                                         -- event-loop will add it automatically
@@ -195,16 +216,22 @@ the client provided in the request, and x is the result
 of the up-call. The primary also updates the client’s
 entry in the client-table to contain the result.
     -}
+    let cn = let OpNumber x = n in CommitNumber x
+    guardM $ use (commitNumber.to (== pred cn))
     howMany <- addPrepareOk n from
     isQ <- isQuorum howMany
     if isQ
       then do
-        -- TODO should execute machine
-        -- result <- tODO
-        let result = ()
-        commitNumber .= let OpNumber x = n in CommitNumber x
-        (clientId, requestNumber) <- findClientInfoForOp n
-        respond clientId (VRReply v requestNumber result)
+        l <- use theLog
+        case logLookup n l of
+          Nothing -> do
+            -- shouldn't happen, we get a confirmation but don't remember the op
+            ereturn
+          Just op -> do
+            result <- executeReplicatedMachine op
+            commitNumber .= cn
+            (clientId, requestNumber) <- findClientInfoForOp n
+            respond clientId (VRReply v requestNumber result)
       else ereturn
   Commit v k -> do
     checkIsBackup v
@@ -220,19 +247,24 @@ client-table, but does not send the reply to the client.
     tODO
 
 sm :: [NodeId] -> NodeId
-  -> ReplicatedState -> ReplicatedStateMachine ReplicatedState ReplicatedOp ReplicatedResult
-  -> SM VRState' VRRequest' VRMessage' VRResponse'
+  -> s -> ReplicatedStateMachine s o r
+  -> SM (VRState s o r) (VRRequest o) (VRMessage o) (VRResponse r)
 sm otherNodes me iState iSM = SM (initState otherNodes me iState iSM) (\i s g -> runSMM (machine i) s g) noTimeouts
 
 --------------------------------------------------------------------------------
 -- For testing
 --------------------------------------------------------------------------------
 
-vrCodec :: Codec VRRequest' VRMessage' VRResponse'
+vrCodec :: (Read m, Show m, Show r) => Codec (VRRequest m) (VRMessage m) (VRResponse r)
 vrCodec = showReadCodec
 
 agenda :: Agenda
 agenda = makeAgenda
-  [(epoch, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest epoch (ClientId 0) req)))]
+  [(t0, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest t0 (ClientId 0) req1)))
+  ,(t1, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest t1 (ClientId 0) req2)))
+  ]
   where
-    req = encShow $ VRRequest () 0
+    t0 = epoch
+    t1 = addTime (secondsToNominalDiffTime 20) t0
+    req1 = encShow $ VRRequest "first" 0
+    req2 = encShow $ VRRequest "second" 1

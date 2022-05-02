@@ -3,17 +3,25 @@
 {-# LANGUAGE TemplateHaskell #-}
 module ATMC.Lec05.ViewstampReplication.Message where
 
+import Data.Sequence (Seq)
+import qualified Data.Sequence as S
+import Data.TreeDiff (ToExpr)
+
 import ATMC.Lec05.StateMachine
 import ATMC.Lec05.StateMachineDSL
 
 newtype RequestNumber = RequestNumber Int
-  deriving newtype (Eq, Num, Ord, Read, Show)
+  deriving newtype (Eq, Num, Ord, Read, Show, ToExpr)
 newtype ViewNumber = ViewNumber Int
-  deriving newtype (Eq, Num, Read, Show)
+  deriving newtype (Eq, Num, Ord, Read, Show, ToExpr)
 newtype OpNumber = OpNumber Int
-  deriving newtype (Enum, Eq, Ord, Num, Read, Show)
+  deriving newtype (Enum, Eq, Ord, Num, Read, Show, ToExpr)
 newtype CommitNumber = CommitNumber Int
-  deriving newtype (Num, Read, Show)
+  deriving newtype (Enum, Eq, Num, Read, Show, ToExpr)
+newtype Nonce = Nonce Int
+  deriving newtype (Read, Show)
+newtype Log op = Log (Seq op)
+  deriving newtype (ToExpr, Monoid, Read, Semigroup, Show)
 
 data VRRequest op
   = VRRequest op RequestNumber -- ClientId in `ClientRequest`
@@ -33,7 +41,17 @@ data InternalClientMessage op = InternalClientMessage
 makeLenses ''InternalClientMessage
 
 data VRMessage op
+  -- 4.1 Normal Operation
   = Prepare ViewNumber (InternalClientMessage op) OpNumber CommitNumber
   | PrepareOk ViewNumber OpNumber {- i which is node-id -}
   | Commit ViewNumber CommitNumber
+  -- 4.3 Recovery
+  | Recovery Nonce {- i which is node-id -}
+  | RecoveryResponse ViewNumber Nonce (Log op) OpNumber CommitNumber
   deriving (Read, Show)
+
+(|>) :: Log op -> op -> Log op
+(Log l) |> o = Log (l S.|> o)
+
+logLookup :: OpNumber -> Log op -> Maybe op
+logLookup (OpNumber i) (Log l) = S.lookup (pred i) l

@@ -155,7 +155,7 @@ Discussion
 
   + XXX: Stateful property-based testing using state machines, like we seen in
     this lecture, tries to approximate proof by structural induction on the
-    sequence of inputs. Or inductive invarint method?!
+    sequence of inputs. Or inductive invariant method?!
 
   + Executable (as the REPL exercise shows, but also more on this later)
 

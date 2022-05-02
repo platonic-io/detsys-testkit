@@ -2,6 +2,7 @@
 
 module ATMC.Lec05.Configuration where
 
+import Data.TreeDiff (ToExpr)
 import Data.Typeable
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
@@ -15,6 +16,7 @@ newtype Configuration = Configuration (IOVector SomeCodecSM)
 
 data SomeCodecSM = forall state request message response.
   ( Show state, Show request, Show message, Show response
+  , ToExpr state
   , Typeable state, Typeable request, Typeable response
   ) => SomeCodecSM (Codec request message response)
                    (SM state request message response)

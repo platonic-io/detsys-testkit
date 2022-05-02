@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 module ATMC.Lec05.ViewstampReplication.State where
 
@@ -5,13 +6,17 @@ import Data.List (sort)
 import Data.Map (Map)
 import Data.Sequence (Seq)
 import Data.Set (Set)
+import Data.TreeDiff (ToExpr(toExpr), Expr(App))
+import GHC.Generics (Generic)
 
 import ATMC.Lec05.StateMachine
 import ATMC.Lec05.StateMachineDSL
 import ATMC.Lec05.ViewstampReplication.Message
 
 data Status = Normal | ViewChange | Recovering
-  deriving Show
+  deriving (Generic, Eq, Show)
+
+instance ToExpr Status
 
 -- I think here is where the bug is
 data ClientStatus result
@@ -20,12 +25,18 @@ data ClientStatus result
   | Completed { requestNumber :: RequestNumber
               , copNumber :: OpNumber
               , theResult :: result, theViewNumber :: ViewNumber}
-  deriving Show
+  deriving (Generic, Show)
+
+instance ToExpr result => ToExpr (ClientStatus result)
 
 newtype ReplicatedStateMachine state op result = ReplicatedStateMachine {runReplicated :: state -> op -> (result, state)}
+  deriving Generic
 
 instance Show (ReplicatedStateMachine s o r) where
   show _ = "RSM"
+
+instance ToExpr (ReplicatedStateMachine s o r) where
+  toExpr _ = App "RSM" []
 
 data VRState state op result = VRState
   { _configuration :: [NodeId]
@@ -42,7 +53,7 @@ data VRState state op result = VRState
   , _opNumber :: OpNumber
   -- ^ The op-number assigned to the most recently re-
   -- ceived request, initially 0.
-  , _theLog :: Seq OpNumber
+  , _theLog :: Log op
   -- ^ The log. This is an array containing op-number
   -- entries. The entries contain the requests that have
   -- been received so far in their assigned order.
@@ -61,7 +72,9 @@ data VRState state op result = VRState
   , _currentState :: state
   , _stateMachine :: ReplicatedStateMachine state op result
   }
-  deriving Show
+  deriving (Generic, Show)
+
+instance (ToExpr state, ToExpr op, ToExpr result) => ToExpr (VRState state op result)
 
 makeLenses ''VRState
 
