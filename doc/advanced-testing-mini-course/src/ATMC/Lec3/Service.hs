@@ -109,6 +109,7 @@ httpFrontend queue req respond =
           respond (responseLBS status400 [] "Couldn't parse index")
         Just ix -> do
           response <- newEmptyMVar
+          -- NOTE: We are not checking if the queue is full here...
           qiEnqueue queue (Read ix response)
           mbs <- takeMVar response
           case mbs of
