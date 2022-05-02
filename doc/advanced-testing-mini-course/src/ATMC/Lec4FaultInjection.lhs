@@ -24,8 +24,42 @@ Plan
    + read returns a malformed write which no longer deserialises, or has a valid
      client request id to send the response to
 
+Discussion
+----------
+
+Can we not just inject real faults like Jepsen does?
+[`iptables`](https://linux.die.net/man/8/iptables) for dropping messages and
+network partitions, [`tc`](https://man7.org/linux/man-pages/man8/tc.8.html) for
+creating latency or simulating a slow connection on the network,
+[`(p)kill`](https://linux.die.net/man/1/kill) for killing processes, `kill -STOP
+$pid` and `kill -CONT $pid` for pausing and resuming processes to simulate long
+I/O or GC pauses, [`libfaketime`](https://github.com/wolfcw/libfaketime) for
+clock-skews, etc?
+
+We could, after all Jepsen is a very successful at finding bugs in distributed
+databases using these techniques. However keep in mind exactly how Jepsen is
+used: typically companies hire Kyle Kingsbury for a couple of weeks/months, he
+writes the tests and runs them, analyses the results and writes a report.
+
+XXX:
+
+* requires root, needs to be done in containers or vm which slows down and
+  complicates start up
+* non-deterministic
+* slow
+* ci flakiness
+* blackbox
+
 Exercises
 ---------
 
 0. Try to imagine how much more difficult it would be to write these tests
    without injecting the faults in the fake, but rather the real dependency.
+
+
+See also
+--------
+
+- [*Why Is Random Testing Effective for Partition Tolerance
+  Bugs?*(https://dl.acm.org/doi/pdf/10.1145/3158134) by Majumdar and Niksic
+  (2018)
