@@ -6,6 +6,7 @@ import Prelude hiding (writeFile)
 import Data.Aeson
 import Data.ByteString.Lazy (ByteString, writeFile)
 import Data.Int(Int64)
+import Data.TreeDiff (ansiWlPretty, ediff, ppEditExpr)
 
 import ATMC.Lec5.History
 import ATMC.Lec5.StateMachine
@@ -13,7 +14,7 @@ import ATMC.Lec5.Time
 
 toI :: (Int, HistEvent) -> Value
 toI (i, HistEvent n bs inp as msgs) = object
-  [ "state" .= (show bs <> " ==> " <> show as)
+  [ "state" .= show (ppEditExpr ansiWlPretty (ediff bs as))
   , "currentEvent" .= object
     [ "from" .= f
     , "to" .= showN n
