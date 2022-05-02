@@ -47,7 +47,7 @@ fakeEnqueue x m
 fakeDequeue :: Model a -> (Model a, Maybe a)
 fakeDequeue m = case mQueue m of
   []       -> (m, Nothing)
-  (x : xs) -> (m { mQueue = xs }, (Just x))
+  (x : xs) -> (m { mQueue = xs }, Just x)
 
 step :: Command a -> Model a -> (Model a, Response a)
 step Size        m = (m, Int (length (mQueue m)))
@@ -102,8 +102,8 @@ newtype Capacity = Capacity Int
 instance Arbitrary Capacity where
   arbitrary = Capacity <$> choose (0, 5)
 
-prop_queue :: Capacity -> Property
-prop_queue (Capacity cap) =
+prop_contractTests :: Capacity -> Property
+prop_contractTests (Capacity cap) =
   forAllShrink (genCommands cap 0) (shrinkList (const [])) $ \cmds -> monadicIO $ do
     let m = newModel cap
     q <- run (newQueue cap)
