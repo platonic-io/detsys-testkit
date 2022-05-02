@@ -183,7 +183,7 @@ assertProgram msg prog = do
 
     -   Stateless (or pure) property-based testing tries to *approximate* proof by induction in math. For example the following is the proposition that addition is associative for integers, *forall i j k. (i + j) + k == i + (j + k)*. It looks almost exactly like the property you'd write in a property-based test, but of course this test passing isn't a proof of the proposition, still a step in the right direction if we want to be serious about program correctness.
 
-    -   XXX: Stateful property-based testing using state machines, like we seen in this lecture, tries to approximate proof by structural induction on the sequence of inputs. Or inductive invarint method?!
+    -   XXX: Stateful property-based testing using state machines, like we seen in this lecture, tries to approximate proof by structural induction on the sequence of inputs. Or inductive invariant method?!
 
     -   Executable (as the REPL exercise shows, but also more on this later)
 
@@ -217,7 +217,7 @@ assertProgram msg prog = do
 
     (2008) 
 
--   "Can one generalize Turing machines so that any algorithm, never mind how abstract, can be modeled by a generalized machine very closely and faithfully?"
+-   "Can one generalize Turing machines so that any algorithm, never mind how ab- stract, can be modeled by a generalized machine very closely and faithfully?"
 
     Perhaps somewhat surprisingly it turns out that the answer is yes, and the generalisation is a state machine! (This means that in some sense the state machine is the ultimate model?!)
 
