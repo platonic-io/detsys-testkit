@@ -1,21 +1,5 @@
 ``` {.haskell .literate}
-module ATMC.Lec10LibraryOrFramework where
-```
-
-## Motivation
-
--   How can we take everything we've done so far and pack it up in a nice way so that many different applications can be written, easily communicate with each other all while being conveniently debuggable?
-
-## See also
-
--   Jane Street's [Concord](https://signalsandthreads.com/state-machine-replication-and-why-you-should-care/) framework
-
--   Chuck's Bandwagon framework
-
----
-
-``` {.haskell .literate}
-module ATMC.Lec1SMTesting where
+module ATMC.Lec01SMTesting where
 ```
 
 ``` {.haskell .literate}
@@ -199,7 +183,7 @@ assertProgram msg prog = do
 
     -   Stateless (or pure) property-based testing tries to *approximate* proof by induction in math. For example the following is the proposition that addition is associative for integers, *forall i j k. (i + j) + k == i + (j + k)*. It looks almost exactly like the property you'd write in a property-based test, but of course this test passing isn't a proof of the proposition, still a step in the right direction if we want to be serious about program correctness.
 
-    -   XXX: Stateful property-based testing using state machines, like we seen in this lecture, tries to approximate proof by structural induction on the sequence of inputs. Or inductive invarint method?!
+    -   XXX: Stateful property-based testing using state machines, like we seen in this lecture, tries to approximate proof by structural induction on the sequence of inputs. Or inductive invariant method?!
 
     -   Executable (as the REPL exercise shows, but also more on this later)
 
@@ -233,7 +217,7 @@ assertProgram msg prog = do
 
     (2008) 
 
--   "Can one generalize Turing machines so that any algorithm, never mind how abstract, can be modeled by a generalized machine very closely and faithfully?"
+-   "Can one generalize Turing machines so that any algorithm, never mind how ab- stract, can be modeled by a generalized machine very closely and faithfully?"
 
     Perhaps somewhat surprisingly it turns out that the answer is yes, and the generalisation is a state machine! (This means that in some sense the state machine is the ultimate model?!)
 
@@ -248,7 +232,7 @@ assertProgram msg prog = do
 ```
 
 ``` {.haskell .literate}
-module ATMC.Lec2ConcurrentSMTesting where
+module ATMC.Lec02ConcurrentSMTesting where
 ```
 
 ``` {.haskell .literate}
@@ -266,7 +250,7 @@ import Test.HUnit hiding (assert)
 ```
 
 ``` {.haskell .literate}
-import ATMC.Lec1SMTesting
+import ATMC.Lec01SMTesting
 ```
 
 # Concurrent state machine testing with linearisability
@@ -519,7 +503,7 @@ assertHistory msg hist =
 ---
 
 ``` {.haskell .literate}
-module ATMC.Lec3SMContractTesting where
+module ATMC.Lec03SMContractTesting where
 ```
 
 ``` {.haskell .literate}
@@ -558,15 +542,15 @@ import Data.IORef
 ## SUT B: a queue (producer of the interface)
 
 ``` {.haskell .literate}
-import ATMC.Lec3.QueueInterface
-import ATMC.Lec3.Queue
-import ATMC.Lec3.QueueTest
+import ATMC.Lec03.QueueInterface
+import ATMC.Lec03.Queue
+import ATMC.Lec03.QueueTest
 ```
 
 ## SUT A: web service (consumer of the interface)
 
 ``` {.haskell .literate}
-import ATMC.Lec3.Service
+import ATMC.Lec03.Service
 ```
 
 ------------------------------------------------------------------------
@@ -639,7 +623,7 @@ Why not just spin up the real component B when testing component A?
 ---
 
 ``` {.haskell .literate}
-module ATMC.Lec4FaultInjection where
+module ATMC.Lec04FaultInjection where
 ```
 
 # Fault-injection
@@ -658,16 +642,23 @@ module ATMC.Lec4FaultInjection where
 
 ## Discussion
 
-Can we not just inject real faults like Jepsen does? [`iptables`](https://linux.die.net/man/8/iptables) for dropping messages and network partitions, [`tc`](https://man7.org/linux/man-pages/man8/tc.8.html) for creating latency or simulating a slow connection on the network, [`(p)kill`](https://linux.die.net/man/1/kill) for killing processes, `kill -STOP $pid` and `kill -CONT $pid` for pausing and resuming processes to simulate long I/O or GC pauses, [`libfaketime`](https://github.com/wolfcw/libfaketime) for clock-skews, etc?
+-   Can we not just inject real faults like Jepsen does? [`iptables`](https://linux.die.net/man/8/iptables) for dropping messages and network partitions, [`tc`](https://man7.org/linux/man-pages/man8/tc.8.html) for creating latency or simulating a slow connection on the network, [`(p)kill`](https://linux.die.net/man/1/kill) for killing processes, `kill -STOP   $pid` and `kill -CONT $pid` for pausing and resuming processes to simulate long I/O or GC pauses, [`libfaketime`](https://github.com/wolfcw/libfaketime) for clock-skews, etc?
 
-We could, after all Jepsen is a very successful at finding bugs in distributed databases using these techniques. However keep in mind exactly how Jepsen is used: typically companies hire Kyle Kingsbury for a couple of weeks/months, he writes the tests and runs them, analyses the results and writes a report.
+    We could, after all Jepsen is a very successful at finding bugs in distributed databases using these techniques. However keep in mind exactly how Jepsen is used: typically companies hire Kyle Kingsbury for a couple of weeks/months, he writes the tests and runs them, analyses the results and writes a report.
 
-XXX:
+    XXX:
 
--   non-deterministic
--   slow
--   ci flakiness
--   blackbox
+    -   requires root, needs to be done in containers or vm which slows down and complicates start up
+    -   non-deterministic
+    -   slow
+    -   ci flakiness
+    -   blackbox
+
+-   Can we contract test the fault injection? I.e. how do we know that the faults we inject correspond to real faults that can happen? How can we be sure to have covered all possible real faults?
+
+    XXX:
+
+    -   fault models, e.g. see: https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models
 
 ## Exercises
 
@@ -681,11 +672,11 @@ XXX:
 ---
 
 ``` {.haskell .literate}
-module ATMC.Lec5SimulationTesting where
+module ATMC.Lec05SimulationTesting where
 ```
 
 ``` {.haskell .literate}
-import ATMC.Lec5.EventLoop
+import ATMC.Lec05.EventLoop
 ```
 
 # Simulation testing
@@ -805,7 +796,7 @@ The simulation code is open source and can be found [here](https://github.com/in
 ---
 
 ``` {.haskell .literate}
-module ATMC.Lec6WhiteboxCheckers where
+module ATMC.Lec06WhiteboxCheckers where
 ```
 
 ## Motivation
@@ -825,7 +816,7 @@ module ATMC.Lec6WhiteboxCheckers where
 ---
 
 ``` {.haskell .literate}
-module ATMC.Lec7EfficientEventLoop where
+module ATMC.Lec07EfficientEventLoop where
 ```
 
 ## Motivation
@@ -845,7 +836,7 @@ module ATMC.Lec7EfficientEventLoop where
 ---
 
 ``` {.haskell .literate}
-module ATMC.Lec8AsyncFileSystemIO where
+module ATMC.Lec08AsyncFileSystemIO where
 ```
 
 ## Motivation
@@ -861,7 +852,7 @@ module ATMC.Lec8AsyncFileSystemIO where
 ---
 
 ``` {.haskell .literate}
-module ATMC.Lec9SMUpgrades where
+module ATMC.Lec09SMUpgrades where
 ```
 
 # State machine upgrades
@@ -880,6 +871,22 @@ module ATMC.Lec9SMUpgrades where
 ## See also
 
 -   Erlang hot-code swapping
+
+---
+
+``` {.haskell .literate}
+module ATMC.Lec10LibraryOrFramework where
+```
+
+## Motivation
+
+-   How can we take everything we've done so far and pack it up in a nice way so that many different applications can be written, easily communicate with each other all while being conveniently debuggable?
+
+## See also
+
+-   Jane Street's [Concord](https://signalsandthreads.com/state-machine-replication-and-why-you-should-care/) framework
+
+-   Chuck's Bandwagon framework
 
 ---
 
@@ -942,11 +949,11 @@ module ATMC where
 ```
 
 ``` {.haskell .literate}
-import ATMC.Lec1SMTesting
-import ATMC.Lec2ConcurrentSMTesting
-import ATMC.Lec3SMContractTesting
-import ATMC.Lec4FaultInjection
-import ATMC.Lec5SimulationTesting
+import ATMC.Lec01SMTesting
+import ATMC.Lec02ConcurrentSMTesting
+import ATMC.Lec03SMContractTesting
+import ATMC.Lec04FaultInjection
+import ATMC.Lec05SimulationTesting
 ```
 
 ---

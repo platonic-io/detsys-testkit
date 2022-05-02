@@ -75,8 +75,8 @@ Table of contents
 
 > module ATMC where
 
-> import ATMC.Lec1SMTesting
-> import ATMC.Lec2ConcurrentSMTesting
-> import ATMC.Lec3SMContractTesting
-> import ATMC.Lec4FaultInjection
-> import ATMC.Lec5SimulationTesting
+> import ATMC.Lec01SMTesting
+> import ATMC.Lec02ConcurrentSMTesting
+> import ATMC.Lec03SMContractTesting
+> import ATMC.Lec04FaultInjection
+> import ATMC.Lec05SimulationTesting
