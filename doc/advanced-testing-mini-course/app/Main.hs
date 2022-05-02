@@ -3,19 +3,19 @@ module Main where
 import System.Environment
 import Control.Exception (assert)
 
-import ATMC.Lec5.EventLoop
-import ATMC.Lec5.StateMachine
-import ATMC.Lec5.Configuration
-import ATMC.Lec5.Codec
-import ATMC.Lec5.Debug
-import ATMC.Lec5.Random
-import ATMC.Lec5.History
+import ATMC.Lec05.EventLoop
+import ATMC.Lec05.StateMachine
+import ATMC.Lec05.Configuration
+import ATMC.Lec05.Codec
+import ATMC.Lec05.Debug
+import ATMC.Lec05.Random
+import ATMC.Lec05.History
 
-import ATMC.Lec2ConcurrentSMTesting
+import ATMC.Lec02ConcurrentSMTesting
 
-import ATMC.Lec5.ViewstampReplication.State (ReplicatedStateMachine(..))
-import qualified ATMC.Lec5.ViewstampReplication.Machine as VR
-import ATMC.Lec5.ViewstampReplication.Message
+import ATMC.Lec05.ViewstampReplication.State (ReplicatedStateMachine(..))
+import qualified ATMC.Lec05.ViewstampReplication.Machine as VR
+import ATMC.Lec05.ViewstampReplication.Message
 
 ------------------------------------------------------------------------
 
