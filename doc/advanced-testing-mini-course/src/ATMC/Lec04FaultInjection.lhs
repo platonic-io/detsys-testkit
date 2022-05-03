@@ -60,7 +60,7 @@ Plan
 >       case fault of
 >         Just Empty          -> return Nothing
 >         Just (ReadFail err) -> throwIO err
->         _otherwse           -> qiDequeue fake
+>         _otherwise          -> qiDequeue fake
 
 > injectFullFault :: FaultyFakeQueue a -> IO ()
 > injectFullFault (FaultyFakeQueue _queue ref) = writeIORef ref (Just Full)
@@ -104,9 +104,10 @@ Discussion
 
   * requires root, needs to be done in containers or vm which slows down and
     complicates start up
+  * imprecise (e.g. `iptables` can't drop exactly the 42nd message and only if it's a read)
   * non-deterministic
-  * slow
-  * ci flakiness
+  * slow (we need to wait for timeouts to happend, ~30-90 secs)
+  * ci flakiness (e.g. `docker pull` failing)
   * blackbox
 
 - Can we contract test the fault injection? I.e. how do we know that the faults
@@ -116,6 +117,25 @@ Discussion
   XXX:
 
   * fault models, e.g. see: https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models
+
+- What about [Chaos engineering](https://en.wikipedia.org/wiki/Chaos_engineering)?
+
+  + Chaos engineering has the same downsides as Jepsen when it comes to being slow
+    and non-deterministic
+
+  + It's important to remember in which context it was developed: Netflix
+    (hundreds(?) of already designed and deployed systems spanning datacentres
+    around the globe), unless you are in that same situation then the fault
+    injection techniques discussed here are far simpler to implement
+
+  + Works at a different level, e.g. "over 5% of the traffic receives 500
+    errors", rather than "assertion A failed at line number L", i.e. test
+    failures will pin-point you much more precisely to where the problem is
+
+  + Tests production configurations, as well as monitoring and alerting
+
+  + In conclusion: chaos engineering is complementary to what we discribed here,
+    but probably less bang for the buck and should be done later
 
 Exercises
 ---------
