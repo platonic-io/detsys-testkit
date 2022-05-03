@@ -95,6 +95,10 @@ generateNonce = Nonce <$> random
 
 initStateTransfer :: VR s o r ()
 initStateTransfer = do
+  {- 4.3 Recovery
+1. The recovering replica, i, sends a 〈RECOVERY i, x〉
+message to all other replicas, where x is a nonce.
+-}
   guardM $ use (currentStatus.to (== Normal))
   currentStatus .= Recovering
   nonce <- generateNonce
@@ -244,6 +248,39 @@ forming the up-call to the service code, increments
 its commit-number, updates the client’s entry in the
 client-table, but does not send the reply to the client.
     -}
+    tODO
+  Recovery x -> do
+    let i = from
+    {- 4.3 Recovery
+2. A replica j replies to a RECOVERY message only
+when its status is normal. In this case the replica
+sends a 〈RECOVERYRESPONSE v, x, l, n, k, j〉 mes-
+sage to the recovering replica, where v is its view-
+number and x is the nonce in the RECOVERY mes-
+sage. If j is the primary of its view, l is its log, n is
+its op-number, and k is the commit-number; other-
+wise these values are nil.
+    -}
+    guardM $ use (currentStatus.to (== Normal))
+    v <- use currentViewNumber
+    l <- use theLog
+    j <- use replicaNumber
+    isP <- isPrimary
+    resp <- case isP of
+      True -> FromPrimary <$> {- n -} use opNumber <*> {- k -} use commitNumber
+      False -> pure FromReplica
+    send i $ RecoveryResponse v x l resp j
+  RecoveryResponse v x l resp j -> do
+    {- 4.3 Recovery
+3. The recovering replica waits to receive at least f +
+1 RECOVERYRESPONSE messages from different
+replicas, all containing the nonce it sent in its RE-
+COVERY message, including one from the primary
+of the latest view it learns of in these messages.
+Then it updates its state using the information from
+the primary, changes its status to normal, and the
+recovery protocol is complete.
+-}
     tODO
 
 sm :: [NodeId] -> NodeId
