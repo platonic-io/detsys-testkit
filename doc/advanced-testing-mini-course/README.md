@@ -1,8 +1,76 @@
-``` {.haskell .literate}
-module ATMC.Lec01SMTesting where
+# Advanced property-based testing mini-course
+
+-   Goals:
+
+    -   Show how to test stateful (i.e. impure/monadic) programs using property-based testing in general;
+    -   Show how to use fault injection and so called simulation testing to test distributed systems in particular;
+    -   Introduce the reader to related work and open problems in the area.
+
+-   Pre-requisites:
+
+    -   Enough familiarity with Haskell to be able to read simple programs, for example if you can follow along in the *Learn You a Haskell for Great Good!* [tutorial](http://learnyouahaskell.com/chapters), then you should be fine;
+
+    -   Basic knowledge of state machines (i.e. [Mealy](https://en.wikipedia.org/wiki/Mealy_machine) / [Moore machines](https://en.wikipedia.org/wiki/Moore_machine) and [transducers](https://en.wikipedia.org/wiki/Finite-state_transducer)).
+
+    -   Some experience with property-based testing of non-stateful (i.e. pure) programs. For example as explained in the official QuickCheck [manual](http://www.cse.chalmers.se/~rjmh/QuickCheck/manual.html) or in the following [tutorial](https://begriffs.com/posts/2017-01-14-design-use-quickcheck.html).
+
+## Structure
+
+Each lecture has the following structure:
+
+-   Motiviation: explains why we are doing what we are about to do;
+-   Plan: how we will do it;
+-   Code: an implementation of the idea;
+-   Discussion: common questions or objections;
+-   Exercises: things the authors were to lazy to do, but they know how to;
+-   Problems: things the authors don't know how to do (yet);
+-   See also: links to further reading about the topic or related topics;
+-   Summary: the most important take away.
+
+The lectures build upon each other. We start by modelling and testing a simple counter using a state machine in lecture 1, we then reuse the same state machine model to test the counter of thread-safety using linearisability in lecture 2. In lecture 3 we will implement a queue and a web service that uses said queue, the state machine model for the queue and the real implementation of the queue will be contract tested to ensure that the model is faithful to the implementation, subsequently while testing the web service we will use the model in place of the real queue. In lecture 4 we introduce fault injection to the queue allowing us to test how the web service performs when its dependency fails. Finally, in lecture 5, we combine all the above ideas in what, sometimes is called simulation testing, to test a distributed system that uses replicated state machines.
+
+## Table of contents
+
+1.  State machine testing
+
+-   State machine models
+-   Pre-conditions
+-   Coverage
+-   Execution trace for counterexamples
+-   Regression tests from counterexamples
+-   Metrics
+-   References?
+
+2.  Concurrent state machine testing with linearisability
+
+-   Generalise generation and execution to N threads
+-   Collect history
+-   Enumerate all possible sequential executions from concurrent history
+-   Write simple linearisability checker: check if there's any such sequential execution that satisifies the (sequential) state machine model
+
+3.  Consumer-driven contract tests using state machines
+4.  Fault-injection
+5.  Simulation testing
+
+```haskell
+module Lec00Introduction where
 ```
 
-``` {.haskell .literate}
+```haskell
+import Lec01SMTesting
+import Lec02ConcurrentSMTesting
+import Lec03SMContractTesting
+import Lec04FaultInjection
+import Lec05SimulationTesting
+```
+
+---
+
+```haskell
+module Lec01SMTesting where
+```
+
+```haskell
 import Control.Monad.IO.Class
 import Data.IORef
 import Test.QuickCheck
@@ -28,120 +96,120 @@ XXX: ...
 
 ## SUT
 
-``` {.haskell .literate}
+```haskell
 newtype Counter = Counter (IORef Int)
 ```
 
-``` {.haskell .literate}
+```haskell
 newCounter :: IO Counter
 newCounter = do
   ref <- newIORef 0
   return (Counter ref)
 ```
 
-``` {.haskell .literate}
+```haskell
 incr :: Counter -> IO ()
 incr (Counter ref) = do
   n <- readIORef ref
   writeIORef ref (n + 1)
 ```
 
-``` {.haskell .literate}
+```haskell
 get :: Counter -> IO Int
 get (Counter ref) = readIORef ref
 ```
 
 ## State machine model/specification/fake
 
-``` {.haskell .literate}
+```haskell
 newtype FakeCounter = FakeCounter Int
 ```
 
-``` {.haskell .literate}
+```haskell
 fakeIncr :: FakeCounter -> (FakeCounter, ())
 fakeIncr (FakeCounter i) = (FakeCounter (i + 1), ())
 ```
 
-``` {.haskell .literate}
+```haskell
 fakeGet :: FakeCounter -> (FakeCounter, Int)
 fakeGet (FakeCounter i) = (FakeCounter i, i)
 ```
 
-``` {.haskell .literate}
+```haskell
 data Command = Incr | Get
   deriving (Eq, Show)
 ```
 
-``` {.haskell .literate}
+```haskell
 data Response = Unit () | Int Int
   deriving (Eq, Show)
 ```
 
-``` {.haskell .literate}
+```haskell
 type Model = FakeCounter
 ```
 
-``` {.haskell .literate}
+```haskell
 initModel :: Model
 initModel = FakeCounter 0
 ```
 
-``` {.haskell .literate}
+```haskell
 step :: Model -> Command -> (Model, Response)
 step m cmd = case cmd of
   Incr -> Unit <$> fakeIncr m
   Get  -> Int  <$> fakeGet m
 ```
 
-``` {.haskell .literate}
+```haskell
 exec :: Counter -> Command -> IO Response
 exec c cmd = case cmd of
   Incr -> Unit <$> incr c
   Get  -> Int  <$> get c
 ```
 
-``` {.haskell .literate}
+```haskell
 newtype Program = Program [Command]
   deriving Show
 ```
 
-``` {.haskell .literate}
+```haskell
 genCommand :: Gen Command
 genCommand = elements [Incr, Get]
 ```
 
-``` {.haskell .literate}
+```haskell
 genProgram :: Model -> Gen Program
 genProgram _m = Program <$> listOf genCommand
 ```
 
-``` {.haskell .literate}
+```haskell
 samplePrograms :: IO [Program]
 samplePrograms = sample' (genProgram initModel)
 ```
 
-``` {.haskell .literate}
+```haskell
 validProgram :: Model -> [Command] -> Bool
 validProgram _mode _cmds = True
 ```
 
-``` {.haskell .literate}
+```haskell
 shrinkCommand :: Command -> [Command]
 shrinkCommand _cmd = []
 ```
 
-``` {.haskell .literate}
+```haskell
 shrinkProgram :: Program -> [Program]
 shrinkProgram _prog = [] -- Exercises.
 ```
 
-``` {.haskell .literate}
+```haskell
 forallPrograms :: (Program -> Property) -> Property
 forallPrograms p =
   forAllShrink (genProgram initModel) shrinkProgram p
 ```
 
-``` {.haskell .literate}
+```haskell
 prop_counter :: Property
 prop_counter = forallPrograms $ \prog -> monadicIO $ do
   c <- run newCounter
@@ -149,7 +217,7 @@ prop_counter = forallPrograms $ \prog -> monadicIO $ do
   runProgram c m prog
 ```
 
-``` {.haskell .literate}
+```haskell
 runProgram :: MonadIO m => Counter -> Model -> Program -> m Bool
 runProgram c0 m0 (Program cmds) = go c0 m0 cmds
   where
@@ -164,7 +232,7 @@ runProgram c0 m0 (Program cmds) = go c0 m0 cmds
 
 ## Regression tests
 
-``` {.haskell .literate}
+```haskell
 assertProgram :: String -> Program -> Assertion
 assertProgram msg prog = do
   c <- newCounter
@@ -225,17 +293,17 @@ assertProgram msg prog = do
 
 ---
 
-``` {.haskell .literate}
+```haskell
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveFoldable #-}
 ```
 
-``` {.haskell .literate}
-module ATMC.Lec02ConcurrentSMTesting where
+```haskell
+module Lec02ConcurrentSMTesting where
 ```
 
-``` {.haskell .literate}
+```haskell
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
@@ -249,8 +317,8 @@ import Test.QuickCheck.Monadic
 import Test.HUnit hiding (assert)
 ```
 
-``` {.haskell .literate}
-import ATMC.Lec01SMTesting
+```haskell
+import Lec01SMTesting
 ```
 
 # Concurrent state machine testing with linearisability
@@ -263,12 +331,12 @@ import ATMC.Lec01SMTesting
 
 -   E.g. counters are often shared among different threads, how can we test that the counter implementation is thread-safe?
 
-``` {.haskell .literate}
+```haskell
 newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
   deriving Show
 ```
 
-``` {.haskell .literate}
+```haskell
 forAllConcProgram :: (ConcProgram -> Property) -> Property
 forAllConcProgram k =
   forAllShrinkShow (genConcProgram m) (shrinkConcProgram m) prettyConcProgram k
@@ -276,7 +344,7 @@ forAllConcProgram k =
     m = initModel
 ```
 
-``` {.haskell .literate}
+```haskell
 genConcProgram :: Model -> Gen ConcProgram
 genConcProgram m0 = sized (go m0 [])
   where
@@ -288,17 +356,17 @@ genConcProgram m0 = sized (go m0 [])
                     go (advanceModel m cmds) (cmds : acc) (sz - n)
 ```
 
-``` {.haskell .literate}
+```haskell
 advanceModel :: Model -> [Command] -> Model
 advanceModel m cmds = foldl (\ih cmd -> fst (step ih cmd)) m cmds
 ```
 
-``` {.haskell .literate}
+```haskell
 concSafe :: Model -> [Command] -> Bool
 concSafe m0 = all (validProgram m0) . permutations
 ```
 
-``` {.haskell .literate}
+```haskell
 validConcProgram :: Model -> ConcProgram -> Bool
 validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
   where
@@ -308,7 +376,7 @@ validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
     go m acc   (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
 ```
 
-``` {.haskell .literate}
+```haskell
 shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
 shrinkConcProgram m
   = filter (validConcProgram m)
@@ -318,42 +386,42 @@ shrinkConcProgram m
   . unConcProgram
 ```
 
-``` {.haskell .literate}
+```haskell
 prettyConcProgram :: ConcProgram -> String
 prettyConcProgram = show
 ```
 
-``` {.haskell .literate}
+```haskell
 newtype History' cmd resp = History [Operation' cmd resp]
   deriving (Show, Functor, Foldable)
 ```
 
-``` {.haskell .literate}
+```haskell
 type History = History' Command Response
 ```
 
-``` {.haskell .literate}
+```haskell
 newtype Pid = Pid Int
   deriving (Eq, Ord, Show)
 ```
 
-``` {.haskell .literate}
+```haskell
 data Operation' cmd resp
   = Invoke Pid cmd
   | Ok     Pid resp
   deriving (Show, Functor, Foldable)
 ```
 
-``` {.haskell .literate}
+```haskell
 type Operation = Operation' Command Response
 ```
 
-``` {.haskell .literate}
+```haskell
 toPid :: ThreadId -> Pid
 toPid tid = Pid (read (drop (length ("ThreadId " :: String)) (show tid)))
 ```
 
-``` {.haskell .literate}
+```haskell
 concExec :: TQueue Operation -> Counter -> Command -> IO ()
 concExec queue counter cmd = do
   pid <- toPid <$> myThreadId
@@ -367,7 +435,7 @@ concExec queue counter cmd = do
 
 Generate all possible single-threaded executions from the concurrent history.
 
-``` {.haskell .literate}
+```haskell
 interleavings :: History' cmd resp -> Forest (cmd, resp)
 interleavings (History [])  = []
 interleavings (History ops) =
@@ -383,7 +451,7 @@ interleavings (History ops) =
     takeInvocations ((Ok    _pid _resp) : _)   = []
 ```
 
-``` {.haskell .literate}
+```haskell
     findResponse :: Pid -> [Operation' cmd resp] -> [(resp, [Operation' cmd resp])]
     findResponse _pid []                                   = []
     findResponse  pid ((Ok pid' resp) : ops) | pid == pid' = [(resp, ops)]
@@ -391,13 +459,13 @@ interleavings (History ops) =
       [ (resp, op : ops') | (resp, ops') <- findResponse pid ops ]
 ```
 
-``` {.haskell .literate}
+```haskell
     matchInvocation :: Pid -> Operation' cmd resp -> Bool
     matchInvocation pid (Invoke pid' _cmd) = pid == pid'
     matchInvocation _   _                  = False
 ```
 
-``` {.haskell .literate}
+```haskell
     filter1 :: (a -> Bool) -> [a] -> [a]
     filter1 _ []                   = []
     filter1 p (x : xs) | p x       = x : filter1 p xs
@@ -406,7 +474,7 @@ interleavings (History ops) =
 
 If any one of the single-threaded executions respects the state machine model, then the concurrent execution is correct.
 
-``` {.haskell .literate}
+```haskell
 linearisable :: forall model cmd resp. Eq resp
              => (model -> cmd -> (model, resp)) -> model -> Forest (cmd, resp) -> Bool
 linearisable step0 model0 = any' (go model0)
@@ -419,13 +487,13 @@ linearisable step0 model0 = any' (go model0)
         resp == resp' && any' (go model') ts
 ```
 
-``` {.haskell .literate}
+```haskell
     any' :: (a -> Bool) -> [a] -> Bool
     any' _p [] = True
     any'  p xs = any p xs
 ```
 
-``` {.haskell .literate}
+```haskell
 prop_concurrent :: Property
 prop_concurrent = mapSize (min 20) $
   forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
@@ -451,13 +519,13 @@ prop_concurrent = mapSize (min 20) $
       . classify (500 < length cmds)                       "length commands: >501"
 ```
 
-``` {.haskell .literate}
+```haskell
     constructorString :: Command -> String
     constructorString Incr {} = "Incr"
     constructorString Get  {} = "Get"
 ```
 
-``` {.haskell .literate}
+```haskell
     assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
     assertWithFail condition msg = do
       unless condition $
@@ -465,14 +533,14 @@ prop_concurrent = mapSize (min 20) $
       assert condition
 ```
 
-``` {.haskell .literate}
+```haskell
 prettyHistory :: History -> String
 prettyHistory = show
 ```
 
 ## Regression testing
 
-``` {.haskell .literate}
+```haskell
 assertHistory :: String -> History -> Assertion
 assertHistory msg hist =
   assertBool (prettyHistory hist) (linearisable step initModel (interleavings hist))
@@ -502,11 +570,11 @@ assertHistory msg hist =
 
 ---
 
-``` {.haskell .literate}
-module ATMC.Lec03SMContractTesting where
+```haskell
+module Lec03SMContractTesting where
 ```
 
-``` {.haskell .literate}
+```haskell
 import Data.IORef
 ```
 
@@ -541,16 +609,16 @@ import Data.IORef
 
 ## SUT B: a queue (producer of the interface)
 
-``` {.haskell .literate}
-import ATMC.Lec03.QueueInterface
-import ATMC.Lec03.Queue
-import ATMC.Lec03.QueueTest
+```haskell
+import Lec03.QueueInterface
+import Lec03.Queue
+import Lec03.QueueTest
 ```
 
 ## SUT A: web service (consumer of the interface)
 
-``` {.haskell .literate}
-import ATMC.Lec03.Service
+```haskell
+import Lec03.Service
 ```
 
 ------------------------------------------------------------------------
@@ -622,8 +690,13 @@ Why not just spin up the real component B when testing component A?
 
 ---
 
-``` {.haskell .literate}
-module ATMC.Lec04FaultInjection where
+```haskell
+module Lec04FaultInjection where
+```
+
+```haskell
+import Control.Exception
+import Data.IORef
 ```
 
 # Fault-injection
@@ -640,6 +713,84 @@ module ATMC.Lec04FaultInjection where
     -   read fails, e.g. bug in queue causes exception to be thrown
     -   read returns a malformed write which no longer deserialises, or has a valid client request id to send the response to
 
+## Faulty queue
+
+```haskell
+import Lec03.QueueInterface
+import Lec03.Service
+```
+
+```haskell
+data FaultyFakeQueue a = FaultyFakeQueue
+  { ffqQueue :: QueueI a
+  , ffqFault :: IORef (Maybe Fault)
+  }
+```
+
+```haskell
+data Fault = Full | Empty | ReadFail IOException
+```
+
+```haskell
+faultyFakeQueue :: Int -> IO (FaultyFakeQueue a)
+faultyFakeQueue size = do
+  fake <- fakeQueue size
+  ref  <- newIORef Nothing
+  return FaultyFakeQueue
+    { ffqQueue = QueueI
+        { qiEnqueue = enqueue fake ref
+        , qiDequeue = dequeue fake ref
+        }
+    , ffqFault = ref
+    }
+  where
+    enqueue fake ref x = do
+      fault <- readIORef ref
+      case fault of
+        Just Full  -> return False
+        _otherwise -> qiEnqueue fake x
+```
+
+```haskell
+    dequeue fake ref = do
+      fault <- readIORef ref
+      case fault of
+        Just Empty          -> return Nothing
+        Just (ReadFail err) -> throwIO err
+        _otherwise          -> qiDequeue fake
+```
+
+```haskell
+injectFullFault :: FaultyFakeQueue a -> IO ()
+injectFullFault (FaultyFakeQueue _queue ref) = writeIORef ref (Just Full)
+```
+
+```haskell
+injectEmptyFault :: FaultyFakeQueue a -> IO ()
+injectEmptyFault (FaultyFakeQueue _queue ref) = writeIORef ref (Just Empty)
+```
+
+```haskell
+injectReadFailFault :: FaultyFakeQueue a -> IOException -> IO ()
+injectReadFailFault (FaultyFakeQueue _queue ref) err = writeIORef ref (Just (ReadFail err))
+```
+
+```haskell
+removeFault :: FaultyFakeQueue a -> IO ()
+removeFault (FaultyFakeQueue _queue ref) = writeIORef ref Nothing
+```
+
+```haskell
+test_injectFullFault :: IO ()
+test_injectFullFault = do
+  ffq <- faultyFakeQueue 4
+  res1 <- qiEnqueue (ffqQueue ffq) "test1"
+  assert (res1 == True) (return ())
+  injectFullFault ffq
+  res2 <- qiEnqueue (ffqQueue ffq) "test2"
+  assert (res2 == False) (return ())
+```
+
 ## Discussion
 
 -   Can we not just inject real faults like Jepsen does? [`iptables`](https://linux.die.net/man/8/iptables) for dropping messages and network partitions, [`tc`](https://man7.org/linux/man-pages/man8/tc.8.html) for creating latency or simulating a slow connection on the network, [`(p)kill`](https://linux.die.net/man/1/kill) for killing processes, `kill -STOP   $pid` and `kill -CONT $pid` for pausing and resuming processes to simulate long I/O or GC pauses, [`libfaketime`](https://github.com/wolfcw/libfaketime) for clock-skews, etc?
@@ -649,20 +800,35 @@ module ATMC.Lec04FaultInjection where
     XXX:
 
     -   requires root, needs to be done in containers or vm which slows down and complicates start up
+    -   imprecise (e.g. `iptables` can't drop exactly the 42nd message and only if it's a read)
     -   non-deterministic
-    -   slow
-    -   ci flakiness
+    -   slow (we need to wait for timeouts to happend, \~30-90 secs)
+    -   ci flakiness (e.g. `docker pull` failing)
     -   blackbox
 
 -   Can we contract test the fault injection? I.e. how do we know that the faults we inject correspond to real faults that can happen? How can we be sure to have covered all possible real faults?
 
-    XXX:
+    To answer questions of this kind it helps to specify fault models, for an example of this see `tigerbeetle`'s [documentation](https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models), one then manually needs to convince oneself of the fact that the fault models are covered by the fault injection.
 
-    -   fault models, e.g. see: https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models
+-   What about [Chaos engineering](https://en.wikipedia.org/wiki/Chaos_engineering)?
+
+    -   Chaos engineering has the same downsides as Jepsen when it comes to being slow and non-deterministic
+
+    -   It's important to remember in which context it was developed: Netflix (hundreds(?) of already designed and deployed systems spanning datacentres around the globe), unless you are in that same situation then the fault injection techniques discussed here are far simpler to implement
+
+    -   Works at a different level, e.g. "over 5% of the traffic receives 500 errors", rather than "assertion A failed at line number L", i.e. test failures will pin-point you much more precisely to where the problem is
+
+    -   Tests production configurations, as well as monitoring and alerting
+
+    -   In conclusion: chaos engineering is complementary to what we discribed here, but probably less bang for the buck and should be done later -- remember the quote from the motivation: "\[...\] in 58% of the catastrophic failures, the underlying faults could easily have been detected through simple testing of error handling code."
 
 ## Exercises
 
 0.  Try to imagine how much more difficult it would be to write these tests without injecting the faults in the fake, but rather the real dependency.
+
+## Problems
+
+0.  Can we do better than randomly inserting faults? (Hint: see [*Lineage-driven Fault Injection*](https://people.ucsc.edu/~palvaro/molly.pdf) by Alvaro et al (2015))
 
 ## See also
 
@@ -671,12 +837,12 @@ module ATMC.Lec04FaultInjection where
 
 ---
 
-``` {.haskell .literate}
-module ATMC.Lec05SimulationTesting where
+```haskell
+module Lec05SimulationTesting where
 ```
 
-``` {.haskell .literate}
-import ATMC.Lec05.EventLoop
+```haskell
+import Lec05.EventLoop
 ```
 
 # Simulation testing
@@ -795,8 +961,8 @@ The simulation code is open source and can be found [here](https://github.com/in
 
 ---
 
-``` {.haskell .literate}
-module ATMC.Lec06WhiteboxCheckers where
+```haskell
+module Lec06WhiteboxCheckers where
 ```
 
 ## Motivation
@@ -815,8 +981,8 @@ module ATMC.Lec06WhiteboxCheckers where
 
 ---
 
-``` {.haskell .literate}
-module ATMC.Lec07EfficientEventLoop where
+```haskell
+module Lec07EfficientEventLoop where
 ```
 
 ## Motivation
@@ -835,8 +1001,8 @@ module ATMC.Lec07EfficientEventLoop where
 
 ---
 
-``` {.haskell .literate}
-module ATMC.Lec08AsyncFileSystemIO where
+```haskell
+module Lec08AsyncFileSystemIO where
 ```
 
 ## Motivation
@@ -851,8 +1017,8 @@ module ATMC.Lec08AsyncFileSystemIO where
 
 ---
 
-``` {.haskell .literate}
-module ATMC.Lec09SMUpgrades where
+```haskell
+module Lec09SMUpgrades where
 ```
 
 # State machine upgrades
@@ -874,8 +1040,8 @@ module ATMC.Lec09SMUpgrades where
 
 ---
 
-``` {.haskell .literate}
-module ATMC.Lec10LibraryOrFramework where
+```haskell
+module Lec10LibraryOrFramework where
 ```
 
 ## Motivation
@@ -887,74 +1053,6 @@ module ATMC.Lec10LibraryOrFramework where
 -   Jane Street's [Concord](https://signalsandthreads.com/state-machine-replication-and-why-you-should-care/) framework
 
 -   Chuck's Bandwagon framework
-
----
-
-# Advanced property-based testing mini-course
-
--   Goals:
-
-    -   Show how to test stateful (i.e. impure/monadic) programs using property-based testing in general;
-    -   Show how to use fault injection and so called simulation testing to test distributed systems in particular;
-    -   Introduce the reader to related work and open problems in the area.
-
--   Pre-requisites:
-
-    -   Enough familiarity with Haskell to be able to read simple programs, for example if you can follow along in the *Learn You a Haskell for Great Good!* [tutorial](http://learnyouahaskell.com/chapters), then you should be fine;
-
-    -   Basic knowledge of state machines (i.e. [Mealy](https://en.wikipedia.org/wiki/Mealy_machine) / [Moore machines](https://en.wikipedia.org/wiki/Moore_machine) and [transducers](https://en.wikipedia.org/wiki/Finite-state_transducer)).
-
-    -   Some experience with property-based testing of non-stateful (i.e. pure) programs. For example as explained in the official QuickCheck [manual](http://www.cse.chalmers.se/~rjmh/QuickCheck/manual.html) or in the following [tutorial](https://begriffs.com/posts/2017-01-14-design-use-quickcheck.html).
-
-## Structure
-
-Each lecture has the following structure:
-
--   Motiviation: explains why we are doing what we are about to do;
--   Plan: how we will do it;
--   Code: an implementation of the idea;
--   Discussion: common questions or objections;
--   Exercises: things the authors were to lazy to do, but they know how to;
--   Problems: things the authors don't know how to do (yet);
--   See also: links to further reading about the topic or related topics;
--   Summary: the most important take away.
-
-The lectures build upon each other. We start by modelling and testing a simple counter using a state machine in lecture 1, we then reuse the same state machine model to test the counter of thread-safety using linearisability in lecture 2. In lecture 3 we will implement a queue and a web service that uses said queue, the state machine model for the queue and the real implementation of the queue will be contract tested to ensure that the model is faithful to the implementation, subsequently while testing the web service we will use the model in place of the real queue. In lecture 4 we introduce fault injection to the queue allowing us to test how the web service performs when its dependency fails. Finally, in lecture 5, we combine all the above ideas in what, sometimes is called simulation testing, to test a distributed system that uses replicated state machines.
-
-## Table of contents
-
-1.  State machine testing
-
--   State machine models
--   Pre-conditions
--   Coverage
--   Execution trace for counterexamples
--   Regression tests from counterexamples
--   Metrics
--   References?
-
-2.  Concurrent state machine testing with linearisability
-
--   Generalise generation and execution to N threads
--   Collect history
--   Enumerate all possible sequential executions from concurrent history
--   Write simple linearisability checker: check if there's any such sequential execution that satisifies the (sequential) state machine model
-
-3.  Consumer-driven contract tests using state machines
-4.  Fault-injection
-5.  Simulation testing
-
-``` {.haskell .literate}
-module ATMC where
-```
-
-``` {.haskell .literate}
-import ATMC.Lec01SMTesting
-import ATMC.Lec02ConcurrentSMTesting
-import ATMC.Lec03SMContractTesting
-import ATMC.Lec04FaultInjection
-import ATMC.Lec05SimulationTesting
-```
 
 ---
 
