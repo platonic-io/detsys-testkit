@@ -40,6 +40,11 @@ data InternalClientMessage op = InternalClientMessage
 
 makeLenses ''InternalClientMessage
 
+data RecoveryResponse
+  = FromPrimary OpNumber CommitNumber
+  | FromReplica
+  deriving (Read, Show)
+
 data VRMessage op
   -- 4.1 Normal Operation
   = Prepare ViewNumber (InternalClientMessage op) OpNumber CommitNumber
@@ -47,7 +52,7 @@ data VRMessage op
   | Commit ViewNumber CommitNumber
   -- 4.3 Recovery
   | Recovery Nonce {- i which is node-id -}
-  | RecoveryResponse ViewNumber Nonce (Log op) OpNumber CommitNumber
+  | RecoveryResponse ViewNumber Nonce (Log op) RecoveryResponse Int
   deriving (Read, Show)
 
 (|>) :: Log op -> op -> Log op
