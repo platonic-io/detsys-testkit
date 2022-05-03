@@ -19,9 +19,9 @@ toI (i, HistEvent n bs inp as msgs) = object
   , "currentEvent" .= object
     [ "from" .= f
     , "to" .= showN n
-    , "event" .= ("" :: String) -- we don't have this? TODO
+    , "event" .= eventName m
     , "receivedLogical" .= i
-    , "message" .= show m
+    , "message" .= m
     ]
   , "runningVersion" .= (1 :: Int64) -- TODO
   , "receivedTime" .= fromEpoch t
@@ -29,6 +29,7 @@ toI (i, HistEvent n bs inp as msgs) = object
   , "sent" .= (msgs >>= toD)
   ]
   where
+    eventName = takeWhile (/= ' ')
     showN (NodeId n)   = "Node" <> show n
     showC (ClientId c) = "Client" <> show c
     (t, f, m) = case inp of
@@ -37,14 +38,14 @@ toI (i, HistEvent n bs inp as msgs) = object
     toD (ClientResponse c resp) = pure $ object
       [ "from" .= showN n
       , "to" .= showC c
-      , "event" .= ("" :: String)
+      , "event" .= eventName (show resp)
       , "receivedLogical" .= i
       , "message" .= show resp
       ]
     toD (InternalMessageOut n msg) = pure $ object
       [ "from" .= showN n
       , "to" .= showN n
-      , "event" .= ("" :: String)
+      , "event" .= eventName (show msg)
       , "receivedLogical" .= i
       , "message" .= show msg
       ]
