@@ -1,5 +1,8 @@
 > module ATMC.Lec04FaultInjection where
 
+> import Control.Exception
+> import Data.IORef
+
 Fault-injection
 ===============
 
@@ -23,6 +26,62 @@ Plan
    + read fails, e.g. bug in queue causes exception to be thrown
    + read returns a malformed write which no longer deserialises, or has a valid
      client request id to send the response to
+
+> import ATMC.Lec03.QueueInterface
+> import ATMC.Lec03.Service
+
+> data FaultyFakeQueue a = FaultyFakeQueue
+>   { ffqQueue :: QueueI a
+>   , ffqFault :: IORef (Maybe Fault)
+>   }
+
+> data Fault = Full | Empty | ReadFail IOException
+
+> faultyFakeQueue :: Int -> IO (FaultyFakeQueue a)
+> faultyFakeQueue size = do
+>   fake <- fakeQueue size
+>   ref  <- newIORef Nothing
+>   return FaultyFakeQueue
+>     { ffqQueue = QueueI
+>         { qiEnqueue = enqueue fake ref
+>         , qiDequeue = dequeue fake ref
+>         }
+>     , ffqFault = ref
+>     }
+>   where
+>     enqueue fake ref x = do
+>       fault <- readIORef ref
+>       case fault of
+>         Just Full  -> return False
+>         _otherwise -> qiEnqueue fake x
+
+>     dequeue fake ref = do
+>       fault <- readIORef ref
+>       case fault of
+>         Just Empty          -> return Nothing
+>         Just (ReadFail err) -> throwIO err
+>         _otherwse           -> qiDequeue fake
+
+> injectFullFault :: FaultyFakeQueue a -> IO ()
+> injectFullFault (FaultyFakeQueue _queue ref) = writeIORef ref (Just Full)
+
+> injectEmptyFault :: FaultyFakeQueue a -> IO ()
+> injectEmptyFault (FaultyFakeQueue _queue ref) = writeIORef ref (Just Empty)
+
+> injectReadFailFault :: FaultyFakeQueue a -> IOException -> IO ()
+> injectReadFailFault (FaultyFakeQueue _queue ref) err = writeIORef ref (Just (ReadFail err))
+
+> removeFault :: FaultyFakeQueue a -> IO ()
+> removeFault (FaultyFakeQueue _queue ref) = writeIORef ref Nothing
+
+> test_injectFullFault :: IO ()
+> test_injectFullFault = do
+>   ffq <- faultyFakeQueue 4
+>   res1 <- qiEnqueue (ffqQueue ffq) "test1"
+>   assert (res1 == True) (return ())
+>   injectFullFault ffq
+>   res2 <- qiEnqueue (ffqQueue ffq) "test2"
+>   assert (res2 == False) (return ())
 
 Discussion
 ----------
