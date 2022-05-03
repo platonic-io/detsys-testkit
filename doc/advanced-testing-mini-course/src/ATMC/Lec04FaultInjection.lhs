@@ -27,6 +27,9 @@ Plan
    + read returns a malformed write which no longer deserialises, or has a valid
      client request id to send the response to
 
+Faulty queue
+------------
+
 > import ATMC.Lec03.QueueInterface
 > import ATMC.Lec03.Service
 
@@ -114,14 +117,16 @@ Discussion
   we inject correspond to real faults that can happen? How can we be sure to
   have covered all possible real faults?
 
-  XXX:
-
-  * fault models, e.g. see: https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models
+  To answer questions of this kind it helps to specify fault models, for an
+  example of this see `tigerbeetle`'s
+  [documentation](https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models),
+  one then manually needs to convince oneself of the fact that the fault models
+  are covered by the fault injection.
 
 - What about [Chaos engineering](https://en.wikipedia.org/wiki/Chaos_engineering)?
 
-  + Chaos engineering has the same downsides as Jepsen when it comes to being slow
-    and non-deterministic
+  + Chaos engineering has the same downsides as Jepsen when it comes to being
+    slow and non-deterministic
 
   + It's important to remember in which context it was developed: Netflix
     (hundreds(?) of already designed and deployed systems spanning datacentres
@@ -135,7 +140,10 @@ Discussion
   + Tests production configurations, as well as monitoring and alerting
 
   + In conclusion: chaos engineering is complementary to what we discribed here,
-    but probably less bang for the buck and should be done later
+    but probably less bang for the buck and should be done later -- remember the
+    quote from the motivation: "[...] in 58% of the catastrophic failures, the
+    underlying faults could easily have been detected through simple testing of
+    error handling code."
 
 Exercises
 ---------
@@ -143,6 +151,12 @@ Exercises
 0. Try to imagine how much more difficult it would be to write these tests
    without injecting the faults in the fake, but rather the real dependency.
 
+Problems
+--------
+
+0. Can we do better than randomly inserting faults? (Hint: see [*Lineage-driven
+   Fault Injection*](https://people.ucsc.edu/~palvaro/molly.pdf) by Alvaro et al
+   (2015))
 
 See also
 --------
