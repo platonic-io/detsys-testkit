@@ -27,6 +27,9 @@ Plan
    + read returns a malformed write which no longer deserialises, or has a valid
      client request id to send the response to
 
+Faulty queue
+------------
+
 > import ATMC.Lec03.QueueInterface
 > import ATMC.Lec03.Service
 
@@ -60,7 +63,7 @@ Plan
 >       case fault of
 >         Just Empty          -> return Nothing
 >         Just (ReadFail err) -> throwIO err
->         _otherwse           -> qiDequeue fake
+>         _otherwise          -> qiDequeue fake
 
 > injectFullFault :: FaultyFakeQueue a -> IO ()
 > injectFullFault (FaultyFakeQueue _queue ref) = writeIORef ref (Just Full)
@@ -104,18 +107,43 @@ Discussion
 
   * requires root, needs to be done in containers or vm which slows down and
     complicates start up
+  * imprecise (e.g. `iptables` can't drop exactly the 42nd message and only if it's a read)
   * non-deterministic
-  * slow
-  * ci flakiness
+  * slow (we need to wait for timeouts to happend, ~30-90 secs)
+  * ci flakiness (e.g. `docker pull` failing)
   * blackbox
 
 - Can we contract test the fault injection? I.e. how do we know that the faults
   we inject correspond to real faults that can happen? How can we be sure to
   have covered all possible real faults?
 
-  XXX:
+  To answer questions of this kind it helps to specify fault models, for an
+  example of this see `tigerbeetle`'s
+  [documentation](https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models),
+  one then manually needs to convince oneself of the fact that the fault models
+  are covered by the fault injection.
 
-  * fault models, e.g. see: https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models
+- What about [Chaos engineering](https://en.wikipedia.org/wiki/Chaos_engineering)?
+
+  + Chaos engineering has the same downsides as Jepsen when it comes to being
+    slow and non-deterministic
+
+  + It's important to remember in which context it was developed: Netflix
+    (hundreds(?) of already designed and deployed systems spanning datacentres
+    around the globe), unless you are in that same situation then the fault
+    injection techniques discussed here are far simpler to implement
+
+  + Works at a different level, e.g. "over 5% of the traffic receives 500
+    errors", rather than "assertion A failed at line number L", i.e. test
+    failures will pin-point you much more precisely to where the problem is
+
+  + Tests production configurations, as well as monitoring and alerting
+
+  + In conclusion: chaos engineering is complementary to what we discribed here,
+    but probably less bang for the buck and should be done later -- remember the
+    quote from the motivation: "[...] in 58% of the catastrophic failures, the
+    underlying faults could easily have been detected through simple testing of
+    error handling code."
 
 Exercises
 ---------
@@ -123,6 +151,12 @@ Exercises
 0. Try to imagine how much more difficult it would be to write these tests
    without injecting the faults in the fake, but rather the real dependency.
 
+Problems
+--------
+
+0. Can we do better than randomly inserting faults? (Hint: see [*Lineage-driven
+   Fault Injection*](https://people.ucsc.edu/~palvaro/molly.pdf) by Alvaro et al
+   (2015))
 
 See also
 --------
