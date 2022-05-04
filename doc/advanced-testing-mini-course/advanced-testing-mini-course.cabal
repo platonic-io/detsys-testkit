@@ -32,6 +32,7 @@ library
     , aeson
     , bytestring
     , containers
+    , directory
     , heaps
     , http-client
     , http-types

@@ -56,6 +56,7 @@ SUT A: web service (consumer of the interface)
 ----------------------------------------------
 
 > import Lec03.Service
+> import Lec03.ServiceTest
 
 ---
 
