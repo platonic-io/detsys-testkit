@@ -52,12 +52,14 @@ Faulty queue
 >     , ffqFault = ref
 >     }
 >   where
+>     enqueue :: QueueI a -> IORef (Maybe Fault) -> a -> IO Bool
 >     enqueue fake ref x = do
 >       fault <- readIORef ref
 >       case fault of
 >         Just Full  -> return False
 >         _otherwise -> qiEnqueue fake x
 
+>     dequeue :: QueueI a -> IORef (Maybe Fault) -> IO (Maybe a)
 >     dequeue fake ref = do
 >       fault <- readIORef ref
 >       case fault of

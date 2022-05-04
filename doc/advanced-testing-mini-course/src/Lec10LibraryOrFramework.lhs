@@ -16,3 +16,7 @@ See also
   framework
 
 - Chuck's Bandwagon framework
+
+- OCaml's [Eio](https://ocaml-multicore.github.io/eio/eio/Eio/index.html) and
+  its [`io_uring`](https://en.wikipedia.org/wiki/Io_uring)
+  [backend](https://ocaml-multicore.github.io/eio/eio_linux/Eio_linux/index.html)
