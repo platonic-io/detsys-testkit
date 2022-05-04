@@ -14,7 +14,10 @@ Motivation
 
   - ["Jepsen-proof engineering"](https://sled.rs/simulation.html)
 
-Idea
+  - "Everyone knows that debugging is twice as hard as writing a program in the
+    first place." -- Brian Kernighan
+
+Plan
 ----
 
   + What interface does the event loop provide?
