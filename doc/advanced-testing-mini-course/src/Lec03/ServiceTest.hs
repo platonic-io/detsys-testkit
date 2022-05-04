@@ -5,6 +5,9 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TQueue
 import Control.Monad
+import Data.ByteString (ByteString)
+import Data.Vector (Vector)
+import qualified Data.Vector as Vector
 import Data.List (permutations)
 import Data.Tree (Forest, Tree(Node))
 import System.Directory
@@ -24,21 +27,27 @@ import Lec03.Service
 
 ------------------------------------------------------------------------
 
-data ClientRequest = WriteReq | ReadReq
+newtype Index = Index Int
+  deriving (Eq, Show)
+
+data ClientRequest = WriteReq ByteString | ReadReq Index
   deriving Show
 
-data ClientResponse = R
+data ClientResponse = WriteResp Index | ReadResp (Maybe ByteString)
   deriving (Eq, Show)
 
 newtype ConcProgram = ConcProgram [[ClientRequest]]
 
-data Model = Model
+newtype Model = Model (Vector ByteString)
 
 initModel :: Model
-initModel = undefined
+initModel = Model Vector.empty
 
 step :: Model -> ClientRequest -> (Model, ClientResponse)
-step = undefined
+step (Model vec) (WriteReq bs) =
+  (Model (Vector.snoc vec bs), WriteResp (Index (Vector.length vec + 1)))
+step (Model vec) (ReadReq (Index ix)) =
+  (Model vec, ReadResp  (vec Vector.!? ix))
 
 type Operation = Operation' ClientRequest ClientResponse
 
