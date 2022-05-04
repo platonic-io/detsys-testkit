@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Lec03.ServiceTest where
 
 import Control.Concurrent
