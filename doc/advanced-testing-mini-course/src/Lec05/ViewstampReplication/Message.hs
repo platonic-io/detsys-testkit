@@ -17,7 +17,7 @@ newtype ViewNumber = ViewNumber Int
 newtype OpNumber = OpNumber Int
   deriving newtype (Enum, Eq, Ord, Num, Read, Show, ToExpr)
 newtype CommitNumber = CommitNumber Int
-  deriving newtype (Enum, Eq, Num, Read, Show, ToExpr)
+  deriving newtype (Enum, Eq, Ord, Num, Read, Show, ToExpr)
 newtype Nonce = Nonce Int
   deriving newtype (Read, Show)
 newtype Log op = Log (Seq op)
@@ -60,4 +60,4 @@ data VRMessage op
 (Log l) |> o = Log (l S.|> o)
 
 logLookup :: OpNumber -> Log op -> Maybe op
-logLookup (OpNumber i) (Log l) = S.lookup (pred i) l
+logLookup (OpNumber i) (Log l) = S.lookup i l

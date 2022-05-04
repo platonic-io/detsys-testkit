@@ -114,6 +114,23 @@ executeReplicatedMachine op = do
   currentState .= cs'
   return result
 
+executeUpToOrBeginStateTransfer :: CommitNumber -> VR s o r ()
+executeUpToOrBeginStateTransfer (-1) = do
+  -- -1 means nothing has been comitted yet!
+  return ()
+executeUpToOrBeginStateTransfer k = do
+  myK <- use (commitNumber.to (max 0))
+  guard $ myK <= k
+  forM_ [myK .. k] $ \(CommitNumber v) -> do
+    l <- use theLog
+    case logLookup (OpNumber v) l of
+      Nothing -> initStateTransfer
+      Just op -> do
+        _r <- executeReplicatedMachine op
+        -- update clientTable?
+        return ()
+  commitNumber .= k
+
 {- 4.1 Normal Operation -- TODO: When we add ticks --
 6. Normally the primary informs backups about the
 commit when it sends the next PREPARE message;
@@ -174,8 +191,8 @@ current view-number, m is the message it received
 from the client, n is the op-number it assigned to
 the request, and k is the commit-number.
   -}
-  opNumber += 1
   cOp <- use opNumber
+  opNumber += 1
   theLog %= (|> op)
   clientTable.at c .= Just (InFlight s cOp)
   v <- use currentViewNumber
@@ -198,15 +215,8 @@ sends a 〈PREPAREOK v, n, i〉 message to the pri-
 mary to indicate that this operation and all earlier
 ones have prepared locally.
     -}
-    -- also look at step 7.
-    myK <- use opNumber
-    -- i <- use replicaNumber
-    when (succ myK /= n) $ do
-      -- We haven't processed earlier messages
-      -- should start state transfer.
-      -- TODO: for now we just drop
-      ereturn
-    opNumber += 1
+    executeUpToOrBeginStateTransfer k
+    opNumber += 1 -- or save n?
     theLog %= (|> (m^.operation))
     clientTable.at (m^.clientId) .= Just (InFlight (m^.clientRequestNumber) n)
     sendPrimary $ PrepareOk v n {- i -} -- we don't need to add i since
@@ -258,7 +268,7 @@ forming the up-call to the service code, increments
 its commit-number, updates the client’s entry in the
 client-table, but does not send the reply to the client.
     -}
-    tODO
+    executeUpToOrBeginStateTransfer k
   Recovery x -> do
     let i = from
     {- 4.3 Recovery
@@ -309,7 +319,7 @@ agenda :: Agenda
 agenda = mk
   [ ("first", 0)  -- this will complete
   , ("second", 5) -- this will be rejected
-  , ("third", 20) -- this will complete
+  , ("third", 9) -- this will complete
   ]
   where
     mk = makeAgenda . snd . List.mapAccumL op ini
