@@ -29,6 +29,7 @@ data VRRequest op
 
 data VRResponse result
   = VRReply ViewNumber RequestNumber result
+  | VROnlyOneInflightAllowed
   deriving (Eq, Read, Show)
 
 data InternalClientMessage op = InternalClientMessage
