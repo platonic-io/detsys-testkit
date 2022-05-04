@@ -94,7 +94,7 @@ State machine model/specification/fake
 > samplePrograms = sample' (genProgram initModel)
 
 > validProgram :: Model -> [Command] -> Bool
-> validProgram _mode _cmds = True
+> validProgram _model _cmds = True
 
 > shrinkCommand :: Command -> [Command]
 > shrinkCommand _cmd = []

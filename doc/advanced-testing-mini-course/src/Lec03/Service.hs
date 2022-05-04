@@ -65,14 +65,24 @@ main = do
   queue <- case args of
              ["--testing"] -> fakeQueue mAX_QUEUE_SIZE
              _otherwise    -> realQueue mAX_QUEUE_SIZE
-
   service queue
 
 service :: QueueI Command -> IO ()
 service queue = do
   bracket initDB closeDB $ \conn ->
-    withAsync (worker queue conn) $ \_a ->
-      runFrontEnd queue pORT
+    withAsync (worker queue conn) $ \_a -> do
+      _ready <- newEmptyMVar
+      runFrontEnd queue _ready pORT
+
+asyncService :: QueueI Command -> IO (Async ())
+asyncService queue = do
+  bracket initDB closeDB $ \conn ->
+    withAsync (worker queue conn) $ \_a -> do
+      ready <- newEmptyMVar
+      pid <- async (runFrontEnd queue ready pORT)
+      takeMVar ready
+      putStrLn "asyncService: ready"
+      return pid
 
 worker :: QueueI Command -> Connection -> IO ()
 worker queue conn = go
@@ -132,8 +142,13 @@ httpFrontend queue req respond =
                      _otherwise -> Nothing
                    _otherwise   -> Nothing
 
-runFrontEnd :: QueueI Command -> Port -> IO ()
-runFrontEnd queue port = run port (httpFrontend queue)
+runFrontEnd :: QueueI Command -> MVar () -> Port -> IO ()
+runFrontEnd queue ready port = runSettings settings (httpFrontend queue)
+  where
+    settings
+      = setPort port
+      $ setBeforeMainLoop (putMVar ready ())
+      $ defaultSettings
 
 ------------------------------------------------------------------------
 
