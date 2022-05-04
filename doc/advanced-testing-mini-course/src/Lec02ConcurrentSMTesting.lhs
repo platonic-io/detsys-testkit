@@ -56,7 +56,7 @@ Motivation
 > advanceModel m cmds = foldl (\ih cmd -> fst (step ih cmd)) m cmds
 
 > concSafe :: Model -> [Command] -> Bool
-> concSafe m0 = all (validProgram m0) . permutations
+> concSafe m = all (validProgram m) . permutations
 
 > validConcProgram :: Model -> ConcProgram -> Bool
 > validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
@@ -168,16 +168,6 @@ then the concurrent execution is correct.
 >       hist <- History <$> run (atomically (flushTQueue queue))
 >       assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
 >   where
->     classifyCommandsLength :: [Command] -> Property -> Property
->     classifyCommandsLength cmds
->       = classify (length cmds == 0)                        "length commands: 0"
->       . classify (0   < length cmds && length cmds <= 10)  "length commands: 1-10"
->       . classify (10  < length cmds && length cmds <= 50)  "length commands: 11-50"
->       . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
->       . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
->       . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
->       . classify (500 < length cmds)                       "length commands: >501"
-
 >     constructorString :: Command -> String
 >     constructorString Incr {} = "Incr"
 >     constructorString Get  {} = "Get"
@@ -187,6 +177,16 @@ then the concurrent execution is correct.
 >       unless condition $
 >         monitor (counterexample ("Failed: " ++ msg))
 >       assert condition
+
+> classifyCommandsLength :: [cmd] -> Property -> Property
+> classifyCommandsLength cmds
+>   = classify (length cmds == 0)                        "length commands: 0"
+>   . classify (0   < length cmds && length cmds <= 10)  "length commands: 1-10"
+>   . classify (10  < length cmds && length cmds <= 50)  "length commands: 11-50"
+>   . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
+>   . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
+>   . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
+>   . classify (500 < length cmds)                       "length commands: >501"
 
 > prettyHistory :: (Show cmd, Show resp) => History' cmd resp -> String
 > prettyHistory = show

@@ -41,6 +41,7 @@ import Lec02ConcurrentSMTesting
        , linearisable
        , prettyHistory
        , toPid
+       , classifyCommandsLength
        )
 import Lec03.Service
 
@@ -55,7 +56,8 @@ data ClientRequest = WriteReq ByteString | ReadReq Index
 data ClientResponse = WriteResp Index | ReadResp (Maybe ByteString)
   deriving (Eq, Show)
 
-newtype ConcProgram = ConcProgram [[ClientRequest]]
+newtype ConcProgram = ConcProgram { unConcProgram :: [[ClientRequest]] }
+  deriving Show
 
 newtype Model = Model (Vector ByteString)
 
@@ -90,14 +92,53 @@ concExec mgr hist req = do
       then atomically (writeTQueue hist (Ok pid (ReadResp (Just (responseBody resp)))))
       else atomically (writeTQueue hist (Ok pid (ReadResp Nothing)))
 
+genClientRequest :: Gen ClientRequest
+genClientRequest = oneof
+  [ WriteReq <$> (LBS.pack <$> arbitrary)
+  , ReadReq <$> (Index <$> arbitrary)
+  ]
+
+validProgram :: Model -> [ClientRequest] -> Bool
+validProgram _model _cmds = True
+
+shrinkClientRequest :: ClientRequest -> [ClientRequest]
+shrinkClientRequest (WriteReq bs) = [ WriteReq (LBS.pack s') | s' <- shrink (LBS.unpack bs) ]
+shrinkClientRequest (ReadReq _ix) = []
+
 genConcProgram :: Model -> Gen ConcProgram
-genConcProgram = undefined
+genConcProgram m0 = sized (go m0 [])
+  where
+    go :: Model -> [[ClientRequest]] -> Int -> Gen ConcProgram
+    go m acc sz | sz <= 0   = return (ConcProgram (reverse acc))
+                | otherwise = do
+                    n <- chooseInt (2, 5)
+                    reqs <- vectorOf n genClientRequest `suchThat` concSafe m
+                    go (advanceModel m reqs) (reqs : acc) (sz - n)
+
+advanceModel :: Model -> [ClientRequest] -> Model
+advanceModel m reqs = foldl (\ih req -> fst (step ih req)) m reqs
+
+concSafe :: Model -> [ClientRequest] -> Bool
+concSafe m = all (validProgram m) . permutations
+
+validConcProgram :: Model -> ConcProgram -> Bool
+validConcProgram m0 (ConcProgram reqss0) = go m0 True reqss0
+  where
+    go :: Model -> Bool -> [[ClientRequest]] -> Bool
+    go m False _              = False
+    go m acc   []             = acc
+    go m acc   (reqs : reqss) = go (advanceModel m reqs) (concSafe m reqs) reqss
 
 shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
-shrinkConcProgram = undefined
+shrinkConcProgram m
+  = filter (validConcProgram m)
+  . map ConcProgram
+  . filter (not . null)
+  . shrinkList (shrinkList shrinkClientRequest)
+  . unConcProgram
 
 prettyConcProgram :: ConcProgram -> String
-prettyConcProgram = undefined
+prettyConcProgram = show
 
 forAllConcProgram :: (ConcProgram -> Property) -> Property
 forAllConcProgram k =
@@ -110,13 +151,13 @@ startService = do
   removePathForcibly sQLITE_DB_PATH
   -- NOTE: fake queue is used here, justified by previous contract testing.
   queue <- fakeQueue mAX_QUEUE_SIZE
-  async (service queue)
+  asyncService queue
 
 stopService :: Async () -> IO ()
 stopService pid = cancel pid
 
-prop_concurrent :: Property
-prop_concurrent = mapSize (min 20) $
+prop_collaborationTests :: Property
+prop_collaborationTests = mapSize (min 20) $
   forAllConcProgram $ \(ConcProgram reqss) -> monadicIO $ do
     monitor (classifyCommandsLength (concat reqss))
     monitor (tabulate "Client requests" (map constructorString (concat reqss)))
@@ -131,16 +172,6 @@ prop_concurrent = mapSize (min 20) $
       hist <- History <$> run (atomically (flushTQueue queue))
       assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
   where
-    classifyCommandsLength :: [ClientRequest] -> Property -> Property
-    classifyCommandsLength reqs
-      = classify (length reqs == 0)                        "length requests: 0"
-      . classify (0   < length reqs && length reqs <= 10)  "length requests: 1-10"
-      . classify (10  < length reqs && length reqs <= 50)  "length requests: 11-50"
-      . classify (50  < length reqs && length reqs <= 100) "length requests: 51-100"
-      . classify (100 < length reqs && length reqs <= 200) "length requests: 101-200"
-      . classify (200 < length reqs && length reqs <= 500) "length requests: 201-500"
-      . classify (500 < length reqs)                       "length requests: >501"
-
     constructorString :: ClientRequest -> String
     constructorString WriteReq {} = "WriteReq"
     constructorString ReadReq  {} = "ReadReq"
