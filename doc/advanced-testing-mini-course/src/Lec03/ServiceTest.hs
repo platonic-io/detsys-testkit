@@ -5,23 +5,42 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TQueue
 import Control.Monad
-import Data.ByteString (ByteString)
-import Data.Vector (Vector)
-import qualified Data.Vector as Vector
+import qualified Data.ByteString.Char8 as BS8
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Lazy.Char8 as LBS8
 import Data.List (permutations)
 import Data.Tree (Forest, Tree(Node))
+import Data.Vector (Vector)
+import qualified Data.Vector as Vector
+import Network.HTTP.Client
+       ( Manager
+       , RequestBody(RequestBodyLBS)
+       , defaultManagerSettings
+       , httpLbs
+       , method
+       , newManager
+       , parseRequest
+       , path
+       , requestBody
+       , responseBody
+       , responseStatus
+       )
+import Network.HTTP.Types (status200)
 import System.Directory
 import System.Random
-import Test.HUnit hiding (assert)
+import Test.HUnit hiding (assert, path)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
+import Text.Read (readMaybe)
 
 import Lec02ConcurrentSMTesting
        ( History'(History)
-       , Operation'
+       , Operation'(Ok)
        , interleavings
        , linearisable
        , prettyHistory
+       , toPid
        )
 import Lec03.Service
 
@@ -45,14 +64,31 @@ initModel = Model Vector.empty
 
 step :: Model -> ClientRequest -> (Model, ClientResponse)
 step (Model vec) (WriteReq bs) =
-  (Model (Vector.snoc vec bs), WriteResp (Index (Vector.length vec + 1)))
+  (Model (Vector.snoc vec bs), WriteResp (Index (Vector.length vec)))
 step (Model vec) (ReadReq (Index ix)) =
-  (Model vec, ReadResp  (vec Vector.!? ix))
+  (Model vec, ReadResp (vec Vector.!? ix))
 
 type Operation = Operation' ClientRequest ClientResponse
 
-concExec :: TQueue Operation -> ClientRequest -> IO ()
-concExec = undefined
+concExec :: Manager -> TQueue Operation -> ClientRequest -> IO ()
+concExec mgr hist req = do
+  initReq <- parseRequest ("http://localhost:" ++ show pORT)
+  case req of
+    WriteReq bs -> do
+      resp <- httpLbs initReq { method = "POST"
+                              , requestBody = RequestBodyLBS bs
+                              } mgr
+      pid <- toPid <$> myThreadId
+      atomically (writeTQueue hist
+                  (Ok pid (WriteResp (Index (read (LBS8.unpack (responseBody resp)))))))
+    ReadReq (Index ix) -> do
+      resp <- httpLbs initReq { method = "GET"
+                              , path = path initReq <> BS8.pack (show ix)
+                              } mgr
+      pid <- toPid <$> myThreadId
+      if responseStatus resp == status200
+      then atomically (writeTQueue hist (Ok pid (ReadResp (Just (responseBody resp)))))
+      else atomically (writeTQueue hist (Ok pid (ReadResp Nothing)))
 
 genConcProgram :: Model -> Gen ConcProgram
 genConcProgram = undefined
@@ -86,10 +122,11 @@ prop_concurrent = mapSize (min 20) $
     monitor (tabulate "Client requests" (map constructorString (concat reqss)))
     monitor (tabulate "Number of concurrent client requests" (map (show . length) reqss))
     -- Rerun a couple of times, to avoid being lucky with the interleavings.
+    mgr <- run (newManager defaultManagerSettings)
     replicateM_ 10 $ do
       pid <- run startService
       queue <- run newTQueueIO
-      run (mapM_ (mapConcurrently (concExec queue)) reqss)
+      run (mapM_ (mapConcurrently (concExec mgr queue)) reqss)
       run (stopService pid)
       hist <- History <$> run (atomically (flushTQueue queue))
       assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
