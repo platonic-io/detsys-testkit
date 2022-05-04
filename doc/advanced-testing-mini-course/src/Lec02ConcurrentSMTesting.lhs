@@ -188,7 +188,7 @@ then the concurrent execution is correct.
 >         monitor (counterexample ("Failed: " ++ msg))
 >       assert condition
 
-> prettyHistory :: History -> String
+> prettyHistory :: (Show cmd, Show resp) => History' cmd resp -> String
 > prettyHistory = show
 
 Regression testing

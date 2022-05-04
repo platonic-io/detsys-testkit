@@ -14,26 +14,44 @@ import Test.QuickCheck
 import Test.QuickCheck.Monadic
 
 import Lec02ConcurrentSMTesting
-       (History'(History), interleavings, linearisable, prettyHistory)
+       ( History'(History)
+       , Operation'
+       , interleavings
+       , linearisable
+       , prettyHistory
+       )
 import Lec03.Service
 
 ------------------------------------------------------------------------
 
 data ClientRequest = WriteReq | ReadReq
+  deriving Show
 
+data ClientResponse = R
+  deriving (Eq, Show)
 
 newtype ConcProgram = ConcProgram [[ClientRequest]]
 
+data Model = Model
+
+initModel :: Model
 initModel = undefined
 
+step :: Model -> ClientRequest -> (Model, ClientResponse)
 step = undefined
 
+type Operation = Operation' ClientRequest ClientResponse
+
+concExec :: TQueue Operation -> ClientRequest -> IO ()
 concExec = undefined
 
+genConcProgram :: Model -> Gen ConcProgram
 genConcProgram = undefined
 
+shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
 shrinkConcProgram = undefined
 
+prettyConcProgram :: ConcProgram -> String
 prettyConcProgram = undefined
 
 forAllConcProgram :: (ConcProgram -> Property) -> Property
@@ -45,6 +63,7 @@ forAllConcProgram k =
 startService :: IO (Async ())
 startService = do
   removePathForcibly sQLITE_DB_PATH
+  -- NOTE: fake queue is used here, justified by previous contract testing.
   queue <- fakeQueue mAX_QUEUE_SIZE
   async (service queue)
 
