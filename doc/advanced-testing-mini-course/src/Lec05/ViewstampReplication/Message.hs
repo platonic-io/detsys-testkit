@@ -17,7 +17,7 @@ newtype ViewNumber = ViewNumber Int
 newtype OpNumber = OpNumber Int
   deriving newtype (Enum, Eq, Ord, Num, Read, Show, ToExpr)
 newtype CommitNumber = CommitNumber Int
-  deriving newtype (Enum, Eq, Num, Read, Show, ToExpr)
+  deriving newtype (Enum, Eq, Ord, Num, Read, Show, ToExpr)
 newtype Nonce = Nonce Int
   deriving newtype (Read, Show)
 newtype Log op = Log (Seq op)
@@ -29,6 +29,7 @@ data VRRequest op
 
 data VRResponse result
   = VRReply ViewNumber RequestNumber result
+  | VROnlyOneInflightAllowed
   deriving (Eq, Read, Show)
 
 data InternalClientMessage op = InternalClientMessage
@@ -40,6 +41,11 @@ data InternalClientMessage op = InternalClientMessage
 
 makeLenses ''InternalClientMessage
 
+data RecoveryResponse
+  = FromPrimary OpNumber CommitNumber
+  | FromReplica
+  deriving (Read, Show)
+
 data VRMessage op
   -- 4.1 Normal Operation
   = Prepare ViewNumber (InternalClientMessage op) OpNumber CommitNumber
@@ -47,11 +53,11 @@ data VRMessage op
   | Commit ViewNumber CommitNumber
   -- 4.3 Recovery
   | Recovery Nonce {- i which is node-id -}
-  | RecoveryResponse ViewNumber Nonce (Log op) OpNumber CommitNumber
+  | RecoveryResponse ViewNumber Nonce (Log op) RecoveryResponse Int
   deriving (Read, Show)
 
 (|>) :: Log op -> op -> Log op
 (Log l) |> o = Log (l S.|> o)
 
 logLookup :: OpNumber -> Log op -> Maybe op
-logLookup (OpNumber i) (Log l) = S.lookup (pred i) l
+logLookup (OpNumber i) (Log l) = S.lookup i l

@@ -2,6 +2,7 @@
 module Lec05.ViewstampReplication.Machine where
 
 import Control.Monad (forM_, unless, when)
+import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Time.Clock (secondsToNominalDiffTime)
@@ -95,6 +96,10 @@ generateNonce = Nonce <$> random
 
 initStateTransfer :: VR s o r ()
 initStateTransfer = do
+  {- 4.3 Recovery
+1. The recovering replica, i, sends a 〈RECOVERY i, x〉
+message to all other replicas, where x is a nonce.
+-}
   guardM $ use (currentStatus.to (== Normal))
   currentStatus .= Recovering
   nonce <- generateNonce
@@ -109,7 +114,24 @@ executeReplicatedMachine op = do
   currentState .= cs'
   return result
 
-{- -- When we get ticks --
+executeUpToOrBeginStateTransfer :: CommitNumber -> VR s o r ()
+executeUpToOrBeginStateTransfer (-1) = do
+  -- -1 means nothing has been comitted yet!
+  return ()
+executeUpToOrBeginStateTransfer k = do
+  myK <- use (commitNumber.to (max 0))
+  guard $ myK <= k
+  forM_ [myK .. k] $ \(CommitNumber v) -> do
+    l <- use theLog
+    case logLookup (OpNumber v) l of
+      Nothing -> initStateTransfer
+      Just op -> do
+        _r <- executeReplicatedMachine op
+        -- update clientTable?
+        return ()
+  commitNumber .= k
+
+{- 4.1 Normal Operation -- TODO: When we add ticks --
 6. Normally the primary informs backups about the
 commit when it sends the next PREPARE message;
 this is the purpose of the commit-number in the
@@ -123,14 +145,14 @@ number = op-number).
 
 machine :: Input (VRRequest o) (VRMessage o) -> VR s o r ()
 machine (ClientRequest time c (VRRequest op s)) = do
-  {-
+  {- 4.1 Normal Operation
 1. The client sends a 〈REQUEST op, c, s〉 message to
 the primary, where op is the operation (with its ar-
 guments) the client wants to run, c is the client-id,
 and s is the request-number assigned to the request.
   -}
   checkIsPrimary
-  {-
+  {- 4.1 Normal Operation
 2. When the primary receives the request, it compares
 the request-number in the request with the informa-
 tion in the client table. If the request-number s isn’t
@@ -151,8 +173,15 @@ has already been executed.
               respond c (VRReply vn s r)
               ereturn
           | otherwise -> return ()
-        InFlight{} -> return ()
-  {-
+        InFlight s' _ -> do
+          {- 4 The VR Protocol
+In addition the client records its own client-id and a
+current request-number. A client is allowed to have just
+one outstanding request at a time.
+-}
+          respond c VROnlyOneInflightAllowed
+          ereturn
+  {- 4.1 Normal Operation
 3. The primary advances op-number, adds the request
 to the end of the log, and updates the information
 for this client in the client-table to contain the new
@@ -162,8 +191,8 @@ current view-number, m is the message it received
 from the client, n is the op-number it assigned to
 the request, and k is the commit-number.
   -}
-  opNumber += 1
   cOp <- use opNumber
+  opNumber += 1
   theLog %= (|> op)
   clientTable.at c .= Just (InFlight s cOp)
   v <- use currentViewNumber
@@ -172,7 +201,7 @@ the request, and k is the commit-number.
 machine (InternalMessage time from iMsg) = case iMsg of
   Prepare v m n k -> do
     checkIsBackup v
-    {-
+    {- 4.1 Normal Operation
 4. Backups process PREPARE messages in order: a
 backup won’t accept a prepare with op-number n
 until it has entries for all earlier requests in its log.
@@ -186,15 +215,8 @@ sends a 〈PREPAREOK v, n, i〉 message to the pri-
 mary to indicate that this operation and all earlier
 ones have prepared locally.
     -}
-    -- also look at step 7.
-    myK <- use opNumber
-    -- i <- use replicaNumber
-    when (succ myK /= n) $ do
-      -- We haven't processed earlier messages
-      -- should start state transfer.
-      -- TODO: for now we just drop
-      ereturn
-    opNumber += 1
+    executeUpToOrBeginStateTransfer k
+    opNumber += 1 -- or save n?
     theLog %= (|> (m^.operation))
     clientTable.at (m^.clientId) .= Just (InFlight (m^.clientRequestNumber) n)
     sendPrimary $ PrepareOk v n {- i -} -- we don't need to add i since
@@ -202,7 +224,7 @@ ones have prepared locally.
   PrepareOk v n -> do
     let i = from
     checkIsPrimary
-    {-
+    {- 4.1 Normal Operation
 5. The primary waits for f PREPAREOK messages
 from different backups; at this point it considers
 the operation (and all earlier ones) to be commit-
@@ -231,11 +253,13 @@ entry in the client-table to contain the result.
             result <- executeReplicatedMachine op
             commitNumber .= cn
             (clientId, requestNumber) <- findClientInfoForOp n
+            clientTable.at clientId .= Just (Completed requestNumber n result v)
+            -- TODO: should we gc primaryPrepareOk?
             respond clientId (VRReply v requestNumber result)
       else ereturn
   Commit v k -> do
     checkIsBackup v
-    {-
+    {- 4.1 Normal Operation
 7. When a backup learns of a commit, it waits un-
 til it has the request in its log (which may require
 state transfer) and until it has executed all earlier
@@ -244,6 +268,39 @@ forming the up-call to the service code, increments
 its commit-number, updates the client’s entry in the
 client-table, but does not send the reply to the client.
     -}
+    executeUpToOrBeginStateTransfer k
+  Recovery x -> do
+    let i = from
+    {- 4.3 Recovery
+2. A replica j replies to a RECOVERY message only
+when its status is normal. In this case the replica
+sends a 〈RECOVERYRESPONSE v, x, l, n, k, j〉 mes-
+sage to the recovering replica, where v is its view-
+number and x is the nonce in the RECOVERY mes-
+sage. If j is the primary of its view, l is its log, n is
+its op-number, and k is the commit-number; other-
+wise these values are nil.
+    -}
+    guardM $ use (currentStatus.to (== Normal))
+    v <- use currentViewNumber
+    l <- use theLog
+    j <- use replicaNumber
+    isP <- isPrimary
+    resp <- case isP of
+      True -> FromPrimary <$> {- n -} use opNumber <*> {- k -} use commitNumber
+      False -> pure FromReplica
+    send i $ RecoveryResponse v x l resp j
+  RecoveryResponse v x l resp j -> do
+    {- 4.3 Recovery
+3. The recovering replica waits to receive at least f +
+1 RECOVERYRESPONSE messages from different
+replicas, all containing the nonce it sent in its RE-
+COVERY message, including one from the primary
+of the latest view it learns of in these messages.
+Then it updates its state using the information from
+the primary, changes its status to normal, and the
+recovery protocol is complete.
+-}
     tODO
 
 sm :: [NodeId] -> NodeId
@@ -259,12 +316,20 @@ vrCodec :: (Read m, Show m, Show r) => Codec (VRRequest m) (VRMessage m) (VRResp
 vrCodec = showReadCodec
 
 agenda :: Agenda
-agenda = makeAgenda
-  [(t0, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest t0 (ClientId 0) req1)))
-  ,(t1, NetworkEventE (NetworkEvent (NodeId 0) (ClientRequest t1 (ClientId 0) req2)))
+agenda = mk
+  [ ("first", 0)  -- this will complete
+  , ("second", 5) -- this will be rejected
+  , ("third", 9) -- this will complete
   ]
   where
-    t0 = epoch
-    t1 = addTime (secondsToNominalDiffTime 20) t0
-    req1 = encShow $ VRRequest "first" 0
-    req2 = encShow $ VRRequest "second" 1
+    mk = makeAgenda . snd . List.mapAccumL op ini
+    ini = (0, epoch)
+    op (requestNumber, currentTime) (msg, timeDiff) =
+      let
+        newTime = addTime (secondsToNominalDiffTime timeDiff) currentTime
+      in ( (requestNumber+1, newTime)
+         , (newTime
+           , NetworkEventE (NetworkEvent
+                             (NodeId 0)
+                             (ClientRequest newTime (ClientId 0)
+                               (encShow $ VRRequest msg requestNumber)))))

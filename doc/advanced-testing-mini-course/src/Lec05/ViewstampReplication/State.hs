@@ -87,7 +87,7 @@ initState config me state stateInterface = VRState
   , _currentStatus = Normal
   , _opNumber = 0
   , _theLog = mempty
-  , _commitNumber = 0 -- ?
+  , _commitNumber = -1 -- ?
   , _clientTable = mempty
   -- not in paper
   , _primaryPrepareOk = mempty
