@@ -96,13 +96,15 @@ runWorker d = go
       case r of
         Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state _step timeout)) -> do
-          r <- try (evaluate (timeout time state))
+          gen <- rGetStdGen (dRandom d)
+          r <- try (evaluate (timeout time state gen))
           case r of
             Left (e :: SomeException) ->
               putStrLn ("timeout failed, error: " ++ displayException e)
-            Right (outputs, state') -> do
+            Right (outputs, state', gen') -> do
               -- XXX: Append to history
               updateReceiverState nodeId state' (dConfiguration d)
+              rSetStdGen (dRandom d) gen'
               mapM_ (handleOutput codec nodeId) outputs
 
     handleEvent (CommandEventE Exit) = error "IMPOSSIBLE: this case has already been handled"
