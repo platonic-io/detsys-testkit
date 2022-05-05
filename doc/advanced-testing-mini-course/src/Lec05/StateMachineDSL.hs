@@ -25,7 +25,7 @@ type SMM s msg resp a =
 
 data Guard = Keep | Drop
 
-runSMM :: SMM s msg resp () -> s -> StdGen -> ([Output resp msg], s, StdGen)
+runSMM :: SMM s msg resp () -> SMStep s msg resp
 runSMM m s gen =
   case runWriter (runStateT (runStateT (runContT m (const (return Keep))) s) gen) of
     (((Keep,  s'),  gen'),  outputs) -> (outputs, s', gen')
