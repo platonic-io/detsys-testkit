@@ -4,14 +4,8 @@
 module Lec05.EventLoop where
 
 import Control.Monad
-import Control.Applicative
 import Control.Concurrent.Async
-import Control.Concurrent.MVar
-import Control.Concurrent.STM
 import Control.Exception
-import Data.ByteString.Lazy (ByteString)
-import Data.IORef
-import Data.Time
 
 import Lec05.Agenda
 import Lec05.Codec
@@ -81,8 +75,8 @@ runWorker d = go
                                   show rawInput)
             Just input -> do
               gen <- rGetStdGen (dRandom d)
-              r <- try (evaluate (step input state gen))
-              case r of
+              res <- try (evaluate (step input state gen))
+              case res of
                 Left (e :: SomeException) ->
                   putStrLn ("step failed, error: " ++ displayException e)
                 Right (outputs, state', gen') -> do

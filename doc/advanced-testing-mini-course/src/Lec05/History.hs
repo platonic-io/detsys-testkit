@@ -6,7 +6,6 @@
 module Lec05.History where
 
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TQueue
 import Data.Typeable
 import Data.TreeDiff (ToExpr)
 

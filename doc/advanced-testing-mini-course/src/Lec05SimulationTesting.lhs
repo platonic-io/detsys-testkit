@@ -1,6 +1,6 @@
 > module Lec05SimulationTesting where
 
-> import Lec05.EventLoop
+> import Lec05.EventLoop ()
 
 Simulation testing
 ==================

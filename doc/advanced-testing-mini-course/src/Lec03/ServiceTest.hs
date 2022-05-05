@@ -5,14 +5,12 @@ module Lec03.ServiceTest where
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TQueue
 import Control.Monad
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as LBS8
 import Data.List (permutations)
-import Data.Tree (Forest, Tree(Node))
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Network.HTTP.Client
@@ -29,21 +27,19 @@ import Network.HTTP.Client
        , responseStatus
        )
 import Network.HTTP.Types (status200)
-import System.Directory
-import System.Random
-import Test.HUnit hiding (assert, path)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
-import Text.Read (readMaybe)
 
 import Lec02ConcurrentSMTesting
        ( History'(History)
        , Operation'(Ok)
+       , appendHistory
+       , assertWithFail
+       , classifyCommandsLength
        , interleavings
        , linearisable
        , prettyHistory
        , toPid
-       , classifyCommandsLength
        )
 import Lec03.Service
 
@@ -75,24 +71,44 @@ step (Model vec) (ReadReq (Index ix)) =
 type Operation = Operation' ClientRequest ClientResponse
 
 concExec :: Manager -> TQueue Operation -> ClientRequest -> IO ()
-concExec mgr hist req = do
-  initReq <- parseRequest ("http://localhost:" ++ show pORT)
+concExec mgr hist req =
   case req of
     WriteReq bs -> do
-      resp <- httpLbs initReq { method = "POST"
-                              , requestBody = RequestBodyLBS bs
-                              } mgr
+      ix <- httpWrite mgr bs
       pid <- toPid <$> myThreadId
-      atomically (writeTQueue hist
-                  (Ok pid (WriteResp (Index (read (LBS8.unpack (responseBody resp)))))))
-    ReadReq (Index ix) -> do
-      resp <- httpLbs initReq { method = "GET"
-                              , path = path initReq <> BS8.pack (show ix)
-                              } mgr
+      appendHistory hist (Ok pid (WriteResp ix))
+    ReadReq ix -> do
+      mbs <- httpRead mgr ix
       pid <- toPid <$> myThreadId
-      if responseStatus resp == status200
-      then atomically (writeTQueue hist (Ok pid (ReadResp (Just (responseBody resp)))))
-      else atomically (writeTQueue hist (Ok pid (ReadResp Nothing)))
+      appendHistory hist (Ok pid (ReadResp mbs))
+
+------------------------------------------------------------------------
+
+httpWrite :: Manager -> ByteString -> IO Index
+httpWrite mgr bs = do
+  initReq <- parseRequest ("http://localhost:" ++ show pORT)
+  resp <- httpLbs initReq { method = "POST"
+                          , requestBody = RequestBodyLBS bs
+                          } mgr
+  return (Index (read (LBS8.unpack (responseBody resp))))
+
+httpRead :: Manager -> Index -> IO (Maybe ByteString)
+httpRead mgr ix = do
+  initReq <- parseRequest ("http://localhost:" ++ show pORT)
+  resp <- httpLbs initReq { method = "GET"
+                          , path = path initReq <> BS8.pack (show ix)
+                          } mgr
+  if responseStatus resp == status200
+  then return (Just (responseBody resp))
+  else return Nothing
+
+httpReset :: Manager -> IO ()
+httpReset mgr = do
+  initReq <- parseRequest ("http://localhost:" ++ show pORT)
+  _resp <- httpLbs initReq { method = "DELETE" } mgr
+  return ()
+
+------------------------------------------------------------------------
 
 genClientRequest :: Gen ClientRequest
 genClientRequest = oneof
@@ -127,9 +143,9 @@ validConcProgram :: Model -> ConcProgram -> Bool
 validConcProgram m0 (ConcProgram reqss0) = go m0 True reqss0
   where
     go :: Model -> Bool -> [[ClientRequest]] -> Bool
-    go m False _              = False
-    go m acc   []             = acc
-    go m acc   (reqs : reqss) = go (advanceModel m reqs) (concSafe m reqs) reqss
+    go _m False _              = False
+    go _m acc   []             = acc
+    go  m _acc  (reqs : reqss) = go (advanceModel m reqs) (concSafe m reqs) reqss
 
 shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
 shrinkConcProgram m
@@ -148,38 +164,28 @@ forAllConcProgram k =
   where
     m = initModel
 
-startService :: IO (Async ())
-startService = do
-  removePathForcibly sQLITE_DB_PATH
-  -- NOTE: fake queue is used here, justified by previous contract testing.
-  queue <- fakeQueue mAX_QUEUE_SIZE
-  asyncService queue
-
-stopService :: Async () -> IO ()
-stopService pid = cancel pid
-
-prop_collaborationTests :: Property
-prop_collaborationTests = mapSize (min 20) $
+-- NOTE: Assumes that the service is running.
+prop_collaborationTests :: Manager -> Property
+prop_collaborationTests mgr = mapSize (min 20) $
   forAllConcProgram $ \(ConcProgram reqss) -> monadicIO $ do
     monitor (classifyCommandsLength (concat reqss))
     monitor (tabulate "Client requests" (map constructorString (concat reqss)))
     monitor (tabulate "Number of concurrent client requests" (map (show . length) reqss))
     -- Rerun a couple of times, to avoid being lucky with the interleavings.
-    mgr <- run (newManager defaultManagerSettings)
     replicateM_ 10 $ do
-      pid <- run startService
       queue <- run newTQueueIO
       run (mapM_ (mapConcurrently (concExec mgr queue)) reqss)
-      run (stopService pid)
       hist <- History <$> run (atomically (flushTQueue queue))
       assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
+      run (httpReset mgr)
   where
     constructorString :: ClientRequest -> String
     constructorString WriteReq {} = "WriteReq"
     constructorString ReadReq  {} = "ReadReq"
 
-    assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
-    assertWithFail condition msg = do
-      unless condition $
-        monitor (counterexample ("Failed: " ++ msg))
-      assert condition
+test :: IO ()
+test = do
+  -- NOTE: fake queue is used here, justified by previous contract testing.
+  queue <- fakeQueue mAX_QUEUE_SIZE
+  mgr   <- newManager defaultManagerSettings
+  withService queue (quickCheck (prop_collaborationTests mgr))
