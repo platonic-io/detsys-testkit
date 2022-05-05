@@ -57,7 +57,7 @@ dequeue q = do
     j <- rear q
     x <- Vec.unsafeRead (qQueue q) j
     modifyIORef' (qSize q) (\sz -> sz - 1)
-    modifyIORef' (qRear q) (\j -> (j + 1) `mod` capacity q)
+    modifyIORef' (qRear q) (\j' -> (j' + 1) `mod` capacity q)
     return (Just x)
 
 display :: Show a => Queue a -> IO ()
@@ -73,11 +73,11 @@ display q = do
   putStrLn (show r)
   putStr "  , queue = "
   putStr "["
-  r <- rear q
-  sz <- size q
-  flip mapM_ [r..sz - 1] $ \ix -> do
+  r' <- rear q
+  sz' <- size q
+  flip mapM_ [r'..sz' - 1] $ \ix -> do
     x <- Vec.unsafeRead (qQueue q) ix
     putStr (show x)
-    unless (ix == sz - 1) $ do
+    unless (ix == sz' - 1) $ do
       putStr ", "
   putStrLn "]"

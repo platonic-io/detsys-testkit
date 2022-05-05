@@ -82,12 +82,13 @@ data Resp = Resp Int
   deriving (Eq, Show)
 
 example :: Input Req Msg -> SMM ExampleState Msg Resp ()
-example (ClientRequest at cid req) = do
+example (ClientRequest _at cid _req) = do
   esInt .= 1
   esInt += 2
   esInt += 3
   s <- use esInt
   respond cid (Resp s)
+example _otherwise = return ()
 
 t :: Bool
 t = runSMM (example (ClientRequest epoch (ClientId 0) Req)) initExState (mkStdGen 0)

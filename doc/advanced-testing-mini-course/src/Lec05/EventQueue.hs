@@ -1,7 +1,6 @@
 module Lec05.EventQueue where
 
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TQueue
 import Data.IORef
 
 import Lec05.Agenda
@@ -24,8 +23,8 @@ realEventQueue _clock = do
     }
 
 fakeEventQueue :: Agenda -> Clock -> IO EventQueue
-fakeEventQueue a clock = do
-  agenda <- newIORef a
+fakeEventQueue a0 _clock = do
+  agenda <- newIORef a0
   return EventQueue
     { eqEnqueue = enqueue agenda
     , eqDequeue = dequeue agenda

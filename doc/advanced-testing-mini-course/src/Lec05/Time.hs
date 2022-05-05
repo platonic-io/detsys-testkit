@@ -6,7 +6,6 @@ module Lec05.Time where
 import Data.Int (Int64)
 import Data.IORef
 import Data.Time
-import Data.Time.Clock
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Data.Time.Calendar.OrdinalDate
 

@@ -91,8 +91,8 @@ runWorker d = go
         Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state _step timeout)) -> do
           gen <- rGetStdGen (dRandom d)
-          r <- try (evaluate (timeout time state gen))
-          case r of
+          res <- try (evaluate (timeout time state gen))
+          case res of
             Left (e :: SomeException) ->
               putStrLn ("timeout failed, error: " ++ displayException e)
             Right (outputs, state', gen') -> do

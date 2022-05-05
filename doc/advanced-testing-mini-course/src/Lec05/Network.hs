@@ -5,22 +5,17 @@
 module Lec05.Network where
 
 import Control.Concurrent.MVar
-import Control.Concurrent.STM
 import Control.Exception
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Lazy (ByteString)
 import Data.Functor
 import Data.Text.Read (decimal)
-import Data.Time.Clock
-import Data.Typeable
 import Network.HTTP.Client
 import Network.HTTP.Types.Status
 import Network.Wai hiding (requestBody)
 import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
-import System.Exit
 
-import Lec05.Agenda
 import Lec05.AwaitingClients
 import Lec05.Random
 import Lec05.StateMachine
@@ -44,7 +39,7 @@ realNetwork evQ clock = do
   ac       <- newAwaitingClients
   mgr      <- newManager defaultManagerSettings
   initReq  <- parseRequest ("http://localhost:" ++ show pORT)
-  let sendReq = \fromNodeId toNodeId msg ->
+  let sendReq = \_fromNodeId toNodeId msg ->
         initReq { method      = "PUT"
                 , path        = path initReq <> BS8.pack (show (unNodeId toNodeId))
                 , requestBody = RequestBodyLBS msg

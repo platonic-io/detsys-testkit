@@ -30,8 +30,8 @@ lookupReceiver (NodeId nid) (Configuration v)
   | otherwise             = return Nothing
 
 updateReceiverState :: Typeable state => NodeId -> state -> Configuration -> IO ()
-updateReceiverState (NodeId nid) newState (Configuration v) =
-  Vector.modify v (updateState newState) nid
+updateReceiverState (NodeId nid) newState0 (Configuration v) =
+  Vector.modify v (updateState newState0) nid
   where
     updateState :: Typeable state => state -> SomeCodecSM -> SomeCodecSM
     updateState newState' (SomeCodecSM codec (SM _oldState step timeout)) =

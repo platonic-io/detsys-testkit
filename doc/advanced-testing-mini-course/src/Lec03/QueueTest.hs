@@ -64,7 +64,7 @@ exec (Enqueue x)      q = Bool  <$> enqueue q x
 exec Dequeue          q = Maybe <$> dequeue q
 
 genCommand :: Arbitrary a => Int -> Int -> Gen (Command a)
-genCommand cap sz = frequency
+genCommand _cap _sz = frequency
   [ (3, pure Size)
   , (0, pure Clear) -- NOTE: If this happens too often, it causing enqueue to
                     -- rarely write to a full queue.
@@ -72,17 +72,9 @@ genCommand cap sz = frequency
   , (5, Enqueue <$> arbitrary)
   , (2, pure Dequeue)
   ]
-  where
-    genMany c = do
-      -- `cap - sz` will fit, when `n` is negative will also fit, and when `n`
-      -- is positive won't fit.
-      let is = [ i | i <- [0..cap], cap - sz - i >= 0 ]
-      -- We append `[0]` because if `is` is empty elements fails otherwise.
-      n <- elements (is ++ map negate is ++ [0])
-      c <$> vectorOf (cap - sz + n) arbitrary
 
 genCommands :: Arbitrary a => Int -> Int -> Gen [Command a]
-genCommands cap sz = sized (go sz)
+genCommands cap sz0 = sized (go sz0)
   where
     go _sz 0 = return []
     go sz  n = do
@@ -109,8 +101,8 @@ prop_contractTests (Capacity cap) =
     q <- run (newQueue cap)
     monitor (tabulate "Commands" (map prettyCommand cmds))
     (result, hist) <- go cmds m q []
-    return result
     mapM_ (monitor . classify') (zip cmds hist)
+    return result
     where
       go :: [Command Int] -> Model Int -> Queue Int -> [Response Int] -> PropertyM IO (Bool, [Response Int])
       go []          _m _q hist = return (True, reverse hist)
