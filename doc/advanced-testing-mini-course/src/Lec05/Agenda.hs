@@ -5,7 +5,6 @@ module Lec05.Agenda where
 
 import Data.Heap (Entry(Entry), Heap)
 import qualified Data.Heap as Heap
-import Data.List (foldl')
 import Data.Foldable
 
 import Lec05.Time

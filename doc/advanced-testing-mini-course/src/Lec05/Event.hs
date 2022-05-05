@@ -26,6 +26,7 @@ getEventTime (NetworkEventE (NetworkEvent _nodeId input)) = getInputTime input
     getInputTime :: Input request message -> Time
     getInputTime (ClientRequest   time _cid _req) = time
     getInputTime (InternalMessage time _nid _msg) = time
+getEventTime CommandEventE {} = error "getEventTime: impossible"
 
 data CommandEvent = Exit
   deriving Show

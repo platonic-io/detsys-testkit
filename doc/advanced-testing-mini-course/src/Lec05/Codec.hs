@@ -1,6 +1,5 @@
 module Lec05.Codec where
 
-import Data.Typeable
 import Data.ByteString.Lazy (ByteString)
 import Data.Text.Lazy (pack, unpack)
 import Data.Text.Lazy.Encoding (decodeUtf8, encodeUtf8)

@@ -4,7 +4,6 @@ module Lec03.Service where
 
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Concurrent.STM
 import Control.Exception (bracket)
 import Control.Monad (forM_)
 import Data.ByteString.Lazy (ByteString)
@@ -42,16 +41,16 @@ pORT = 8050
 ------------------------------------------------------------------------
 
 realQueue :: Int -> IO (QueueI a)
-realQueue size = do
-  q <- newQueue size
+realQueue sz = do
+  q <- newQueue sz
   return QueueI
     { qiEnqueue = enqueue q
     , qiDequeue = dequeue q
     }
 
 fakeQueue :: Int -> IO (QueueI a)
-fakeQueue size = do
-  ref <- newIORef (newModel size)
+fakeQueue sz = do
+  ref <- newIORef (newModel sz)
   return QueueI
     { qiEnqueue = \x -> atomicModifyIORef' ref (fakeEnqueue x)
     , qiDequeue =       atomicModifyIORef' ref fakeDequeue
@@ -126,7 +125,7 @@ httpFrontend queue req respond =
         Just ix -> do
           response <- newEmptyMVar
           -- NOTE: We are not checking if the queue is full here...
-          qiEnqueue queue (Read ix response)
+          _ <- qiEnqueue queue (Read ix response)
           mbs <- takeMVar response
           case mbs of
             Nothing ->
@@ -135,12 +134,12 @@ httpFrontend queue req respond =
     "POST" -> do
       bs <- consumeRequestBodyStrict req
       response <- newEmptyMVar
-      qiEnqueue queue (Write bs response)
+      _ <- qiEnqueue queue (Write bs response)
       ix <- takeMVar response
       respond (responseLBS status200 [] (BS8.pack (show ix)))
     "DELETE" -> do
       response <- newEmptyMVar
-      qiEnqueue queue (Reset response)
+      _ <- qiEnqueue queue (Reset response)
       () <- takeMVar response
       respond (responseLBS status200 [] (BS8.pack "Reset"))
     _otherwise -> do

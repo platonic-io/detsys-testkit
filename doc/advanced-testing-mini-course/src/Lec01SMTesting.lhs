@@ -113,7 +113,7 @@ State machine model/specification/fake
 >   runProgram c m prog
 
 > runProgram :: MonadIO m => Counter -> Model -> Program -> m Bool
-> runProgram c0 m0 (Program cmds) = go c0 m0 cmds
+> runProgram c0 m0 (Program cmds0) = go c0 m0 cmds0
 >   where
 >      go _c _m []           = return True
 >      go  c  m (cmd : cmds) = do
