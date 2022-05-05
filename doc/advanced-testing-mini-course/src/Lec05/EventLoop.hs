@@ -4,14 +4,8 @@
 module Lec05.EventLoop where
 
 import Control.Monad
-import Control.Applicative
 import Control.Concurrent.Async
-import Control.Concurrent.MVar
-import Control.Concurrent.STM
 import Control.Exception
-import Data.ByteString.Lazy (ByteString)
-import Data.IORef
-import Data.Time
 
 import Lec05.Agenda
 import Lec05.Codec
@@ -81,8 +75,8 @@ runWorker d = go
                                   show rawInput)
             Just input -> do
               gen <- rGetStdGen (dRandom d)
-              r <- try (evaluate (step input state gen))
-              case r of
+              res <- try (evaluate (step input state gen))
+              case res of
                 Left (e :: SomeException) ->
                   putStrLn ("step failed, error: " ++ displayException e)
                 Right (outputs, state', gen') -> do
@@ -96,8 +90,8 @@ runWorker d = go
       case r of
         Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state _step timeout)) -> do
-          r <- try (evaluate (timeout time state))
-          case r of
+          res <- try (evaluate (timeout time state))
+          case res of
             Left (e :: SomeException) ->
               putStrLn ("timeout failed, error: " ++ displayException e)
             Right (outputs, state') -> do

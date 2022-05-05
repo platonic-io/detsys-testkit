@@ -74,15 +74,17 @@ service queue = do
       _ready <- newEmptyMVar
       runFrontEnd queue _ready pORT
 
-asyncService :: QueueI Command -> IO (Async ())
-asyncService queue = do
+withService :: QueueI Command -> IO () -> IO ()
+withService queue io = do
   bracket initDB closeDB $ \conn ->
     withAsync (worker queue conn) $ \_a -> do
       ready <- newEmptyMVar
       pid <- async (runFrontEnd queue ready pORT)
-      takeMVar ready
-      putStrLn "asyncService: ready"
-      return pid
+      confirm <- async (takeMVar ready)
+      ok <- waitEither pid confirm
+      case ok of
+        Right () -> io
+        Left  () -> error "Service should not return"
 
 worker :: QueueI Command -> Connection -> IO ()
 worker queue conn = go
@@ -101,6 +103,7 @@ worker queue conn = go
 data Command
   = Write ByteString (MVar Int)
   | Read Int (MVar (Maybe ByteString))
+  | Reset (MVar ()) -- For testing.
 
 exec :: Command -> Connection -> IO ()
 exec (Read ix response) conn = do
@@ -109,6 +112,9 @@ exec (Read ix response) conn = do
 exec (Write bs response) conn = do
   ix <- writeDB conn bs
   putMVar response ix
+exec (Reset response) conn = do
+  resetDB conn
+  putMVar response ()
 
 httpFrontend :: QueueI Command -> Application
 httpFrontend queue req respond =
@@ -132,6 +138,11 @@ httpFrontend queue req respond =
       qiEnqueue queue (Write bs response)
       ix <- takeMVar response
       respond (responseLBS status200 [] (BS8.pack (show ix)))
+    "DELETE" -> do
+      response <- newEmptyMVar
+      qiEnqueue queue (Reset response)
+      () <- takeMVar response
+      respond (responseLBS status200 [] (BS8.pack "Reset"))
     _otherwise -> do
       respond (responseLBS status400 [] "Invalid method")
   where
@@ -185,6 +196,11 @@ readDB conn ix = do
   case result of
     [[bs]]     -> return (Just bs)
     _otherwise -> return Nothing
+
+resetDB :: Connection -> IO ()
+resetDB conn = do
+  execute_ conn "DROP TABLE IF EXISTS lec3_webservice"
+  execute_ conn "CREATE TABLE IF NOT EXISTS lec3_webservice (ix INTEGER PRIMARY KEY, value BLOB)"
 
 closeDB :: Connection -> IO ()
 closeDB = close

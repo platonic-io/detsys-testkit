@@ -75,8 +75,8 @@ Table of contents
 
 > module Lec00Introduction where
 
-> import Lec01SMTesting
-> import Lec02ConcurrentSMTesting
-> import Lec03SMContractTesting
-> import Lec04FaultInjection
-> import Lec05SimulationTesting
+> import Lec01SMTesting ()
+> import Lec02ConcurrentSMTesting ()
+> import Lec03SMContractTesting ()
+> import Lec04FaultInjection ()
+> import Lec05SimulationTesting ()

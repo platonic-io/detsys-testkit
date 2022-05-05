@@ -1,7 +1,5 @@
 > module Lec03SMContractTesting where
 
-> import Data.IORef
-
 Consumer-driven contract testing using state machines
 =====================================================
 
@@ -47,16 +45,16 @@ Picture
 SUT B: a queue (producer of the interface)
 ------------------------------------------
 
-> import Lec03.QueueInterface
-> import Lec03.Queue
-> import Lec03.QueueTest
+> import Lec03.QueueInterface ()
+> import Lec03.Queue ()
+> import Lec03.QueueTest ()
 
 
 SUT A: web service (consumer of the interface)
 ----------------------------------------------
 
-> import Lec03.Service
-> import Lec03.ServiceTest
+> import Lec03.Service ()
+> import Lec03.ServiceTest ()
 
 ---
 

@@ -7,7 +7,6 @@
 > import Control.Concurrent
 > import Control.Concurrent.Async
 > import Control.Concurrent.STM
-> import Control.Concurrent.STM.TQueue
 > import Control.Monad
 > import Data.List (permutations)
 > import Data.Tree (Forest, Tree(Node))
@@ -62,9 +61,9 @@ Motivation
 > validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
 >   where
 >     go :: Model -> Bool -> [[Command]] -> Bool
->     go m False _              = False
->     go m acc   []             = acc
->     go m acc   (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
+>     go _m False _              = False
+>     go _m acc   []             = acc
+>     go m _acc   (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
 
 > shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
 > shrinkConcProgram m
@@ -95,10 +94,13 @@ Motivation
 > toPid :: ThreadId -> Pid
 > toPid tid = Pid (read (drop (length ("ThreadId " :: String)) (show tid)))
 
+> appendHistory :: TQueue (Operation' cmd resp) -> Operation' cmd resp -> IO ()
+> appendHistory hist op = atomically (writeTQueue hist op)
+
 > concExec :: TQueue Operation -> Counter -> Command -> IO ()
 > concExec queue counter cmd = do
 >   pid <- toPid <$> myThreadId
->   atomically (writeTQueue queue (Invoke pid cmd))
+>   appendHistory queue (Invoke pid cmd)
 >   -- Adds some entropy to the possible interleavings.
 >   sleep <- randomRIO (0, 5)
 >   threadDelay sleep
@@ -109,11 +111,11 @@ Generate all possible single-threaded executions from the concurrent history.
 
 > interleavings :: History' cmd resp -> Forest (cmd, resp)
 > interleavings (History [])  = []
-> interleavings (History ops) =
+> interleavings (History ops0) =
 >   [ Node (cmd, resp) (interleavings (History ops'))
->   | (tid, cmd)   <- takeInvocations ops
+>   | (tid, cmd)   <- takeInvocations ops0
 >   , (resp, ops') <- findResponse tid
->                       (filter1 (not . matchInvocation tid) ops)
+>                       (filter1 (not . matchInvocation tid) ops0)
 >   ]
 >   where
 >     takeInvocations :: [Operation' cmd resp] -> [(Pid, cmd)]
@@ -172,11 +174,11 @@ then the concurrent execution is correct.
 >     constructorString Incr {} = "Incr"
 >     constructorString Get  {} = "Get"
 
->     assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
->     assertWithFail condition msg = do
->       unless condition $
->         monitor (counterexample ("Failed: " ++ msg))
->       assert condition
+> assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
+> assertWithFail condition msg = do
+>   unless condition $
+>     monitor (counterexample ("Failed: " ++ msg))
+>   assert condition
 
 > classifyCommandsLength :: [cmd] -> Property -> Property
 > classifyCommandsLength cmds
@@ -195,7 +197,7 @@ Regression testing
 ------------------
 
 > assertHistory :: String -> History -> Assertion
-> assertHistory msg hist =
+> assertHistory _msg hist =
 >   assertBool (prettyHistory hist) (linearisable step initModel (interleavings hist))
 
 
