@@ -34,7 +34,7 @@ main = do
         nodes = map NodeId [0..4]
         smI :: ReplicatedStateMachine [String] String ()
         smI = ReplicatedStateMachine $ \ s o -> ((), o:s)
-        vrSM me = VR.sm (filter (/= me) nodes) me [] smI
+        vrSM me = VR.vrSM (filter (/= me) nodes) me [] smI
         printItem label prefix thing =
           putStrLn $ "\x1b[31m" <> label <> ":\x1b[0m " <> prefix <> show thing
         printE (HistEvent n bs inp as msgs) = do
