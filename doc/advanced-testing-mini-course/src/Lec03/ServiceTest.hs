@@ -164,6 +164,8 @@ forAllConcProgram k =
   where
     m = initModel
 
+-- NOTE: We shouldn't use a model in concurrent tests before we made sure it
+-- passes sequential tests.
 -- NOTE: Assumes that the service is running.
 prop_collaborationTests :: Manager -> Property
 prop_collaborationTests mgr = mapSize (min 20) $
