@@ -1,7 +1,7 @@
 {-# LANGUAGE MultiWayIf #-}
 module Lec05.ViewstampReplication.Machine where
 
-import Control.Monad (forM_, unless, when)
+import Control.Monad (forM_, unless)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -13,7 +13,7 @@ import Lec05.Codec
 import Lec05.Event
 import Lec05.StateMachine
 import Lec05.StateMachineDSL
-import Lec05.Time (addTime, epoch)
+import Lec05.Time (Time, addTime, epoch)
 import Lec05.ViewstampReplication.Message
 import Lec05.ViewstampReplication.State
 
@@ -52,7 +52,7 @@ performs a state transfer§
   if
     | cVn == msgVN -> return ()
     | cVn >  msgVN -> ereturn -- drop the message
-    | cVn <  msgVN -> initStateTransfer
+    | otherwise {- cVn <  msgVN -} -> initStateTransfer
 
 broadCastReplicas :: VRMessage o -> VR s o r ()
 broadCastReplicas msg = do
@@ -109,8 +109,8 @@ message to all other replicas, where x is a nonce.
 executeReplicatedMachine :: o -> VR s o r r
 executeReplicatedMachine op = do
   cs <- use currentState
-  sm <- use (stateMachine.to runReplicated)
-  let (result, cs') = sm cs op
+  rsm <- use stateMachine
+  let (result, cs') = runReplicated rsm cs op
   currentState .= cs'
   return result
 
@@ -144,7 +144,7 @@ number = op-number).
 -}
 
 machine :: Input (VRRequest o) (VRMessage o) -> VR s o r ()
-machine (ClientRequest time c (VRRequest op s)) = do
+machine (ClientRequest _time c (VRRequest op s)) = do
   {- 4.1 Normal Operation
 1. The client sends a 〈REQUEST op, c, s〉 message to
 the primary, where op is the operation (with its ar-
@@ -167,13 +167,13 @@ has already been executed.
     Just cs -> do
       guard (requestNumber cs <= s)
       case cs of
-        Completed s' v r vn
+        Completed s' _v r vn
           | s' == s -> do
               -- should check that it has been executed?
               respond c (VRReply vn s r)
               ereturn
           | otherwise -> return ()
-        InFlight s' _ -> do
+        InFlight _s' _ -> do
           {- 4 The VR Protocol
 In addition the client records its own client-id and a
 current request-number. A client is allowed to have just
@@ -198,7 +198,7 @@ the request, and k is the commit-number.
   v <- use currentViewNumber
   k <- use commitNumber
   broadCastReplicas $ Prepare v (InternalClientMessage op c s) cOp k
-machine (InternalMessage time from iMsg) = case iMsg of
+machine (InternalMessage _time from iMsg) = case iMsg of
   Prepare v m n k -> do
     checkIsBackup v
     {- 4.1 Normal Operation
@@ -240,7 +240,7 @@ entry in the client-table to contain the result.
     -}
     let cn = let OpNumber x = n in CommitNumber x
     guardM $ use (commitNumber.to (== pred cn))
-    howMany <- addPrepareOk n from
+    howMany <- addPrepareOk n i
     isQ <- isQuorum howMany
     if isQ
       then do
@@ -252,10 +252,10 @@ entry in the client-table to contain the result.
           Just op -> do
             result <- executeReplicatedMachine op
             commitNumber .= cn
-            (clientId, requestNumber) <- findClientInfoForOp n
-            clientTable.at clientId .= Just (Completed requestNumber n result v)
+            (theClientId, theRequestNumber) <- findClientInfoForOp n
+            clientTable.at theClientId .= Just (Completed theRequestNumber n result v)
             -- TODO: should we gc primaryPrepareOk?
-            respond clientId (VRReply v requestNumber result)
+            respond theClientId (VRReply v theRequestNumber result)
       else ereturn
   Commit v k -> do
     checkIsBackup v
@@ -290,7 +290,7 @@ wise these values are nil.
       True -> FromPrimary <$> {- n -} use opNumber <*> {- k -} use commitNumber
       False -> pure FromReplica
     send i $ RecoveryResponse v x l resp j
-  RecoveryResponse v x l resp j -> do
+  RecoveryResponse _v _x _l _resp _j -> do
     {- 4.3 Recovery
 3. The recovering replica waits to receive at least f +
 1 RECOVERYRESPONSE messages from different
@@ -303,10 +303,16 @@ recovery protocol is complete.
 -}
     tODO
 
-sm :: [NodeId] -> NodeId
+machineTime :: Time -> VR s o r ()
+machineTime _t = return ()
+
+vrSM :: [NodeId] -> NodeId
   -> s -> ReplicatedStateMachine s o r
   -> SM (VRState s o r) (VRRequest o) (VRMessage o) (VRResponse r)
-sm otherNodes me iState iSM = SM (initState otherNodes me iState iSM) (\i s g -> runSMM (machine i) s g) noTimeouts
+vrSM otherNodes me iState iSM = SM
+  (initState otherNodes me iState iSM)
+  (runSMM . machine)
+  (runSMM . machineTime)
 
 --------------------------------------------------------------------------------
 -- For testing
@@ -324,12 +330,12 @@ agenda = mk
   where
     mk = makeAgenda . snd . List.mapAccumL op ini
     ini = (0, epoch)
-    op (requestNumber, currentTime) (msg, timeDiff) =
+    op (curRequestNumber, currentTime) (msg, timeDiff) =
       let
         newTime = addTime (secondsToNominalDiffTime timeDiff) currentTime
-      in ( (requestNumber+1, newTime)
+      in ( (curRequestNumber+1, newTime)
          , (newTime
            , NetworkEventE (NetworkEvent
                              (NodeId 0)
                              (ClientRequest newTime (ClientId 0)
-                               (encShow $ VRRequest msg requestNumber)))))
+                               (encShow $ VRRequest msg curRequestNumber)))))

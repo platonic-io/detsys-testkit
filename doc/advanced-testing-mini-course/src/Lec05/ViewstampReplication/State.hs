@@ -4,7 +4,6 @@ module Lec05.ViewstampReplication.State where
 
 import Data.List (sort)
 import Data.Map (Map)
-import Data.Sequence (Seq)
 import Data.Set (Set)
 import Data.TreeDiff (ToExpr(toExpr), Expr(App))
 import GHC.Generics (Generic)
