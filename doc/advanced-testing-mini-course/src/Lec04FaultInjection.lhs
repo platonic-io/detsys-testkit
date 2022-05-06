@@ -121,7 +121,7 @@ Faulty queue
 Discussion
 ----------
 
-- Modelling the faults, i.e. move non-determinism out from linearisability
+- Modelling the faults, i.e. move some non-determinism out from linearisability
   checker into the model, is possible but not recommended as it complicated the
   model.
 
