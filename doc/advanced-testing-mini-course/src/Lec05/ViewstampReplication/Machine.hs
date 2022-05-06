@@ -13,7 +13,7 @@ import Lec05.Codec
 import Lec05.Event
 import Lec05.StateMachine
 import Lec05.StateMachineDSL
-import Lec05.Time (addTime, epoch)
+import Lec05.Time (Time, addTime, epoch)
 import Lec05.ViewstampReplication.Message
 import Lec05.ViewstampReplication.State
 
@@ -303,10 +303,16 @@ recovery protocol is complete.
 -}
     tODO
 
+machineTime :: Time -> VR s o r ()
+machineTime t = return ()
+
 sm :: [NodeId] -> NodeId
   -> s -> ReplicatedStateMachine s o r
   -> SM (VRState s o r) (VRRequest o) (VRMessage o) (VRResponse r)
-sm otherNodes me iState iSM = SM (initState otherNodes me iState iSM) (\i s g -> runSMM (machine i) s g) noTimeouts
+sm otherNodes me iState iSM = SM
+  (initState otherNodes me iState iSM)
+  (runSMM . machine)
+  (runSMM . machineTime)
 
 --------------------------------------------------------------------------------
 -- For testing
