@@ -32,7 +32,8 @@ Each lecture has the following structure:
 
 - Motiviation: explains why we are doing what we are about to do;
 - Plan: how we will do it;
-- Code: an implementation of the idea;
+- Code: a concrete implementation of the idea (in case you get stuck when trying
+  to implement it yourself);
 - Discussion: common questions or objections;
 - Exercises: things the authors were to lazy to do, but they know how to;
 - Problems: things the authors don't know how to do (yet);

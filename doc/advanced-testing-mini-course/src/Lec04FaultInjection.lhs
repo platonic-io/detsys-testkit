@@ -21,11 +21,22 @@ Motivation
 Plan
 ----
 
+- Create a wrapper around our fake queue implementation which allows us to inject faults
+
 - Possible faults to inject for the queue
    + write fails, e.g. queue is full
-   + read fails, e.g. bug in queue causes exception to be thrown
+   + read fails, e.g. queue is empty
+   + read crashes, e.g. bug in queue causes exception to be thrown
    + read returns a malformed write which no longer deserialises, or has a valid
      client request id to send the response to
+
+- Use the same web service model that we write in the previous lecture and do
+  "collaboration tests" with the fake queue with faults to ensure that our
+  service that uses the queue doesn't crash even if the presence of faults
+
+- Notice that we don't have to make any changes to the model to account of the
+  possible faults, the linearisability checker does this for us behind the
+  scenes
 
 Faulty queue
 ------------
@@ -88,8 +99,31 @@ Faulty queue
 >   res2 <- qiEnqueue (ffqQueue ffq) "test2"
 >   assert (res2 == False) (return ())
 
+
+-- XXX: make `exec` :: Command -> Model -> IO {Fail, Info, Ok Response}
+
+-- XXX: stop testing if sequential property hits Info, otherwise we break:
+
+--     Crashes
+--
+--     If an operation does not complete for some reason (perhaps because it
+--     timed out or a critical component crashed) that operation has no
+--     completion time, and must, in general, be considered concurrent with
+--     every operation after its invocation. It may or may not execute.
+--
+--     A process with an operation is in this state is effectively stuck, and
+--     can never invoke another operation again. If it were to invoke another
+--     operation, it would violate our single-threaded constraint: processes
+--     only do one thing at a time.
+--
+-- Source: https://jepsen.io/consistency
+
 Discussion
 ----------
+
+- Modelling the faults, i.e. move some non-determinism out from linearisability
+  checker into the model, is possible but not recommended as it complicated the
+  model.
 
 - Can we not just inject real faults like Jepsen does?
   [`iptables`](https://linux.die.net/man/8/iptables) for dropping messages and
@@ -158,7 +192,9 @@ Problems
 
 0. Can we do better than randomly inserting faults? (Hint: see [*Lineage-driven
    Fault Injection*](https://people.ucsc.edu/~palvaro/molly.pdf) by Alvaro et al
-   (2015))
+   (2015) and the
+   [`ldfi`](https://github.com/symbiont-io/detsys-testkit/tree/main/src/ldfi)
+   directory in the `detsys-testkit` repo)
 
 See also
 --------

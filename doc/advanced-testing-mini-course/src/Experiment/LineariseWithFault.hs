@@ -19,6 +19,8 @@ data FailureMode
   | INFO
   deriving Show
 
+-- XXX: We probably don't want to use Pid = ThreadId here, because if we have an
+-- INFO we don't want any further operations executed by that Pid.
 data Operation' cmd resp
   = Invoke Lec2.Pid cmd
   | Ok     Lec2.Pid resp
