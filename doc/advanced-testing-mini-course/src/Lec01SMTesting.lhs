@@ -214,3 +214,10 @@ See also
   For details see Gurevich's
   [generalisation](http://delta-apache-vm.cs.tau.ac.il/~nachumd/models/gurevich.pdf)
   of the Church-Turing thesis.
+
+Summary
+-------
+
+Property-based testing lets us *generate unit tests* for pure
+functions/components, property-based testing using state machine models lets us
+generate unit tests for *stateful* functions/components.

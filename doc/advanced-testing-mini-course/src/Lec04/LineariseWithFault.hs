@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Experiment.LineariseWithFault where
+module Lec04.LineariseWithFault where
 
 import Data.Tree (Forest, Tree(Node))
 import Test.QuickCheck hiding (Result)
