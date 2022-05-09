@@ -61,6 +61,7 @@ library
     Lec03.Service
     Lec03.ServiceTest
     Lec04FaultInjection
+    Lec04.LineariseWithFault
     Lec05.Agenda
     Lec05.AwaitingClients
     Lec05.Codec
@@ -90,7 +91,6 @@ library
     Lec08AsyncFileSystemIO
     Lec09SMUpgrades
     Lec10LibraryOrFramework
-    Experiment.LineariseWithFault
     Experiment.Simulation
 
   default-language: Haskell2010
