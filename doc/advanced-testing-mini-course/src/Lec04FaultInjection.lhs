@@ -216,11 +216,14 @@ Model
 >        then go m' cmds
 >        else return False
 
-> test :: IO ()
-> test = do
+> unit_faultTest :: IO ()
+> unit_faultTest = do
 >   queue <- faultyFakeQueue mAX_QUEUE_SIZE
 >   mgr   <- newManager defaultManagerSettings
 >   withService (ffqQueue queue) (quickCheck (prop_sequentialWithFaults (ffqFault queue) mgr))
+
+Concurrent testing
+------------------
 
 > newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
 >   deriving Show
