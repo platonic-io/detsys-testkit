@@ -79,13 +79,10 @@ withService queue io = do
     withAsync (worker queue conn) $ \wPid -> do
       link wPid
       ready <- newEmptyMVar
-      fePid <- async (runFrontEnd queue ready pORT)
-      link fePid
-      confirm <- async (takeMVar ready)
-      ok <- waitEither fePid confirm
-      case ok of
-        Right () -> io
-        Left  () -> error "Service should not return"
+      withAsync (runFrontEnd queue ready pORT) $ \fePid -> do
+        link fePid
+        takeMVar ready
+        io
 
 worker :: QueueI Command -> Connection -> IO ()
 worker queue conn = go
