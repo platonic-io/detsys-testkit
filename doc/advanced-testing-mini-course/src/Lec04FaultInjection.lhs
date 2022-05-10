@@ -56,7 +56,7 @@ Faulty queue
 ------------
 
 > import Lec03.QueueInterface
-> import Lec03.Service (fakeQueue)
+> import Lec03.Service (fakeQueue, realQueue)
 > import Lec03.ServiceTest (Index(Index), httpWrite, httpRead, httpReset)
 
 > data FaultyFakeQueue a = FaultyFakeQueue
@@ -211,27 +211,41 @@ Model
 > runProgram :: MonadIO m => IORef (Maybe Fault) -> Manager -> Model -> Program -> m Bool
 > runProgram ref mgr m0 (Program cmds0) = go m0 cmds0
 >   where
->      go _m []           = return True
->      go  m (cmd : cmds) = do
->        resp <- liftIO (exec cmd ref mgr)
->        let (m', resp') = step m cmd
->        if resp == resp'
->        then go m' cmds
->        else return False
+>     go _m []           = return True
+>     go  m (cmd : cmds) = do
+>       resp <- liftIO (exec cmd ref mgr)
+>       let (m', resp') = step m cmd
+>       if resp == resp'
+>       then go m' cmds
+>       else return False
 
-> unit_faultTest :: IO ()
-> unit_faultTest = do
+> withFaultyQueueService :: (Manager -> IORef (Maybe Fault) -> IO ()) -> IO ()
+> withFaultyQueueService io = do
 >   queue <- faultyFakeQueue mAX_QUEUE_SIZE
 >   mgr   <- newManager defaultManagerSettings
->   withService (ffqQueue queue) (quickCheck (prop_sequentialWithFaults (ffqFault queue) mgr))
+>   withService (ffqQueue queue) (io mgr (ffqFault queue))
+
+> withFakeQueueService :: (Manager -> IO ()) -> IO ()
+> withFakeQueueService io = do
+>   queue <- fakeQueue mAX_QUEUE_SIZE
+>   mgr   <- newManager defaultManagerSettings
+>   withService queue (io mgr)
+
+> withRealQueueService :: (Manager -> IO ()) -> IO ()
+> withRealQueueService io = do
+>   queue <- realQueue mAX_QUEUE_SIZE
+>   mgr   <- newManager defaultManagerSettings
+>   withService queue (io mgr)
+
+> unit_faultTest :: IO ()
+> unit_faultTest =
+>   withFaultyQueueService (\mgr ref -> quickCheck (prop_sequentialWithFaults ref mgr))
 
 > assertProgram :: String -> Program -> Assertion
-> assertProgram msg prog = do
->   ffq <- faultyFakeQueue mAX_QUEUE_SIZE
->   mgr <- newManager defaultManagerSettings
->   withService (ffqQueue ffq) $ do
+> assertProgram msg prog =
+>   withFaultyQueueService $ \mgr ref -> do
 >     let m = initModel
->     b <- runProgram (ffqFault ffq) mgr m prog
+>     b <- runProgram ref mgr m prog
 >     assertBool msg b
 
 > unit_singleWrite :: Assertion

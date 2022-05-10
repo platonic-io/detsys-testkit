@@ -93,14 +93,16 @@ httpWrite mgr bs = do
   return (Index (read (LBS8.unpack (responseBody resp))))
 
 httpRead :: Manager -> Index -> IO (Maybe ByteString)
-httpRead mgr ix = do
+httpRead mgr (Index ix) = do
   initReq <- parseRequest ("http://localhost:" ++ show pORT)
   resp <- httpLbs initReq { method = "GET"
                           , path = path initReq <> BS8.pack (show ix)
                           } mgr
   if responseStatus resp == status200
   then return (Just (responseBody resp))
-  else return Nothing
+  else do
+    putStrLn ("httpRead: responseStatus: " ++ show (responseStatus resp))
+    return Nothing
 
 httpReset :: Manager -> IO ()
 httpReset mgr = do
