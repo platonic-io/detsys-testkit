@@ -95,6 +95,7 @@ worker queue conn = go
           threadDelay 1000 -- 1 ms
           go
         Just cmd -> do
+          putStrLn (prettyCommand cmd)
           exec cmd conn
           go
 
@@ -102,6 +103,11 @@ data Command
   = Write ByteString (MVar Int)
   | Read Int (MVar (Maybe ByteString))
   | Reset (MVar ()) -- For testing.
+
+prettyCommand :: Command -> String
+prettyCommand (Write bs _response) = "Write " ++ show bs
+prettyCommand (Read ix _response)  = "Read " ++ show ix
+prettyCommand (Reset _response)    = "Reset"
 
 exec :: Command -> Connection -> IO ()
 exec (Read ix response) conn = do
@@ -180,8 +186,13 @@ initDB = do
   let flags = map (++ ";") sQLITE_FLAGS
   forM_ flags $ \flag -> do
     execute_ conn ("PRAGMA " <> fromString flag)
-  execute_ conn "CREATE TABLE IF NOT EXISTS lec3_webservice (ix INTEGER PRIMARY KEY, value BLOB)"
+  resetDB conn
   return conn
+
+resetDB :: Connection -> IO ()
+resetDB conn = do
+  execute_ conn "DROP TABLE IF EXISTS lec3_webservice"
+  execute_ conn "CREATE TABLE IF NOT EXISTS lec3_webservice (ix INTEGER PRIMARY KEY, value BLOB)"
 
 writeDB :: Connection -> ByteString -> IO Int
 writeDB conn bs = do
@@ -194,11 +205,6 @@ readDB conn ix = do
   case result of
     [[bs]]     -> return (Just bs)
     _otherwise -> return Nothing
-
-resetDB :: Connection -> IO ()
-resetDB conn = do
-  execute_ conn "DROP TABLE IF EXISTS lec3_webservice"
-  execute_ conn "CREATE TABLE IF NOT EXISTS lec3_webservice (ix INTEGER PRIMARY KEY, value BLOB)"
 
 closeDB :: Connection -> IO ()
 closeDB = close
