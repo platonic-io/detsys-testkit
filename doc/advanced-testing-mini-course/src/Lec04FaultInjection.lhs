@@ -1,3 +1,5 @@
+> {-# LANGUAGE OverloadedStrings #-}
+
 > module Lec04FaultInjection where
 
 > import Data.Vector (Vector)
@@ -7,12 +9,13 @@
 > import Control.Exception
 > import Control.Monad.IO.Class (MonadIO, liftIO)
 > import Data.IORef
+> import Test.HUnit (Assertion, assertBool)
 > import Test.QuickCheck
 > import Test.QuickCheck.Monadic hiding (assert)
 > import Network.HTTP.Client (Manager, defaultManagerSettings, newManager)
 
 > import Lec03.Service (withService, mAX_QUEUE_SIZE)
-> import Lec04.LineariseWithFault
+> import Lec04.LineariseWithFault ()
 
 Fault-injection
 ===============
@@ -106,7 +109,7 @@ Faulty queue
 > test_injectFullFault :: IO ()
 > test_injectFullFault = do
 >   ffq <- faultyFakeQueue 4
->   res1 <- qiEnqueue (ffqQueue ffq) "test1"
+>   res1 <- qiEnqueue (ffqQueue ffq) ("test1" :: String)
 >   assert (res1 == True) (return ())
 >   injectFullFault (ffqFault ffq)
 >   res2 <- qiEnqueue (ffqQueue ffq) "test2"
@@ -221,6 +224,19 @@ Model
 >   queue <- faultyFakeQueue mAX_QUEUE_SIZE
 >   mgr   <- newManager defaultManagerSettings
 >   withService (ffqQueue queue) (quickCheck (prop_sequentialWithFaults (ffqFault queue) mgr))
+
+> assertProgram :: String -> Program -> Assertion
+> assertProgram msg prog = do
+>   ffq <- faultyFakeQueue mAX_QUEUE_SIZE
+>   mgr <- newManager defaultManagerSettings
+>   withService (ffqQueue ffq) $ do
+>     let m = initModel
+>     b <- runProgram (ffqFault ffq) mgr m prog
+>     assertBool msg b
+
+> unit_singleWrite :: Assertion
+> unit_singleWrite = assertProgram "singleWrite" (Program [ClientRequest (WriteReq "hi")])
+
 
 Concurrent testing
 ------------------
