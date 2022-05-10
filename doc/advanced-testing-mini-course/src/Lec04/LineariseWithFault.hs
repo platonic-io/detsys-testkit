@@ -35,6 +35,19 @@ data Result resp
   | OkWithNoResponse
   deriving Show
 
+isValidConcurrentHistory :: History' cmd resp -> Either String ()
+isValidConcurrentHistory (History xs) = go [] [] xs
+  where
+    go _runningPids _infoPids [] = Right ()
+    go  runningPids  infoPids (op:ops) = case op of
+      Invoke pid _
+        | pid `elem` runningPids -> Left $ show pid ++ " is already running. Each pid should only run one command at a time."
+        | pid `elem` infoPids -> Left $ show pid ++ " have already returned an INFO and shouldn't make any more comands. But we see an INVOKE."
+        | otherwise -> go (pid:runningPids) infoPids ops
+      Ok pid _ -> go (filter (/= pid) runningPids) infoPids ops
+      Fail pid FAIL -> go (filter (/= pid) runningPids) infoPids ops
+      Fail pid INFO -> go (filter (/= pid) runningPids) (pid:infoPids) ops
+
 interleavings :: History' cmd resp -> Forest (cmd, Result resp)
 interleavings (History [])  = []
 interleavings (History ops) | all (not . isOk) ops = []
@@ -92,7 +105,10 @@ linearisable step0 model0 = any' (go model0)
 
 linearise :: forall model cmd resp. Eq resp => Show cmd => Show resp
              => (model -> cmd -> (model, resp)) -> model -> History' cmd resp -> Bool
-linearise step0 model0 = linearisable step0 model0 . interleavings
+linearise step0 model0 history = case isValidConcurrentHistory history of
+  Left err -> error err
+  Right () -> linearisable step0 model0 (interleavings history)
+
 
 --------------------------------------------------------------------------------
 -- Testing
@@ -196,6 +212,13 @@ smStep xs x = (x:xs, x:xs)
 
 smModel :: SimpleModel
 smModel = []
+
+prop_genHistory :: [Pid] -> Int -> Property
+prop_genHistory pids nrOfNewPids =
+  forAll (genHistory smStep smModel arbitrary nrOfNewPids pids) $ \(ch, _) ->
+    case isValidConcurrentHistory ch of
+      Left err -> counterexample err False
+      Right () -> property True
 
 prop_Linearise :: [Pid] -> Int -> Property
 prop_Linearise pids nrOfNewPids =
