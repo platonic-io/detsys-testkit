@@ -3,13 +3,15 @@
 > import Data.Vector (Vector)
 > import qualified Data.Vector as Vector
 > import Data.ByteString.Lazy (ByteString)
+> import qualified Data.ByteString.Lazy as LBS
 > import Control.Exception
 > import Control.Monad.IO.Class (MonadIO, liftIO)
 > import Data.IORef
 > import Test.QuickCheck
 > import Test.QuickCheck.Monadic hiding (assert)
-> import Network.HTTP.Client (Manager)
+> import Network.HTTP.Client (Manager, defaultManagerSettings, newManager)
 
+> import Lec03.Service (withService, mAX_QUEUE_SIZE)
 > import Lec04.LineariseWithFault
 
 Fault-injection
@@ -89,24 +91,24 @@ Faulty queue
 >         Just (ReadFail err) -> throwIO err
 >         _otherwise          -> qiDequeue fake
 
-> injectFullFault :: FaultyFakeQueue a -> IO ()
-> injectFullFault (FaultyFakeQueue _queue ref) = writeIORef ref (Just Full)
+> injectFullFault :: IORef (Maybe Fault) -> IO ()
+> injectFullFault ref = writeIORef ref (Just Full)
 
-> injectEmptyFault :: FaultyFakeQueue a -> IO ()
-> injectEmptyFault (FaultyFakeQueue _queue ref) = writeIORef ref (Just Empty)
+> injectEmptyFault :: IORef (Maybe Fault) -> IO ()
+> injectEmptyFault ref = writeIORef ref (Just Empty)
 
-> injectReadFailFault :: FaultyFakeQueue a -> IOException -> IO ()
-> injectReadFailFault (FaultyFakeQueue _queue ref) err = writeIORef ref (Just (ReadFail err))
+> injectReadFailFault :: IORef (Maybe Fault) -> IOException -> IO ()
+> injectReadFailFault ref err = writeIORef ref (Just (ReadFail err))
 
-> removeFault :: FaultyFakeQueue a -> IO ()
-> removeFault (FaultyFakeQueue _queue ref) = writeIORef ref Nothing
+> removeFault :: IORef (Maybe Fault) -> IO ()
+> removeFault ref = writeIORef ref Nothing
 
 > test_injectFullFault :: IO ()
 > test_injectFullFault = do
 >   ffq <- faultyFakeQueue 4
 >   res1 <- qiEnqueue (ffqQueue ffq) "test1"
 >   assert (res1 == True) (return ())
->   injectFullFault ffq
+>   injectFullFault (ffqFault ffq)
 >   res2 <- qiEnqueue (ffqQueue ffq) "test2"
 >   assert (res2 == False) (return ())
 
@@ -130,12 +132,38 @@ Model
 >   deriving Show
 
 > genProgram :: Model -> Gen Program
-> genProgram (Model vec mFault) = undefined
+> genProgram m0 = sized (go m0 [])
+>   where
+>     go _m cmds 0 = return (Program (reverse cmds))
+>     go  m cmds n = do
+>       cmd <- genCommand m
+>       let m' = fst (step m cmd)
+>       go m' (cmd : cmds) (n - 1)
+
+>     genCommand :: Model -> Gen Command
+>     genCommand m = case mMaybeFault m of
+>       Nothing     -> frequency [ (2, InjectFault <$> genFault)
+>                                , (8, ClientRequest <$> genRequest)
+>                                ]
+>       Just _fault -> frequency [ (8, return RemoveFault)
+>                                , (2, ClientRequest <$> genRequest)
+>                                ]
+
+>     genRequest :: Gen ClientRequest
+>     genRequest = frequency [ (2, WriteReq <$> (LBS.pack <$> arbitrary))
+>                            , (8, ReadReq  <$> (Index <$> arbitrary))
+>                            ]
+
+>     genFault :: Gen Fault
+>     genFault = elements [ Full, Empty, ReadFail (userError "bug")]
 
 > data Model = Model
 >   { mModel      :: Vector ByteString
 >   , mMaybeFault :: Maybe Fault
 >   }
+
+> initModel :: Model
+> initModel = Model Vector.empty Nothing
 
 > step :: Model -> Command -> (Model, Maybe ClientResponse)
 > step m cmd = case cmd of
@@ -148,21 +176,21 @@ Model
 >   RemoveFault       -> (m { mMaybeFault = Nothing}, Nothing)
 >   Reset             -> (m, Nothing)
 
-> exec :: Command -> FaultyFakeQueue ClientRequest -> Manager -> IO (Maybe ClientResponse)
-> exec (ClientRequest req) _queue mgr =
+> exec :: Command -> IORef (Maybe Fault) -> Manager -> IO (Maybe ClientResponse)
+> exec (ClientRequest req) _ref mgr =
 >   case req of
 >     WriteReq bs -> Just . WriteResp <$> httpWrite mgr bs
 >     ReadReq ix  -> Just . ReadResp  <$> httpRead mgr ix
-> exec (InjectFault fault)  queue _mgr = do
+> exec (InjectFault fault)  ref _mgr = do
 >   case fault of
->     Full         -> injectFullFault queue
->     Empty        -> injectEmptyFault queue
->     ReadFail err -> injectReadFailFault queue err
+>     Full         -> injectFullFault ref
+>     Empty        -> injectEmptyFault ref
+>     ReadFail err -> injectReadFailFault ref err
 >   return Nothing
-> exec RemoveFault queue _mgr = do
->   removeFault queue
+> exec RemoveFault ref _mgr = do
+>   removeFault ref
 >   return Nothing
-> exec Reset _queue mgr = do
+> exec Reset _ref mgr = do
 >   httpReset mgr
 >   return Nothing
 
@@ -173,23 +201,26 @@ Model
 > forallPrograms p =
 >   forAllShrink (genProgram initModel) shrinkProgram p
 
-> prop_sequentialWithFaults :: FaultyFakeQueue ClientRequest -> Manager -> Property
-> prop_sequentialWithFaults queue mgr = forallPrograms $ \prog -> monadicIO $ do
->   runProgram queue mgr initModel prog
+> prop_sequentialWithFaults :: IORef (Maybe Fault) -> Manager -> Property
+> prop_sequentialWithFaults ref mgr = forallPrograms $ \prog -> monadicIO $ do
+>   runProgram ref mgr initModel prog
 
-> runProgram :: MonadIO m => FaultyFakeQueue ClientRequest -> Manager -> Model -> Program -> m Bool
-> runProgram q mgr m0 (Program cmds0) = go m0 cmds0
+> runProgram :: MonadIO m => IORef (Maybe Fault) -> Manager -> Model -> Program -> m Bool
+> runProgram ref mgr m0 (Program cmds0) = go m0 cmds0
 >   where
 >      go _m []           = return True
 >      go  m (cmd : cmds) = do
->        resp <- liftIO (exec cmd q mgr)
+>        resp <- liftIO (exec cmd ref mgr)
 >        let (m', resp') = step m cmd
 >        if resp == resp'
 >        then go m' cmds
 >        else return False
 
-> initModel :: Model
-> initModel = Model Vector.empty Nothing
+> test :: IO ()
+> test = do
+>   queue <- faultyFakeQueue mAX_QUEUE_SIZE
+>   mgr   <- newManager defaultManagerSettings
+>   withService (ffqQueue queue) (quickCheck (prop_sequentialWithFaults (ffqFault queue) mgr))
 
 > newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
 >   deriving Show
