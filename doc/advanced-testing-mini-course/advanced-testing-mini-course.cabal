@@ -28,8 +28,8 @@ library
   build-depends:    base ^>=4.14.1.0
   hs-source-dirs:   src
   build-depends:
-    , async
     , aeson
+    , async
     , bytestring
     , containers
     , directory
@@ -40,28 +40,29 @@ library
     , microlens-platform
     , QuickCheck
     , random
-    , stm
     , sqlite-simple
+    , stm
     , text
     , time
     , transformers
-    , tree-diff ==0.0.2.1
+    , tree-diff           ==0.0.2.1
     , vector
     , wai
     , warp
 
   exposed-modules:
+    Experiment.Simulation
     Lec00Introduction
     Lec01SMTesting
     Lec02ConcurrentSMTesting
-    Lec03SMContractTesting
-    Lec03.QueueInterface
     Lec03.Queue
+    Lec03.QueueInterface
     Lec03.QueueTest
     Lec03.Service
     Lec03.ServiceTest
-    Lec04FaultInjection
+    Lec03SMContractTesting
     Lec04.LineariseWithFault
+    Lec04FaultInjection
     Lec05.Agenda
     Lec05.AwaitingClients
     Lec05.Codec
@@ -74,10 +75,10 @@ library
     Lec05.History
     Lec05.Network
     Lec05.Options
+    Lec05.Random
     Lec05.SmartBFT.Machine
     Lec05.SmartBFT.Messages
     Lec05.SmartBFT.State
-    Lec05.Random
     Lec05.StateMachine
     Lec05.StateMachineDSL
     Lec05.Time
@@ -91,7 +92,6 @@ library
     Lec08AsyncFileSystemIO
     Lec09SMUpgrades
     Lec10LibraryOrFramework
-    Experiment.Simulation
 
   default-language: Haskell2010
   ghc-options:      -Wall
@@ -110,4 +110,23 @@ executable lec5
 
   hs-source-dirs:   app
   default-language: Haskell2010
-  ghc-options:      -Wall -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
+  ghc-options:
+    -Wall -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
+
+test-suite test
+  main-is:            Main.hs
+  hs-source-dirs:     test
+  other-modules:
+    Driver
+    LecTest
+
+  build-depends:
+    , advanced-testing-mini-course
+    , base
+    , tasty
+    , tasty-hunit
+
+  build-tool-depends: tasty-discover:tasty-discover -any
+  type:               exitcode-stdio-1.0
+  ghc-options:
+    -Wall -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts

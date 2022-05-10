@@ -76,11 +76,13 @@ service queue = do
 withService :: QueueI Command -> IO () -> IO ()
 withService queue io = do
   bracket initDB closeDB $ \conn ->
-    withAsync (worker queue conn) $ \_a -> do
+    withAsync (worker queue conn) $ \wPid -> do
+      link wPid
       ready <- newEmptyMVar
-      pid <- async (runFrontEnd queue ready pORT)
+      fePid <- async (runFrontEnd queue ready pORT)
+      link fePid
       confirm <- async (takeMVar ready)
-      ok <- waitEither pid confirm
+      ok <- waitEither fePid confirm
       case ok of
         Right () -> io
         Left  () -> error "Service should not return"
