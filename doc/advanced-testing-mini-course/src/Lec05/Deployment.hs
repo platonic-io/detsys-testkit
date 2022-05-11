@@ -67,5 +67,5 @@ newDeployment mode config = case mode of
       , dTimerWheel    = timerWheel
       , dRandom        = random
       , dPids          = Pids []
-      , dAppendHistory = appendHistory history
+      , dAppendHistory = appendHistory history DidArrive
       }

@@ -13,8 +13,8 @@ import Lec05.History
 import Lec05.StateMachine
 import Lec05.Time
 
-toI :: (Int, HistEvent) -> Value
-toI (i, HistEvent n bs inp as msgs) = object
+toI :: (Int, HistEvent') -> Value
+toI (i, HistEvent' _dropped (HistEvent n bs inp as msgs)) = object
   [ "state" .= show (ppEditExpr ansiWlPretty (ediff bs as))
   , "currentEvent" .= object
     [ "from" .= f
@@ -51,8 +51,8 @@ toI (i, HistEvent n bs inp as msgs) = object
       ]
     toD _ = []
 
-toDebugFile :: [HistEvent] -> ByteString
+toDebugFile :: [HistEvent'] -> ByteString
 toDebugFile = encode . map toI . zip [0..]
 
-writeDebugFile :: FilePath -> [HistEvent] -> IO ()
+writeDebugFile :: FilePath -> [HistEvent'] -> IO ()
 writeDebugFile fp xs = writeFile fp (toDebugFile xs)

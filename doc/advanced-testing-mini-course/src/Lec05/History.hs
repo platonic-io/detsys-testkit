@@ -15,7 +15,14 @@ import Lec05.StateMachine
 
 ------------------------------------------------------------------------
 
-newtype History = History (TQueue HistEvent)
+newtype History = History (TQueue HistEvent')
+
+data Dropped = DidDrop | DidArrive
+
+data HistEvent' = HistEvent'
+  { heDropped :: Dropped
+  , heEvent :: HistEvent
+  }
 
 data HistEvent = forall state req msg resp.
   ( Show state, Show req, Show msg, Show resp
@@ -29,10 +36,10 @@ newHistory = do
   q <- newTQueueIO
   return (History q)
 
-appendHistory :: History -> HistEvent -> IO ()
-appendHistory (History q) ev = atomically (writeTQueue q ev)
+appendHistory :: History -> Dropped -> HistEvent -> IO ()
+appendHistory (History q) dropped ev = atomically (writeTQueue q (HistEvent' dropped ev))
 
-readHistory :: History -> IO [HistEvent]
+readHistory :: History -> IO [HistEvent']
 readHistory (History q) = atomically (flushTQueue q)
 
 ------------------------------------------------------------------------
