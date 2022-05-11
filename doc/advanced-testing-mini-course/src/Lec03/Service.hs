@@ -95,7 +95,6 @@ worker queue conn = go
           threadDelay 1000 -- 1 ms
           go
         Just cmd -> do
-          putStrLn (prettyCommand cmd)
           exec cmd conn
           go
 

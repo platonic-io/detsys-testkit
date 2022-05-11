@@ -1,6 +1,10 @@
 > {-# LANGUAGE OverloadedStrings #-}
 
-> module Lec04FaultInjection where
+> module Lec04FaultInjection
+>   ( module Lec04FaultInjection
+>   , module Lec03.ServiceTest
+>   )
+>   where
 
 > import Data.Vector (Vector)
 > import qualified Data.Vector as Vector
@@ -146,16 +150,20 @@ Model
 >     genCommand :: Model -> Gen Command
 >     genCommand m = case mMaybeFault m of
 >       Nothing     -> frequency [ (2, InjectFault <$> genFault)
->                                , (8, ClientRequest <$> genRequest)
+>                                , (8, ClientRequest <$> genRequest m)
 >                                ]
 >       Just _fault -> frequency [ (8, return RemoveFault)
->                                , (2, ClientRequest <$> genRequest)
+>                                , (2, ClientRequest <$> genRequest m)
 >                                ]
 
->     genRequest :: Gen ClientRequest
->     genRequest = frequency [ (2, WriteReq <$> (LBS.pack <$> arbitrary))
->                            , (8, ReadReq  <$> (Index <$> arbitrary))
->                            ]
+>     genRequest :: Model -> Gen ClientRequest
+>     genRequest m | len == 0  = WriteReq <$> (LBS.pack <$> arbitrary)
+>                  | otherwise = frequency
+>                      [ (2, WriteReq <$> (LBS.pack <$> arbitrary))
+>                      , (8, ReadReq  <$> (Index <$> elements [0 .. len - 1]))
+>                      ]
+>       where
+>         len = Vector.length (mModel m)
 
 >     genFault :: Gen Fault
 >     genFault = elements [ Full, Empty, ReadFail (userError "bug")]
