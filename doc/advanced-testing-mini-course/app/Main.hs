@@ -37,11 +37,11 @@ main = do
         vrSM me = VR.vrSM (filter (/= me) nodes) me [] smI
         printItem label prefix thing =
           putStrLn $ "\x1b[31m" <> label <> ":\x1b[0m " <> prefix <> show thing
-        printE (HistEvent n bs inp as msgs) = do
+        printE (HistEvent' d (HistEvent n bs inp as msgs)) = do
           putStrLn "\n\x1b[32mNew Entry\x1b[0m"
           printItem "Node" " " n
           printItem "State before" "\n" bs
-          printItem "Input" " " inp
+          printItem "Input" (case d of { DidDrop -> "[DROPPED] "; DidArrive -> " "}) inp
           printItem "State after" "\n" as
           printItem "Sent messages" "" ""
           mapM_ (\x -> putStrLn $ "  " <> show x) msgs
@@ -53,6 +53,6 @@ main = do
       let step :: () -> VRRequest () -> ((), VRResponse ())
           step = undefined
           initModel = undefined
-      assert (linearisable step initModel (interleavings (blackboxHistory history)))
+      assert (linearisable step initModel (interleavings (blackboxHistory (fmap heEvent history))))
              (return ())
     _otherwise       -> eventLoopProduction [SomeCodecSM idCodec echoSM]
