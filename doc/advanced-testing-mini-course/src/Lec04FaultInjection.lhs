@@ -1,4 +1,5 @@
 > {-# LANGUAGE OverloadedStrings #-}
+> {-# LANGUAGE ScopedTypeVariables #-}
 
 > module Lec04FaultInjection
 >   ( module Lec04FaultInjection
@@ -14,11 +15,16 @@
 > import Control.Monad.IO.Class (MonadIO, liftIO)
 > import Data.IORef
 > import Test.HUnit (Assertion, assertBool)
-> import Test.QuickCheck
+> import Test.QuickCheck hiding (Result)
 > import Test.QuickCheck.Monadic hiding (assert)
-> import Network.HTTP.Client (Manager, defaultManagerSettings, newManager)
+> import Network.HTTP.Client (HttpException(HttpExceptionRequest),
+>                             HttpExceptionContent(ResponseTimeout), Manager,
+>                             defaultManagerSettings, newManager)
 
 > import Lec03.Service (withService, mAX_QUEUE_SIZE)
+> import Lec03.QueueInterface
+> import Lec03.Service (fakeQueue, realQueue)
+> import Lec03.ServiceTest (Index(Index), httpWrite, httpRead, httpReset)
 > import Lec04.LineariseWithFault ()
 
 Fault-injection
@@ -58,10 +64,6 @@ Plan
 
 Faulty queue
 ------------
-
-> import Lec03.QueueInterface
-> import Lec03.Service (fakeQueue, realQueue)
-> import Lec03.ServiceTest (Index(Index), httpWrite, httpRead, httpReset)
 
 > data FaultyFakeQueue a = FaultyFakeQueue
 >   { ffqQueue :: QueueI a
@@ -132,7 +134,7 @@ Model
 > data ClientRequest = WriteReq ByteString | ReadReq Index
 >   deriving Show
 
-> data ClientResponse = WriteResp Index | ReadResp (Maybe ByteString)
+> data ClientResponse = WriteResp Index | ReadResp ByteString
 >   deriving (Eq, Show)
 
 > newtype Program = Program { unProgram :: [Command] }
@@ -144,8 +146,11 @@ Model
 >     go _m cmds 0 = return (Program (reverse cmds))
 >     go  m cmds n = do
 >       cmd <- genCommand m
->       let m' = fst (step m cmd)
->       go m' (cmd : cmds) (n - 1)
+>       case mMaybeFault m of
+>         Nothing -> do
+>           let m' = fst (step m cmd)
+>           go m' (cmd : cmds) (n - 1)
+>         Just _fault -> go m (cmd : cmds) (n - 1)
 
 >     genCommand :: Model -> Gen Command
 >     genCommand m = case mMaybeFault m of
@@ -166,7 +171,7 @@ Model
 >         len = Vector.length (mModel m)
 
 >     genFault :: Gen Fault
->     genFault = elements [ Full, Empty, ReadFail (userError "bug")]
+>     genFault = elements [ Full ] -- , Empty ] -- , ReadFail (userError "bug")]
 
 > data Model = Model
 >   { mModel      :: Vector ByteString
@@ -182,50 +187,104 @@ Model
 >     ( m { mModel = Vector.snoc (mModel m) bs }
 >     , Just (WriteResp (Index (Vector.length (mModel m))))
 >     )
->   ClientRequest (ReadReq (Index ix)) -> (m, Just (ReadResp (mModel m Vector.!? ix)))
+>   ClientRequest (ReadReq (Index ix)) -> (m, Just (ReadResp (mModel m Vector.! ix)))
 >   InjectFault fault -> (m { mMaybeFault = Just fault}, Nothing)
 >   RemoveFault       -> (m { mMaybeFault = Nothing}, Nothing)
 >   Reset             -> (m, Nothing)
 
-> exec :: Command -> IORef (Maybe Fault) -> Manager -> IO (Maybe ClientResponse)
+> data Result a = Ok a | Fail | Info | Nemesis
+>   deriving Show
+
+> exec :: Command -> IORef (Maybe Fault) -> Manager -> IO (Result ClientResponse)
 > exec (ClientRequest req) _ref mgr =
 >   case req of
->     WriteReq bs -> Just . WriteResp <$> httpWrite mgr bs
->     ReadReq ix  -> Just . ReadResp  <$> httpRead mgr ix
+>     WriteReq bs -> do
+>       res <- try (httpWrite mgr bs)
+>       case res of
+>         Left (err :: HttpException) | isResponseTimeout err -> return Info
+>                                     | otherwise             -> return Fail
+>         Right ix -> return (Ok (WriteResp ix))
+>     ReadReq ix  -> do
+>       res <- try (httpRead mgr ix)
+>       case res of
+>         Left (err :: HttpException) | isResponseTimeout err -> return Info
+>                                     | otherwise             -> return Fail
+>         Right bs -> return (Ok (ReadResp bs))
 > exec (InjectFault fault)  ref _mgr = do
 >   case fault of
 >     Full         -> injectFullFault ref
 >     Empty        -> injectEmptyFault ref
 >     ReadFail err -> injectReadFailFault ref err
->   return Nothing
+>   return Nemesis
 > exec RemoveFault ref _mgr = do
 >   removeFault ref
->   return Nothing
+>   return Nemesis
 > exec Reset _ref mgr = do
 >   httpReset mgr
->   return Nothing
+>   return Nemesis
+
+> isResponseTimeout :: HttpException -> Bool
+> isResponseTimeout (HttpExceptionRequest _req ResponseTimeout) = True
+> isResponseTimeout _otherwise                                  = False
 
 > shrinkProgram :: Program -> [Program]
-> shrinkProgram _prog = []
+> shrinkProgram (Program cmds) = filter isValidProgram ((map Program (shrinkList shrinkCommand cmds)))
+>   where
+>     shrinkCommand _cmd = []
+
+> isValidProgram :: Program -> Bool
+> isValidProgram (Program cmds0) = go initModel cmds0
+>   where
+>     go _m [] = True
+>     go  m (ClientRequest (ReadReq (Index ix)) : cmds)
+>       | ix < Vector.length (mModel m) = go m cmds
+>       | otherwise                     = False
+>     go  m (cmd@(ClientRequest (WriteReq _bs)) : cmds) = case mMaybeFault m of
+>       Nothing     -> let m' = fst (step m cmd) in go m' cmds
+>       Just _fault -> go m cmds
+>     go  m (cmd : cmds) = let m' = fst (step m cmd) in go m' cmds
 
 > forallPrograms :: (Program -> Property) -> Property
 > forallPrograms p =
 >   forAllShrink (genProgram initModel) shrinkProgram p
 
 > prop_sequentialWithFaults :: IORef (Maybe Fault) -> Manager -> Property
-> prop_sequentialWithFaults ref mgr = forallPrograms $ \prog -> monadicIO $ do
->   runProgram ref mgr initModel prog
+> prop_sequentialWithFaults ref mgr = noShrinking $ forallPrograms $ \prog -> monadicIO $ do
+>   r <- runProgram ref mgr initModel prog
+>   run (removeFault ref)
+>   run (httpReset mgr)
+>   case r of
+>     Left err -> do
+>       monitor (counterexample err)
+>       return False
+>     Right () -> return True
 
-> runProgram :: MonadIO m => IORef (Maybe Fault) -> Manager -> Model -> Program -> m Bool
+> runProgram :: MonadIO m => IORef (Maybe Fault) -> Manager -> Model -> Program -> m (Either String ())
 > runProgram ref mgr m0 (Program cmds0) = go m0 cmds0
 >   where
->     go _m []           = return True
+>     go _m []           = return (Right ())
 >     go  m (cmd : cmds) = do
->       resp <- liftIO (exec cmd ref mgr)
->       let (m', resp') = step m cmd
->       if resp == resp'
->       then go m' cmds
->       else return False
+>       res <- liftIO (exec cmd ref mgr)
+>       case res of
+>         Ok resp -> do
+>           let (m', mResp') = step m cmd
+>           case mResp' of
+>             Just resp' | resp == resp' -> go m' cmds
+>                        | otherwise     -> return (Left (concat [show resp, " /= ", show resp']))
+>             Nothing -> return (Left (concat [show res, " /= ", show mResp']))
+>         Fail -> do
+>           mFault <- liftIO (readIORef ref)
+>           case mFault of
+>             Nothing -> do
+>               let (_m', mResp') = step m cmd
+>               return (Left ("Fail without fault being injected, expected: " ++ show mResp'))
+>             Just _fault -> go m cmds
+>         Info -> return (Left "Continuing would violate the single-threaded constraint: processes only do one thing at a time.")
+>         Nemesis -> do
+>           let (m', mResp') = step m cmd
+>           case mResp' of
+>             Nothing     -> go m' cmds
+>             Just _resp' -> return (Left (concat [show res, " /= ", show mResp']))
 
 > withFaultyQueueService :: (Manager -> IORef (Maybe Fault) -> IO ()) -> IO ()
 > withFaultyQueueService io = do
@@ -253,8 +312,11 @@ Model
 > assertProgram msg prog =
 >   withFaultyQueueService $ \mgr ref -> do
 >     let m = initModel
->     b <- runProgram ref mgr m prog
->     assertBool msg b
+>     r <- runProgram ref mgr m prog
+>     assertBool msg (isRight r)
+>   where
+>     isRight Right {} = True
+>     isRight Left  {} = False
 
 > unit_singleWrite :: Assertion
 > unit_singleWrite = assertProgram "singleWrite" (Program [ClientRequest (WriteReq "hi")])

@@ -128,22 +128,28 @@ httpFrontend queue req respond =
           respond (responseLBS status400 [] "Couldn't parse index")
         Just ix -> do
           response <- newEmptyMVar
-          -- NOTE: We are not checking if the queue is full here...
-          _ <- qiEnqueue queue (Read ix response)
-          mbs <- takeMVar response
-          case mbs of
-            Nothing ->
-              respond (responseLBS status404 [] (BS8.pack "Not found"))
-            Just bs -> respond (responseLBS status200 [] bs)
+          success <- qiEnqueue queue (Read ix response)
+          if success
+          then do
+            mbs <- takeMVar response
+            case mbs of
+              Nothing ->
+                respond (responseLBS status404 [] (BS8.pack "Not found"))
+              Just bs -> respond (responseLBS status200 [] bs)
+          else respond (responseLBS status503 [] "Overloaded")
     "POST" -> do
       bs <- consumeRequestBodyStrict req
       response <- newEmptyMVar
-      _ <- qiEnqueue queue (Write bs response)
-      ix <- takeMVar response
-      respond (responseLBS status200 [] (BS8.pack (show ix)))
+      success <- qiEnqueue queue (Write bs response)
+      if success
+      then do
+        ix <- takeMVar response
+        respond (responseLBS status200 [] (BS8.pack (show ix)))
+      else respond (responseLBS status503 [] "Overloaded")
+
     "DELETE" -> do
       response <- newEmptyMVar
-      _ <- qiEnqueue queue (Reset response)
+      True <- qiEnqueue queue (Reset response)
       () <- takeMVar response
       respond (responseLBS status200 [] (BS8.pack "Reset"))
     _otherwise -> do
