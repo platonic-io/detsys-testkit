@@ -13,7 +13,7 @@ import Lec05.Network
 
 ------------------------------------------------------------------------
 
-data DeploymentMode = Production | Simulation Seed Agenda History
+data DeploymentMode = Production | Simulation Seed Agenda History (Maybe FailureSpec)
 
 displayDeploymentMode :: DeploymentMode -> String
 displayDeploymentMode Production    = "production"
@@ -32,6 +32,10 @@ data Deployment = Deployment
   }
 
 newtype Pids = Pids { unPids :: [Async ()] }
+
+data FailureSpec = FailureSpec
+  { fsNetworkFailure :: NetworkFaults
+  }
 
 newDeployment :: DeploymentMode -> Configuration -> IO Deployment
 newDeployment mode config = case mode of
@@ -52,11 +56,11 @@ newDeployment mode config = case mode of
       , dPids          = Pids []
       , dAppendHistory = \_ -> return ()
       }
-  Simulation seed agenda history -> do
+  Simulation seed agenda history mf -> do
     clock      <- fakeClockEpoch
     eventQueue <- fakeEventQueue agenda clock
     random     <- fakeRandom seed
-    network    <- fakeNetwork eventQueue clock random
+    network    <- faultyNetwork eventQueue clock random config history (fmap fsNetworkFailure mf)
     timerWheel <- newTimerWheel
     return Deployment
       { dMode          = mode

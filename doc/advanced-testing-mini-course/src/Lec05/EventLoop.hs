@@ -28,7 +28,11 @@ eventLoopProduction = eventLoop (Options Production) <=< makeConfiguration
 
 eventLoopSimulation :: Seed -> Agenda -> History -> [SomeCodecSM] -> IO ()
 eventLoopSimulation seed agenda history =
-  eventLoop (Options (Simulation seed agenda history)) <=< makeConfiguration
+  eventLoop (Options (Simulation seed agenda history Nothing)) <=< makeConfiguration
+
+eventLoopFaultySimulation :: Seed -> Agenda -> History -> FailureSpec -> [SomeCodecSM] -> IO ()
+eventLoopFaultySimulation seed agenda history failureSpec =
+  eventLoop (Options (Simulation seed agenda history (Just failureSpec))) <=< makeConfiguration
 
 echoAgenda :: Agenda
 echoAgenda = makeAgenda

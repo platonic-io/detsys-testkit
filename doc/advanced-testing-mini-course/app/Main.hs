@@ -8,6 +8,8 @@ import Lec05.StateMachine
 import Lec05.Configuration
 import Lec05.Codec
 import Lec05.Debug
+import Lec05.Deployment
+import Lec05.Network
 import Lec05.Random
 import Lec05.History
 
@@ -36,17 +38,18 @@ main = do
         smI = ReplicatedStateMachine $ \ s o -> ((), o:s)
         vrSM me = VR.vrSM (filter (/= me) nodes) me [] smI
         printItem label prefix thing =
-          putStrLn $ "\x1b[31m" <> label <> ":\x1b[0m " <> prefix <> show thing
+          putStrLn $ "\x1b[33m" <> label <> ":\x1b[0m " <> prefix <> show thing
         printE (HistEvent' d (HistEvent n bs inp as msgs)) = do
           putStrLn "\n\x1b[32mNew Entry\x1b[0m"
           printItem "Node" " " n
           printItem "State before" "\n" bs
-          printItem "Input" (case d of { DidDrop -> "[DROPPED] "; DidArrive -> " "}) inp
+          printItem "Input" (case d of { DidDrop -> "\x1b[31m[DROPPED]\x1b[0m "; DidArrive -> " "}) inp
           printItem "State after" "\n" as
           printItem "Sent messages" "" ""
           mapM_ (\x -> putStrLn $ "  " <> show x) msgs
-      eventLoopSimulation (Seed 0) VR.agenda h [ SomeCodecSM VR.vrCodec (vrSM me)
-                                               | me <- nodes]
+        fs = FailureSpec (NetworkFaults 0.2)
+      eventLoopFaultySimulation (Seed 0) VR.agenda h fs
+        [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes]
       history <- readHistory h
       mapM_ printE history
       writeDebugFile fp history

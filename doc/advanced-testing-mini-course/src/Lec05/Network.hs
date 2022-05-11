@@ -17,6 +17,8 @@ import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
 
 import Lec05.AwaitingClients
+import Lec05.Configuration
+import Lec05.History
 import Lec05.Random
 import Lec05.StateMachine
 import Lec05.Time
@@ -115,6 +117,45 @@ fakeNetwork evQ clock random = do
       let arrivalTime = addTime (fromRational (toRational d)) now
       eqEnqueue evQ
         (NetworkEventE (NetworkEvent to (InternalMessage arrivalTime from msg)))
+
+    respond :: ClientId -> ByteString -> IO ()
+    respond _clientId _resp = return ()
+
+data NetworkFaults = NetworkFaults
+  { nfChanceOfDrop :: Double }
+
+faultyNetwork :: EventQueue -> Clock -> Random -> Configuration
+  -> History -> Maybe NetworkFaults -> IO Network
+faultyNetwork evQ clock random config history mnf = do
+  return Network
+    { nSend    = send
+    , nRespond = respond
+    , nRun     = return ()
+    }
+  where
+    probOfDrop = case mnf of
+      Nothing -> 0.0
+      Just nf -> nfChanceOfDrop nf
+    send :: NodeId -> NodeId -> ByteString -> IO ()
+    send from to msg = do
+      now <- cGetCurrentTime clock
+      willDrop <- (< probOfDrop) <$> randomInterval random (0.0, 1.0)
+      if willDrop
+        then do
+          mst <- lookupReceiver to config
+          case mst of
+            Nothing -> error $ "Can't find actor: " <> show to
+            Just (SomeCodecSM _ sm) -> do
+             let
+               st = smState sm
+               he = HistEvent to st (InternalMessage now from msg :: Input () ByteString) st ([] :: [Output () ByteString])
+             appendHistory history DidDrop he
+        else do
+          -- XXX: Exponential distribution?
+          d <- randomInterval random (1.0, 20.0) :: IO Double
+          let arrivalTime = addTime (fromRational (toRational d)) now
+          eqEnqueue evQ
+            (NetworkEventE (NetworkEvent to (InternalMessage arrivalTime from msg)))
 
     respond :: ClientId -> ByteString -> IO ()
     respond _clientId _resp = return ()
