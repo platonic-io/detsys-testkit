@@ -49,8 +49,8 @@ main = do
           printItem "State after" "\n" as
           printItem "Sent messages" "" ""
           mapM_ (\x -> putStrLn $ "  " <> show x) msgs
-        fs = FailureSpec (NetworkFaults 0.2)
-      collector <- eventLoopFaultySimulation (Seed 0) VR.agenda h fs
+        fs = FailureSpec (NetworkFaults 0.15)
+      collector <- eventLoopFaultySimulation (Seed 6) VR.agenda h fs
         [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes]
       history <- readHistory h
       mapM_ printE history
