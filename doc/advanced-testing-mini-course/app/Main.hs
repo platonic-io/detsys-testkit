@@ -2,7 +2,9 @@ module Main where
 
 import System.Environment
 import Control.Exception (assert)
+import Control.Monad (unless)
 
+import Lec05.ErrorReporter
 import Lec05.EventLoop
 import Lec05.StateMachine
 import Lec05.Configuration
@@ -27,7 +29,7 @@ main = do
   case args of
     ["--simulation"] -> do
       h <- newHistory
-      eventLoopSimulation (Seed 0) echoAgenda h [SomeCodecSM idCodec echoSM]
+      _collector <- eventLoopSimulation (Seed 0) echoAgenda h [SomeCodecSM idCodec echoSM]
       _history <- readHistory h
       putStrLn "Can't print history yet, need Show/Pretty constraints for parameters..."
     ["vr", "--simulation", fp] -> do
@@ -48,10 +50,14 @@ main = do
           printItem "Sent messages" "" ""
           mapM_ (\x -> putStrLn $ "  " <> show x) msgs
         fs = FailureSpec (NetworkFaults 0.2)
-      eventLoopFaultySimulation (Seed 0) VR.agenda h fs
+      collector <- eventLoopFaultySimulation (Seed 0) VR.agenda h fs
         [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes]
       history <- readHistory h
       mapM_ printE history
+      -- let's print the errors again so they are easier to see.
+      reportedErrors <- readFromCollector collector
+      unless (null reportedErrors) (putStrLn "")
+      mapM_ putStrLn reportedErrors
       writeDebugFile fp history
       let step :: () -> VRRequest () -> ((), VRResponse ())
           step = undefined

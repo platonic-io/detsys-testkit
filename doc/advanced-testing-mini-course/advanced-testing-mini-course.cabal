@@ -69,6 +69,7 @@ library
     Lec05.Configuration
     Lec05.Debug
     Lec05.Deployment
+    Lec05.ErrorReporter
     Lec05.Event
     Lec05.EventLoop
     Lec05.EventQueue
