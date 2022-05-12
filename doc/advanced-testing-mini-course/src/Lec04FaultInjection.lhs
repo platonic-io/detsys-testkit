@@ -17,9 +17,10 @@
 > import Test.HUnit (Assertion, assertBool)
 > import Test.QuickCheck hiding (Result)
 > import Test.QuickCheck.Monadic hiding (assert)
+> import Network.HTTP.Types (status503)
 > import Network.HTTP.Client (HttpException(HttpExceptionRequest),
->                             HttpExceptionContent(ResponseTimeout), Manager,
->                             defaultManagerSettings, newManager)
+>                             HttpExceptionContent(StatusCodeException), Manager,
+>                             defaultManagerSettings, newManager, responseStatus)
 
 > import Lec03.Service (withService, mAX_QUEUE_SIZE)
 > import Lec03.QueueInterface
@@ -171,7 +172,7 @@ Model
 >         len = Vector.length (mModel m)
 
 >     genFault :: Gen Fault
->     genFault = elements [ Full ] -- , Empty ] -- , ReadFail (userError "bug")]
+>     genFault = elements [ Full ] -- XXX: , Empty ] -- , ReadFail (userError "bug")]
 
 > data Model = Model
 >   { mModel      :: Vector ByteString
@@ -201,14 +202,14 @@ Model
 >     WriteReq bs -> do
 >       res <- try (httpWrite mgr bs)
 >       case res of
->         Left (err :: HttpException) | isResponseTimeout err -> return Info
->                                     | otherwise             -> return Fail
+>         Left (err :: HttpException) | is503 err -> return Fail
+>                                     | otherwise -> return Info
 >         Right ix -> return (Ok (WriteResp ix))
 >     ReadReq ix  -> do
 >       res <- try (httpRead mgr ix)
 >       case res of
->         Left (err :: HttpException) | isResponseTimeout err -> return Info
->                                     | otherwise             -> return Fail
+>         -- NOTE: since read doesn't change the state we can always treat is a failure.
+>         Left (_err :: HttpException) -> return Fail
 >         Right bs -> return (Ok (ReadResp bs))
 > exec (InjectFault fault)  ref _mgr = do
 >   case fault of
@@ -223,9 +224,9 @@ Model
 >   httpReset mgr
 >   return Nemesis
 
-> isResponseTimeout :: HttpException -> Bool
-> isResponseTimeout (HttpExceptionRequest _req ResponseTimeout) = True
-> isResponseTimeout _otherwise                                  = False
+> is503 :: HttpException -> Bool
+> is503 (HttpExceptionRequest _req (StatusCodeException resp _bs)) = responseStatus resp == status503
+> is503 _otherwise = False
 
 > shrinkProgram :: Program -> [Program]
 > shrinkProgram (Program cmds) = filter isValidProgram ((map Program (shrinkList shrinkCommand cmds)))
@@ -317,9 +318,6 @@ Model
 >   where
 >     isRight Right {} = True
 >     isRight Left  {} = False
-
-> unit_singleWrite :: Assertion
-> unit_singleWrite = assertProgram "singleWrite" (Program [ClientRequest (WriteReq "hi")])
 
 
 Concurrent testing
