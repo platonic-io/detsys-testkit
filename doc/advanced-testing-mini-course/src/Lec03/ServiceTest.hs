@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Lec03.ServiceTest where
 
@@ -19,14 +20,15 @@ import Network.HTTP.Client
        , defaultManagerSettings
        , httpLbs
        , method
+       , brConsume
+       , withResponse
        , newManager
        , parseRequest
        , path
        , requestBody
        , responseBody
-       , responseStatus
+       , throwErrorStatusCodes
        )
-import Network.HTTP.Types (status200)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 
@@ -46,12 +48,12 @@ import Lec03.Service
 ------------------------------------------------------------------------
 
 newtype Index = Index Int
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show, Num)
 
 data ClientRequest = WriteReq ByteString | ReadReq Index
   deriving Show
 
-data ClientResponse = WriteResp Index | ReadResp (Maybe ByteString)
+data ClientResponse = WriteResp Index | ReadResp ByteString
   deriving (Eq, Show)
 
 newtype ConcProgram = ConcProgram { unConcProgram :: [[ClientRequest]] }
@@ -66,7 +68,7 @@ step :: Model -> ClientRequest -> (Model, ClientResponse)
 step (Model vec) (WriteReq bs) =
   (Model (Vector.snoc vec bs), WriteResp (Index (Vector.length vec)))
 step (Model vec) (ReadReq (Index ix)) =
-  (Model vec, ReadResp (vec Vector.!? ix))
+  (Model vec, ReadResp (vec Vector.! ix))
 
 type Operation = Operation' ClientRequest ClientResponse
 
@@ -78,31 +80,35 @@ concExec mgr hist req =
       pid <- toPid <$> myThreadId
       appendHistory hist (Ok pid (WriteResp ix))
     ReadReq ix -> do
-      mbs <- httpRead mgr ix
+      bs <- httpRead mgr ix
       pid <- toPid <$> myThreadId
-      appendHistory hist (Ok pid (ReadResp mbs))
+      appendHistory hist (Ok pid (ReadResp bs))
 
 ------------------------------------------------------------------------
 
 httpWrite :: Manager -> ByteString -> IO Index
 httpWrite mgr bs = do
   initReq <- parseRequest ("http://localhost:" ++ show pORT)
-  resp <- httpLbs initReq { method = "POST"
-                          , requestBody = RequestBodyLBS bs
-                          } mgr
-  return (Index (read (LBS8.unpack (responseBody resp))))
+  let req = initReq { method = "POST"
+                    , requestBody = RequestBodyLBS bs
+                    }
+  withResponse req mgr $ \resp -> do
+    throwErrorStatusCodes req resp
+    bss <- brConsume (responseBody resp)
+    case LBS8.readInt (LBS8.fromChunks bss) of
+      Nothing          -> error "httpWrite: can't read index"
+      Just (ix, _rest) -> return (Index ix)
 
-httpRead :: Manager -> Index -> IO (Maybe ByteString)
+httpRead :: Manager -> Index -> IO ByteString
 httpRead mgr (Index ix) = do
   initReq <- parseRequest ("http://localhost:" ++ show pORT)
-  resp <- httpLbs initReq { method = "GET"
-                          , path = path initReq <> BS8.pack (show ix)
-                          } mgr
-  if responseStatus resp == status200
-  then return (Just (responseBody resp))
-  else do
-    putStrLn ("httpRead: responseStatus: " ++ show (responseStatus resp))
-    return Nothing
+  let req = initReq { method = "GET"
+                    , path = path initReq <> BS8.pack (show ix)
+                    }
+  withResponse req mgr $ \resp -> do
+    throwErrorStatusCodes req resp
+    bss <- brConsume (responseBody resp)
+    return (LBS8.fromChunks bss)
 
 httpReset :: Manager -> IO ()
 httpReset mgr = do
