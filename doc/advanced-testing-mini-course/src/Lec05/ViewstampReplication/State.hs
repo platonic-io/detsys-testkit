@@ -70,6 +70,10 @@ data VRState state op result = VRState
   -- so the actual state machine is not listed
   , _currentState :: state
   , _stateMachine :: ReplicatedStateMachine state op result
+  -- state transfer not listed
+  , _recoveryResponses :: Map Nonce (Set NodeId)
+  , _currentNonce :: Maybe Nonce -- should we store this in the `Status`?
+  , _primaryResponse :: Maybe (PrimaryRecoveryResponse op)
   }
   deriving (Generic, Show)
 
@@ -92,6 +96,10 @@ initState config me state stateInterface = VRState
   , _primaryPrepareOk = mempty
   , _currentState = state
   , _stateMachine = stateInterface
+  -- not in paper state transfer
+  , _recoveryResponses = mempty
+  , _currentNonce = Nothing
+  , _primaryResponse = Nothing
   }
   where
     topo = sort (me:config)

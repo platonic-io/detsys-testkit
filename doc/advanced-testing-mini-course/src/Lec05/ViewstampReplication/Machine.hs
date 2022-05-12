@@ -1,7 +1,7 @@
 {-# LANGUAGE MultiWayIf #-}
 module Lec05.ViewstampReplication.Machine where
 
-import Control.Monad (forM_, unless)
+import Control.Monad (forM_, unless, when)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -64,10 +64,9 @@ broadCastReplicas msg = do
 broadCastOtherReplicas :: VRMessage o -> VR s o r ()
 broadCastOtherReplicas msg = do
   nodes <- use configuration
-  ViewNumber cVn <- use currentViewNumber
   me <- use replicaNumber
   forM_ (zip [0..] nodes) $ \ (i, node) -> do
-    unless (i == cVn `mod` length nodes || i == me) $ send node msg
+    unless (i == me) $ send node msg
 
 sendPrimary :: VRMessage o -> VR s o r ()
 sendPrimary msg = do
@@ -87,6 +86,16 @@ isQuorum x = do
   let f = (n - 1) `div` 2
   return (f <= x)
 
+addRecoveryResponse :: Nonce -> NodeId -> VR s o r Int
+addRecoveryResponse x from = do
+  s <- recoveryResponses.at x <%= Just . maybe (Set.singleton from) (Set.insert from)
+  return (maybe 0 Set.size s)
+
+pickLatest :: PrimaryRecoveryResponse op -> PrimaryRecoveryResponse op -> PrimaryRecoveryResponse op
+pickLatest p@(PrimaryRecoveryResponse _l _o k) p'@(PrimaryRecoveryResponse _l' _o' k')
+  | k <= k' = p'
+  | otherwise = p
+
 findClientInfoForOp :: OpNumber -> VR s o r (ClientId, RequestNumber)
 findClientInfoForOp on = use $
   clientTable.to (Map.filter (\cs -> copNumber cs == on)).to Map.findMin.to (fmap requestNumber)
@@ -101,8 +110,9 @@ initStateTransfer = do
 message to all other replicas, where x is a nonce.
 -}
   guardM $ use (currentStatus.to (== Normal))
-  currentStatus .= Recovering
   nonce <- generateNonce
+  currentStatus .= Recovering
+  currentNonce  .= Just nonce
   broadCastOtherReplicas $ Recovery nonce
   ereturn
 
@@ -283,14 +293,16 @@ wise these values are nil.
     -}
     guardM $ use (currentStatus.to (== Normal))
     v <- use currentViewNumber
-    l <- use theLog
     j <- use replicaNumber
     isP <- isPrimary
     resp <- case isP of
-      True -> FromPrimary <$> {- n -} use opNumber <*> {- k -} use commitNumber
+      True -> FromPrimary <$> (PrimaryRecoveryResponse
+        <$> {- l-} use theLog
+        <*> {- n -} use opNumber
+        <*> {- k -} use commitNumber)
       False -> pure FromReplica
-    send i $ RecoveryResponse v x l resp j
-  RecoveryResponse _v _x _l _resp _j -> do
+    send i $ RecoveryResponse v x resp j
+  RecoveryResponse _v x resp _j -> do -- TODO should probably check view number?
     {- 4.3 Recovery
 3. The recovering replica waits to receive at least f +
 1 RECOVERYRESPONSE messages from different
@@ -301,7 +313,26 @@ Then it updates its state using the information from
 the primary, changes its status to normal, and the
 recovery protocol is complete.
 -}
-    tODO
+    guardM $ use (currentStatus.to (== Recovering))
+    guardM $ use (currentNonce .to (== Just x))
+    howMany <- addRecoveryResponse x from
+    case resp of
+      FromReplica -> return ()
+      FromPrimary p -> primaryResponse %= maybe (Just p) (Just . pickLatest p)
+    q <- isQuorum howMany
+    when q $ do
+      mresp <- use primaryResponse
+      case mresp of
+        Nothing -> return ()
+        Just (PrimaryRecoveryResponse l n k) -> do
+          theLog .= l
+          opNumber .= n
+          currentStatus .= Normal
+          -- annoying to reset these
+          recoveryResponses .= mempty
+          currentNonce .= Nothing
+          primaryResponse .= Nothing
+          executeUpToOrBeginStateTransfer k
 
 machineTime :: Time -> VR s o r ()
 machineTime _t = return ()
