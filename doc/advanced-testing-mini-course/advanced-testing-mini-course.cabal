@@ -77,9 +77,6 @@ library
     Lec05.Network
     Lec05.Options
     Lec05.Random
-    Lec05.SmartBFT.Machine
-    Lec05.SmartBFT.Messages
-    Lec05.SmartBFT.State
     Lec05.StateMachine
     Lec05.StateMachineDSL
     Lec05.Time
