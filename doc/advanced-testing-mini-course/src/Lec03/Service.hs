@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Lec03.Service where
 
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Exception (bracket)
+import Control.Exception (bracket, IOException, catch)
 import Control.Monad (forM_)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS8
@@ -90,6 +91,8 @@ worker queue conn = go
     go :: IO ()
     go = do
       mCmd <- qiDequeue queue
+                -- This fixes the problem inject read error exposes:
+                `catch` (\(_err :: IOException) -> return Nothing)
       case mCmd of
         Nothing -> do
           threadDelay 1000 -- 1 ms

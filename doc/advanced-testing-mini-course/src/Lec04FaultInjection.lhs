@@ -1,9 +1,11 @@
 > {-# LANGUAGE OverloadedStrings #-}
+> {-# LANGUAGE NumericUnderscores #-}
 > {-# LANGUAGE ScopedTypeVariables #-}
 
 > module Lec04FaultInjection
 >   ( module Lec04FaultInjection
 >   , module Lec03.ServiceTest
+>   , module Test.QuickCheck
 >   )
 >   where
 
@@ -20,7 +22,8 @@
 > import Network.HTTP.Types (status503)
 > import Network.HTTP.Client (HttpException(HttpExceptionRequest),
 >                             HttpExceptionContent(StatusCodeException), Manager,
->                             defaultManagerSettings, newManager, responseStatus)
+>                             defaultManagerSettings, newManager, responseStatus,
+>                             managerResponseTimeout, responseTimeoutMicro)
 
 > import Lec03.Service (withService, mAX_QUEUE_SIZE)
 > import Lec03.QueueInterface
@@ -90,15 +93,21 @@ Faulty queue
 >     enqueue fake ref x = do
 >       fault <- readIORef ref
 >       case fault of
->         Just Full  -> return False
+>         Just Full -> do
+>           removeFault ref
+>           return False
 >         _otherwise -> qiEnqueue fake x
 
 >     dequeue :: QueueI a -> IORef (Maybe Fault) -> IO (Maybe a)
 >     dequeue fake ref = do
 >       fault <- readIORef ref
 >       case fault of
->         Just Empty          -> return Nothing
->         Just (ReadFail err) -> throwIO err
+>         Just Empty -> do
+>           removeFault ref
+>           return Nothing
+>         Just (ReadFail err) -> do
+>           removeFault ref
+>           throwIO err
 >         _otherwise          -> qiDequeue fake
 
 > injectFullFault :: IORef (Maybe Fault) -> IO ()
@@ -128,7 +137,6 @@ Model
 > data Command
 >   = ClientRequest ClientRequest
 >   | InjectFault Fault
->   | RemoveFault
 >   | Reset -- Used for testing only.
 >   deriving Show
 
@@ -155,12 +163,10 @@ Model
 
 >     genCommand :: Model -> Gen Command
 >     genCommand m = case mMaybeFault m of
->       Nothing     -> frequency [ (2, InjectFault <$> genFault)
->                                , (8, ClientRequest <$> genRequest m)
->                                ]
->       Just _fault -> frequency [ (8, return RemoveFault)
->                                , (2, ClientRequest <$> genRequest m)
->                                ]
+>       Nothing -> frequency [ (2, InjectFault <$> genFault)
+>                            , (8, ClientRequest <$> genRequest m)
+>                            ]
+>       Just _fault -> ClientRequest <$> genRequest m
 
 >     genRequest :: Model -> Gen ClientRequest
 >     genRequest m | len == 0  = WriteReq <$> (LBS.pack <$> arbitrary)
@@ -172,7 +178,10 @@ Model
 >         len = Vector.length (mModel m)
 
 >     genFault :: Gen Fault
->     genFault = elements [ Full ] -- XXX: , Empty ] -- , ReadFail (userError "bug")]
+>     genFault = frequency [ (1, pure Full)
+>                          , (1, pure Empty)
+>                          , (1, pure (ReadFail (userError "bug")))
+>                          ]
 
 > data Model = Model
 >   { mModel      :: Vector ByteString
@@ -190,7 +199,6 @@ Model
 >     )
 >   ClientRequest (ReadReq (Index ix)) -> (m, Just (ReadResp (mModel m Vector.! ix)))
 >   InjectFault fault -> (m { mMaybeFault = Just fault}, Nothing)
->   RemoveFault       -> (m { mMaybeFault = Nothing}, Nothing)
 >   Reset             -> (m, Nothing)
 
 > data Result a = Ok a | Fail | Info | Nemesis
@@ -216,9 +224,6 @@ Model
 >     Full         -> injectFullFault ref
 >     Empty        -> injectEmptyFault ref
 >     ReadFail err -> injectReadFailFault ref err
->   return Nemesis
-> exec RemoveFault ref _mgr = do
->   removeFault ref
 >   return Nemesis
 > exec Reset _ref mgr = do
 >   httpReset mgr
@@ -273,13 +278,7 @@ Model
 >             Just resp' | resp == resp' -> go m' cmds
 >                        | otherwise     -> return (Left (concat [show resp, " /= ", show resp']))
 >             Nothing -> return (Left (concat [show res, " /= ", show mResp']))
->         Fail -> do
->           mFault <- liftIO (readIORef ref)
->           case mFault of
->             Nothing -> do
->               let (_m', mResp') = step m cmd
->               return (Left ("Fail without fault being injected, expected: " ++ show mResp'))
->             Just _fault -> go m cmds
+>         Fail -> go m cmds
 >         Info -> return (Left "Continuing would violate the single-threaded constraint: processes only do one thing at a time.")
 >         Nemesis -> do
 >           let (m', mResp') = step m cmd
@@ -291,6 +290,7 @@ Model
 > withFaultyQueueService io = do
 >   queue <- faultyFakeQueue mAX_QUEUE_SIZE
 >   mgr   <- newManager defaultManagerSettings
+>              { managerResponseTimeout = responseTimeoutMicro (1_000_000) } -- 1s
 >   withService (ffqQueue queue) (io mgr (ffqFault queue))
 
 > withFakeQueueService :: (Manager -> IO ()) -> IO ()
