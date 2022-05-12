@@ -325,7 +325,7 @@ agenda :: Agenda
 agenda = mk
   [ ("first", 0)  -- this will complete
   , ("second", 5) -- this will be rejected
-  , ("third", 9) -- this will complete
+  , ("third", 25) -- this will complete
   ]
   where
     mk = makeAgenda . snd . List.mapAccumL op ini
