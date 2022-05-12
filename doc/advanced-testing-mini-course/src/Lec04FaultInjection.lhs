@@ -194,10 +194,13 @@ Model
 > step :: Model -> Command -> (Model, Maybe ClientResponse)
 > step m cmd = case cmd of
 >   ClientRequest (WriteReq bs) ->
->     ( m { mModel = Vector.snoc (mModel m) bs }
+>     ( m { mModel = Vector.snoc (mModel m) bs, mMaybeFault = Nothing }
 >     , Just (WriteResp (Index (Vector.length (mModel m))))
 >     )
->   ClientRequest (ReadReq (Index ix)) -> (m, Just (ReadResp (mModel m Vector.! ix)))
+>   ClientRequest (ReadReq (Index ix)) ->
+>     ( m { mMaybeFault = Nothing }
+>     , Just (ReadResp (mModel m Vector.! ix))
+>     )
 >   InjectFault fault -> (m { mMaybeFault = Just fault}, Nothing)
 >   Reset             -> (m, Nothing)
 
