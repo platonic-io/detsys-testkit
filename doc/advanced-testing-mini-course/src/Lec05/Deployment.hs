@@ -4,6 +4,7 @@ import Control.Concurrent.Async
 
 import Lec05.History
 import Lec05.Agenda
+import Lec05.ErrorReporter
 import Lec05.EventQueue
 import Lec05.Configuration
 import Lec05.Random
@@ -13,7 +14,7 @@ import Lec05.Network
 
 ------------------------------------------------------------------------
 
-data DeploymentMode = Production | Simulation Seed Agenda History (Maybe FailureSpec)
+data DeploymentMode = Production | Simulation Seed Agenda History (Maybe FailureSpec) Collector
 
 displayDeploymentMode :: DeploymentMode -> String
 displayDeploymentMode Production    = "production"
@@ -29,6 +30,7 @@ data Deployment = Deployment
   , dRandom        :: Random
   , dPids          :: Pids
   , dAppendHistory :: HistEvent -> IO ()
+  , dReportError   :: ErrorReporter
   }
 
 newtype Pids = Pids { unPids :: [Async ()] }
@@ -55,8 +57,9 @@ newDeployment mode config = case mode of
       , dRandom        = random
       , dPids          = Pids []
       , dAppendHistory = \_ -> return ()
+      , dReportError   = putStrLn
       }
-  Simulation seed agenda history mf -> do
+  Simulation seed agenda history mf errorCollector -> do
     clock      <- fakeClockEpoch
     eventQueue <- fakeEventQueue agenda clock
     random     <- fakeRandom seed
@@ -72,4 +75,5 @@ newDeployment mode config = case mode of
       , dRandom        = random
       , dPids          = Pids []
       , dAppendHistory = appendHistory history DidArrive
+      , dReportError   = reportWithCollector errorCollector
       }

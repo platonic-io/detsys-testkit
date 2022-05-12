@@ -10,6 +10,7 @@ import Control.Exception
 import Lec05.Agenda
 import Lec05.Codec
 import Lec05.History
+import Lec05.ErrorReporter
 import Lec05.Event
 import Lec05.EventQueue
 import Lec05.Network
@@ -26,13 +27,19 @@ import Lec05.Deployment
 eventLoopProduction :: [SomeCodecSM] -> IO ()
 eventLoopProduction = eventLoop (Options Production) <=< makeConfiguration
 
-eventLoopSimulation :: Seed -> Agenda -> History -> [SomeCodecSM] -> IO ()
-eventLoopSimulation seed agenda history =
-  eventLoop (Options (Simulation seed agenda history Nothing)) <=< makeConfiguration
+eventLoopSimulation :: Seed -> Agenda -> History -> [SomeCodecSM] -> IO Collector
+eventLoopSimulation seed agenda history nodes = do
+  config <- makeConfiguration nodes
+  collector <- newCollector
+  eventLoop (Options (Simulation seed agenda history Nothing collector)) config
+  return collector
 
-eventLoopFaultySimulation :: Seed -> Agenda -> History -> FailureSpec -> [SomeCodecSM] -> IO ()
-eventLoopFaultySimulation seed agenda history failureSpec =
-  eventLoop (Options (Simulation seed agenda history (Just failureSpec))) <=< makeConfiguration
+eventLoopFaultySimulation :: Seed -> Agenda -> History -> FailureSpec -> [SomeCodecSM] -> IO Collector
+eventLoopFaultySimulation seed agenda history failureSpec nodes = do
+  config <- makeConfiguration nodes
+  collector <- newCollector
+  eventLoop (Options (Simulation seed agenda history (Just failureSpec) collector)) config
+  return collector
 
 echoAgenda :: Agenda
 echoAgenda = makeAgenda
@@ -71,10 +78,10 @@ runWorker d = go
     handleEvent (NetworkEventE (NetworkEvent nodeId rawInput)) = do
       r <- lookupReceiver nodeId (dConfiguration d)
       case r of
-        Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
+        Nothing -> dReportError d ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state step _timeout)) ->
           case decodeInput codec rawInput of
-            Nothing -> putStrLn (("Decoding of input failed, node id: " ++
+            Nothing -> dReportError d (("Decoding of input failed, node id: " ++
                                   show (unNodeId nodeId)) ++ ", input: " ++
                                   show rawInput)
             Just input -> do
@@ -82,7 +89,7 @@ runWorker d = go
               res <- try (evaluate (step input state gen))
               case res of
                 Left (e :: SomeException) ->
-                  putStrLn ("step failed, error: " ++ displayException e)
+                  dReportError d ("step failed, error: " ++ displayException e)
                 Right (outputs, state', gen') -> do
                   dAppendHistory d (HistEvent nodeId state input state' outputs)
                   updateReceiverState nodeId state' (dConfiguration d)
@@ -92,13 +99,13 @@ runWorker d = go
     handleEvent (TimerEventE (TimerEvent nodeId time)) = do
       r <- lookupReceiver nodeId (dConfiguration d)
       case r of
-        Nothing -> putStrLn ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
+        Nothing -> dReportError d ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
         Just (SomeCodecSM codec (SM state _step timeout)) -> do
           gen <- rGetStdGen (dRandom d)
           res <- try (evaluate (timeout time state gen))
           case res of
             Left (e :: SomeException) ->
-              putStrLn ("timeout failed, error: " ++ displayException e)
+              dReportError d ("timeout failed, error: " ++ displayException e)
             Right (outputs, state', gen') -> do
               -- XXX: Append to history
               updateReceiverState nodeId state' (dConfiguration d)
