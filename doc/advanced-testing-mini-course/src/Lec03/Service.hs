@@ -1,3 +1,4 @@
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -5,7 +6,7 @@ module Lec03.Service where
 
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Exception (bracket, IOException, catch)
+import Control.Exception (IOException, bracket, catch)
 import Control.Monad (forM_)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS8
@@ -26,6 +27,7 @@ import Network.HTTP.Types.Status
 import Network.Wai
 import Network.Wai.Handler.Warp
 import System.Environment
+import System.Timeout (timeout)
 
 import Lec03.Queue
 import Lec03.QueueInterface
@@ -134,11 +136,11 @@ httpFrontend queue req respond =
           success <- qiEnqueue queue (Read ix response)
           if success
           then do
-            mbs <- takeMVar response
-            case mbs of
-              Nothing ->
-                respond (responseLBS status404 [] (BS8.pack "Not found"))
-              Just bs -> respond (responseLBS status200 [] bs)
+            mMbs <- timeout 3_000_000 (takeMVar response)
+            case mMbs of
+              Just Nothing   -> respond (responseLBS status404 [] (BS8.pack "Not found"))
+              Just (Just bs) -> respond (responseLBS status200 [] bs)
+              Nothing        -> respond (responseLBS status500 [] (BS8.pack "Internal error"))
           else respond (responseLBS status503 [] "Overloaded")
     "POST" -> do
       bs <- consumeRequestBodyStrict req
@@ -146,8 +148,10 @@ httpFrontend queue req respond =
       success <- qiEnqueue queue (Write bs response)
       if success
       then do
-        ix <- takeMVar response
-        respond (responseLBS status200 [] (BS8.pack (show ix)))
+        mIx <- timeout 3_000_000 (takeMVar response)
+        case mIx of
+          Just ix -> respond (responseLBS status200 [] (BS8.pack (show ix)))
+          Nothing -> respond (responseLBS status500 [] (BS8.pack "Internal error"))
       else respond (responseLBS status503 [] "Overloaded")
 
     "DELETE" -> do

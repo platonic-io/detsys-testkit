@@ -9,6 +9,7 @@
 >   )
 >   where
 
+> import Control.Concurrent (threadDelay)
 > import Data.Vector (Vector)
 > import qualified Data.Vector as Vector
 > import Data.ByteString.Lazy (ByteString)
@@ -74,7 +75,7 @@ Faulty queue
 >   , ffqFault :: IORef (Maybe Fault)
 >   }
 
-> data Fault = Full | Empty | ReadFail IOException
+> data Fault = Full | Empty | ReadFail IOException | ReadSlow
 >   deriving Show
 
 > faultyFakeQueue :: Int -> IO (FaultyFakeQueue a)
@@ -108,7 +109,11 @@ Faulty queue
 >         Just (ReadFail err) -> do
 >           removeFault ref
 >           throwIO err
->         _otherwise          -> qiDequeue fake
+>         Just ReadSlow -> do
+>           removeFault ref
+>           threadDelay 5_000_000
+>           qiDequeue fake
+>         _otherwise -> qiDequeue fake
 
 > injectFullFault :: IORef (Maybe Fault) -> IO ()
 > injectFullFault ref = writeIORef ref (Just Full)
@@ -118,6 +123,9 @@ Faulty queue
 
 > injectReadFailFault :: IORef (Maybe Fault) -> IOException -> IO ()
 > injectReadFailFault ref err = writeIORef ref (Just (ReadFail err))
+
+> injectReadSlowFault :: IORef (Maybe Fault) -> IO ()
+> injectReadSlowFault ref = writeIORef ref (Just ReadSlow)
 
 > removeFault :: IORef (Maybe Fault) -> IO ()
 > removeFault ref = writeIORef ref Nothing
@@ -131,8 +139,8 @@ Faulty queue
 >   res2 <- qiEnqueue (ffqQueue ffq) "test2"
 >   assert (res2 == False) (return ())
 
-Model
------
+Sequential "collaboration" testing
+----------------------------------
 
 > data Command
 >   = ClientRequest ClientRequest
@@ -181,6 +189,7 @@ Model
 >     genFault = frequency [ (1, pure Full)
 >                          , (1, pure Empty)
 >                          , (1, pure (ReadFail (userError "bug")))
+>                          , (0, pure ReadSlow)
 >                          ]
 
 > data Model = Model
@@ -227,6 +236,7 @@ Model
 >     Full         -> injectFullFault ref
 >     Empty        -> injectEmptyFault ref
 >     ReadFail err -> injectReadFailFault ref err
+>     ReadSlow     -> injectReadSlowFault ref
 >   return Nemesis
 > exec Reset _ref mgr = do
 >   httpReset mgr
@@ -282,6 +292,7 @@ Model
 >                        | otherwise     -> return (Left (concat [show resp, " /= ", show resp']))
 >             Nothing -> return (Left (concat [show res, " /= ", show mResp']))
 >         Fail -> go m cmds
+>         -- For more see the "Crashes" section of https://jepsen.io/consistency
 >         Info -> return (Left "Continuing would violate the single-threaded constraint: processes only do one thing at a time.")
 >         Nemesis -> do
 >           let (m', mResp') = step m cmd
@@ -293,7 +304,7 @@ Model
 > withFaultyQueueService io = do
 >   queue <- faultyFakeQueue mAX_QUEUE_SIZE
 >   mgr   <- newManager defaultManagerSettings
->              { managerResponseTimeout = responseTimeoutMicro (1_000_000) } -- 1s
+>              { managerResponseTimeout = responseTimeoutMicro (10_000_000) } -- 10s
 >   withService (ffqQueue queue) (io mgr (ffqFault queue))
 
 > withFakeQueueService :: (Manager -> IO ()) -> IO ()
@@ -323,31 +334,14 @@ Model
 >     isRight Left  {} = False
 
 
-Concurrent testing
-------------------
+Concurrent "collaboration" testing
+----------------------------------
 
 > newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
 >   deriving Show
 
 
 
--- XXX: make `exec` :: Command -> IO {Fail, Info, Ok Response}
-
--- XXX: stop testing if sequential property hits Info, otherwise we break:
-
---     Crashes
---
---     If an operation does not complete for some reason (perhaps because it
---     timed out or a critical component crashed) that operation has no
---     completion time, and must, in general, be considered concurrent with
---     every operation after its invocation. It may or may not execute.
---
---     A process with an operation is in this state is effectively stuck, and
---     can never invoke another operation again. If it were to invoke another
---     operation, it would violate our single-threaded constraint: processes
---     only do one thing at a time.
---
--- Source: https://jepsen.io/consistency
 
 Discussion
 ----------
