@@ -124,19 +124,22 @@ exec (Reset response) conn = do
   resetDB conn
   putMVar response ()
 
+wORKER_TIMEOUT_MICROS :: Int
+wORKER_TIMEOUT_MICROS = 30_000_000 -- 30s
+
 httpFrontend :: QueueI Command -> Application
 httpFrontend queue req respond =
   case requestMethod req of
     "GET" -> do
       case parseIndex of
-        Nothing -> do
+        Nothing ->
           respond (responseLBS status400 [] "Couldn't parse index")
         Just ix -> do
           response <- newEmptyMVar
           success <- qiEnqueue queue (Read ix response)
           if success
           then do
-            mMbs <- timeout 3_000_000 (takeMVar response)
+            mMbs <- timeout wORKER_TIMEOUT_MICROS (takeMVar response)
             case mMbs of
               Just Nothing   -> respond (responseLBS status404 [] (BS8.pack "Not found"))
               Just (Just bs) -> respond (responseLBS status200 [] bs)
@@ -148,7 +151,7 @@ httpFrontend queue req respond =
       success <- qiEnqueue queue (Write bs response)
       if success
       then do
-        mIx <- timeout 3_000_000 (takeMVar response)
+        mIx <- timeout wORKER_TIMEOUT_MICROS (takeMVar response)
         case mIx of
           Just ix -> respond (responseLBS status200 [] (BS8.pack (show ix)))
           Nothing -> respond (responseLBS status500 [] (BS8.pack "Internal error"))
@@ -157,8 +160,10 @@ httpFrontend queue req respond =
     "DELETE" -> do
       response <- newEmptyMVar
       True <- qiEnqueue queue (Reset response)
-      () <- takeMVar response
-      respond (responseLBS status200 [] (BS8.pack "Reset"))
+      mu <- timeout wORKER_TIMEOUT_MICROS (takeMVar response)
+      case mu of
+        Just () -> respond (responseLBS status200 [] (BS8.pack "Reset"))
+        Nothing -> respond (responseLBS status500 [] (BS8.pack "Internal error"))
     _otherwise -> do
       respond (responseLBS status400 [] "Invalid method")
   where
