@@ -111,7 +111,7 @@ Faulty queue
 >           throwIO err
 >         Just ReadSlow -> do
 >           removeFault ref
->           threadDelay 5_000_000
+>           threadDelay 200_000 -- 0.2s
 >           qiDequeue fake
 >         _otherwise -> qiDequeue fake
 
@@ -189,7 +189,7 @@ Sequential "collaboration" testing
 >     genFault = frequency [ (1, pure Full)
 >                          , (1, pure Empty)
 >                          , (1, pure (ReadFail (userError "bug")))
->                          , (0, pure ReadSlow)
+>                          , (1, pure ReadSlow)
 >                          ]
 
 > data Model = Model
