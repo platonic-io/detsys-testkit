@@ -190,6 +190,13 @@ Methods in Large-Scale Functional Programming" (2020):
 The simulation code is open source and can be found
 [here](https://github.com/input-output-hk/ouroboros-network/tree/master/io-sim).
 
+### Apache Cassandra
+
+* [Cassandra](https://en.wikipedia.org/wiki/Apache_Cassandra) is a distributed,
+   wide-column store, NoSQL database, which recently added support for
+   [simulation
+   testing](https://cwiki.apache.org/confluence/display/CASSANDRA/CEP-10%3A+Cluster+and+Code+Simulations).
+
 ## Further reading
 
 Since this kind of testing is still cutting edge, there are still
