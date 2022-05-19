@@ -2,6 +2,7 @@
 module Lec05.ViewstampReplication.Machine where
 
 import Control.Monad (forM_, unless, when)
+import Data.Fixed
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -208,6 +209,7 @@ the request, and k is the commit-number.
   v <- use currentViewNumber
   k <- use commitNumber
   broadCastReplicas $ Prepare v (InternalClientMessage op c s) cOp k
+  resetTimerSeconds =<< use broadCastInterval
 machine (InternalMessage _time from iMsg) = case iMsg of
   Prepare v m n k -> do
     checkIsBackup v
@@ -334,15 +336,24 @@ recovery protocol is complete.
           primaryResponse .= Nothing
           executeUpToOrBeginStateTransfer k
 
-machineTime :: Time -> VR s o r ()
-machineTime _t = return ()
+machineInit :: VR s o r ()
+machineInit = do
+  registerTimerSeconds =<< use broadCastInterval
 
-vrSM :: [NodeId] -> NodeId
+machineTime :: Time -> VR s o r ()
+machineTime _t = do
+  guardM $ isPrimary -- TODO different logic for backups
+  v <- use currentViewNumber
+  k <- use commitNumber
+  broadCastReplicas $ Commit v k
+  registerTimerSeconds =<< use broadCastInterval
+
+vrSM :: [NodeId] -> NodeId -> Pico
   -> s -> ReplicatedStateMachine s o r
   -> SM (VRState s o r) (VRRequest o) (VRMessage o) (VRResponse r)
-vrSM otherNodes me iState iSM = SM
-  (initState otherNodes me iState iSM)
-  noInit
+vrSM otherNodes me rbInterval iState iSM = SM
+  (initState otherNodes me rbInterval iState iSM)
+  (runSMM machineInit)
   (runSMM . machine)
   (runSMM . machineTime)
 

@@ -2,6 +2,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Lec05.ViewstampReplication.State where
 
+import Data.Fixed
 import Data.List (sort)
 import Data.Map (Map)
 import Data.Set (Set)
@@ -71,6 +72,7 @@ data VRState state op result = VRState
   , _currentState :: state
   , _stateMachine :: ReplicatedStateMachine state op result
   -- state transfer not listed
+  , _broadCastInterval :: Pico
   , _recoveryResponses :: Map Nonce (Set NodeId)
   , _currentNonce :: Maybe Nonce -- should we store this in the `Status`?
   , _primaryResponse :: Maybe (PrimaryRecoveryResponse op)
@@ -81,9 +83,9 @@ instance (ToExpr state, ToExpr op, ToExpr result) => ToExpr (VRState state op re
 
 makeLenses ''VRState
 
-initState :: [NodeId] -> NodeId -> state -> ReplicatedStateMachine state op result
+initState :: [NodeId] -> NodeId -> Pico -> state -> ReplicatedStateMachine state op result
   -> VRState state op result
-initState config me state stateInterface = VRState
+initState config me theBroadCastInterval state stateInterface = VRState
   { _configuration = topo
   , _replicaNumber = fst $ head $ filter ((== me) . snd) $ zip [0..] topo
   , _currentViewNumber = 0
@@ -97,6 +99,7 @@ initState config me state stateInterface = VRState
   , _currentState = state
   , _stateMachine = stateInterface
   -- not in paper state transfer
+  , _broadCastInterval = theBroadCastInterval
   , _recoveryResponses = mempty
   , _currentNonce = Nothing
   , _primaryResponse = Nothing
