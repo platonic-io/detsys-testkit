@@ -17,10 +17,26 @@ newtype Time = Time UTCTime
 addTime :: NominalDiffTime -> Time -> Time
 addTime secs (Time t) = Time (addUTCTime secs t)
 
+addTimeMicros :: Int -> Time -> Time
+addTimeMicros micros (Time t) = Time (addUTCTime (realToFrac micros * 0.000001) t)
+
+diffTimeMicros :: Time -> Time -> Int
+diffTimeMicros (Time t0) (Time t1) =
+  round (realToFrac (fromEnum (diffUTCTime t0 t1)) * 0.000001)
+  -- The `NominalTimeDiff` we get from `diffUTCTime` has a precision of one
+  -- picosecond (= 10^-12 s), and according to the documentation " Enumeration
+  -- functions will treat it as picoseconds.", so hence the `fromEnum` and `*
+  -- 10^-6`.
+
 data Clock = Clock
   { cGetCurrentTime :: IO Time
   , cSetCurrentTime :: Time -> IO ()
   }
+
+cModifyCurrentTime :: Clock -> (Time -> Time) -> IO ()
+cModifyCurrentTime clock f = do
+  t <- cGetCurrentTime clock
+  cSetCurrentTime clock (f t)
 
 realClock :: IO Clock
 realClock = return Clock
