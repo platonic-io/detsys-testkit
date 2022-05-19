@@ -132,7 +132,7 @@ executeUpToOrBeginStateTransfer (-1) = do
 executeUpToOrBeginStateTransfer k = do
   myK <- use (commitNumber.to (max 0))
   guard $ myK <= k
-  forM_ [myK .. k] $ \(CommitNumber v) -> do
+  forM_ [succ myK .. k] $ \(CommitNumber v) -> do
     l <- use theLog
     case logLookup (OpNumber v) l of
       Nothing -> initStateTransfer
