@@ -64,7 +64,9 @@ runWorker d = go
       nTimerEvent <- nextTimer (dTimerWheel d) (dClock d)
       event <- case nTimerEvent of
         None -> eqDequeue (dEventQueue d) NoTimeout
-        Now timerEvent -> return (TimerEventE timerEvent)
+        Now timerEvent -> do
+          popTimer (dTimerWheel d)
+          return (TimerEventE timerEvent)
         Later micros timerEvent -> eqDequeue (dEventQueue d)
                                      (Timeout micros (do
                                        popTimer (dTimerWheel d)
