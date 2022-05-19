@@ -8,7 +8,7 @@ import qualified Data.Heap as Heap
 import Data.Foldable
 
 import Lec05.Time
-import Lec05.Event (Event)
+import Lec05.Event (Event(..), CommandEvent(..))
 
 ------------------------------------------------------------------------
 
@@ -26,6 +26,9 @@ union (Agenda h) (Agenda h') = Agenda (h `Heap.union` h')
 
 makeAgenda :: [(Time, e)] -> Agenda' e
 makeAgenda = Agenda . Heap.fromList . map (uncurry Entry)
+
+makeEventAgenda :: Time -> [(Time, Event)] -> Agenda
+makeEventAgenda endTime = makeAgenda . ((endTime, CommandEventE Exit):)
 
 pop :: Agenda' e -> Maybe ((Time, e), Agenda' e)
 pop (Agenda h) = case Heap.uncons h of

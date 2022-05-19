@@ -364,14 +364,14 @@ vrSM otherNodes me rbInterval iState iSM = SM
 vrCodec :: (Read m, Show m, Show r) => Codec (VRRequest m) (VRMessage m) (VRResponse r)
 vrCodec = showReadCodec
 
-agenda :: Agenda
-agenda = mk
+agenda :: Time -> Agenda
+agenda endTime = mk
   [ ("first", 0)  -- this will complete
   , ("second", 5) -- this will be rejected
   , ("third", 25) -- this will complete
   ]
   where
-    mk = makeAgenda . snd . List.mapAccumL op ini
+    mk = makeEventAgenda endTime . snd . List.mapAccumL op ini
     ini = (0, epoch)
     op (curRequestNumber, currentTime) (msg, timeDiff) =
       let
