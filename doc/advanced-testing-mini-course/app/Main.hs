@@ -14,6 +14,7 @@ import Lec05.Deployment
 import Lec05.Network
 import Lec05.Random
 import Lec05.History
+import Lec05.Time
 
 import Lec02ConcurrentSMTesting
 
@@ -51,7 +52,8 @@ main = do
           printItem "Sent messages" "" ""
           mapM_ (\x -> putStrLn $ "  " <> show x) msgs
         fs = FailureSpec (NetworkFaults 0.15)
-      collector <- eventLoopFaultySimulation (Seed 6) VR.agenda h fs
+        endTime = addTime 600 epoch
+      collector <- eventLoopFaultySimulation (Seed 6) (VR.agenda endTime) h fs
         [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes]
       history <- readHistory h
       mapM_ printE history
