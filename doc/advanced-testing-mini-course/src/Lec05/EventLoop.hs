@@ -52,9 +52,7 @@ eventLoop opts config = do
   d <- newDeployment (oDeployment opts) config
   withAsync (nRun (dNetwork d)) $ \anet -> do
     link anet
-    withAsync (runTimerManager (dTimerWheel d) (dClock d) (dEventQueue d)) $ \atm -> do
-      link atm
-      runWorker (d { dPids = Pids [anet, atm] })
+    runWorker (d { dPids = Pids [anet] })
 
 -- XXX: Faults
 
@@ -63,7 +61,14 @@ runWorker d = go
   where
     go :: IO ()
     go = do
-      event <- eqDequeue (dEventQueue d)
+      nTimerEvent <- nextTimer (dTimerWheel d) (dClock d)
+      event <- case nTimerEvent of
+        None -> eqDequeue (dEventQueue d) NoTimeout
+        Now timerEvent -> return (TimerEventE timerEvent)
+        Later micros timerEvent -> eqDequeue (dEventQueue d)
+                                     (Timeout micros (do
+                                       popTimer (dTimerWheel d)
+                                       return (TimerEventE timerEvent)))
       if isExitCommand event
       then exit
       else do
