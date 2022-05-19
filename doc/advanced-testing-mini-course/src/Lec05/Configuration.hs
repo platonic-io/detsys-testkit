@@ -21,6 +21,9 @@ data SomeCodecSM = forall state request message response.
   ) => SomeCodecSM (Codec request message response)
                    (SM state request message response)
 
+nrOfNodes :: Configuration -> Int
+nrOfNodes (Configuration v) = Vector.length v
+
 makeConfiguration :: [SomeCodecSM] -> IO Configuration
 makeConfiguration sms = Configuration <$> Vector.generate (length sms) (sms !!)
 
@@ -34,7 +37,7 @@ updateReceiverState (NodeId nid) newState0 (Configuration v) =
   Vector.modify v (updateState newState0) nid
   where
     updateState :: Typeable state => state -> SomeCodecSM -> SomeCodecSM
-    updateState newState' (SomeCodecSM codec (SM _oldState step timeout)) =
+    updateState newState' (SomeCodecSM codec (SM _oldState initF step timeout)) =
       case cast newState' of
-        Just newState -> SomeCodecSM codec (SM newState step timeout)
+        Just newState -> SomeCodecSM codec (SM newState initF step timeout)
         Nothing       -> error "updateReceiverState: state type mismatch"

@@ -342,6 +342,7 @@ vrSM :: [NodeId] -> NodeId
   -> SM (VRState s o r) (VRRequest o) (VRMessage o) (VRResponse r)
 vrSM otherNodes me iState iSM = SM
   (initState otherNodes me iState iSM)
+  noInit
   (runSMM . machine)
   (runSMM . machineTime)
 
