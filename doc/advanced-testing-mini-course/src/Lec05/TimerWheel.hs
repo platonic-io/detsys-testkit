@@ -2,14 +2,12 @@ module Lec05.TimerWheel where
 
 import Data.Time
 import Data.Fixed
-import Data.Foldable
 import Data.IORef
 import Data.Heap (Entry(Entry), Heap)
 import qualified Data.Heap as Heap
 
 import Lec05.Time
 import Lec05.Event
-import Lec05.EventQueue
 import Lec05.StateMachine
 
 ------------------------------------------------------------------------

@@ -46,13 +46,21 @@ fakeEventQueue a0 clock = do
     enqueue agenda event = modifyIORef' agenda (push (getEventTime event, event))
 
     dequeue :: IORef Agenda -> DequeueTimeout -> IO Event
-    dequeue agenda NoTimeout = do
+    dequeue agenda dequeueTimeout = do
       a <- readIORef agenda
       case pop a of
-        Nothing -> return (CommandEventE Exit)
-        Just ((_time, event), a') -> do
-          writeIORef agenda a'
-          return event
-    dequeue agenda (Timeout micros retry) = do
-      cModifyCurrentTime clock (addTimeMicros micros)
-      retry
+        Nothing -> case dequeueTimeout of
+          NoTimeout -> return (CommandEventE Exit)
+          Timeout _micros retry -> retry
+        Just ((time, event), a') -> case dequeueTimeout of
+          NoTimeout -> do
+            writeIORef agenda a'
+            return event
+          Timeout micros retry -> do
+            now <- cGetCurrentTime clock
+            let later = addTimeMicros micros now
+            if time <= later
+            then do
+              writeIORef agenda a'
+              return event
+            else retry
