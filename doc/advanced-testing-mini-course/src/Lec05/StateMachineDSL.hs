@@ -95,4 +95,4 @@ t = runSMM (example (ClientRequest epoch (ClientId 0) Req)) initExState (mkStdGe
     == ([ClientResponse (ClientId 0) (Resp 6)], ExampleState {_esInt = 6}, (mkStdGen 1))
 
 sm :: SM ExampleState Req Msg Resp
-sm = SM initExState (\i s g -> runSMM (example i) s g) noTimeouts
+sm = SM initExState noInit (\i s g -> runSMM (example i) s g) noTimeouts

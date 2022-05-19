@@ -59,8 +59,25 @@ eventLoop opts config = do
 -- XXX: Faults
 
 runWorker :: Deployment -> IO ()
-runWorker d = go
+runWorker d = initialize >> go
   where
+    initialize :: IO ()
+    initialize =
+      forM_ (map NodeId [0.. (nrOfNodes (dConfiguration d) - 1)]) $ \nodeId -> do
+        r <- lookupReceiver nodeId (dConfiguration d)
+        case r of
+          Nothing -> dReportError d ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
+          Just (SomeCodecSM codec (SM state initF _step _timeout)) -> do
+            gen <- rGetStdGen (dRandom d)
+            res <- try (evaluate (initF state gen))
+            case res of
+              Left (e :: SomeException) ->
+                dReportError d ("init failed, error: " ++ displayException e)
+              Right (outputs, state', gen') -> do
+                updateReceiverState nodeId state' (dConfiguration d)
+                rSetStdGen (dRandom d) gen'
+                mapM_ (handleOutput codec nodeId) outputs
+
     go :: IO ()
     go = do
       event <- eqDequeue (dEventQueue d)
@@ -79,7 +96,7 @@ runWorker d = go
       r <- lookupReceiver nodeId (dConfiguration d)
       case r of
         Nothing -> dReportError d ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
-        Just (SomeCodecSM codec (SM state step _timeout)) ->
+        Just (SomeCodecSM codec (SM state _init step _timeout)) ->
           case decodeInput codec rawInput of
             Nothing -> dReportError d (("Decoding of input failed, node id: " ++
                                   show (unNodeId nodeId)) ++ ", input: " ++
@@ -100,7 +117,7 @@ runWorker d = go
       r <- lookupReceiver nodeId (dConfiguration d)
       case r of
         Nothing -> dReportError d ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
-        Just (SomeCodecSM codec (SM state _step timeout)) -> do
+        Just (SomeCodecSM codec (SM state _init _step timeout)) -> do
           gen <- rGetStdGen (dRandom d)
           res <- try (evaluate (timeout time state gen))
           case res of

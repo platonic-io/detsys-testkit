@@ -25,6 +25,7 @@ type SMStep state message response
 
 data SM state request message response = SM
   { smState   :: state
+  , smInit    :: SMStep state message response
   , smStep    :: Input request message -> SMStep state message response
   , smTimeout :: Time -> SMStep state message response
   -- smPredicate :: state -> [pred]
@@ -43,12 +44,16 @@ data Output response message
   | ResetTimerSeconds Pico
   deriving (Eq, Show)
 
+noInit :: SMStep state message response
+noInit state stdgen = ([], state, stdgen)
+
 noTimeouts :: Time -> SMStep state message response
 noTimeouts _time state stdgen = ([], state, stdgen)
 
 echoSM :: SM () ByteString ByteString ByteString
 echoSM = SM
   { smState   = ()
+  , smInit    = noInit
   , smStep    = \(ClientRequest _at cid req) () gen -> ([ClientResponse cid req], (), gen)
   , smTimeout = noTimeouts
   }
