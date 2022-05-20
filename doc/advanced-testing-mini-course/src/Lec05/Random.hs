@@ -1,7 +1,7 @@
 module Lec05.Random where
 
 import Data.IORef
-import System.Random (StdGen, setStdGen, getStdGen, mkStdGen, randomR)
+import System.Random (StdGen, setStdGen, getStdGen, mkStdGen, randomR, randomIO)
 import qualified System.Random
 
 ------------------------------------------------------------------------
@@ -35,3 +35,6 @@ randomInterval random range = do
   let (x, g') = randomR range g
   rSetStdGen random g'
   return x
+
+generateSeeds :: Int -> IO [Seed]
+generateSeeds nr = mapM (\_ -> fmap Seed randomIO) [1..nr]
