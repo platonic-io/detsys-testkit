@@ -52,7 +52,7 @@ blackboxHistory = Lec2.History . go []
     go :: [Operation' req resp] -> [HistEvent] -> [Operation' req resp]
     go acc [] = reverse acc
     go acc (HistEvent _nodeId _state input _state' outputs : evs) =
-      go (clientRequest input ++ foldMap clientResponse outputs ++ acc) evs
+      go (foldMap clientResponse outputs ++ clientRequest input ++ acc) evs
 
     clientRequest :: Typeable req' => Input req' msg -> [Operation' req resp]
     clientRequest (ClientRequest _time clientId req) = case cast req of
