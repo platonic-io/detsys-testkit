@@ -14,7 +14,7 @@ import Lec05.Codec
 import Lec05.Event
 import Lec05.StateMachine
 import Lec05.StateMachineDSL
-import Lec05.Time (Time, addTime, epoch)
+import Lec05.Time (Time, addTimeSeconds, epoch)
 import Lec05.ViewstampReplication.Message
 import Lec05.ViewstampReplication.State
 
@@ -375,7 +375,7 @@ agenda endTime = mk
     ini = (0, epoch)
     op (curRequestNumber, currentTime) (msg, timeDiff) =
       let
-        newTime = addTime (secondsToNominalDiffTime timeDiff) currentTime
+        newTime = addTimeSeconds (secondsToNominalDiffTime timeDiff) currentTime
       in ( (curRequestNumber+1, newTime)
          , (newTime
            , NetworkEventE (NetworkEvent

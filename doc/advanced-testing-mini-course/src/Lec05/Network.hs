@@ -114,7 +114,7 @@ fakeNetwork evQ clock random = do
       now <- cGetCurrentTime clock
       -- XXX: Exponential distribution?
       d <- randomInterval random (1.0, 20.0) :: IO Double
-      let arrivalTime = addTime (fromRational (toRational d)) now
+      let arrivalTime = addTimeSeconds (fromRational (toRational d)) now
       eqEnqueue evQ
         (NetworkEventE (NetworkEvent to (InternalMessage arrivalTime from msg)))
 
@@ -153,7 +153,7 @@ faultyNetwork evQ clock random config history mnf = do
         else do
           -- XXX: Exponential distribution?
           d <- randomInterval random (1.0, 20.0) :: IO Double
-          let arrivalTime = addTime (fromRational (toRational d)) now
+          let arrivalTime = addTimeSeconds (fromRational (toRational d)) now
           eqEnqueue evQ
             (NetworkEventE (NetworkEvent to (InternalMessage arrivalTime from msg)))
 
