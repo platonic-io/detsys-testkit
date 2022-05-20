@@ -17,7 +17,7 @@ import Lec05.Random
 import Lec05.History
 import Lec05.Time
 
-import Lec02ConcurrentSMTesting
+import qualified Lec04.LineariseWithFault as Lec4
 
 import Lec05.ViewstampReplication.State (ReplicatedStateMachine(..))
 import qualified Lec05.ViewstampReplication.Machine as VR
@@ -41,12 +41,22 @@ smI :: ReplicatedStateMachine [String] String [String]
 smI = ReplicatedStateMachine $ \ s o -> (o:s, o:s)
 
 type Model = [String]
+type Command = VRRequest String
+type Response = VRResponse [String]
 
-step :: Model -> VRRequest String -> (Model, VRResponse [String])
+step :: Model -> Command -> (Model, Response)
 step xs (VRRequest op rn) = (op:xs, VRReply 1 rn (op:xs))
 
 initModel :: [String]
 initModel = []
+
+markFailure :: Lec4.History' Command Response -> Lec4.History' Command Response
+markFailure (Lec4.History ops) = Lec4.History (map go ops)
+  where
+    go i@Lec4.Invoke{} = i
+    go f@Lec4.Fail{} = f
+    go (Lec4.Ok p VROnlyOneInflightAllowed{}) = Lec4.Fail p Lec4.FAIL
+    go o@Lec4.Ok{} = o
 
 main :: IO ()
 main = do
@@ -84,8 +94,8 @@ main = do
       unless (null reportedErrors) (putStrLn "")
       mapM_ putStrLn reportedErrors
       writeDebugFile fp history
-      assert (linearisable step initModel (interleavings (blackboxHistory (fmap heEvent history))))
-             (return ())
+      let bbHistory = markFailure (blackboxFailHistory (fmap heEvent history))
+      assert (Lec4.linearise step initModel bbHistory) (return ())
     ["vr", "--simulation-explore"] -> do
       seeds <- generateSeeds 10
       runMany seeds $ \ seed -> do
@@ -103,8 +113,8 @@ main = do
         reportedErrors <- readFromCollector collector
         unless (null reportedErrors) (putStrLn "")
         mapM_ putStrLn reportedErrors
-        let bbHistory = blackboxHistory (fmap heEvent history)
-            isValid = linearisable step initModel (interleavings bbHistory)
+        let bbHistory = markFailure (blackboxFailHistory (fmap heEvent history))
+            isValid = Lec4.linearise step initModel bbHistory
         print bbHistory
         return isValid
     _otherwise       -> eventLoopProduction [SomeCodecSM idCodec echoSM]
