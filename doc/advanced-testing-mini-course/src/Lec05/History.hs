@@ -11,6 +11,7 @@ import Data.TreeDiff (ToExpr)
 
 import Lec02ConcurrentSMTesting (History', Operation'(..), Pid(Pid))
 import qualified Lec02ConcurrentSMTesting as Lec2
+import qualified Lec04.LineariseWithFault as Lec4
 import Lec05.StateMachine
 
 ------------------------------------------------------------------------
@@ -67,3 +68,11 @@ blackboxHistory = Lec2.History . go []
 
     clientIdToPid :: ClientId -> Pid
     clientIdToPid (ClientId cid) = Pid cid
+
+blackboxFailHistory :: forall req resp. (Typeable req, Typeable resp)
+                    => [HistEvent] -> Lec4.History' req resp
+blackboxFailHistory he = case blackboxHistory he of
+  Lec2.History ops -> Lec4.History (fmap go ops)
+  where
+    go (Lec2.Invoke p c) = Lec4.Invoke p c
+    go (Lec2.Ok p r) = Lec4.Ok p r
