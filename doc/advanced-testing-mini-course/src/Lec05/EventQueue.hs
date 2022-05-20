@@ -1,6 +1,7 @@
 module Lec05.EventQueue where
 
 import Control.Concurrent.STM
+       (atomically, newTQueueIO, readTQueue, writeTQueue)
 import Data.IORef
 import System.Timeout (timeout)
 

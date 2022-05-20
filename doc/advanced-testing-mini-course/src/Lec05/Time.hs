@@ -14,8 +14,8 @@ import Data.Time.Calendar.OrdinalDate
 newtype Time = Time UTCTime
   deriving stock (Eq, Ord, Show)
 
-addTime :: NominalDiffTime -> Time -> Time
-addTime secs (Time t) = Time (addUTCTime secs t)
+addTimeSeconds :: NominalDiffTime -> Time -> Time
+addTimeSeconds secs (Time t) = Time (addUTCTime secs t)
 
 addTimeMicros :: Int -> Time -> Time
 addTimeMicros micros (Time t) = Time (addUTCTime (realToFrac micros * 0.000001) t)

@@ -22,13 +22,13 @@ newTimerWheel = do
 registerTimer :: TimerWheel -> Clock -> NodeId -> Pico -> IO ()
 registerTimer (TimerWheel hr) clock nodeId secs = do
   now <- cGetCurrentTime clock
-  let expires = addTime (secondsToNominalDiffTime secs) now
+  let expires = addTimeSeconds (secondsToNominalDiffTime secs) now
   atomicModifyIORef' hr (\h -> (Heap.insert (Entry expires nodeId) h, ()))
 
 resetTimer :: TimerWheel -> Clock -> NodeId -> Pico -> IO ()
 resetTimer (TimerWheel hr) clock nodeId secs = do
   now <- cGetCurrentTime clock
-  let expires = addTime (secondsToNominalDiffTime secs) now
+  let expires = addTimeSeconds (secondsToNominalDiffTime secs) now
   atomicModifyIORef' hr (\h -> (Heap.map (go expires) h, ()))
     where
       go expires e@(Entry _expires nodeId')
