@@ -56,13 +56,13 @@ blackboxHistory = Lec2.History . go []
     clientRequest :: Typeable req' => Input req' msg -> [Operation' req resp]
     clientRequest (ClientRequest _time clientId req) = case cast req of
       Just req' -> [Invoke (clientIdToPid clientId) req']
-      Nothing   -> []
+      Nothing   -> error "Failed cast, can't add clientRequest"
     clientRequest _otherwise = []
 
     clientResponse :: Typeable resp' => Output resp' msg -> [Operation' req resp]
     clientResponse (ClientResponse clientId resp) = case cast resp of
       Just resp' -> [Ok (clientIdToPid clientId) resp']
-      Nothing    -> []
+      Nothing    -> error "Failed cast, can't add clientResponse"
     clientResponse _otherwise = []
 
     clientIdToPid :: ClientId -> Pid
