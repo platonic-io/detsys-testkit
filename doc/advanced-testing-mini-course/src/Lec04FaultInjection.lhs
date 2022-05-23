@@ -9,7 +9,10 @@
 >   )
 >   where
 
-> import Control.Concurrent (threadDelay)
+> import Control.Monad (replicateM_)
+> import Control.Concurrent (threadDelay, myThreadId)
+> import Control.Concurrent.Async (mapConcurrently)
+> import Control.Concurrent.STM (TQueue, atomically, flushTQueue, newTQueueIO)
 > import Data.Vector (Vector)
 > import qualified Data.Vector as Vector
 > import Data.ByteString.Lazy (ByteString)
@@ -17,6 +20,7 @@
 > import Control.Exception
 > import Control.Monad.IO.Class (MonadIO, liftIO)
 > import Data.IORef
+> import Data.List (permutations)
 > import Test.HUnit (Assertion, assertBool)
 > import Test.QuickCheck hiding (Result)
 > import Test.QuickCheck.Monadic hiding (assert)
@@ -26,11 +30,12 @@
 >                             defaultManagerSettings, newManager, responseStatus,
 >                             managerResponseTimeout, responseTimeoutMicro)
 
-> import Lec03.Service (withService, mAX_QUEUE_SIZE)
+> import Lec02ConcurrentSMTesting (assertWithFail, classifyCommandsLength, toPid)
+> import Lec03.Service (withService, mAX_QUEUE_SIZE, fakeQueue, realQueue)
 > import Lec03.QueueInterface
-> import Lec03.Service (fakeQueue, realQueue)
 > import Lec03.ServiceTest (Index(Index), httpWrite, httpRead, httpReset)
-> import Lec04.LineariseWithFault ()
+> import Lec04.LineariseWithFault (History'(History), Operation'(..), FailureMode(..), interleavings,
+>                                  linearisable, prettyHistory, appendHistory)
 
 Fault-injection
 ===============
@@ -45,12 +50,13 @@ Motivation
     [Simple Testing Can Prevent Most Critical Failures: An Analysis of
     Production Failures in Distributed Data-intensive
     Systems](http://www.eecg.toronto.edu/~yuan/papers/failure_analysis_osdi14.pdf)
-    (2014) Yuan et al;
+    (2014) Yuan et al.
 
 Plan
 ----
 
-- Create a wrapper around our fake queue implementation which allows us to inject faults
+- Create a wrapper around our fake queue implementation which allows us to
+  inject faults
 
 - Possible faults to inject for the queue
    + write fails, e.g. queue is full
@@ -169,13 +175,13 @@ Sequential "collaboration" testing
 >           go m' (cmd : cmds) (n - 1)
 >         Just _fault -> go m (cmd : cmds) (n - 1)
 
->     genCommand :: Model -> Gen Command
->     genCommand m = case mMaybeFault m of
->       Nothing -> frequency [ (2, InjectFault <$> genFault)
->                            , (8, ClientRequest <$> genRequest m)
->                            ]
->       Just _fault -> ClientRequest <$> genRequest m
-
+> genCommand :: Model -> Gen Command
+> genCommand m0 = case mMaybeFault m0 of
+>   Nothing -> frequency [ (2, InjectFault <$> genFault)
+>                        , (8, ClientRequest <$> genRequest m0)
+>                        ]
+>   Just _fault -> ClientRequest <$> genRequest m0
+>   where
 >     genRequest :: Model -> Gen ClientRequest
 >     genRequest m | len == 0  = WriteReq <$> (LBS.pack <$> arbitrary)
 >                  | otherwise = frequency
@@ -213,7 +219,7 @@ Sequential "collaboration" testing
 >   InjectFault fault -> (m { mMaybeFault = Just fault}, Nothing)
 >   Reset             -> (m, Nothing)
 
-> data Result a = Ok a | Fail | Info | Nemesis
+> data Result a = ROk a | RFail | RInfo | RNemesis
 >   deriving Show
 
 > exec :: Command -> IORef (Maybe Fault) -> Manager -> IO (Result ClientResponse)
@@ -222,37 +228,37 @@ Sequential "collaboration" testing
 >     WriteReq bs -> do
 >       res <- try (httpWrite mgr bs)
 >       case res of
->         Left (err :: HttpException) | is503 err -> return Fail
->                                     | otherwise -> return Info
->         Right ix -> return (Ok (WriteResp ix))
+>         Left (err :: HttpException) | is503 err -> return RFail
+>                                     | otherwise -> return RInfo
+>         Right ix -> return (ROk (WriteResp ix))
 >     ReadReq ix  -> do
 >       res <- try (httpRead mgr ix)
 >       case res of
 >         -- NOTE: since read doesn't change the state we can always treat is a failure.
->         Left (_err :: HttpException) -> return Fail
->         Right bs -> return (Ok (ReadResp bs))
+>         Left (_err :: HttpException) -> return RFail
+>         Right bs -> return (ROk (ReadResp bs))
 > exec (InjectFault fault)  ref _mgr = do
 >   case fault of
 >     Full         -> injectFullFault ref
 >     Empty        -> injectEmptyFault ref
 >     ReadFail err -> injectReadFailFault ref err
 >     ReadSlow     -> injectReadSlowFault ref
->   return Nemesis
+>   return RNemesis
 > exec Reset _ref mgr = do
 >   httpReset mgr
->   return Nemesis
+>   return RNemesis
 
 > is503 :: HttpException -> Bool
 > is503 (HttpExceptionRequest _req (StatusCodeException resp _bs)) = responseStatus resp == status503
 > is503 _otherwise = False
 
 > shrinkProgram :: Program -> [Program]
-> shrinkProgram (Program cmds) = filter isValidProgram ((map Program (shrinkList shrinkCommand cmds)))
+> shrinkProgram (Program cmds) = filter (isValidProgram initModel) ((map Program (shrinkList shrinkCommand cmds)))
 >   where
 >     shrinkCommand _cmd = []
 
-> isValidProgram :: Program -> Bool
-> isValidProgram (Program cmds0) = go initModel cmds0
+> isValidProgram :: Model -> Program -> Bool
+> isValidProgram m0 (Program cmds0) = go m0 cmds0
 >   where
 >     go _m [] = True
 >     go  m (ClientRequest (ReadReq (Index ix)) : cmds)
@@ -285,16 +291,16 @@ Sequential "collaboration" testing
 >     go  m (cmd : cmds) = do
 >       res <- liftIO (exec cmd ref mgr)
 >       case res of
->         Ok resp -> do
+>         ROk resp -> do
 >           let (m', mResp') = step m cmd
 >           case mResp' of
 >             Just resp' | resp == resp' -> go m' cmds
 >                        | otherwise     -> return (Left (concat [show resp, " /= ", show resp']))
 >             Nothing -> return (Left (concat [show res, " /= ", show mResp']))
->         Fail -> go m cmds
+>         RFail -> go m cmds
 >         -- For more see the "Crashes" section of https://jepsen.io/consistency
->         Info -> return (Left "Continuing would violate the single-threaded constraint: processes only do one thing at a time.")
->         Nemesis -> do
+>         RInfo -> return (Left "Continuing would violate the single-threaded constraint: processes only do one thing at a time.")
+>         RNemesis -> do
 >           let (m', mResp') = step m cmd
 >           case mResp' of
 >             Nothing     -> go m' cmds
@@ -340,7 +346,93 @@ Concurrent "collaboration" testing
 > newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
 >   deriving Show
 
+> forAllConcProgram :: (ConcProgram -> Property) -> Property
+> forAllConcProgram k =
+>   forAllShrinkShow (genConcProgram initModel) (shrinkConcProgram initModel)
+>                    prettyConcProgram k
+>   where
 
+>     genConcProgram :: Model -> Gen ConcProgram
+>     genConcProgram m0 = sized (go m0 [])
+>       where
+>         go :: Model -> [[Command]] -> Int -> Gen ConcProgram
+>         go m acc sz | sz <= 0   = return (ConcProgram (reverse acc))
+>                     | otherwise = do
+>                         n <- chooseInt (2, 5)
+>                         cmds <- vectorOf n (genCommand m) `suchThat` concSafe m
+>                         go (advanceModel m cmds) (cmds : acc) (sz - n)
+
+>     advanceModel :: Model -> [Command] -> Model
+>     advanceModel m cmds = foldl (\ih cmd -> fst (step ih cmd)) m cmds
+
+>     concSafe :: Model -> [Command] -> Bool
+>     concSafe m = all (isValidProgram m . Program) . permutations
+
+>     validConcProgram :: Model -> ConcProgram -> Bool
+>     validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
+>       where
+>         go :: Model -> Bool -> [[Command]] -> Bool
+>         go _m False _              = False
+>         go _m acc   []             = acc
+>         go  m _acc  (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
+
+>     shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
+>     shrinkConcProgram m
+>       = filter (validConcProgram m)
+>       . map ConcProgram
+>       . filter (not . null)
+>       . shrinkList (shrinkList shrinkCommand)
+>       . unConcProgram
+>       where
+>         shrinkCommand _cmd = []
+
+>     prettyConcProgram :: ConcProgram -> String
+>     prettyConcProgram = show
+
+
+> type Operation = Operation' Command (Maybe ClientResponse)
+
+> concExec :: IORef (Maybe Fault) -> Manager -> TQueue Operation -> Command -> IO ()
+> concExec ref mgr hist cmd = do
+>   pid <- toPid <$> myThreadId -- XXX: we can't reuse crashed pids...
+>   appendHistory hist (Invoke pid cmd)
+>   res <- exec cmd ref mgr
+>   case res of
+>     ROk resp -> appendHistory hist (Ok pid (Just resp))
+>     RFail    -> appendHistory hist (Fail pid FAIL)
+>     RInfo    -> appendHistory hist (Fail pid INFO)
+>     RNemesis -> appendHistory hist (Ok pid Nothing)
+
+> -- NOTE: Assumes that the service is running.
+> prop_faultyCollaborationTests :: IORef (Maybe Fault) -> Manager -> Property
+> prop_faultyCollaborationTests ref mgr = mapSize (min 20) $
+>   forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
+>     monitor (classifyCommandsLength (concat cmdss))
+>     monitor (tabulate "Client requests" (map constructorString (concat cmdss)))
+>     monitor (tabulate "Number of concurrent client requests" (map (show . length) cmdss))
+>     -- Rerun a couple of times, to avoid being lucky with the interleavings.
+>     replicateM_ 10 $ do
+>       history <- run newTQueueIO
+>       run (mapM_ (mapConcurrently (concExec ref mgr history)) cmdss)
+>       hist <- History <$> run (atomically (flushTQueue history))
+>       assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
+>       run (httpReset mgr)
+>   where
+>     constructorString :: Command -> String
+>     constructorString (ClientRequest WriteReq {}) = "WriteReq"
+>     constructorString (ClientRequest ReadReq  {}) = "ReadReq"
+>     constructorString (InjectFault Full)          = "Full"
+>     constructorString (InjectFault Empty)         = "Empty"
+>     constructorString (InjectFault ReadFail {})   = "ReadFail"
+>     constructorString (InjectFault ReadSlow {})   = "ReadSlow"
+>     constructorString Reset                       = "Reset"
+
+> test :: IO ()
+> test = do
+>   -- NOTE: fake queue is used here, justified by previous contract testing.
+>   ffq <- faultyFakeQueue mAX_QUEUE_SIZE
+>   mgr <- newManager defaultManagerSettings
+>   withService (ffqQueue ffq) (quickCheck (prop_faultyCollaborationTests (ffqFault ffq) mgr))
 
 
 Discussion
@@ -421,9 +513,17 @@ Problems
    [`ldfi`](https://github.com/symbiont-io/detsys-testkit/tree/main/src/ldfi)
    directory in the `detsys-testkit` repo)
 
+1. What's better at finding bugs: i) a small fixed agenda and try many faults
+   and interleavings, or ii) a big random agenda and fewer interleavings?
+
 See also
 --------
 
 - [*Why Is Random Testing Effective for Partition Tolerance
   Bugs?*(https://dl.acm.org/doi/pdf/10.1145/3158134) by Majumdar and Niksic
   (2018)
+
+Summary
+-------
+
+XXX
