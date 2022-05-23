@@ -4,14 +4,20 @@
 
 module Lec04.LineariseWithFault where
 
+import Control.Concurrent.STM (TQueue, atomically, writeTQueue)
 import Data.Tree (Forest, Tree(Node))
 import Test.QuickCheck hiding (Result)
 
-import Lec01SMTesting
+import Lec01SMTesting (Command, Response)
 import Lec02ConcurrentSMTesting (Pid(..))
+
+------------------------------------------------------------------------
 
 newtype History' cmd resp = History [Operation' cmd resp]
   deriving (Show, Functor, Foldable)
+
+prettyHistory :: (Show cmd, Show resp) => History' cmd resp -> String
+prettyHistory = show
 
 type History = History' Command Response
 
@@ -29,6 +35,9 @@ data Operation' cmd resp
   deriving (Show, Functor, Foldable)
 
 type Operation = Operation' Command Response
+
+appendHistory :: TQueue (Operation' cmd resp) -> Operation' cmd resp -> IO ()
+appendHistory hist op = atomically (writeTQueue hist op)
 
 data Result resp
   = OkWithResponse resp
@@ -220,7 +229,7 @@ prop_genHistory pids nrOfNewPids =
       Left err -> counterexample err False
       Right () -> property True
 
-prop_Linearise :: [Pid] -> Int -> Property
-prop_Linearise pids nrOfNewPids =
+prop_linearise :: [Pid] -> Int -> Property
+prop_linearise pids nrOfNewPids =
   forAll (genHistory smStep smModel arbitrary nrOfNewPids pids) $ \(ch, _) ->
     linearise smStep smModel ch
