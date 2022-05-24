@@ -2,15 +2,16 @@ module Lec05.Deployment where
 
 import Control.Concurrent.Async
 
-import Lec05.History
 import Lec05.Agenda
+import Lec05.ClientGenerator
+import Lec05.Configuration
 import Lec05.ErrorReporter
 import Lec05.EventQueue
-import Lec05.Configuration
+import Lec05.History
+import Lec05.Network
 import Lec05.Random
 import Lec05.Time
 import Lec05.TimerWheel
-import Lec05.Network
 
 ------------------------------------------------------------------------
 
@@ -61,9 +62,10 @@ newDeployment mode config = case mode of
       }
   Simulation seed agenda history mf errorCollector -> do
     clock      <- fakeClockEpoch
-    eventQueue <- fakeEventQueue agenda clock
+    let clientGenerator = emptyGenerator
+    eventQueue <- fakeEventQueue agenda clock clientGenerator
     random     <- fakeRandom seed
-    network    <- faultyNetwork eventQueue clock random config history (fmap fsNetworkFailure mf)
+    network    <- faultyNetwork eventQueue clock random config history (fmap fsNetworkFailure mf) clientGenerator
     timerWheel <- newTimerWheel
     return Deployment
       { dMode          = mode

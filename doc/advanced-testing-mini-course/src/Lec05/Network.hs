@@ -17,6 +17,7 @@ import Network.Wai.Handler.Warp
 import System.Timeout (timeout)
 
 import Lec05.AwaitingClients
+import Lec05.ClientGenerator
 import Lec05.Configuration
 import Lec05.History
 import Lec05.Random
@@ -125,8 +126,8 @@ data NetworkFaults = NetworkFaults
   { nfChanceOfDrop :: Double }
 
 faultyNetwork :: EventQueue -> Clock -> Random -> Configuration
-  -> History -> Maybe NetworkFaults -> IO Network
-faultyNetwork evQ clock random config history mnf = do
+  -> History -> Maybe NetworkFaults -> ClientGenerator -> IO Network
+faultyNetwork evQ clock random config history mnf cg = do
   return Network
     { nSend    = send
     , nRespond = respond
@@ -158,4 +159,4 @@ faultyNetwork evQ clock random config history mnf = do
             (NetworkEventE (NetworkEvent to (InternalMessage arrivalTime from msg)))
 
     respond :: ClientId -> ByteString -> IO ()
-    respond _clientId _resp = return ()
+    respond clientId resp = cgRespond cg clientId resp

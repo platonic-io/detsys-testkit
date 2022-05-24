@@ -65,6 +65,7 @@ library
     Lec04FaultInjection
     Lec05.Agenda
     Lec05.AwaitingClients
+    Lec05.ClientGenerator
     Lec05.Codec
     Lec05.Configuration
     Lec05.Debug
