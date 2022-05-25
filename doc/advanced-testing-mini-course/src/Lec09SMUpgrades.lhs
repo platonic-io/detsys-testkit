@@ -1,5 +1,3 @@
-> module Lec09SMUpgrades where
-
 State machine upgrades
 ======================
 
@@ -15,6 +13,14 @@ Plan
 - Codec upgrades
 - State machine upgrades
 - Seralisation of state machines?
+
+Code
+----
+
+> module Lec09SMUpgrades where
+
+> import Lec09.FreeFunc ()
+> import Lec09.Pipeline ()
 
 See also
 --------

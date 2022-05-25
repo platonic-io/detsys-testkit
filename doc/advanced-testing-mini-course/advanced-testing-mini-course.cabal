@@ -33,11 +33,13 @@ library
     , bytestring
     , containers
     , directory
+    , filepath
     , heaps
     , http-client
     , http-types
     , HUnit
     , microlens-platform
+    , overloaded
     , QuickCheck
     , random
     , sqlite-simple
@@ -46,6 +48,7 @@ library
     , time
     , transformers
     , tree-diff           ==0.0.2.1
+    , unix
     , vector
     , wai
     , warp
@@ -88,6 +91,8 @@ library
     Lec06WhiteboxCheckers
     Lec07EfficientEventLoop
     Lec08AsyncFileSystemIO
+    Lec09.FreeFunc
+    Lec09.Pipeline
     Lec09SMUpgrades
     Lec10LibraryOrFramework
 
