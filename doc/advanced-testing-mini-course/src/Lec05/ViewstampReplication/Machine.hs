@@ -127,7 +127,7 @@ executeUpToOrBeginStateTransfer (-1) = do
   -- -1 means nothing has been comitted yet!
   return ()
 executeUpToOrBeginStateTransfer k = do
-  myK <- use (commitNumber.to (max 0))
+  myK <- use commitNumber
   guard $ myK <= k
   forM_ [succ myK .. k] $ \(CommitNumber v) -> do
     l <- use theLog
