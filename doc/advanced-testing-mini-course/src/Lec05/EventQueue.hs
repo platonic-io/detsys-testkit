@@ -3,7 +3,6 @@ module Lec05.EventQueue where
 import Control.Concurrent.STM
        (atomically, newTQueueIO, readTQueue, writeTQueue)
 import Data.IORef
-import Data.List (sortOn)
 import System.Timeout (timeout)
 
 import Lec05.Agenda
@@ -63,7 +62,7 @@ fakeEventQueue a0 clock clientGenerator = do
             , case ncr of
                 CurrentlyNoRequests -> id
                 Now e -> push (now, return e)
-                Later t e -> push (t, return e)
+                Later t e -> push (t, e)
             ]
             emptyAgenda
       case pop allEvents of

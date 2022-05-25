@@ -15,7 +15,10 @@ import Lec05.TimerWheel
 
 ------------------------------------------------------------------------
 
-data DeploymentMode = Production | Simulation Seed Agenda History (Maybe FailureSpec) Collector
+data DeploymentMode
+  = Production
+  | Simulation Seed Agenda History (Maybe FailureSpec) Collector
+      (Maybe (SingleStateGenerator, NominalDiffTime))
 
 displayDeploymentMode :: DeploymentMode -> String
 displayDeploymentMode Production    = "production"
@@ -60,9 +63,11 @@ newDeployment mode config = case mode of
       , dAppendHistory = \_ -> return ()
       , dReportError   = putStrLn
       }
-  Simulation seed agenda history mf errorCollector -> do
+  Simulation seed agenda history mf errorCollector mSingleStateGenerator-> do
     clock      <- fakeClockEpoch
-    let clientGenerator = emptyGenerator
+    clientGenerator <- case mSingleStateGenerator of
+      Nothing -> return emptyGenerator
+      Just (ssg, delay) -> singleStateGenerator ssg clock delay
     eventQueue <- fakeEventQueue agenda clock clientGenerator
     random     <- fakeRandom seed
     network    <- faultyNetwork eventQueue clock random config history (fmap fsNetworkFailure mf) clientGenerator
