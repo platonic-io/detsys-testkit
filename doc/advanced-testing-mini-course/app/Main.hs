@@ -87,7 +87,7 @@ main = do
       _collector <- eventLoopSimulation (Seed 0) echoAgenda h [SomeCodecSM idCodec echoSM]
       _history <- readHistory h
       putStrLn "Can't print history yet, need Show/Pretty constraints for parameters..."
-    ["vr", "--simulation", fp] -> do
+    ["vr", "--simulation", seed, fp] -> do
       h <- newHistory
       let
         nodes = map NodeId [0..4]
@@ -104,8 +104,9 @@ main = do
           printItem "Sent messages" "" ""
           mapM_ (\x -> putStrLn $ "  " <> show x) msgs
         fs = FailureSpec (NetworkFaults 0.15)
-        endTime = addTimeSeconds 600 epoch
-      collector <- eventLoopFaultySimulation (Seed 6) (VR.agenda endTime) h fs
+        seed' = read seed
+        endTime = addTimeSeconds 3600 epoch
+      collector <- eventLoopFaultySimulation (Seed seed') (VR.agenda endTime) h fs
         [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes] (Just (vrClientGenerator, vrClientDelay))
       history <- readHistory h
       mapM_ printE history
@@ -125,7 +126,7 @@ main = do
           delta = 10 -- time for primary to do re-broadcast
           vrSM me = VR.vrSM (filter (/= me) nodes) me delta [] smI
           fs = FailureSpec (NetworkFaults 0.15)
-          endTime = addTimeSeconds 600 epoch
+          endTime = addTimeSeconds 3600 epoch
         collector <- eventLoopFaultySimulation seed (VR.agenda endTime) h fs
           [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes] (Just (vrClientGenerator, vrClientDelay))
         history <- readHistory h
