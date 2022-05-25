@@ -341,7 +341,11 @@ machineTime :: Time -> VR s o r ()
 machineTime _t = do
   guardM $ isPrimary -- TODO different logic for backups
   v <- use currentViewNumber
+  OpNumber o <- use opNumber
   k <- use commitNumber
+  -- we should only broadcast `Commit` if we haven't seen new client request
+  -- see 4.1 Normal Operation, 6)
+  guard $ CommitNumber o == k
   broadCastReplicas $ Commit v k
   registerTimerSeconds =<< use broadCastInterval
 
