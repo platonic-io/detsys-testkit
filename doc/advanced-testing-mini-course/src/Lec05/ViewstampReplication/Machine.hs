@@ -127,7 +127,7 @@ executeUpToOrBeginStateTransfer (-1) = do
   -- -1 means nothing has been comitted yet!
   return ()
 executeUpToOrBeginStateTransfer k = do
-  myK <- use (commitNumber.to (max 0))
+  myK <- use commitNumber
   guard $ myK <= k
   forM_ [succ myK .. k] $ \(CommitNumber v) -> do
     l <- use theLog
@@ -341,7 +341,11 @@ machineTime :: Time -> VR s o r ()
 machineTime _t = do
   guardM $ isPrimary -- TODO different logic for backups
   v <- use currentViewNumber
+  OpNumber o <- use opNumber
   k <- use commitNumber
+  -- we should only broadcast `Commit` if we haven't seen new client request
+  -- see 4.1 Normal Operation, 6)
+  guard $ CommitNumber o == k
   broadCastReplicas $ Commit v k
   registerTimerSeconds =<< use broadCastInterval
 
