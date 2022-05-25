@@ -159,7 +159,7 @@ httpFrontend queue req respond =
 
     "DELETE" -> do
       response <- newEmptyMVar
-      True <- qiEnqueue queue (Reset response)
+      _b <- qiEnqueue queue (Reset response)
       mu <- timeout wORKER_TIMEOUT_MICROS (takeMVar response)
       case mu of
         Just () -> respond (responseLBS status200 [] (BS8.pack "Reset"))
