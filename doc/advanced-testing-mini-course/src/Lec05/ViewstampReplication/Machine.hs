@@ -3,18 +3,15 @@ module Lec05.ViewstampReplication.Machine where
 
 import Control.Monad (forM_, unless, when)
 import Data.Fixed
-import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Time.Clock (secondsToNominalDiffTime)
 import GHC.Stack (HasCallStack)
 
 import Lec05.Agenda
 import Lec05.Codec
-import Lec05.Event
 import Lec05.StateMachine
 import Lec05.StateMachineDSL
-import Lec05.Time (Time, addTimeSeconds, epoch)
+import Lec05.Time (Time)
 import Lec05.ViewstampReplication.Message
 import Lec05.ViewstampReplication.State
 
@@ -365,20 +362,4 @@ vrCodec :: (Read m, Show m, Show r) => Codec (VRRequest m) (VRMessage m) (VRResp
 vrCodec = showReadCodec
 
 agenda :: Time -> Agenda
-agenda endTime = mk
-  [ ("first", 0)  -- this will complete
-  , ("second", 5) -- this will be rejected
-  , ("third", 25) -- this will complete
-  ]
-  where
-    mk = makeEventAgenda endTime . snd . List.mapAccumL op ini
-    ini = (0, epoch)
-    op (curRequestNumber, currentTime) (msg, timeDiff) =
-      let
-        newTime = addTimeSeconds (secondsToNominalDiffTime timeDiff) currentTime
-      in ( (curRequestNumber+1, newTime)
-         , (newTime
-           , NetworkEventE (NetworkEvent
-                             (NodeId 0)
-                             (ClientRequest newTime (ClientId 0)
-                               (encShow $ VRRequest msg curRequestNumber)))))
+agenda endTime = makeEventAgenda endTime []

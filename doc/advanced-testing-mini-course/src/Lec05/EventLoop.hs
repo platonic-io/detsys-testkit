@@ -8,6 +8,7 @@ import Control.Concurrent.Async
 import Control.Exception
 
 import Lec05.Agenda
+import Lec05.ClientGenerator (SingleStateGenerator)
 import Lec05.Codec
 import Lec05.History
 import Lec05.ErrorReporter
@@ -31,14 +32,15 @@ eventLoopSimulation :: Seed -> Agenda -> History -> [SomeCodecSM] -> IO Collecto
 eventLoopSimulation seed agenda history nodes = do
   config <- makeConfiguration nodes
   collector <- newCollector
-  eventLoop (Options (Simulation seed agenda history Nothing collector)) config
+  eventLoop (Options (Simulation seed agenda history Nothing collector Nothing)) config
   return collector
 
-eventLoopFaultySimulation :: Seed -> Agenda -> History -> FailureSpec -> [SomeCodecSM] -> IO Collector
-eventLoopFaultySimulation seed agenda history failureSpec nodes = do
+eventLoopFaultySimulation :: Seed -> Agenda -> History -> FailureSpec -> [SomeCodecSM]
+  -> Maybe (SingleStateGenerator, NominalDiffTime) -> IO Collector
+eventLoopFaultySimulation seed agenda history failureSpec nodes mClientGenerator = do
   config <- makeConfiguration nodes
   collector <- newCollector
-  eventLoop (Options (Simulation seed agenda history (Just failureSpec) collector)) config
+  eventLoop (Options (Simulation seed agenda history (Just failureSpec) collector mClientGenerator)) config
   return collector
 
 echoAgenda :: Agenda

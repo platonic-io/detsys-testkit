@@ -5,6 +5,7 @@ import Control.Monad (unless)
 import System.Environment
 import System.Exit (die)
 
+import Lec05.ClientGenerator
 import Lec05.ErrorReporter
 import Lec05.EventLoop
 import Lec05.StateMachine
@@ -45,18 +46,37 @@ type Command = VRRequest String
 type Response = VRResponse [String]
 
 step :: Model -> Command -> (Model, Response)
-step xs (VRRequest op rn) = (op:xs, VRReply 1 rn (op:xs))
+step xs (VRRequest op rn) = (op:xs, VRReply 0 rn (op:xs))
 
 initModel :: [String]
 initModel = []
 
 markFailure :: Lec4.History' Command Response -> Lec4.History' Command Response
-markFailure (Lec4.History ops) = Lec4.History (map go ops)
+markFailure (Lec4.History ops) = Lec4.History (finishClients [] $ map go ops)
   where
     go i@Lec4.Invoke{} = i
     go f@Lec4.Fail{} = f
     go (Lec4.Ok p VROnlyOneInflightAllowed{}) = Lec4.Fail p Lec4.FAIL
     go o@Lec4.Ok{} = o
+
+    remove x = filter (/= x)
+
+    finishClients ps [] = [ Lec4.Fail p Lec4.FAIL | p <- ps]
+    finishClients ps (op:h) = case op of
+      Lec4.Invoke p _ -> op : finishClients (p:ps) h
+      Lec4.Ok p _ -> op : finishClients (remove p ps) h
+      Lec4.Fail p _ -> op : finishClients (remove p ps) h
+
+vrClientGenerator :: SingleStateGenerator
+vrClientGenerator = SingleStateGenerator
+  0
+  (+1)
+  (\ curRequestNumber ->
+     let msg = "msg" ++ show curRequestNumber
+     in (NodeId 0, encShow $ VRRequest msg curRequestNumber))
+
+vrClientDelay :: NominalDiffTime
+vrClientDelay = 2
 
 main :: IO ()
 main = do
@@ -86,7 +106,7 @@ main = do
         fs = FailureSpec (NetworkFaults 0.15)
         endTime = addTimeSeconds 600 epoch
       collector <- eventLoopFaultySimulation (Seed 6) (VR.agenda endTime) h fs
-        [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes]
+        [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes] (Just (vrClientGenerator, vrClientDelay))
       history <- readHistory h
       mapM_ printE history
       -- let's print the errors again so they are easier to see.
@@ -107,7 +127,7 @@ main = do
           fs = FailureSpec (NetworkFaults 0.15)
           endTime = addTimeSeconds 600 epoch
         collector <- eventLoopFaultySimulation seed (VR.agenda endTime) h fs
-          [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes]
+          [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes] (Just (vrClientGenerator, vrClientDelay))
         history <- readHistory h
         -- let's print the errors again so they are easier to see.
         reportedErrors <- readFromCollector collector
