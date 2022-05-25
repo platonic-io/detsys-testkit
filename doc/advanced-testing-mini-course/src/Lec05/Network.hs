@@ -134,9 +134,11 @@ faultyNetwork evQ clock random config history mnf cg = do
     , nRun     = return ()
     }
   where
+    probOfDrop :: Double
     probOfDrop = case mnf of
       Nothing -> 0.0
       Just nf -> nfChanceOfDrop nf
+
     send :: NodeId -> NodeId -> ByteString -> IO ()
     send from to msg = do
       now <- cGetCurrentTime clock

@@ -214,7 +214,7 @@ Sequential "collaboration" testing
 >     )
 >   ClientRequest (ReadReq (Index ix)) ->
 >     ( m { mMaybeFault = Nothing }
->     , Just (ReadResp (mModel m Vector.! ix))
+>     , ReadResp <$> mModel m Vector.!? ix
 >     )
 >   InjectFault fault -> (m { mMaybeFault = Just fault}, Nothing)
 >   Reset             -> (m, Nothing)
@@ -358,7 +358,7 @@ Concurrent "collaboration" testing
 >         go :: Model -> [[Command]] -> Int -> Gen ConcProgram
 >         go m acc sz | sz <= 0   = return (ConcProgram (reverse acc))
 >                     | otherwise = do
->                         n <- chooseInt (2, 5)
+>                         n <- chooseInt (2, 3)
 >                         cmds <- vectorOf n (genCommand m) `suchThat` concSafe m
 >                         go (advanceModel m cmds) (cmds : acc) (sz - n)
 
@@ -416,6 +416,7 @@ Concurrent "collaboration" testing
 >       run (mapM_ (mapConcurrently (concExec ref mgr history)) cmdss)
 >       hist <- History <$> run (atomically (flushTQueue history))
 >       assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
+>       run (removeFault ref)
 >       run (httpReset mgr)
 >   where
 >     constructorString :: Command -> String
