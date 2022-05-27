@@ -20,14 +20,14 @@ Each lecture has the following structure:
 
 -   Motiviation: explains why we are doing what we are about to do;
 -   Plan: how we will do it;
--   Code: an implementation of the idea;
+-   Code: a concrete implementation of the idea (in case you get stuck when trying to implement it yourself);
 -   Discussion: common questions or objections;
 -   Exercises: things the authors were to lazy to do, but they know how to;
 -   Problems: things the authors don't know how to do (yet);
 -   See also: links to further reading about the topic or related topics;
 -   Summary: the most important take away.
 
-The lectures build upon each other. We start by modelling and testing a simple counter using a state machine in lecture 1, we then reuse the same state machine model to test the counter of thread-safety using linearisability in lecture 2. In lecture 3 we will implement a queue and a web service that uses said queue, the state machine model for the queue and the real implementation of the queue will be contract tested to ensure that the model is faithful to the implementation, subsequently while testing the web service we will use the model in place of the real queue. In lecture 4 we introduce fault injection to the queue allowing us to test how the web service performs when its dependency fails. Finally, in lecture 5, we combine all the above ideas in what, sometimes is called simulation testing, to test a distributed system that uses replicated state machines.
+The lectures build upon each other. We start by modelling and testing a simple counter using a state machine in lecture 1, we then reuse the same state machine model to test the counter for thread-safety using linearisability in lecture 2. In lecture 3 we will implement a queue and a web service that uses said queue, the state machine model for the queue and the real implementation of the queue will be contract tested to ensure that the model is faithful to the implementation, subsequently while testing the web service we will use the model in place of the real queue. In lecture 4 we introduce fault injection to the queue allowing us to test how the web service performs when its dependency fails. Finally, in lecture 5, we combine all the above ideas in what, sometimes is called simulation testing, to test a distributed system that uses replicated state machines.
 
 ## Table of contents
 
@@ -57,11 +57,11 @@ module Lec00Introduction where
 ```
 
 ```haskell
-import Lec01SMTesting
-import Lec02ConcurrentSMTesting
-import Lec03SMContractTesting
-import Lec04FaultInjection
-import Lec05SimulationTesting
+import Lec01SMTesting ()
+import Lec02ConcurrentSMTesting ()
+import Lec03SMContractTesting ()
+import Lec04FaultInjection ()
+import Lec05SimulationTesting ()
 ```
 
 ---
@@ -82,17 +82,38 @@ import Test.HUnit
 
 ## Motivation
 
+-   The combinatorics of testing:
+    -   $n$ features, 3-4 tests per feature $\Longrightarrow O(n)$ test cases
+    -   $n$ features, pairs of features $\Longrightarrow O(n^2)$ test cases
+    -   $n$ features, triples of features $\Longrightarrow O(n^3)$ test cases
+    -   Race conditions? (at least two features, non-deterministic)
+-   A lot of work. Solution? Let the computer generate test cases, instead of writing them manually.
+
+## Plan
+
 -   Testing: "the process of using or trying something to see if it works, is suitable, obeys the rules, etc." -- Cambridge dictionary
 
 -   In order to check that the software under test (SUT) obeys the rules we must first write down the rules
 
--   State machine specifications are one of many ways to formally "write down the rules"
+-   A state machine specification is one a way to formally "write down the rules"
 
-## Plan
+-   Since the state machine specification is executable (we can feed it input and get output), we effectively got a [test oracle](https://en.wikipedia.org/wiki/Test_oracle) or a [test double fake](https://en.wikipedia.org/wiki/Test_double) of the SUT
 
-XXX: ...
+-   Testing strategy: generate a sequence of random inputs, run it against the real SUT and against the fake and see if the outputs match
 
--   Use a state machine (pure function from input and state to output and an updated state) to model stateful (impure) systems
+## How it works
+
+![Generator](images/generator.svg)
+
+![State machine testing](images/sm-testing.svg)
+
+-   When assertions fail
+
+-   Shrinking
+
+-   Regression testing
+
+-   Coverage
 
 ## SUT
 
@@ -190,7 +211,7 @@ samplePrograms = sample' (genProgram initModel)
 
 ```haskell
 validProgram :: Model -> [Command] -> Bool
-validProgram _mode _cmds = True
+validProgram _model _cmds = True
 ```
 
 ```haskell
@@ -219,7 +240,7 @@ prop_counter = forallPrograms $ \prog -> monadicIO $ do
 
 ```haskell
 runProgram :: MonadIO m => Counter -> Model -> Program -> m Bool
-runProgram c0 m0 (Program cmds) = go c0 m0 cmds
+runProgram c0 m0 (Program cmds0) = go c0 m0 cmds0
   where
      go _c _m []           = return True
      go  c  m (cmd : cmds) = do
@@ -261,6 +282,8 @@ assertProgram msg prog = do
 
     -   Already heavily used in distributed systems (later we'll see how the model becomes the implementation)
 
+-   Coverage?
+
 ## Excerises
 
 0.  If you're not comfortable with Haskell, port the above code to your favorite programming language.
@@ -277,9 +300,13 @@ assertProgram msg prog = do
 
 ## See also
 
--   The original QuickCheck [paper](https://dl.acm.org/doi/pdf/10.1145/357766.351266) by Koen Claessen and John Hughes (2000) that introduced property-based testing in Haskell.
+-   For more on how feature interaction gives rise to bugs see the following [blog post]((https://www.hillelwayne.com/post/feature-interaction/)) by Hillel Wayne summarising [Pamela Zave](https://en.wikipedia.org/wiki/Pamela_Zave)'s work on the topic;
+
+-   The original QuickCheck [paper](https://dl.acm.org/doi/pdf/10.1145/357766.351266) by Koen Claessen and John Hughes (2000) that introduced property-based testing in Haskell;
 
 -   John Hughes' Midlands Graduate School 2019 [course](http://www.cse.chalmers.se/~rjmh/MGS2019/) on property-based testing, which covers the basics of state machine modelling and testing. It also contains a minimal implementation of a state machine testing library built on top of Haskell's QuickCheck;
+
+-   John Hughes' *Testing the Hard Stuff and Staying Sane* [talk](https://www.youtube.com/watch?v=zi0rHwfiX1Q) (2013-2014);
 
 -   Lamport's [Computation and State Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
 
@@ -290,6 +317,10 @@ assertProgram msg prog = do
     Perhaps somewhat surprisingly it turns out that the answer is yes, and the generalisation is a state machine! (This means that in some sense the state machine is the ultimate model?!)
 
     For details see Gurevich's [generalisation](http://delta-apache-vm.cs.tau.ac.il/~nachumd/models/gurevich.pdf) of the Church-Turing thesis.
+
+## Summary
+
+Property-based testing lets us *generate unit tests* for pure functions/components, property-based testing using state machine models lets us generate unit tests for *stateful* functions/components.
 
 ---
 
@@ -307,7 +338,6 @@ module Lec02ConcurrentSMTesting where
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TQueue
 import Control.Monad
 import Data.List (permutations)
 import Data.Tree (Forest, Tree(Node))
@@ -363,7 +393,7 @@ advanceModel m cmds = foldl (\ih cmd -> fst (step ih cmd)) m cmds
 
 ```haskell
 concSafe :: Model -> [Command] -> Bool
-concSafe m0 = all (validProgram m0) . permutations
+concSafe m = all (validProgram m) . permutations
 ```
 
 ```haskell
@@ -371,9 +401,9 @@ validConcProgram :: Model -> ConcProgram -> Bool
 validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
   where
     go :: Model -> Bool -> [[Command]] -> Bool
-    go m False _              = False
-    go m acc   []             = acc
-    go m acc   (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
+    go _m False _              = False
+    go _m acc   []             = acc
+    go m _acc   (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
 ```
 
 ```haskell
@@ -422,10 +452,15 @@ toPid tid = Pid (read (drop (length ("ThreadId " :: String)) (show tid)))
 ```
 
 ```haskell
+appendHistory :: TQueue (Operation' cmd resp) -> Operation' cmd resp -> IO ()
+appendHistory hist op = atomically (writeTQueue hist op)
+```
+
+```haskell
 concExec :: TQueue Operation -> Counter -> Command -> IO ()
 concExec queue counter cmd = do
   pid <- toPid <$> myThreadId
-  atomically (writeTQueue queue (Invoke pid cmd))
+  appendHistory queue (Invoke pid cmd)
   -- Adds some entropy to the possible interleavings.
   sleep <- randomRIO (0, 5)
   threadDelay sleep
@@ -438,11 +473,11 @@ Generate all possible single-threaded executions from the concurrent history.
 ```haskell
 interleavings :: History' cmd resp -> Forest (cmd, resp)
 interleavings (History [])  = []
-interleavings (History ops) =
+interleavings (History ops0) =
   [ Node (cmd, resp) (interleavings (History ops'))
-  | (tid, cmd)   <- takeInvocations ops
+  | (tid, cmd)   <- takeInvocations ops0
   , (resp, ops') <- findResponse tid
-                      (filter1 (not . matchInvocation tid) ops)
+                      (filter1 (not . matchInvocation tid) ops0)
   ]
   where
     takeInvocations :: [Operation' cmd resp] -> [(Pid, cmd)]
@@ -508,33 +543,33 @@ prop_concurrent = mapSize (min 20) $
       hist <- History <$> run (atomically (flushTQueue queue))
       assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
   where
-    classifyCommandsLength :: [Command] -> Property -> Property
-    classifyCommandsLength cmds
-      = classify (length cmds == 0)                        "length commands: 0"
-      . classify (0   < length cmds && length cmds <= 10)  "length commands: 1-10"
-      . classify (10  < length cmds && length cmds <= 50)  "length commands: 11-50"
-      . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
-      . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
-      . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
-      . classify (500 < length cmds)                       "length commands: >501"
-```
-
-```haskell
     constructorString :: Command -> String
     constructorString Incr {} = "Incr"
     constructorString Get  {} = "Get"
 ```
 
 ```haskell
-    assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
-    assertWithFail condition msg = do
-      unless condition $
-        monitor (counterexample ("Failed: " ++ msg))
-      assert condition
+assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
+assertWithFail condition msg = do
+  unless condition $
+    monitor (counterexample ("Failed: " ++ msg))
+  assert condition
 ```
 
 ```haskell
-prettyHistory :: History -> String
+classifyCommandsLength :: [cmd] -> Property -> Property
+classifyCommandsLength cmds
+  = classify (length cmds == 0)                        "length commands: 0"
+  . classify (0   < length cmds && length cmds <= 10)  "length commands: 1-10"
+  . classify (10  < length cmds && length cmds <= 50)  "length commands: 11-50"
+  . classify (50  < length cmds && length cmds <= 100) "length commands: 51-100"
+  . classify (100 < length cmds && length cmds <= 200) "length commands: 101-200"
+  . classify (200 < length cmds && length cmds <= 500) "length commands: 201-500"
+  . classify (500 < length cmds)                       "length commands: >501"
+```
+
+```haskell
+prettyHistory :: (Show cmd, Show resp) => History' cmd resp -> String
 prettyHistory = show
 ```
 
@@ -542,7 +577,7 @@ prettyHistory = show
 
 ```haskell
 assertHistory :: String -> History -> Assertion
-assertHistory msg hist =
+assertHistory _msg hist =
   assertBool (prettyHistory hist) (linearisable step initModel (interleavings hist))
 ```
 
@@ -572,10 +607,6 @@ assertHistory msg hist =
 
 ```haskell
 module Lec03SMContractTesting where
-```
-
-```haskell
-import Data.IORef
 ```
 
 # Consumer-driven contract testing using state machines
@@ -610,15 +641,16 @@ import Data.IORef
 ## SUT B: a queue (producer of the interface)
 
 ```haskell
-import Lec03.QueueInterface
-import Lec03.Queue
-import Lec03.QueueTest
+import Lec03.QueueInterface ()
+import Lec03.Queue ()
+import Lec03.QueueTest ()
 ```
 
 ## SUT A: web service (consumer of the interface)
 
 ```haskell
-import Lec03.Service
+import Lec03.Service ()
+import Lec03.ServiceTest ()
 ```
 
 ------------------------------------------------------------------------
@@ -691,12 +723,50 @@ Why not just spin up the real component B when testing component A?
 ---
 
 ```haskell
-module Lec04FaultInjection where
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 ```
 
 ```haskell
+module Lec04FaultInjection
+  ( module Lec04FaultInjection
+  , module Lec03.ServiceTest
+  , module Test.QuickCheck
+  )
+  where
+```
+
+```haskell
+import Control.Monad (replicateM_)
+import Control.Concurrent (threadDelay, myThreadId)
+import Control.Concurrent.Async (mapConcurrently)
+import Control.Concurrent.STM (TQueue, atomically, flushTQueue, newTQueueIO)
+import Data.Vector (Vector)
+import qualified Data.Vector as Vector
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import Control.Exception
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.IORef
+import Data.List (permutations)
+import Test.HUnit (Assertion, assertBool)
+import Test.QuickCheck hiding (Result)
+import Test.QuickCheck.Monadic hiding (assert)
+import Network.HTTP.Types (status503)
+import Network.HTTP.Client (HttpException(HttpExceptionRequest),
+                            HttpExceptionContent(StatusCodeException), Manager,
+                            defaultManagerSettings, newManager, responseStatus,
+                            managerResponseTimeout, responseTimeoutMicro)
+```
+
+```haskell
+import Lec02ConcurrentSMTesting (assertWithFail, classifyCommandsLength, toPid)
+import Lec03.Service (withService, mAX_QUEUE_SIZE, fakeQueue, realQueue)
+import Lec03.QueueInterface
+import Lec03.ServiceTest (Index(Index), httpWrite, httpRead, httpReset)
+import Lec04.LineariseWithFault (History'(History), Operation'(..), FailureMode(..), interleavings,
+                                 linearisable, prettyHistory, appendHistory)
 ```
 
 # Fault-injection
@@ -704,21 +774,24 @@ import Data.IORef
 ## Motivation
 
 -   "almost all (92%) of the catastrophic system failures are the result of incorrect handling of non-fatal errors explicitly signaled in software. \[...\] in 58% of the catastrophic failures, the underlying faults could easily have been detected through simple testing of error handling code." -- [Simple Testing Can Prevent Most Critical Failures: An Analysis of Production Failures in Distributed Data-intensive Systems](http://www.eecg.toronto.edu/~yuan/papers/failure_analysis_osdi14.pdf)
-    (2014) Yuan et al;
+    (2014) Yuan et al.
 
 ## Plan
 
+-   Create a wrapper around our fake queue implementation which allows us to inject faults
+
 -   Possible faults to inject for the queue
+
     -   write fails, e.g. queue is full
-    -   read fails, e.g. bug in queue causes exception to be thrown
+    -   read fails, e.g. queue is empty
+    -   read crashes, e.g. bug in queue causes exception to be thrown
     -   read returns a malformed write which no longer deserialises, or has a valid client request id to send the response to
 
-## Faulty queue
+-   Use the same web service model that we write in the previous lecture and do "collaboration tests" with the fake queue with faults to ensure that our service that uses the queue doesn't crash even if the presence of faults
 
-```haskell
-import Lec03.QueueInterface
-import Lec03.Service
-```
+-   Notice that we don't have to make any changes to the model to account of the possible faults, the linearisability checker does this for us behind the scenes
+
+## Faulty queue
 
 ```haskell
 data FaultyFakeQueue a = FaultyFakeQueue
@@ -728,7 +801,8 @@ data FaultyFakeQueue a = FaultyFakeQueue
 ```
 
 ```haskell
-data Fault = Full | Empty | ReadFail IOException
+data Fault = Full | Empty | ReadFail IOException | ReadSlow
+  deriving Show
 ```
 
 ```haskell
@@ -744,54 +818,429 @@ faultyFakeQueue size = do
     , ffqFault = ref
     }
   where
+    enqueue :: QueueI a -> IORef (Maybe Fault) -> a -> IO Bool
     enqueue fake ref x = do
       fault <- readIORef ref
       case fault of
-        Just Full  -> return False
+        Just Full -> do
+          removeFault ref
+          return False
         _otherwise -> qiEnqueue fake x
 ```
 
 ```haskell
+    dequeue :: QueueI a -> IORef (Maybe Fault) -> IO (Maybe a)
     dequeue fake ref = do
       fault <- readIORef ref
       case fault of
-        Just Empty          -> return Nothing
-        Just (ReadFail err) -> throwIO err
-        _otherwise          -> qiDequeue fake
+        Just Empty -> do
+          removeFault ref
+          return Nothing
+        Just (ReadFail err) -> do
+          removeFault ref
+          throwIO err
+        Just ReadSlow -> do
+          removeFault ref
+          threadDelay 200_000 -- 0.2s
+          qiDequeue fake
+        _otherwise -> qiDequeue fake
 ```
 
 ```haskell
-injectFullFault :: FaultyFakeQueue a -> IO ()
-injectFullFault (FaultyFakeQueue _queue ref) = writeIORef ref (Just Full)
+injectFullFault :: IORef (Maybe Fault) -> IO ()
+injectFullFault ref = writeIORef ref (Just Full)
 ```
 
 ```haskell
-injectEmptyFault :: FaultyFakeQueue a -> IO ()
-injectEmptyFault (FaultyFakeQueue _queue ref) = writeIORef ref (Just Empty)
+injectEmptyFault :: IORef (Maybe Fault) -> IO ()
+injectEmptyFault ref = writeIORef ref (Just Empty)
 ```
 
 ```haskell
-injectReadFailFault :: FaultyFakeQueue a -> IOException -> IO ()
-injectReadFailFault (FaultyFakeQueue _queue ref) err = writeIORef ref (Just (ReadFail err))
+injectReadFailFault :: IORef (Maybe Fault) -> IOException -> IO ()
+injectReadFailFault ref err = writeIORef ref (Just (ReadFail err))
 ```
 
 ```haskell
-removeFault :: FaultyFakeQueue a -> IO ()
-removeFault (FaultyFakeQueue _queue ref) = writeIORef ref Nothing
+injectReadSlowFault :: IORef (Maybe Fault) -> IO ()
+injectReadSlowFault ref = writeIORef ref (Just ReadSlow)
+```
+
+```haskell
+removeFault :: IORef (Maybe Fault) -> IO ()
+removeFault ref = writeIORef ref Nothing
 ```
 
 ```haskell
 test_injectFullFault :: IO ()
 test_injectFullFault = do
   ffq <- faultyFakeQueue 4
-  res1 <- qiEnqueue (ffqQueue ffq) "test1"
+  res1 <- qiEnqueue (ffqQueue ffq) ("test1" :: String)
   assert (res1 == True) (return ())
-  injectFullFault ffq
+  injectFullFault (ffqFault ffq)
   res2 <- qiEnqueue (ffqQueue ffq) "test2"
   assert (res2 == False) (return ())
 ```
 
+## Sequential "collaboration" testing
+
+```haskell
+data Command
+  = ClientRequest ClientRequest
+  | InjectFault Fault
+  | Reset -- Used for testing only.
+  deriving Show
+```
+
+```haskell
+data ClientRequest = WriteReq ByteString | ReadReq Index
+  deriving Show
+```
+
+```haskell
+data ClientResponse = WriteResp Index | ReadResp ByteString
+  deriving (Eq, Show)
+```
+
+```haskell
+newtype Program = Program { unProgram :: [Command] }
+  deriving Show
+```
+
+```haskell
+genProgram :: Model -> Gen Program
+genProgram m0 = sized (go m0 [])
+  where
+    go _m cmds 0 = return (Program (reverse cmds))
+    go  m cmds n = do
+      cmd <- genCommand m
+      case mMaybeFault m of
+        Nothing -> do
+          let m' = fst (step m cmd)
+          go m' (cmd : cmds) (n - 1)
+        Just _fault -> go m (cmd : cmds) (n - 1)
+```
+
+```haskell
+genCommand :: Model -> Gen Command
+genCommand m0 = case mMaybeFault m0 of
+  Nothing -> frequency [ (1, InjectFault <$> genFault)
+                       , (9, ClientRequest <$> genRequest m0)
+                       ]
+  Just _fault -> ClientRequest <$> genRequest m0
+  where
+    genRequest :: Model -> Gen ClientRequest
+    genRequest m | len == 0  = WriteReq <$> (LBS.pack <$> arbitrary)
+                 | otherwise = frequency
+                     [ (2, WriteReq <$> (LBS.pack <$> arbitrary))
+                     , (8, ReadReq  <$> (Index <$> elements [0 .. len - 1]))
+                     ]
+      where
+        len = Vector.length (mModel m)
+```
+
+```haskell
+    genFault :: Gen Fault
+    genFault = frequency [ (1, pure Full)
+                         , (1, pure Empty)
+                         , (1, pure (ReadFail (userError "bug")))
+                         , (1, pure ReadSlow)
+                         ]
+```
+
+```haskell
+data Model = Model
+  { mModel      :: Vector ByteString
+  , mMaybeFault :: Maybe Fault
+  }
+```
+
+```haskell
+initModel :: Model
+initModel = Model Vector.empty Nothing
+```
+
+```haskell
+step :: Model -> Command -> (Model, Maybe ClientResponse)
+step m cmd = case cmd of
+  ClientRequest (WriteReq bs) ->
+    ( m { mModel = Vector.snoc (mModel m) bs, mMaybeFault = Nothing }
+    , Just (WriteResp (Index (Vector.length (mModel m))))
+    )
+  ClientRequest (ReadReq (Index ix)) ->
+    ( m { mMaybeFault = Nothing }
+    , ReadResp <$> mModel m Vector.!? ix
+    )
+  InjectFault fault -> (m { mMaybeFault = Just fault}, Nothing)
+  Reset             -> (m, Nothing)
+```
+
+```haskell
+data Result a = ROk a | RFail | RInfo | RNemesis
+  deriving Show
+```
+
+```haskell
+exec :: Command -> IORef (Maybe Fault) -> Manager -> IO (Result ClientResponse)
+exec (ClientRequest req) _ref mgr =
+  case req of
+    WriteReq bs -> do
+      res <- try (httpWrite mgr bs)
+      case res of
+        Left (err :: HttpException) | is503 err -> return RFail
+                                    | otherwise -> return RInfo
+        Right ix -> return (ROk (WriteResp ix))
+    ReadReq ix  -> do
+      res <- try (httpRead mgr ix)
+      case res of
+        -- NOTE: since read doesn't change the state we can always treat is a failure.
+        Left (_err :: HttpException) -> return RFail
+        Right bs -> return (ROk (ReadResp bs))
+exec (InjectFault fault)  ref _mgr = do
+  case fault of
+    Full         -> injectFullFault ref
+    Empty        -> injectEmptyFault ref
+    ReadFail err -> injectReadFailFault ref err
+    ReadSlow     -> injectReadSlowFault ref
+  return RNemesis
+exec Reset _ref mgr = do
+  httpReset mgr
+  return RNemesis
+```
+
+```haskell
+is503 :: HttpException -> Bool
+is503 (HttpExceptionRequest _req (StatusCodeException resp _bs)) = responseStatus resp == status503
+is503 _otherwise = False
+```
+
+```haskell
+shrinkProgram :: Program -> [Program]
+shrinkProgram (Program cmds) = filter (isValidProgram initModel) ((map Program (shrinkList shrinkCommand cmds)))
+  where
+    shrinkCommand _cmd = []
+```
+
+```haskell
+isValidProgram :: Model -> Program -> Bool
+isValidProgram m0 (Program cmds0) = go m0 cmds0
+  where
+    go _m [] = True
+    go  m (ClientRequest (ReadReq (Index ix)) : cmds)
+      | ix < Vector.length (mModel m) = go m cmds
+      | otherwise                     = False
+    go  m (cmd@(ClientRequest (WriteReq _bs)) : cmds) = case mMaybeFault m of
+      Nothing     -> let m' = fst (step m cmd) in go m' cmds
+      Just _fault -> go m cmds
+    go  m (cmd : cmds) = let m' = fst (step m cmd) in go m' cmds
+```
+
+```haskell
+forallPrograms :: (Program -> Property) -> Property
+forallPrograms p =
+  forAllShrink (genProgram initModel) shrinkProgram p
+```
+
+```haskell
+prop_sequentialWithFaults :: IORef (Maybe Fault) -> Manager -> Property
+prop_sequentialWithFaults ref mgr = forallPrograms $ \prog -> monadicIO $ do
+  r <- runProgram ref mgr initModel prog
+  run (removeFault ref)
+  run (httpReset mgr)
+  case r of
+    Left err -> do
+      monitor (counterexample err)
+      return False
+    Right () -> return True
+```
+
+```haskell
+runProgram :: MonadIO m => IORef (Maybe Fault) -> Manager -> Model -> Program -> m (Either String ())
+runProgram ref mgr m0 (Program cmds0) = go m0 cmds0
+  where
+    go _m []           = return (Right ())
+    go  m (cmd : cmds) = do
+      res <- liftIO (exec cmd ref mgr)
+      case res of
+        ROk resp -> do
+          let (m', mResp') = step m cmd
+          case mResp' of
+            Just resp' | resp == resp' -> go m' cmds
+                       | otherwise     -> return (Left (concat [show resp, " /= ", show resp']))
+            Nothing -> return (Left (concat [show res, " /= ", show mResp']))
+        RFail -> go m cmds
+        -- For more see the "Crashes" section of https://jepsen.io/consistency
+        RInfo -> return (Left "Continuing would violate the single-threaded constraint: processes only do one thing at a time.")
+        RNemesis -> do
+          let (m', mResp') = step m cmd
+          case mResp' of
+            Nothing     -> go m' cmds
+            Just _resp' -> return (Left (concat [show res, " /= ", show mResp']))
+```
+
+```haskell
+withFaultyQueueService :: (Manager -> IORef (Maybe Fault) -> IO ()) -> IO ()
+withFaultyQueueService io = do
+  queue <- faultyFakeQueue mAX_QUEUE_SIZE
+  mgr   <- newManager defaultManagerSettings
+             { managerResponseTimeout = responseTimeoutMicro (10_000_000) } -- 10s
+  withService (ffqQueue queue) (io mgr (ffqFault queue))
+```
+
+```haskell
+withFakeQueueService :: (Manager -> IO ()) -> IO ()
+withFakeQueueService io = do
+  queue <- fakeQueue mAX_QUEUE_SIZE
+  mgr   <- newManager defaultManagerSettings
+  withService queue (io mgr)
+```
+
+```haskell
+withRealQueueService :: (Manager -> IO ()) -> IO ()
+withRealQueueService io = do
+  queue <- realQueue mAX_QUEUE_SIZE
+  mgr   <- newManager defaultManagerSettings
+  withService queue (io mgr)
+```
+
+```haskell
+unit_faultTest :: IO ()
+unit_faultTest =
+  withFaultyQueueService (\mgr ref -> quickCheck (prop_sequentialWithFaults ref mgr))
+```
+
+```haskell
+assertProgram :: String -> Program -> Assertion
+assertProgram msg prog =
+  withFaultyQueueService $ \mgr ref -> do
+    let m = initModel
+    r <- runProgram ref mgr m prog
+    assertBool msg (isRight r)
+  where
+    isRight Right {} = True
+    isRight Left  {} = False
+```
+
+## Concurrent "collaboration" testing
+
+```haskell
+newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
+  deriving Show
+```
+
+```haskell
+forAllConcProgram :: (ConcProgram -> Property) -> Property
+forAllConcProgram k =
+  forAllShrinkShow (genConcProgram initModel) (shrinkConcProgram initModel)
+                   prettyConcProgram k
+  where
+```
+
+```haskell
+    genConcProgram :: Model -> Gen ConcProgram
+    genConcProgram m0 = sized (go m0 [])
+      where
+        go :: Model -> [[Command]] -> Int -> Gen ConcProgram
+        go m acc sz | sz <= 0   = return (ConcProgram (reverse acc))
+                    | otherwise = do
+                        n <- chooseInt (2, 3)
+                        cmds <- vectorOf n (genCommand m) `suchThat` concSafe m
+                        go (advanceModel m cmds) (cmds : acc) (sz - n)
+```
+
+```haskell
+    advanceModel :: Model -> [Command] -> Model
+    advanceModel m cmds = foldl (\ih cmd -> fst (step ih cmd)) m cmds
+```
+
+```haskell
+    concSafe :: Model -> [Command] -> Bool
+    concSafe m = all (isValidProgram m . Program) . permutations
+```
+
+```haskell
+    validConcProgram :: Model -> ConcProgram -> Bool
+    validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
+      where
+        go :: Model -> Bool -> [[Command]] -> Bool
+        go _m False _              = False
+        go _m acc   []             = acc
+        go  m _acc  (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
+```
+
+```haskell
+    shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
+    shrinkConcProgram m
+      = filter (validConcProgram m)
+      . map ConcProgram
+      . filter (not . null)
+      . shrinkList (shrinkList shrinkCommand)
+      . unConcProgram
+      where
+        shrinkCommand _cmd = []
+```
+
+```haskell
+    prettyConcProgram :: ConcProgram -> String
+    prettyConcProgram = show
+```
+
+```haskell
+type Operation = Operation' Command (Maybe ClientResponse)
+```
+
+```haskell
+concExec :: IORef (Maybe Fault) -> Manager -> TQueue Operation -> Command -> IO ()
+concExec ref mgr hist cmd = do
+  pid <- toPid <$> myThreadId -- XXX: we can't reuse crashed pids...
+  appendHistory hist (Invoke pid cmd)
+  res <- exec cmd ref mgr
+  case res of
+    ROk resp -> appendHistory hist (Ok pid (Just resp))
+    RFail    -> appendHistory hist (Fail pid FAIL)
+    RInfo    -> appendHistory hist (Fail pid INFO)
+    RNemesis -> appendHistory hist (Ok pid Nothing)
+```
+
+```haskell
+-- NOTE: Assumes that the service is running.
+prop_faultyCollaborationTests :: IORef (Maybe Fault) -> Manager -> Property
+prop_faultyCollaborationTests ref mgr = mapSize (min 20) $
+  forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
+    monitor (classifyCommandsLength (concat cmdss))
+    monitor (tabulate "Client requests" (map constructorString (concat cmdss)))
+    monitor (tabulate "Number of concurrent client requests" (map (show . length) cmdss))
+    -- Rerun a couple of times, to avoid being lucky with the interleavings.
+    replicateM_ 10 $ do
+      history <- run newTQueueIO
+      run (mapM_ (mapConcurrently (concExec ref mgr history)) cmdss)
+      hist <- History <$> run (atomically (flushTQueue history))
+      assertWithFail (linearisable step initModel (interleavings hist)) (prettyHistory hist)
+      run (removeFault ref)
+      run (httpReset mgr)
+  where
+    constructorString :: Command -> String
+    constructorString (ClientRequest WriteReq {}) = "WriteReq"
+    constructorString (ClientRequest ReadReq  {}) = "ReadReq"
+    constructorString (InjectFault Full)          = "Full"
+    constructorString (InjectFault Empty)         = "Empty"
+    constructorString (InjectFault ReadFail {})   = "ReadFail"
+    constructorString (InjectFault ReadSlow {})   = "ReadSlow"
+    constructorString Reset                       = "Reset"
+```
+
+```haskell
+test :: IO ()
+test = do
+  -- NOTE: fake queue is used here, justified by previous contract testing.
+  ffq <- faultyFakeQueue mAX_QUEUE_SIZE
+  mgr <- newManager defaultManagerSettings
+  withService (ffqQueue ffq) (quickCheck (prop_faultyCollaborationTests (ffqFault ffq) mgr))
+```
+
 ## Discussion
+
+-   Modelling the faults, i.e. move some non-determinism out from linearisability checker into the model, is possible but not recommended as it complicated the model.
 
 -   Can we not just inject real faults like Jepsen does? [`iptables`](https://linux.die.net/man/8/iptables) for dropping messages and network partitions, [`tc`](https://man7.org/linux/man-pages/man8/tc.8.html) for creating latency or simulating a slow connection on the network, [`(p)kill`](https://linux.die.net/man/1/kill) for killing processes, `kill -STOP   $pid` and `kill -CONT $pid` for pausing and resuming processes to simulate long I/O or GC pauses, [`libfaketime`](https://github.com/wolfcw/libfaketime) for clock-skews, etc?
 
@@ -828,12 +1277,18 @@ test_injectFullFault = do
 
 ## Problems
 
-0.  Can we do better than randomly inserting faults? (Hint: see [*Lineage-driven Fault Injection*](https://people.ucsc.edu/~palvaro/molly.pdf) by Alvaro et al (2015))
+0.  Can we do better than randomly inserting faults? (Hint: see [*Lineage-driven Fault Injection*](https://people.ucsc.edu/~palvaro/molly.pdf) by Alvaro et al
+    (2015) and the [`ldfi`](https://github.com/symbiont-io/detsys-testkit/tree/main/src/ldfi) directory in the `detsys-testkit` repo)
+1.  What's better at finding bugs: i) a small fixed agenda and try many faults and interleavings, or ii) a big random agenda and fewer interleavings?
 
 ## See also
 
 -   \[*Why Is Random Testing Effective for Partition Tolerance Bugs?*(https://dl.acm.org/doi/pdf/10.1145/3158134) by Majumdar and Niksic
     (2018) 
+
+## Summary
+
+XXX
 
 ---
 
@@ -842,7 +1297,7 @@ module Lec05SimulationTesting where
 ```
 
 ```haskell
-import Lec05.EventLoop
+import Lec05.EventLoop ()
 ```
 
 # Simulation testing
@@ -853,7 +1308,9 @@ import Lec05.EventLoop
 
 -   ["Jepsen-proof engineering"](https://sled.rs/simulation.html)
 
-## Idea
+-   "Everyone knows that debugging is twice as hard as writing a program in the first place." -- Brian Kernighan
+
+## Plan
 
 -   What interface does the event loop provide?
     -   Send/recv messages
@@ -1053,6 +1510,8 @@ module Lec10LibraryOrFramework where
 -   Jane Street's [Concord](https://signalsandthreads.com/state-machine-replication-and-why-you-should-care/) framework
 
 -   Chuck's Bandwagon framework
+
+-   OCaml's [Eio](https://ocaml-multicore.github.io/eio/eio/Eio/index.html) and its [`io_uring`](https://en.wikipedia.org/wiki/Io_uring) [backend](https://ocaml-multicore.github.io/eio/eio_linux/Eio_linux/index.html)
 
 ---
 
