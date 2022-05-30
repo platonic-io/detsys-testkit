@@ -48,13 +48,16 @@ How it works
 
 ![State machine testing](images/sm-testing.svg)
 
-* When assertions fail
+* Shrinking, when assertions fail
 
-* Shrinking
+![Shrinking](images/shrinking.svg)
 
 * Regression testing
 
 * Coverage
+  - Risk when generating random test cases: are we generating interesting test cases?
+  - How to measure coverage
+  - Corner case thinking and unit tests as basis, e.g. try 0, -1, maxInt, etc
 
 
 SUT
