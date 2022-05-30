@@ -12,22 +12,49 @@ State machine testing
 Motivation
 ----------
 
-  - Testing: "the process of using or trying something to see if it works, is
-    suitable, obeys the rules, etc." -- Cambridge dictionary
+- The combinatorics of testing:
+  + $n$ features and 3-4 tests per feature $\Longrightarrow O(n)$ test cases
+  + $n$ features and testing pairs of features     $\Longrightarrow O(n^2)$ test cases
+  + $n$ features and testing triples of features   $\Longrightarrow O(n^3)$ test cases
+  + Race conditions? (at least two features, non-deterministic)
 
-  - In order to check that the software under test (SUT) obeys the rules we must
-    first write down the rules
-
-  - State machine specifications are one of many ways to formally "write down
-    the rules"
+- A lot of work. Solution? Let the computer generate test cases, instead of
+  writing them manually.
 
 Plan
 ----
 
-XXX: ...
+- Testing: "the process of using or trying something to see if it works, is
+  suitable, obeys the rules, etc." -- Cambridge dictionary
 
-- Use a state machine (pure function from input and state to output and an
-  updated state) to model stateful (impure) systems
+- In order to check that the software under test (SUT) obeys the rules we must
+  first write down the rules
+
+- A state machine specification is one a way to formally "write down the
+  rules"
+
+- Since the state machine specification is executable (we can feed it input and
+  get output), we effectively got a [test
+  oracle](https://en.wikipedia.org/wiki/Test_oracle) or a [test double
+  fake](https://en.wikipedia.org/wiki/Test_double) of the SUT
+
+- Testing strategy: generate a sequence of random inputs, run it against the
+  real SUT and against the fake and see if the outputs match
+
+How it works
+------------
+
+![Generator](images/generator.svg)
+
+![State machine testing](images/sm-testing.svg)
+
+* When assertions fail
+
+* Shrinking
+
+* Regression testing
+
+* Coverage
 
 
 SUT
@@ -165,6 +192,8 @@ Discussion
   + Already heavily used in distributed systems (later we'll see how the model
     becomes the implementation)
 
+- Coverage?
+
 Excerises
 ---------
 
@@ -190,15 +219,23 @@ Excerises
 See also
 --------
 
+- For more on how feature interaction gives rise to bugs see the following [blog
+  post]((https://www.hillelwayne.com/post/feature-interaction/)) by Hillel Wayne
+  summarising [Pamela Zave](https://en.wikipedia.org/wiki/Pamela_Zave)'s work on
+  the topic;
+
 - The original QuickCheck
   [paper](https://dl.acm.org/doi/pdf/10.1145/357766.351266) by Koen Claessen and
-  John Hughes (2000) that introduced property-based testing in Haskell.
+  John Hughes (2000) that introduced property-based testing in Haskell;
 
 - John Hughes' Midlands Graduate School 2019
   [course](http://www.cse.chalmers.se/~rjmh/MGS2019/) on property-based testing,
   which covers the basics of state machine modelling and testing. It also
   contains a minimal implementation of a state machine testing library built on
   top of Haskell's QuickCheck;
+
+- John Hughes' *Testing the Hard Stuff and Staying Sane*
+  [talk](https://www.youtube.com/watch?v=zi0rHwfiX1Q) (2013-2014);
 
 - Lamport's [Computation and State
   Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)

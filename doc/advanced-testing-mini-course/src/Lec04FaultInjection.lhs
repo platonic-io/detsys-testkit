@@ -177,8 +177,8 @@ Sequential "collaboration" testing
 
 > genCommand :: Model -> Gen Command
 > genCommand m0 = case mMaybeFault m0 of
->   Nothing -> frequency [ (2, InjectFault <$> genFault)
->                        , (8, ClientRequest <$> genRequest m0)
+>   Nothing -> frequency [ (1, InjectFault <$> genFault)
+>                        , (9, ClientRequest <$> genRequest m0)
 >                        ]
 >   Just _fault -> ClientRequest <$> genRequest m0
 >   where
@@ -274,7 +274,7 @@ Sequential "collaboration" testing
 >   forAllShrink (genProgram initModel) shrinkProgram p
 
 > prop_sequentialWithFaults :: IORef (Maybe Fault) -> Manager -> Property
-> prop_sequentialWithFaults ref mgr = noShrinking $ forallPrograms $ \prog -> monadicIO $ do
+> prop_sequentialWithFaults ref mgr = forallPrograms $ \prog -> monadicIO $ do
 >   r <- runProgram ref mgr initModel prog
 >   run (removeFault ref)
 >   run (httpReset mgr)

@@ -42,7 +42,7 @@ Each lecture has the following structure:
 
 The lectures build upon each other. We start by modelling and testing a simple
 counter using a state machine in lecture 1, we then reuse the same state machine
-model to test the counter of thread-safety using linearisability in lecture 2.
+model to test the counter for thread-safety using linearisability in lecture 2.
 In lecture 3 we will implement a queue and a web service that uses said queue,
 the state machine model for the queue and the real implementation of the queue
 will be contract tested to ensure that the model is faithful to the
