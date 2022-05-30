@@ -44,13 +44,17 @@ Plan
 How it works
 ------------
 
-![Generator](images/generator.svg)
+* Test case generation:
 
-![State machine testing](images/sm-testing.svg)
+![](./images/generator.svg){ width=400px }
 
-* Shrinking, when assertions fail
+* State machine testing:
 
-![Shrinking](images/shrinking.svg)
+![](./images/sm-testing.svg){ width=400px }
+
+* Shrinking, when assertions fail:
+
+![](./images/shrinking.svg){ width=400px }
 
 * Regression testing
 
