@@ -83,9 +83,9 @@ import Test.HUnit
 ## Motivation
 
 -   The combinatorics of testing:
-    -   $n$ features, 3-4 tests per feature $\Longrightarrow O(n)$ test cases
-    -   $n$ features, pairs of features $\Longrightarrow O(n^2)$ test cases
-    -   $n$ features, triples of features $\Longrightarrow O(n^3)$ test cases
+    -   $n$ features and 3-4 tests per feature $\Longrightarrow O(n)$ test cases
+    -   $n$ features and testing pairs of features $\Longrightarrow O(n^2)$ test cases
+    -   $n$ features and testing triples of features $\Longrightarrow O(n^3)$ test cases
     -   Race conditions? (at least two features, non-deterministic)
 -   A lot of work. Solution? Let the computer generate test cases, instead of writing them manually.
 
@@ -107,13 +107,17 @@ import Test.HUnit
 
 ![State machine testing](images/sm-testing.svg)
 
--   When assertions fail
+-   Shrinking, when assertions fail
 
--   Shrinking
+![Shrinking](images/shrinking.svg)
 
 -   Regression testing
 
 -   Coverage
+
+    -   Risk when generating random test cases: are we generating interesting test cases?
+    -   How to measure coverage
+    -   Corner case thinking and unit tests as basis, e.g. try 0, -1, maxInt, etc
 
 ## SUT
 
