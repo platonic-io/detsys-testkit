@@ -23,7 +23,7 @@ Each lecture has the following structure:
 -   Code: a concrete implementation of the idea (in case you get stuck when trying to implement it yourself);
 -   Discussion: common questions or objections;
 -   Exercises: things the authors were to lazy to do, but they know how to;
--   Problems: things the authors don't know how to do (yet);
+-   Problems: things the authors don’t know how to do (yet);
 -   See also: links to further reading about the topic or related topics;
 -   Summary: the most important take away.
 
@@ -46,17 +46,17 @@ The lectures build upon each other. We start by modelling and testing a simple c
 -   Generalise generation and execution to N threads
 -   Collect history
 -   Enumerate all possible sequential executions from concurrent history
--   Write simple linearisability checker: check if there's any such sequential execution that satisifies the (sequential) state machine model
+-   Write simple linearisability checker: check if there’s any such sequential execution that satisifies the (sequential) state machine model
 
 3.  Consumer-driven contract tests using state machines
 4.  Fault-injection
 5.  Simulation testing
 
-```haskell
+``` haskell
 module Lec00Introduction where
 ```
 
-```haskell
+``` haskell
 import Lec01SMTesting ()
 import Lec02ConcurrentSMTesting ()
 import Lec03SMContractTesting ()
@@ -66,11 +66,11 @@ import Lec05SimulationTesting ()
 
 ---
 
-```haskell
+``` haskell
 module Lec01SMTesting where
 ```
 
-```haskell
+``` haskell
 import Control.Monad.IO.Class
 import Data.IORef
 import Test.QuickCheck
@@ -83,19 +83,19 @@ import Test.HUnit
 ## Motivation
 
 -   The combinatorics of testing:
-    -   $n$ features and 3-4 tests per feature $\Longrightarrow O(n)$ test cases
-    -   $n$ features and testing pairs of features $\Longrightarrow O(n^2)$ test cases
-    -   $n$ features and testing triples of features $\Longrightarrow O(n^3)$ test cases
+    -   *n* features and 3-4 tests per feature  ⇒ *O*(*n*) test cases
+    -   *n* features and testing pairs of features  ⇒ *O*(*n*<sup>2</sup>) test cases
+    -   *n* features and testing triples of features  ⇒ *O*(*n*<sup>3</sup>) test cases
     -   Race conditions? (at least two features, non-deterministic)
 -   A lot of work. Solution? Let the computer generate test cases, instead of writing them manually.
 
 ## Plan
 
--   Testing: "the process of using or trying something to see if it works, is suitable, obeys the rules, etc." -- Cambridge dictionary
+-   Testing: “the process of using or trying something to see if it works, is suitable, obeys the rules, etc.” – Cambridge dictionary
 
 -   In order to check that the software under test (SUT) obeys the rules we must first write down the rules
 
--   A state machine specification is one a way to formally "write down the rules"
+-   A state machine specification is one a way to formally “write down the rules”
 
 -   Since the state machine specification is executable (we can feed it input and get output), we effectively got a [test oracle](https://en.wikipedia.org/wiki/Test_oracle) or a [test double fake](https://en.wikipedia.org/wiki/Test_double) of the SUT
 
@@ -103,13 +103,17 @@ import Test.HUnit
 
 ## How it works
 
-![Generator](images/generator.svg)
+-   Test case generation:
 
-![State machine testing](images/sm-testing.svg)
+<img src="./images/generator.svg" width="400" />
 
--   Shrinking, when assertions fail
+-   State machine testing:
 
-![Shrinking](images/shrinking.svg)
+<img src="./images/sm-testing.svg" width="400" />
+
+-   Shrinking, when assertions fail:
+
+<img src="./images/shrinking.svg" width="400" />
 
 -   Regression testing
 
@@ -121,120 +125,120 @@ import Test.HUnit
 
 ## SUT
 
-```haskell
+``` haskell
 newtype Counter = Counter (IORef Int)
 ```
 
-```haskell
+``` haskell
 newCounter :: IO Counter
 newCounter = do
   ref <- newIORef 0
   return (Counter ref)
 ```
 
-```haskell
+``` haskell
 incr :: Counter -> IO ()
 incr (Counter ref) = do
   n <- readIORef ref
   writeIORef ref (n + 1)
 ```
 
-```haskell
+``` haskell
 get :: Counter -> IO Int
 get (Counter ref) = readIORef ref
 ```
 
 ## State machine model/specification/fake
 
-```haskell
+``` haskell
 newtype FakeCounter = FakeCounter Int
 ```
 
-```haskell
+``` haskell
 fakeIncr :: FakeCounter -> (FakeCounter, ())
 fakeIncr (FakeCounter i) = (FakeCounter (i + 1), ())
 ```
 
-```haskell
+``` haskell
 fakeGet :: FakeCounter -> (FakeCounter, Int)
 fakeGet (FakeCounter i) = (FakeCounter i, i)
 ```
 
-```haskell
+``` haskell
 data Command = Incr | Get
   deriving (Eq, Show)
 ```
 
-```haskell
+``` haskell
 data Response = Unit () | Int Int
   deriving (Eq, Show)
 ```
 
-```haskell
+``` haskell
 type Model = FakeCounter
 ```
 
-```haskell
+``` haskell
 initModel :: Model
 initModel = FakeCounter 0
 ```
 
-```haskell
+``` haskell
 step :: Model -> Command -> (Model, Response)
 step m cmd = case cmd of
   Incr -> Unit <$> fakeIncr m
   Get  -> Int  <$> fakeGet m
 ```
 
-```haskell
+``` haskell
 exec :: Counter -> Command -> IO Response
 exec c cmd = case cmd of
   Incr -> Unit <$> incr c
   Get  -> Int  <$> get c
 ```
 
-```haskell
+``` haskell
 newtype Program = Program [Command]
   deriving Show
 ```
 
-```haskell
+``` haskell
 genCommand :: Gen Command
 genCommand = elements [Incr, Get]
 ```
 
-```haskell
+``` haskell
 genProgram :: Model -> Gen Program
 genProgram _m = Program <$> listOf genCommand
 ```
 
-```haskell
+``` haskell
 samplePrograms :: IO [Program]
 samplePrograms = sample' (genProgram initModel)
 ```
 
-```haskell
+``` haskell
 validProgram :: Model -> [Command] -> Bool
 validProgram _model _cmds = True
 ```
 
-```haskell
+``` haskell
 shrinkCommand :: Command -> [Command]
 shrinkCommand _cmd = []
 ```
 
-```haskell
+``` haskell
 shrinkProgram :: Program -> [Program]
 shrinkProgram _prog = [] -- Exercises.
 ```
 
-```haskell
+``` haskell
 forallPrograms :: (Program -> Property) -> Property
 forallPrograms p =
   forAllShrink (genProgram initModel) shrinkProgram p
 ```
 
-```haskell
+``` haskell
 prop_counter :: Property
 prop_counter = forallPrograms $ \prog -> monadicIO $ do
   c <- run newCounter
@@ -242,7 +246,7 @@ prop_counter = forallPrograms $ \prog -> monadicIO $ do
   runProgram c m prog
 ```
 
-```haskell
+``` haskell
 runProgram :: MonadIO m => Counter -> Model -> Program -> m Bool
 runProgram c0 m0 (Program cmds0) = go c0 m0 cmds0
   where
@@ -257,7 +261,7 @@ runProgram c0 m0 (Program cmds0) = go c0 m0 cmds0
 
 ## Regression tests
 
-```haskell
+``` haskell
 assertProgram :: String -> Program -> Assertion
 assertProgram msg prog = do
   c <- newCounter
@@ -268,13 +272,13 @@ assertProgram msg prog = do
 
 ## Discussion
 
--   The specification is longer than the SUT!? For something as simple as a counter, this is true, but for any "real world" system that e.g. persists to disk the model will likely be smaller by an order of magnitude or more.
+-   The specification is longer than the SUT!? For something as simple as a counter, this is true, but for any “real world” system that e.g. persists to disk the model will likely be smaller by an order of magnitude or more.
 
 -   Why state machines over other forms of specifications? E.g. unit test-suite.
 
     -   First of all, a bunch of unit tests are not a specification in the same way that a bunch of examples in math are not a proposition/theorem.
 
-    -   Stateless (or pure) property-based testing tries to *approximate* proof by induction in math. For example the following is the proposition that addition is associative for integers, *forall i j k. (i + j) + k == i + (j + k)*. It looks almost exactly like the property you'd write in a property-based test, but of course this test passing isn't a proof of the proposition, still a step in the right direction if we want to be serious about program correctness.
+    -   Stateless (or pure) property-based testing tries to *approximate* proof by induction in math. For example the following is the proposition that addition is associative for integers, *forall i j k. (i + j) + k == i + (j + k)*. It looks almost exactly like the property you’d write in a property-based test, but of course this test passing isn’t a proof of the proposition, still a step in the right direction if we want to be serious about program correctness.
 
     -   XXX: Stateful property-based testing using state machines, like we seen in this lecture, tries to approximate proof by structural induction on the sequence of inputs. Or inductive invariant method?!
 
@@ -284,13 +288,13 @@ assertProgram msg prog = do
 
     -   Mental model
 
-    -   Already heavily used in distributed systems (later we'll see how the model becomes the implementation)
+    -   Already heavily used in distributed systems (later we’ll see how the model becomes the implementation)
 
 -   Coverage?
 
 ## Excerises
 
-0.  If you're not comfortable with Haskell, port the above code to your favorite programming language.
+0.  If you’re not comfortable with Haskell, port the above code to your favorite programming language.
 
 1.  Add a `Reset` `Command` which resets the counter to its initial value.
 
@@ -298,29 +302,29 @@ assertProgram msg prog = do
 
 3.  Write a REPL for the state machine. Start with the initial state, prompt the user for a command, apply the provided command to the step function and display the response as well as the new state, rinse and repeat.
 
-    (For a SUT as simple as a counter this doesn't make much sense, but when the SUT get more complicated it might make sense to develope the state machine specification first, demo it using something like a REPL or some other simple UI before even starting to implement the real thing.)
+    (For a SUT as simple as a counter this doesn’t make much sense, but when the SUT get more complicated it might make sense to develope the state machine specification first, demo it using something like a REPL or some other simple UI before even starting to implement the real thing.)
 
 4.  Collect timing information about how long each command takes to execute on average.
 
 ## See also
 
--   For more on how feature interaction gives rise to bugs see the following [blog post]((https://www.hillelwayne.com/post/feature-interaction/)) by Hillel Wayne summarising [Pamela Zave](https://en.wikipedia.org/wiki/Pamela_Zave)'s work on the topic;
+-   For more on how feature interaction gives rise to bugs see the following [blog post]((https://www.hillelwayne.com/post/feature-interaction/)) by Hillel Wayne summarising [Pamela Zave](https://en.wikipedia.org/wiki/Pamela_Zave)’s work on the topic;
 
 -   The original QuickCheck [paper](https://dl.acm.org/doi/pdf/10.1145/357766.351266) by Koen Claessen and John Hughes (2000) that introduced property-based testing in Haskell;
 
--   John Hughes' Midlands Graduate School 2019 [course](http://www.cse.chalmers.se/~rjmh/MGS2019/) on property-based testing, which covers the basics of state machine modelling and testing. It also contains a minimal implementation of a state machine testing library built on top of Haskell's QuickCheck;
+-   John Hughes’ Midlands Graduate School 2019 [course](http://www.cse.chalmers.se/~rjmh/MGS2019/) on property-based testing, which covers the basics of state machine modelling and testing. It also contains a minimal implementation of a state machine testing library built on top of Haskell’s QuickCheck;
 
--   John Hughes' *Testing the Hard Stuff and Staying Sane* [talk](https://www.youtube.com/watch?v=zi0rHwfiX1Q) (2013-2014);
+-   John Hughes’ *Testing the Hard Stuff and Staying Sane* [talk](https://www.youtube.com/watch?v=zi0rHwfiX1Q) (2013-2014);
 
--   Lamport's [Computation and State Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
+-   Lamport’s [Computation and State Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
 
-    (2008) 
+    2008. 
 
--   "Can one generalize Turing machines so that any algorithm, never mind how ab- stract, can be modeled by a generalized machine very closely and faithfully?"
+-   “Can one generalize Turing machines so that any algorithm, never mind how ab- stract, can be modeled by a generalized machine very closely and faithfully?”
 
     Perhaps somewhat surprisingly it turns out that the answer is yes, and the generalisation is a state machine! (This means that in some sense the state machine is the ultimate model?!)
 
-    For details see Gurevich's [generalisation](http://delta-apache-vm.cs.tau.ac.il/~nachumd/models/gurevich.pdf) of the Church-Turing thesis.
+    For details see Gurevich’s [generalisation](http://delta-apache-vm.cs.tau.ac.il/~nachumd/models/gurevich.pdf) of the Church-Turing thesis.
 
 ## Summary
 
@@ -328,17 +332,17 @@ Property-based testing lets us *generate unit tests* for pure functions/componen
 
 ---
 
-```haskell
+``` haskell
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveFoldable #-}
 ```
 
-```haskell
+``` haskell
 module Lec02ConcurrentSMTesting where
 ```
 
-```haskell
+``` haskell
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
@@ -351,7 +355,7 @@ import Test.QuickCheck.Monadic
 import Test.HUnit hiding (assert)
 ```
 
-```haskell
+``` haskell
 import Lec01SMTesting
 ```
 
@@ -365,12 +369,12 @@ import Lec01SMTesting
 
 -   E.g. counters are often shared among different threads, how can we test that the counter implementation is thread-safe?
 
-```haskell
+``` haskell
 newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
   deriving Show
 ```
 
-```haskell
+``` haskell
 forAllConcProgram :: (ConcProgram -> Property) -> Property
 forAllConcProgram k =
   forAllShrinkShow (genConcProgram m) (shrinkConcProgram m) prettyConcProgram k
@@ -378,7 +382,7 @@ forAllConcProgram k =
     m = initModel
 ```
 
-```haskell
+``` haskell
 genConcProgram :: Model -> Gen ConcProgram
 genConcProgram m0 = sized (go m0 [])
   where
@@ -390,17 +394,17 @@ genConcProgram m0 = sized (go m0 [])
                     go (advanceModel m cmds) (cmds : acc) (sz - n)
 ```
 
-```haskell
+``` haskell
 advanceModel :: Model -> [Command] -> Model
 advanceModel m cmds = foldl (\ih cmd -> fst (step ih cmd)) m cmds
 ```
 
-```haskell
+``` haskell
 concSafe :: Model -> [Command] -> Bool
 concSafe m = all (validProgram m) . permutations
 ```
 
-```haskell
+``` haskell
 validConcProgram :: Model -> ConcProgram -> Bool
 validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
   where
@@ -410,7 +414,7 @@ validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
     go m _acc   (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
 ```
 
-```haskell
+``` haskell
 shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
 shrinkConcProgram m
   = filter (validConcProgram m)
@@ -420,47 +424,47 @@ shrinkConcProgram m
   . unConcProgram
 ```
 
-```haskell
+``` haskell
 prettyConcProgram :: ConcProgram -> String
 prettyConcProgram = show
 ```
 
-```haskell
+``` haskell
 newtype History' cmd resp = History [Operation' cmd resp]
   deriving (Show, Functor, Foldable)
 ```
 
-```haskell
+``` haskell
 type History = History' Command Response
 ```
 
-```haskell
+``` haskell
 newtype Pid = Pid Int
   deriving (Eq, Ord, Show)
 ```
 
-```haskell
+``` haskell
 data Operation' cmd resp
   = Invoke Pid cmd
   | Ok     Pid resp
   deriving (Show, Functor, Foldable)
 ```
 
-```haskell
+``` haskell
 type Operation = Operation' Command Response
 ```
 
-```haskell
+``` haskell
 toPid :: ThreadId -> Pid
 toPid tid = Pid (read (drop (length ("ThreadId " :: String)) (show tid)))
 ```
 
-```haskell
+``` haskell
 appendHistory :: TQueue (Operation' cmd resp) -> Operation' cmd resp -> IO ()
 appendHistory hist op = atomically (writeTQueue hist op)
 ```
 
-```haskell
+``` haskell
 concExec :: TQueue Operation -> Counter -> Command -> IO ()
 concExec queue counter cmd = do
   pid <- toPid <$> myThreadId
@@ -474,7 +478,7 @@ concExec queue counter cmd = do
 
 Generate all possible single-threaded executions from the concurrent history.
 
-```haskell
+``` haskell
 interleavings :: History' cmd resp -> Forest (cmd, resp)
 interleavings (History [])  = []
 interleavings (History ops0) =
@@ -490,7 +494,7 @@ interleavings (History ops0) =
     takeInvocations ((Ok    _pid _resp) : _)   = []
 ```
 
-```haskell
+``` haskell
     findResponse :: Pid -> [Operation' cmd resp] -> [(resp, [Operation' cmd resp])]
     findResponse _pid []                                   = []
     findResponse  pid ((Ok pid' resp) : ops) | pid == pid' = [(resp, ops)]
@@ -498,13 +502,13 @@ interleavings (History ops0) =
       [ (resp, op : ops') | (resp, ops') <- findResponse pid ops ]
 ```
 
-```haskell
+``` haskell
     matchInvocation :: Pid -> Operation' cmd resp -> Bool
     matchInvocation pid (Invoke pid' _cmd) = pid == pid'
     matchInvocation _   _                  = False
 ```
 
-```haskell
+``` haskell
     filter1 :: (a -> Bool) -> [a] -> [a]
     filter1 _ []                   = []
     filter1 p (x : xs) | p x       = x : filter1 p xs
@@ -513,7 +517,7 @@ interleavings (History ops0) =
 
 If any one of the single-threaded executions respects the state machine model, then the concurrent execution is correct.
 
-```haskell
+``` haskell
 linearisable :: forall model cmd resp. Eq resp
              => (model -> cmd -> (model, resp)) -> model -> Forest (cmd, resp) -> Bool
 linearisable step0 model0 = any' (go model0)
@@ -526,13 +530,13 @@ linearisable step0 model0 = any' (go model0)
         resp == resp' && any' (go model') ts
 ```
 
-```haskell
+``` haskell
     any' :: (a -> Bool) -> [a] -> Bool
     any' _p [] = True
     any'  p xs = any p xs
 ```
 
-```haskell
+``` haskell
 prop_concurrent :: Property
 prop_concurrent = mapSize (min 20) $
   forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
@@ -552,7 +556,7 @@ prop_concurrent = mapSize (min 20) $
     constructorString Get  {} = "Get"
 ```
 
-```haskell
+``` haskell
 assertWithFail :: Monad m => Bool -> String -> PropertyM m ()
 assertWithFail condition msg = do
   unless condition $
@@ -560,7 +564,7 @@ assertWithFail condition msg = do
   assert condition
 ```
 
-```haskell
+``` haskell
 classifyCommandsLength :: [cmd] -> Property -> Property
 classifyCommandsLength cmds
   = classify (length cmds == 0)                        "length commands: 0"
@@ -572,14 +576,14 @@ classifyCommandsLength cmds
   . classify (500 < length cmds)                       "length commands: >501"
 ```
 
-```haskell
+``` haskell
 prettyHistory :: (Show cmd, Show resp) => History' cmd resp -> String
 prettyHistory = show
 ```
 
 ## Regression testing
 
-```haskell
+``` haskell
 assertHistory :: String -> History -> Assertion
 assertHistory _msg hist =
   assertBool (prettyHistory hist) (linearisable step initModel (interleavings hist))
@@ -589,15 +593,15 @@ assertHistory _msg hist =
 
 0.  Can you figure out ways to improve the shrinking? (Hint: see parallel shrinking in [`quickcheck-state-machine`](https://hackage.haskell.org/package/quickcheck-state-machine).)
 
-1.  How can you test that the shrinking is good/optimal? (Hint: see how `labelledExamples` is used in the [*An in-depth look at quickcheck-state-machine*](https://www.well-typed.com/blog/2019/01/qsm-in-depth/) blog post by Edsko de Vries and [*Building on developers' intuitions to create effective property-based tests*](https://www.youtube.com/watch?v=NcJOiQlzlXQ) talk by John Hughes)
+1.  How can you test that the shrinking is good/optimal? (Hint: see how `labelledExamples` is used in the [*An in-depth look at quickcheck-state-machine*](https://www.well-typed.com/blog/2019/01/qsm-in-depth/) blog post by Edsko de Vries and [*Building on developers’ intuitions to create effective property-based tests*](https://www.youtube.com/watch?v=NcJOiQlzlXQ) talk by John Hughes)
 
 ## See also
 
--   [*Finding Race Conditions in Erlang with QuickCheck and PULSE*](http://www.cse.chalmers.se/~nicsma/papers/finding-race-conditions.pdf) ([video](https://vimeo.com/6638041)) -- this is the first paper to describe how Erlang's (closed source) QuickCheck works (including the parallel testing);
+-   [*Finding Race Conditions in Erlang with QuickCheck and PULSE*](http://www.cse.chalmers.se/~nicsma/papers/finding-race-conditions.pdf) ([video](https://vimeo.com/6638041)) – this is the first paper to describe how Erlang’s (closed source) QuickCheck works (including the parallel testing);
 
 -   [*Linearizability: a correctness condition for concurrent objects*](https://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf)\], this is a classic paper that describes the main technique of the parallel property;
 
--   Kyle "aphyr" Kingsbury's blogposts about Jepsen, which also uses linearisability, and has found [bugs](http://jepsen.io/analyses) in many distributed systems:
+-   Kyle “aphyr” Kingsbury’s blogposts about Jepsen, which also uses linearisability, and has found [bugs](http://jepsen.io/analyses) in many distributed systems:
 
     -   [Knossos: Redis and linearizability](https://aphyr.com/posts/309-knossos-redis-and-linearizability);
 
@@ -609,7 +613,7 @@ assertHistory _msg hist =
 
 ---
 
-```haskell
+``` haskell
 module Lec03SMContractTesting where
 ```
 
@@ -619,7 +623,7 @@ module Lec03SMContractTesting where
 
 -   Components rarely exist in isolation, they almost always depend on some other component;
 
--   When we test we often want to test as if the component existed in isolation though, e.g. if component A depends on component B, we'd like to test B first and then *assume* that B is working when testing A;
+-   When we test we often want to test as if the component existed in isolation though, e.g. if component A depends on component B, we’d like to test B first and then *assume* that B is working when testing A;
 
 -   Assumptions like these can be justified using so called *contract tests*.
 
@@ -644,7 +648,7 @@ module Lec03SMContractTesting where
 
 ## SUT B: a queue (producer of the interface)
 
-```haskell
+``` haskell
 import Lec03.QueueInterface ()
 import Lec03.Queue ()
 import Lec03.QueueTest ()
@@ -652,7 +656,7 @@ import Lec03.QueueTest ()
 
 ## SUT A: web service (consumer of the interface)
 
-```haskell
+``` haskell
 import Lec03.Service ()
 import Lec03.ServiceTest ()
 ```
@@ -665,7 +669,7 @@ The job of contract tests are to ensure the accuracy of the mocks/test doubles y
 
 Consumer-driven contract tests just means that the consumer of the mocked API writes the contract test inside the testsuite of the producer.
 
-If component A and B are developed in different repos or by different teams, then the consumer of the API (in our case A consumes B's API) should write the contract test (hence *consumer-driven*).
+If component A and B are developed in different repos or by different teams, then the consumer of the API (in our case A consumes B’s API) should write the contract test (hence *consumer-driven*).
 
 That way:
 
@@ -677,32 +681,32 @@ That way:
 
 Why not just spin up the real component B when testing component A?
 
--   Imagine B is a queue and the real implementation uses Kafka, then we'd need to start several processes...
+-   Imagine B is a queue and the real implementation uses Kafka, then we’d need to start several processes…
 
--   Sometimes component B is slow to use (uses disk or network I/O)...
+-   Sometimes component B is slow to use (uses disk or network I/O)…
 
--   Sometimes component B is a third-party component which we can't redeploy or reset between test runs...
+-   Sometimes component B is a third-party component which we can’t redeploy or reset between test runs…
 
 -   Often we want to be resilient at the level of component A in case component B fails, injecting faults in B to test this is much easier on a fake of B rather than on the real implementation of B (more on this in the next lecture).
 
--   Basically this is how the road towards slow and flaky tests starts. Don't go down that path! If you are thinking: "but some code is only exercised when the real component is deployed, e.g. configuration", then use [smoke tests](https://en.wikipedia.org/wiki/Smoke_testing_%28software%29) rather than integration tests with real components.
+-   Basically this is how the road towards slow and flaky tests starts. Don’t go down that path! If you are thinking: “but some code is only exercised when the real component is deployed, e.g. configuration”, then use [smoke tests](https://en.wikipedia.org/wiki/Smoke_testing_%28software%29) rather than integration tests with real components.
 
-    Origin of the terminology: "The phrase smoke test comes from electronic hardware testing. You plug in a new board and turn on the power. If you see smoke coming from the board, turn off the power. You don't have to do any more testing."
+    Origin of the terminology: “The phrase smoke test comes from electronic hardware testing. You plug in a new board and turn on the power. If you see smoke coming from the board, turn off the power. You don’t have to do any more testing.”
 
-    The software analogue: spin up component(s), wait for their status to become "ready", make some basic requests and see if they succeed.
+    The software analogue: spin up component(s), wait for their status to become “ready”, make some basic requests and see if they succeed.
 
     Acceptable if these are a bit flaky:
 
     -   Component spin up happens relatively rarely in production
     -   These tests will likely involve docker containers and networking, i.e. third-party infrastructure that sometimes is flaky
 
-    "After code reviews, smoke testing is the most cost effective method for identifying and fixing defects in software." -- [Microsoft](https://docs.microsoft.com/en-us/previous-versions/ms182613(v=vs.80))
+    “After code reviews, smoke testing is the most cost effective method for identifying and fixing defects in software.” – [Microsoft](https://docs.microsoft.com/en-us/previous-versions/ms182613(v=vs.80))
 
-    For most software systems, between good contract tests and smoke tests there shouldn't be much of a gap for bugs to sneak in. For special cases, such as distributed systems, we will cover more comprehensive techniques in lecture 5.
+    For most software systems, between good contract tests and smoke tests there shouldn’t be much of a gap for bugs to sneak in. For special cases, such as distributed systems, we will cover more comprehensive techniques in lecture 5.
 
 ## Exercises
 
-0.  The fake/model of the queue is thread-safe, but the real implementation isn't! Fix that and do concurrent contract testing.
+0.  The fake/model of the queue is thread-safe, but the real implementation isn’t! Fix that and do concurrent contract testing.
 
 1.  Introduce an interface for all database interaction, move the current database implementation to `realDb` and introduce fake database instance of the interface.
 
@@ -726,13 +730,13 @@ Why not just spin up the real component B when testing component A?
 
 ---
 
-```haskell
+``` haskell
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 ```
 
-```haskell
+``` haskell
 module Lec04FaultInjection
   ( module Lec04FaultInjection
   , module Lec03.ServiceTest
@@ -741,7 +745,7 @@ module Lec04FaultInjection
   where
 ```
 
-```haskell
+``` haskell
 import Control.Monad (replicateM_)
 import Control.Concurrent (threadDelay, myThreadId)
 import Control.Concurrent.Async (mapConcurrently)
@@ -764,7 +768,7 @@ import Network.HTTP.Client (HttpException(HttpExceptionRequest),
                             managerResponseTimeout, responseTimeoutMicro)
 ```
 
-```haskell
+``` haskell
 import Lec02ConcurrentSMTesting (assertWithFail, classifyCommandsLength, toPid)
 import Lec03.Service (withService, mAX_QUEUE_SIZE, fakeQueue, realQueue)
 import Lec03.QueueInterface
@@ -777,8 +781,8 @@ import Lec04.LineariseWithFault (History'(History), Operation'(..), FailureMode(
 
 ## Motivation
 
--   "almost all (92%) of the catastrophic system failures are the result of incorrect handling of non-fatal errors explicitly signaled in software. \[...\] in 58% of the catastrophic failures, the underlying faults could easily have been detected through simple testing of error handling code." -- [Simple Testing Can Prevent Most Critical Failures: An Analysis of Production Failures in Distributed Data-intensive Systems](http://www.eecg.toronto.edu/~yuan/papers/failure_analysis_osdi14.pdf)
-    (2014) Yuan et al.
+-   “almost all (92%) of the catastrophic system failures are the result of incorrect handling of non-fatal errors explicitly signaled in software. \[…\] in 58% of the catastrophic failures, the underlying faults could easily have been detected through simple testing of error handling code.” – [Simple Testing Can Prevent Most Critical Failures: An Analysis of Production Failures in Distributed Data-intensive Systems](http://www.eecg.toronto.edu/~yuan/papers/failure_analysis_osdi14.pdf)
+    2014. Yuan et al.
 
 ## Plan
 
@@ -791,25 +795,25 @@ import Lec04.LineariseWithFault (History'(History), Operation'(..), FailureMode(
     -   read crashes, e.g. bug in queue causes exception to be thrown
     -   read returns a malformed write which no longer deserialises, or has a valid client request id to send the response to
 
--   Use the same web service model that we write in the previous lecture and do "collaboration tests" with the fake queue with faults to ensure that our service that uses the queue doesn't crash even if the presence of faults
+-   Use the same web service model that we write in the previous lecture and do “collaboration tests” with the fake queue with faults to ensure that our service that uses the queue doesn’t crash even if the presence of faults
 
--   Notice that we don't have to make any changes to the model to account of the possible faults, the linearisability checker does this for us behind the scenes
+-   Notice that we don’t have to make any changes to the model to account of the possible faults, the linearisability checker does this for us behind the scenes
 
 ## Faulty queue
 
-```haskell
+``` haskell
 data FaultyFakeQueue a = FaultyFakeQueue
   { ffqQueue :: QueueI a
   , ffqFault :: IORef (Maybe Fault)
   }
 ```
 
-```haskell
+``` haskell
 data Fault = Full | Empty | ReadFail IOException | ReadSlow
   deriving Show
 ```
 
-```haskell
+``` haskell
 faultyFakeQueue :: Int -> IO (FaultyFakeQueue a)
 faultyFakeQueue size = do
   fake <- fakeQueue size
@@ -832,7 +836,7 @@ faultyFakeQueue size = do
         _otherwise -> qiEnqueue fake x
 ```
 
-```haskell
+``` haskell
     dequeue :: QueueI a -> IORef (Maybe Fault) -> IO (Maybe a)
     dequeue fake ref = do
       fault <- readIORef ref
@@ -850,32 +854,32 @@ faultyFakeQueue size = do
         _otherwise -> qiDequeue fake
 ```
 
-```haskell
+``` haskell
 injectFullFault :: IORef (Maybe Fault) -> IO ()
 injectFullFault ref = writeIORef ref (Just Full)
 ```
 
-```haskell
+``` haskell
 injectEmptyFault :: IORef (Maybe Fault) -> IO ()
 injectEmptyFault ref = writeIORef ref (Just Empty)
 ```
 
-```haskell
+``` haskell
 injectReadFailFault :: IORef (Maybe Fault) -> IOException -> IO ()
 injectReadFailFault ref err = writeIORef ref (Just (ReadFail err))
 ```
 
-```haskell
+``` haskell
 injectReadSlowFault :: IORef (Maybe Fault) -> IO ()
 injectReadSlowFault ref = writeIORef ref (Just ReadSlow)
 ```
 
-```haskell
+``` haskell
 removeFault :: IORef (Maybe Fault) -> IO ()
 removeFault ref = writeIORef ref Nothing
 ```
 
-```haskell
+``` haskell
 test_injectFullFault :: IO ()
 test_injectFullFault = do
   ffq <- faultyFakeQueue 4
@@ -886,9 +890,9 @@ test_injectFullFault = do
   assert (res2 == False) (return ())
 ```
 
-## Sequential "collaboration" testing
+## Sequential “collaboration” testing
 
-```haskell
+``` haskell
 data Command
   = ClientRequest ClientRequest
   | InjectFault Fault
@@ -896,22 +900,22 @@ data Command
   deriving Show
 ```
 
-```haskell
+``` haskell
 data ClientRequest = WriteReq ByteString | ReadReq Index
   deriving Show
 ```
 
-```haskell
+``` haskell
 data ClientResponse = WriteResp Index | ReadResp ByteString
   deriving (Eq, Show)
 ```
 
-```haskell
+``` haskell
 newtype Program = Program { unProgram :: [Command] }
   deriving Show
 ```
 
-```haskell
+``` haskell
 genProgram :: Model -> Gen Program
 genProgram m0 = sized (go m0 [])
   where
@@ -925,7 +929,7 @@ genProgram m0 = sized (go m0 [])
         Just _fault -> go m (cmd : cmds) (n - 1)
 ```
 
-```haskell
+``` haskell
 genCommand :: Model -> Gen Command
 genCommand m0 = case mMaybeFault m0 of
   Nothing -> frequency [ (1, InjectFault <$> genFault)
@@ -943,7 +947,7 @@ genCommand m0 = case mMaybeFault m0 of
         len = Vector.length (mModel m)
 ```
 
-```haskell
+``` haskell
     genFault :: Gen Fault
     genFault = frequency [ (1, pure Full)
                          , (1, pure Empty)
@@ -952,19 +956,19 @@ genCommand m0 = case mMaybeFault m0 of
                          ]
 ```
 
-```haskell
+``` haskell
 data Model = Model
   { mModel      :: Vector ByteString
   , mMaybeFault :: Maybe Fault
   }
 ```
 
-```haskell
+``` haskell
 initModel :: Model
 initModel = Model Vector.empty Nothing
 ```
 
-```haskell
+``` haskell
 step :: Model -> Command -> (Model, Maybe ClientResponse)
 step m cmd = case cmd of
   ClientRequest (WriteReq bs) ->
@@ -979,12 +983,12 @@ step m cmd = case cmd of
   Reset             -> (m, Nothing)
 ```
 
-```haskell
+``` haskell
 data Result a = ROk a | RFail | RInfo | RNemesis
   deriving Show
 ```
 
-```haskell
+``` haskell
 exec :: Command -> IORef (Maybe Fault) -> Manager -> IO (Result ClientResponse)
 exec (ClientRequest req) _ref mgr =
   case req of
@@ -1012,20 +1016,20 @@ exec Reset _ref mgr = do
   return RNemesis
 ```
 
-```haskell
+``` haskell
 is503 :: HttpException -> Bool
 is503 (HttpExceptionRequest _req (StatusCodeException resp _bs)) = responseStatus resp == status503
 is503 _otherwise = False
 ```
 
-```haskell
+``` haskell
 shrinkProgram :: Program -> [Program]
 shrinkProgram (Program cmds) = filter (isValidProgram initModel) ((map Program (shrinkList shrinkCommand cmds)))
   where
     shrinkCommand _cmd = []
 ```
 
-```haskell
+``` haskell
 isValidProgram :: Model -> Program -> Bool
 isValidProgram m0 (Program cmds0) = go m0 cmds0
   where
@@ -1039,13 +1043,13 @@ isValidProgram m0 (Program cmds0) = go m0 cmds0
     go  m (cmd : cmds) = let m' = fst (step m cmd) in go m' cmds
 ```
 
-```haskell
+``` haskell
 forallPrograms :: (Program -> Property) -> Property
 forallPrograms p =
   forAllShrink (genProgram initModel) shrinkProgram p
 ```
 
-```haskell
+``` haskell
 prop_sequentialWithFaults :: IORef (Maybe Fault) -> Manager -> Property
 prop_sequentialWithFaults ref mgr = forallPrograms $ \prog -> monadicIO $ do
   r <- runProgram ref mgr initModel prog
@@ -1058,7 +1062,7 @@ prop_sequentialWithFaults ref mgr = forallPrograms $ \prog -> monadicIO $ do
     Right () -> return True
 ```
 
-```haskell
+``` haskell
 runProgram :: MonadIO m => IORef (Maybe Fault) -> Manager -> Model -> Program -> m (Either String ())
 runProgram ref mgr m0 (Program cmds0) = go m0 cmds0
   where
@@ -1082,7 +1086,7 @@ runProgram ref mgr m0 (Program cmds0) = go m0 cmds0
             Just _resp' -> return (Left (concat [show res, " /= ", show mResp']))
 ```
 
-```haskell
+``` haskell
 withFaultyQueueService :: (Manager -> IORef (Maybe Fault) -> IO ()) -> IO ()
 withFaultyQueueService io = do
   queue <- faultyFakeQueue mAX_QUEUE_SIZE
@@ -1091,7 +1095,7 @@ withFaultyQueueService io = do
   withService (ffqQueue queue) (io mgr (ffqFault queue))
 ```
 
-```haskell
+``` haskell
 withFakeQueueService :: (Manager -> IO ()) -> IO ()
 withFakeQueueService io = do
   queue <- fakeQueue mAX_QUEUE_SIZE
@@ -1099,7 +1103,7 @@ withFakeQueueService io = do
   withService queue (io mgr)
 ```
 
-```haskell
+``` haskell
 withRealQueueService :: (Manager -> IO ()) -> IO ()
 withRealQueueService io = do
   queue <- realQueue mAX_QUEUE_SIZE
@@ -1107,13 +1111,13 @@ withRealQueueService io = do
   withService queue (io mgr)
 ```
 
-```haskell
+``` haskell
 unit_faultTest :: IO ()
 unit_faultTest =
   withFaultyQueueService (\mgr ref -> quickCheck (prop_sequentialWithFaults ref mgr))
 ```
 
-```haskell
+``` haskell
 assertProgram :: String -> Program -> Assertion
 assertProgram msg prog =
   withFaultyQueueService $ \mgr ref -> do
@@ -1125,14 +1129,14 @@ assertProgram msg prog =
     isRight Left  {} = False
 ```
 
-## Concurrent "collaboration" testing
+## Concurrent “collaboration” testing
 
-```haskell
+``` haskell
 newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
   deriving Show
 ```
 
-```haskell
+``` haskell
 forAllConcProgram :: (ConcProgram -> Property) -> Property
 forAllConcProgram k =
   forAllShrinkShow (genConcProgram initModel) (shrinkConcProgram initModel)
@@ -1140,7 +1144,7 @@ forAllConcProgram k =
   where
 ```
 
-```haskell
+``` haskell
     genConcProgram :: Model -> Gen ConcProgram
     genConcProgram m0 = sized (go m0 [])
       where
@@ -1152,17 +1156,17 @@ forAllConcProgram k =
                         go (advanceModel m cmds) (cmds : acc) (sz - n)
 ```
 
-```haskell
+``` haskell
     advanceModel :: Model -> [Command] -> Model
     advanceModel m cmds = foldl (\ih cmd -> fst (step ih cmd)) m cmds
 ```
 
-```haskell
+``` haskell
     concSafe :: Model -> [Command] -> Bool
     concSafe m = all (isValidProgram m . Program) . permutations
 ```
 
-```haskell
+``` haskell
     validConcProgram :: Model -> ConcProgram -> Bool
     validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
       where
@@ -1172,7 +1176,7 @@ forAllConcProgram k =
         go  m _acc  (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
 ```
 
-```haskell
+``` haskell
     shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
     shrinkConcProgram m
       = filter (validConcProgram m)
@@ -1184,16 +1188,16 @@ forAllConcProgram k =
         shrinkCommand _cmd = []
 ```
 
-```haskell
+``` haskell
     prettyConcProgram :: ConcProgram -> String
     prettyConcProgram = show
 ```
 
-```haskell
+``` haskell
 type Operation = Operation' Command (Maybe ClientResponse)
 ```
 
-```haskell
+``` haskell
 concExec :: IORef (Maybe Fault) -> Manager -> TQueue Operation -> Command -> IO ()
 concExec ref mgr hist cmd = do
   pid <- toPid <$> myThreadId -- XXX: we can't reuse crashed pids...
@@ -1206,7 +1210,7 @@ concExec ref mgr hist cmd = do
     RNemesis -> appendHistory hist (Ok pid Nothing)
 ```
 
-```haskell
+``` haskell
 -- NOTE: Assumes that the service is running.
 prop_faultyCollaborationTests :: IORef (Maybe Fault) -> Manager -> Property
 prop_faultyCollaborationTests ref mgr = mapSize (min 20) $
@@ -1233,7 +1237,7 @@ prop_faultyCollaborationTests ref mgr = mapSize (min 20) $
     constructorString Reset                       = "Reset"
 ```
 
-```haskell
+``` haskell
 test :: IO ()
 test = do
   -- NOTE: fake queue is used here, justified by previous contract testing.
@@ -1253,7 +1257,7 @@ test = do
     XXX:
 
     -   requires root, needs to be done in containers or vm which slows down and complicates start up
-    -   imprecise (e.g. `iptables` can't drop exactly the 42nd message and only if it's a read)
+    -   imprecise (e.g. `iptables` can’t drop exactly the 42nd message and only if it’s a read)
     -   non-deterministic
     -   slow (we need to wait for timeouts to happend, \~30-90 secs)
     -   ci flakiness (e.g. `docker pull` failing)
@@ -1261,19 +1265,19 @@ test = do
 
 -   Can we contract test the fault injection? I.e. how do we know that the faults we inject correspond to real faults that can happen? How can we be sure to have covered all possible real faults?
 
-    To answer questions of this kind it helps to specify fault models, for an example of this see `tigerbeetle`'s [documentation](https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models), one then manually needs to convince oneself of the fact that the fault models are covered by the fault injection.
+    To answer questions of this kind it helps to specify fault models, for an example of this see `tigerbeetle`’s [documentation](https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models), one then manually needs to convince oneself of the fact that the fault models are covered by the fault injection.
 
 -   What about [Chaos engineering](https://en.wikipedia.org/wiki/Chaos_engineering)?
 
     -   Chaos engineering has the same downsides as Jepsen when it comes to being slow and non-deterministic
 
-    -   It's important to remember in which context it was developed: Netflix (hundreds(?) of already designed and deployed systems spanning datacentres around the globe), unless you are in that same situation then the fault injection techniques discussed here are far simpler to implement
+    -   It’s important to remember in which context it was developed: Netflix (hundreds(?) of already designed and deployed systems spanning datacentres around the globe), unless you are in that same situation then the fault injection techniques discussed here are far simpler to implement
 
-    -   Works at a different level, e.g. "over 5% of the traffic receives 500 errors", rather than "assertion A failed at line number L", i.e. test failures will pin-point you much more precisely to where the problem is
+    -   Works at a different level, e.g. “over 5% of the traffic receives 500 errors”, rather than “assertion A failed at line number L”, i.e. test failures will pin-point you much more precisely to where the problem is
 
     -   Tests production configurations, as well as monitoring and alerting
 
-    -   In conclusion: chaos engineering is complementary to what we discribed here, but probably less bang for the buck and should be done later -- remember the quote from the motivation: "\[...\] in 58% of the catastrophic failures, the underlying faults could easily have been detected through simple testing of error handling code."
+    -   In conclusion: chaos engineering is complementary to what we discribed here, but probably less bang for the buck and should be done later – remember the quote from the motivation: “\[…\] in 58% of the catastrophic failures, the underlying faults could easily have been detected through simple testing of error handling code.”
 
 ## Exercises
 
@@ -1282,13 +1286,13 @@ test = do
 ## Problems
 
 0.  Can we do better than randomly inserting faults? (Hint: see [*Lineage-driven Fault Injection*](https://people.ucsc.edu/~palvaro/molly.pdf) by Alvaro et al
-    (2015) and the [`ldfi`](https://github.com/symbiont-io/detsys-testkit/tree/main/src/ldfi) directory in the `detsys-testkit` repo)
-1.  What's better at finding bugs: i) a small fixed agenda and try many faults and interleavings, or ii) a big random agenda and fewer interleavings?
+    2015. and the [`ldfi`](https://github.com/symbiont-io/detsys-testkit/tree/main/src/ldfi) directory in the `detsys-testkit` repo)
+1.  What’s better at finding bugs: i) a small fixed agenda and try many faults and interleavings, or ii) a big random agenda and fewer interleavings?
 
 ## See also
 
 -   \[*Why Is Random Testing Effective for Partition Tolerance Bugs?*(https://dl.acm.org/doi/pdf/10.1145/3158134) by Majumdar and Niksic
-    (2018) 
+    2018. 
 
 ## Summary
 
@@ -1296,11 +1300,11 @@ XXX
 
 ---
 
-```haskell
+``` haskell
 module Lec05SimulationTesting where
 ```
 
-```haskell
+``` haskell
 import Lec05.EventLoop ()
 ```
 
@@ -1308,11 +1312,11 @@ import Lec05.EventLoop ()
 
 ## Motivation
 
--   "haven't tested foundation\[db\] in part because their testing appears to be waaaay more rigorous than mine." -- Kyle ["aphyr"](https://twitter.com/aphyr/status/405017101804396546) Kingsbury
+-   “haven’t tested foundation\[db\] in part because their testing appears to be waaaay more rigorous than mine.” – Kyle [“aphyr”](https://twitter.com/aphyr/status/405017101804396546) Kingsbury
 
--   ["Jepsen-proof engineering"](https://sled.rs/simulation.html)
+-   [“Jepsen-proof engineering”](https://sled.rs/simulation.html)
 
--   "Everyone knows that debugging is twice as hard as writing a program in the first place." -- Brian Kernighan
+-   “Everyone knows that debugging is twice as hard as writing a program in the first place.” – Brian Kernighan
 
 ## Plan
 
@@ -1326,7 +1330,7 @@ import Lec05.EventLoop ()
 
 ![simulation event loop](images/simulation-eventloop.svg)
 
-The following pseudo code implementation of the event loop works for both the "real" deployment and simulation:
+The following pseudo code implementation of the event loop works for both the “real” deployment and simulation:
 
     while true {
       msg := deliver()
@@ -1334,7 +1338,7 @@ The following pseudo code implementation of the event loop works for both the "r
       send(out)
     }
 
-by switching out the implementation of `send` from sending messages over the network to merely adding the message to priority queue, and switching out the implementation of `deliever` from listning on a socket to merely popping messages off the priority queue, then we can switch between a "real" deployment and simulation by merely switching between different implementations of the event loops interface (`send` and `deliver`).
+by switching out the implementation of `send` from sending messages over the network to merely adding the message to priority queue, and switching out the implementation of `deliever` from listning on a socket to merely popping messages off the priority queue, then we can switch between a “real” deployment and simulation by merely switching between different implementations of the event loops interface (`send` and `deliver`).
 
 ## Exercises
 
@@ -1355,7 +1359,7 @@ by switching out the implementation of `send` from sending messages over the net
 
     The first reference we been able to find is the following concluding remark by Alan Perlis (the first recipient of the Turing Award) about a discussion about a paper on simulation testing by Brian Randell at the first [conference](http://homepages.cs.ncl.ac.uk/brian.randell/NATO/nato1968.PDF) on Software Engineering (this is where we got the term from) in 1968:
 
-    "I'd like to read three sentences to close this issue.
+    “I’d like to read three sentences to close this issue.
 
          1. A software system can best be designed if the testing is interlaced with
             the designing instead of being used after the design.
@@ -1371,25 +1375,25 @@ by switching out the implementation of `send` from sending messages over the net
             deeper and more detailed goes on with the simulation model controlling, as it
             were, the place and order in which these things are done."
 
--   The idea in its current shape and as applied to distributed systems was introduced(?), or at the very least popularised, by Will Wilson's talk [*Testing Distributed Systems w/ Deterministic Simulation*](https://www.youtube.com/watch?v=4fFDFbi3toc) at Strange Loop
+-   The idea in its current shape and as applied to distributed systems was introduced(?), or at the very least popularised, by Will Wilson’s talk [*Testing Distributed Systems w/ Deterministic Simulation*](https://www.youtube.com/watch?v=4fFDFbi3toc) at Strange Loop
 
-    (2014) about how they used [simulation testing](https://apple.github.io/foundationdb/testing.html) to test [FoundationDB](https://www.foundationdb.org/) (so well that Kyle "aphyr" Kingsbury didn't feel it was [worth](https://twitter.com/aphyr/status/405017101804396546) Jepsen testing it).
+    2014. about how they used [simulation testing](https://apple.github.io/foundationdb/testing.html) to test [FoundationDB](https://www.foundationdb.org/) (so well that Kyle “aphyr” Kingsbury didn’t feel it was [worth](https://twitter.com/aphyr/status/405017101804396546) Jepsen testing it).
 
     Watching the talk and rereading the Perlis quote makes one wonder: was the technique independently rediscovered, or had they in fact read the (in)famous 1968 NATO software engineering report?
 
--   There's also the more established practice of [discrete-event simulation](https://en.wikipedia.org/wiki/Discrete-event_simulation) which is usually used in different contexts than software testing, but nevertheless is close enough in principle that it's worth taking inspiration from (and indeed the simulation testing people often refer to it).
+-   There’s also the more established practice of [discrete-event simulation](https://en.wikipedia.org/wiki/Discrete-event_simulation) which is usually used in different contexts than software testing, but nevertheless is close enough in principle that it’s worth taking inspiration from (and indeed the simulation testing people often refer to it).
 
 -   Other users of simulation testing include.
 
     -   AWS
 
-Here's a quote from the recently published paper [Millions of Tiny Databases](https://www.usenix.org/conference/nsdi20/presentation/brooker) (2020) written by three AWS engineers:
+Here’s a quote from the recently published paper [Millions of Tiny Databases](https://www.usenix.org/conference/nsdi20/presentation/brooker) (2020) written by three AWS engineers:
 
-"To solve this problem \[testing distributed systems\], we picked an approach that is in wide use at Amazon Web Services, which we would like to see broadly adopted: build a test harness which abstracts networking, performance, and other systems concepts (we call it a simworld). The goal of this approach is to allow developers to write distributed systems tests, including tests that simulate packet loss, server failures, corruption, and other failure cases, as unit tests in the same language as the system itself. In this case, these unit tests run inside the developer's IDE (or with junit at build time), with no need for test clusters or other infrastructure. A typical test which tests correctness under packet loss can be implemented in less than 10 lines of Java code, and executes in less than 100ms. The Physalia team have written hundreds of such tests, far exceeding the coverage that would be practical in any cluster-based or container-based approach.
+“To solve this problem \[testing distributed systems\], we picked an approach that is in wide use at Amazon Web Services, which we would like to see broadly adopted: build a test harness which abstracts networking, performance, and other systems concepts (we call it a simworld). The goal of this approach is to allow developers to write distributed systems tests, including tests that simulate packet loss, server failures, corruption, and other failure cases, as unit tests in the same language as the system itself. In this case, these unit tests run inside the developer’s IDE (or with junit at build time), with no need for test clusters or other infrastructure. A typical test which tests correctness under packet loss can be implemented in less than 10 lines of Java code, and executes in less than 100ms. The Physalia team have written hundreds of such tests, far exceeding the coverage that would be practical in any cluster-based or container-based approach.
 
 The key to building a simworld is to build code against abstract physical layers (such as networks, clocks, and disks). In Java we simply wrap these thin layers in interfaces. In production, the code runs against implementations that use real TCP/IP, DNS and other infrastructure. In the simworld, the implementations are based on in-memory implementa- tions that can be trivially created and torn down. In turn, these in-memory implementations include rich fault-injection APIs, which allow test implementors to specify simple statements like: `net.partitionOff ( PARTITION_NAME , p5.getLocalAddress () ); ...   net.healPartition ( PARTITION_NAME );`
 
-Our implementation allows control down to the packet level, allowing testers to delay, duplicate or drop packets based on matching criteria. Similar capabilities are available to test disk IO. Perhaps the most important testing capability in a distributed database is time, where the framework allows each actor to have it's own view of time arbitrarily controlled by the test. Simworld tests can even add Byzantine conditions like data corruption, and operational properties like high la- tency. We highly recommend this testing approach, and have continued to use it for new systems we build."
+Our implementation allows control down to the packet level, allowing testers to delay, duplicate or drop packets based on matching criteria. Similar capabilities are available to test disk IO. Perhaps the most important testing capability in a distributed database is time, where the framework allows each actor to have it’s own view of time arbitrarily controlled by the test. Simworld tests can even add Byzantine conditions like data corruption, and operational properties like high la- tency. We highly recommend this testing approach, and have continued to use it for new systems we build.”
 
     + Dropbox
 
@@ -1404,9 +1408,9 @@ Our implementation allows control down to the packet level, allowing testers to 
 
     + IOHK
 
-From their recent [paper](http://www.cse.chalmers.se/~rjmh/tfp/proceedings/TFP_2020_paper_11.pdf) "Flexibility with Formality: Practical Experience with Agile Formal Methods in Large-Scale Functional Programming" (2020):
+From their recent [paper](http://www.cse.chalmers.se/~rjmh/tfp/proceedings/TFP_2020_paper_11.pdf) “Flexibility with Formality: Practical Experience with Agile Formal Methods in Large-Scale Functional Programming” (2020):
 
-"Both the network and consensus layers must make significant use of concurrency which is notoriously hard to get right and to test. We use Software Transactional Memory(STM) to manage the internal state of a node. While STM makes it much easier to write correct concurrent code, it is of course still possible to get wrong, which leads to intermittent failures that are hard to reproduce and debug.
+“Both the network and consensus layers must make significant use of concurrency which is notoriously hard to get right and to test. We use Software Transactional Memory(STM) to manage the internal state of a node. While STM makes it much easier to write correct concurrent code, it is of course still possible to get wrong, which leads to intermittent failures that are hard to reproduce and debug.
 
 In order to reliably test our code for such concurrency bugs, we wrote a simulator that can execute the concurrent code with both timing determinism and giving global observability, producing execution traces. This enables us to write property tests that can use the execution traces and to run the tests in a deterministic way so that any failures are always reproducible. The use of the mini-protocol design pattern, the encoding of protocol interactions in session types and the use of a timing reproducable simulation has yielded several advantages:
 
@@ -1416,19 +1420,19 @@ In order to reliably test our code for such concurrency bugs, we wrote a simulat
 
 -   Performance consistent protocol layer abstraction / subsitution: construct real world realistic timing for operation without complexity of simulating all the underlying layer protocol complexity. This helps designs / development to maintain performance target awareness during development.
 
--   Consitent error propagation and mitigation (mini protocols to a peer live/die together) removing issues of resource lifetime management away from mini-protocol designers / implementors."
+-   Consitent error propagation and mitigation (mini protocols to a peer live/die together) removing issues of resource lifetime management away from mini-protocol designers / implementors.”
 
 The simulation code is open source and can be found [here](https://github.com/input-output-hk/ouroboros-network/tree/master/io-sim).
 
 ---
 
-```haskell
+``` haskell
 module Lec06WhiteboxCheckers where
 ```
 
 ## Motivation
 
--   Previously we've seen how to black-box test our system, but simulation gives us full insight into what's happening inside "the box" so we can write more interesting white-box checkers
+-   Previously we’ve seen how to black-box test our system, but simulation gives us full insight into what’s happening inside “the box” so we can write more interesting white-box checkers
 
 ## See also
 
@@ -1438,31 +1442,31 @@ module Lec06WhiteboxCheckers where
 
 ## Exercises
 
-0.  Can we model check our state machines a la TLC/HasCal while retaining the possibility to simulate and "production deploy" them? (Hint: see the [P](https://github.com/p-org/P) programming language.)
+0.  Can we model check our state machines a la TLC/HasCal while retaining the possibility to simulate and “production deploy” them? (Hint: see the [P](https://github.com/p-org/P) programming language.)
 
 ---
 
-```haskell
+``` haskell
 module Lec07EfficientEventLoop where
 ```
 
 ## Motivation
 
--   Our event loop is deterministic which allows for simulation, but it's not the most efficient in terms of how fast and how much traffic it can serve
+-   Our event loop is deterministic which allows for simulation, but it’s not the most efficient in terms of how fast and how much traffic it can serve
 
 ## Plan
 
--   Pipelining (shared multi-cast queue a la LMAX' disruptor)
+-   Pipelining (shared multi-cast queue a la LMAX’ disruptor)
 -   Journal?
 
 ## See also
 
--   The Linux kernel's [io_uring](https://kernel.dk/io_uring.pdf) interface
+-   The Linux kernel’s [io_uring](https://kernel.dk/io_uring.pdf) interface
 -   [aeron](https://github.com/real-logic/aeron)
 
 ---
 
-```haskell
+``` haskell
 module Lec08AsyncFileSystemIO where
 ```
 
@@ -1478,7 +1482,7 @@ module Lec08AsyncFileSystemIO where
 
 ---
 
-```haskell
+``` haskell
 module Lec09SMUpgrades where
 ```
 
@@ -1501,21 +1505,21 @@ module Lec09SMUpgrades where
 
 ---
 
-```haskell
+``` haskell
 module Lec10LibraryOrFramework where
 ```
 
 ## Motivation
 
--   How can we take everything we've done so far and pack it up in a nice way so that many different applications can be written, easily communicate with each other all while being conveniently debuggable?
+-   How can we take everything we’ve done so far and pack it up in a nice way so that many different applications can be written, easily communicate with each other all while being conveniently debuggable?
 
 ## See also
 
--   Jane Street's [Concord](https://signalsandthreads.com/state-machine-replication-and-why-you-should-care/) framework
+-   Jane Street’s [Concord](https://signalsandthreads.com/state-machine-replication-and-why-you-should-care/) framework
 
--   Chuck's Bandwagon framework
+-   Chuck’s Bandwagon framework
 
--   OCaml's [Eio](https://ocaml-multicore.github.io/eio/eio/Eio/index.html) and its [`io_uring`](https://en.wikipedia.org/wiki/Io_uring) [backend](https://ocaml-multicore.github.io/eio/eio_linux/Eio_linux/index.html)
+-   OCaml’s [Eio](https://ocaml-multicore.github.io/eio/eio/Eio/index.html) and its [`io_uring`](https://en.wikipedia.org/wiki/Io_uring) [backend](https://ocaml-multicore.github.io/eio/eio_linux/Eio_linux/index.html)
 
 ---
 
