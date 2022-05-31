@@ -117,11 +117,14 @@ import Test.HUnit
 
 -   Regression testing
 
--   Coverage
+<img src="./images/regression.svg" width="400" />
 
+-   Coverage
     -   Risk when generating random test cases: are we generating interesting test cases?
     -   How to measure coverage
     -   Corner case thinking and unit tests as basis, e.g. try 0, -1, maxInt, etc
+
+<img src="./images/coverage.svg" width="400" />
 
 ## SUT
 
@@ -137,10 +140,10 @@ newCounter = do
 ```
 
 ``` haskell
-incr :: Counter -> IO ()
-incr (Counter ref) = do
-  n <- readIORef ref
-  writeIORef ref (n + 1)
+incr :: Counter -> Int -> IO ()
+incr (Counter ref) i = do
+  j <- readIORef ref
+  writeIORef ref (i + j)
 ```
 
 ``` haskell
@@ -152,11 +155,12 @@ get (Counter ref) = readIORef ref
 
 ``` haskell
 newtype FakeCounter = FakeCounter Int
+  deriving Show
 ```
 
 ``` haskell
-fakeIncr :: FakeCounter -> (FakeCounter, ())
-fakeIncr (FakeCounter i) = (FakeCounter (i + 1), ())
+fakeIncr :: FakeCounter -> Int -> (FakeCounter, ())
+fakeIncr (FakeCounter i) j = (FakeCounter (i + j), ())
 ```
 
 ``` haskell
@@ -165,7 +169,7 @@ fakeGet (FakeCounter i) = (FakeCounter i, i)
 ```
 
 ``` haskell
-data Command = Incr | Get
+data Command = Incr Int | Get
   deriving (Eq, Show)
 ```
 
@@ -186,15 +190,15 @@ initModel = FakeCounter 0
 ``` haskell
 step :: Model -> Command -> (Model, Response)
 step m cmd = case cmd of
-  Incr -> Unit <$> fakeIncr m
-  Get  -> Int  <$> fakeGet m
+  Incr i -> Unit <$> fakeIncr m i
+  Get    -> Int  <$> fakeGet m
 ```
 
 ``` haskell
 exec :: Counter -> Command -> IO Response
 exec c cmd = case cmd of
-  Incr -> Unit <$> incr c
-  Get  -> Int  <$> get c
+  Incr i -> Unit <$> incr c i
+  Get    -> Int  <$> get c
 ```
 
 ``` haskell
@@ -204,7 +208,12 @@ newtype Program = Program [Command]
 
 ``` haskell
 genCommand :: Gen Command
-genCommand = elements [Incr, Get]
+genCommand = oneof [Incr <$> genInt, return Get]
+```
+
+``` haskell
+genInt :: Gen Int
+genInt = oneof [arbitrary] -- , elements [0, 1, maxBound, -1, minBound]] -- TODO: Fix coverage by uncommenting.
 ```
 
 ``` haskell
@@ -243,20 +252,42 @@ prop_counter :: Property
 prop_counter = forallPrograms $ \prog -> monadicIO $ do
   c <- run newCounter
   let m = initModel
-  runProgram c m prog
+  (b, hist) <- runProgram c m prog
+  monitor (coverage hist)
+  return b
 ```
 
 ``` haskell
-runProgram :: MonadIO m => Counter -> Model -> Program -> m Bool
-runProgram c0 m0 (Program cmds0) = go c0 m0 cmds0
+coverage :: [(Model, Command, Response, Model)] -> Property -> Property
+coverage hist = classifyLength hist . classifyOverflow hist
   where
-     go _c _m []           = return True
-     go  c  m (cmd : cmds) = do
+    classifyLength xs = classify (length xs == 0)                    "0 length"
+                      . classify (0  < length xs && length xs <= 10) "1-10 length"
+                      . classify (10 < length xs && length xs <= 50) "10-50 length"
+    classifyOverflow [] = id
+```
+
+``` haskell
+    classifyOverflow ((FakeCounter c, Incr i, _resp, _model') : hist') =
+       classify (isOverflow c i) "overflow" . classifyOverflow hist'
+    classifyOverflow (_ : hist') = classifyOverflow hist'
+```
+
+``` haskell
+    isOverflow i j = toInteger i + toInteger j > toInteger (maxBound :: Int)
+```
+
+``` haskell
+runProgram :: MonadIO m => Counter -> Model -> Program -> m (Bool, [(Model, Command, Response, Model)])
+runProgram c0 m0 (Program cmds0) = go c0 m0 [] cmds0
+  where
+     go _c _m hist []           = return (True, reverse hist)
+     go  c  m hist (cmd : cmds) = do
        resp <- liftIO (exec c cmd)
        let (m', resp') = step m cmd
        if resp == resp'
-       then go c m' cmds
-       else return False
+       then go c m' ((m, cmd, resp, m') : hist) cmds
+       else return (False, reverse hist)
 ```
 
 ## Regression tests
@@ -266,7 +297,7 @@ assertProgram :: String -> Program -> Assertion
 assertProgram msg prog = do
   c <- newCounter
   let m = initModel
-  b <- runProgram c m prog
+  (b, _hist) <- runProgram c m prog
   assertBool msg b
 ```
 
@@ -282,7 +313,7 @@ assertProgram msg prog = do
 
     -   XXX: Stateful property-based testing using state machines, like we seen in this lecture, tries to approximate proof by structural induction on the sequence of inputs. Or inductive invariant method?!
 
-    -   Executable (as the REPL exercise shows, but also more on this later)
+    -   Executable (as the REPL exercise below shows, but also more on this later)
 
     -   Same state machine specification can be used for concurrent testing (Lec 2)
 
@@ -304,7 +335,9 @@ assertProgram msg prog = do
 
     (For a SUT as simple as a counter this doesn’t make much sense, but when the SUT get more complicated it might make sense to develope the state machine specification first, demo it using something like a REPL or some other simple UI before even starting to implement the real thing.)
 
-4.  Collect timing information about how long each command takes to execute on average.
+4.  Add a coverage check ensures that we do a `Get` after an overflow has happened.
+
+5.  Collect timing information about how long each command takes to execute on average.
 
 ## See also
 
