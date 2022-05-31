@@ -13,7 +13,7 @@ Motivation
 ----------
 
 - The combinatorics of testing:
-  + $n$ features and 3-4 tests per feature $\Longrightarrow O(n)$ test cases
+  + $n$ features and 3-4 tests per feature         $\Longrightarrow O(n)$   test cases
   + $n$ features and testing pairs of features     $\Longrightarrow O(n^2)$ test cases
   + $n$ features and testing triples of features   $\Longrightarrow O(n^3)$ test cases
   + Race conditions? (at least two features, non-deterministic)
@@ -50,7 +50,7 @@ How it works
 
 * State machine testing:
 
-![](./images/sm-testing.svg){ width=400px }
+![](./images/sm-testing.svg){ width=500px }
 
 * Shrinking, when assertions fail:
 
@@ -74,10 +74,10 @@ SUT
 >   ref <- newIORef 0
 >   return (Counter ref)
 
-> incr :: Counter -> IO ()
-> incr (Counter ref) = do
->   n <- readIORef ref
->   writeIORef ref (n + 1)
+> incr :: Counter -> Int -> IO ()
+> incr (Counter ref) i = do
+>   j <- readIORef ref
+>   writeIORef ref (i + j)
 
 > get :: Counter -> IO Int
 > get (Counter ref) = readIORef ref
@@ -86,15 +86,16 @@ State machine model/specification/fake
 --------------------------------------
 
 > newtype FakeCounter = FakeCounter Int
+>   deriving Show
 
-> fakeIncr :: FakeCounter -> (FakeCounter, ())
-> fakeIncr (FakeCounter i) = (FakeCounter (i + 1), ())
+> fakeIncr :: FakeCounter -> Int -> (FakeCounter, ())
+> fakeIncr (FakeCounter i) j = (FakeCounter (i + j), ())
 
 > fakeGet :: FakeCounter -> (FakeCounter, Int)
 > fakeGet (FakeCounter i) = (FakeCounter i, i)
 
 
-> data Command = Incr | Get
+> data Command = Incr Int | Get
 >   deriving (Eq, Show)
 
 > data Response = Unit () | Int Int
@@ -107,19 +108,22 @@ State machine model/specification/fake
 
 > step :: Model -> Command -> (Model, Response)
 > step m cmd = case cmd of
->   Incr -> Unit <$> fakeIncr m
->   Get  -> Int  <$> fakeGet m
+>   Incr i -> Unit <$> fakeIncr m i
+>   Get    -> Int  <$> fakeGet m
 
 > exec :: Counter -> Command -> IO Response
 > exec c cmd = case cmd of
->   Incr -> Unit <$> incr c
->   Get  -> Int  <$> get c
+>   Incr i -> Unit <$> incr c i
+>   Get    -> Int  <$> get c
 
 > newtype Program = Program [Command]
 >   deriving Show
 
 > genCommand :: Gen Command
-> genCommand = elements [Incr, Get]
+> genCommand = oneof [Incr <$> genInt, return Get]
+
+> genInt :: Gen Int
+> genInt = oneof [arbitrary] -- , elements [0, 1, maxBound, -1, minBound]] -- TODO: Fix coverage by uncommenting.
 
 > genProgram :: Model -> Gen Program
 > genProgram _m = Program <$> listOf genCommand
@@ -144,18 +148,33 @@ State machine model/specification/fake
 > prop_counter = forallPrograms $ \prog -> monadicIO $ do
 >   c <- run newCounter
 >   let m = initModel
->   runProgram c m prog
+>   (b, hist) <- runProgram c m prog
+>   monitor (coverage hist)
+>   return b
 
-> runProgram :: MonadIO m => Counter -> Model -> Program -> m Bool
-> runProgram c0 m0 (Program cmds0) = go c0 m0 cmds0
+> coverage :: [(Model, Command, Response, Model)] -> Property -> Property
+> coverage hist = classifyLength hist . go hist
 >   where
->      go _c _m []           = return True
->      go  c  m (cmd : cmds) = do
+>     go [] = id
+>     go ((FakeCounter c, Incr i, _resp, _model') : hist') = classify (isOverflow c i) "overflow" . go hist'
+>     go (_ : hist') = go hist'
+
+>     isOverflow i j = toInteger i + toInteger j > toInteger (maxBound :: Int)
+
+>     classifyLength xs = classify (length xs == 0)                    "0 length"
+>                       . classify (0  < length xs && length xs <= 10) "1-10 length"
+>                       . classify (10 < length xs && length xs <= 50) "10-50 length"
+
+> runProgram :: MonadIO m => Counter -> Model -> Program -> m (Bool, [(Model, Command, Response, Model)])
+> runProgram c0 m0 (Program cmds0) = go c0 m0 [] cmds0
+>   where
+>      go _c _m hist []           = return (True, reverse hist)
+>      go  c  m hist (cmd : cmds) = do
 >        resp <- liftIO (exec c cmd)
 >        let (m', resp') = step m cmd
 >        if resp == resp'
->        then go c m' cmds
->        else return False
+>        then go c m' ((m, cmd, resp, m') : hist) cmds
+>        else return (False, reverse hist)
 
 Regression tests
 ----------------
@@ -164,7 +183,7 @@ Regression tests
 > assertProgram msg prog = do
 >   c <- newCounter
 >   let m = initModel
->   b <- runProgram c m prog
+>   (b, _hist) <- runProgram c m prog
 >   assertBool msg b
 
 Discussion
@@ -220,14 +239,16 @@ Excerises
    specification first, demo it using something like a REPL or some other simple
    UI before even starting to implement the real thing.)
 
-4. Collect timing information about how long each command takes to execute on
+4. Add a coverage check ensures that we do a `Get` after an overflow has happened.
+
+5. Collect timing information about how long each command takes to execute on
    average.
 
 See also
 --------
 
 - For more on how feature interaction gives rise to bugs see the following [blog
-  post]((https://www.hillelwayne.com/post/feature-interaction/)) by Hillel Wayne
+  post](https://www.hillelwayne.com/post/feature-interaction/) by Hillel Wayne
   summarising [Pamela Zave](https://en.wikipedia.org/wiki/Pamela_Zave)'s work on
   the topic;
 
@@ -245,8 +266,7 @@ See also
   [talk](https://www.youtube.com/watch?v=zi0rHwfiX1Q) (2013-2014);
 
 - Lamport's [Computation and State
-  Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
-  (2008)
+  Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/) (2008)
 
 - "Can one generalize Turing machines so that any algorithm, never mind how ab-
   stract, can be modeled by a generalized machine very closely and faithfully?"
