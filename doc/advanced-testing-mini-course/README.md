@@ -109,7 +109,7 @@ import Test.HUnit
 
 -   State machine testing:
 
-<img src="./images/sm-testing.svg" width="400" />
+<img src="./images/sm-testing.svg" width="500" />
 
 -   Shrinking, when assertions fail:
 
@@ -308,7 +308,7 @@ assertProgram msg prog = do
 
 ## See also
 
--   For more on how feature interaction gives rise to bugs see the following [blog post]((https://www.hillelwayne.com/post/feature-interaction/)) by Hillel Wayne summarising [Pamela Zave](https://en.wikipedia.org/wiki/Pamela_Zave)’s work on the topic;
+-   For more on how feature interaction gives rise to bugs see the following [blog post](https://www.hillelwayne.com/post/feature-interaction/) by Hillel Wayne summarising [Pamela Zave](https://en.wikipedia.org/wiki/Pamela_Zave)’s work on the topic;
 
 -   The original QuickCheck [paper](https://dl.acm.org/doi/pdf/10.1145/357766.351266) by Koen Claessen and John Hughes (2000) that introduced property-based testing in Haskell;
 
@@ -316,9 +316,7 @@ assertProgram msg prog = do
 
 -   John Hughes’ *Testing the Hard Stuff and Staying Sane* [talk](https://www.youtube.com/watch?v=zi0rHwfiX1Q) (2013-2014);
 
--   Lamport’s [Computation and State Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
-
-    2008. 
+-   Lamport’s [Computation and State Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/) (2008)
 
 -   “Can one generalize Turing machines so that any algorithm, never mind how ab- stract, can be modeled by a generalized machine very closely and faithfully?”
 
