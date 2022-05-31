@@ -58,10 +58,14 @@ How it works
 
 * Regression testing
 
+![](./images/regression.svg){ width=400px }
+
 * Coverage
   - Risk when generating random test cases: are we generating interesting test cases?
   - How to measure coverage
   - Corner case thinking and unit tests as basis, e.g. try 0, -1, maxInt, etc
+
+![](./images/coverage.svg){ width=400px }
 
 
 SUT
@@ -153,17 +157,19 @@ State machine model/specification/fake
 >   return b
 
 > coverage :: [(Model, Command, Response, Model)] -> Property -> Property
-> coverage hist = classifyLength hist . go hist
+> coverage hist = classifyLength hist . classifyOverflow hist
 >   where
->     go [] = id
->     go ((FakeCounter c, Incr i, _resp, _model') : hist') = classify (isOverflow c i) "overflow" . go hist'
->     go (_ : hist') = go hist'
-
->     isOverflow i j = toInteger i + toInteger j > toInteger (maxBound :: Int)
-
 >     classifyLength xs = classify (length xs == 0)                    "0 length"
 >                       . classify (0  < length xs && length xs <= 10) "1-10 length"
 >                       . classify (10 < length xs && length xs <= 50) "10-50 length"
+>     classifyOverflow [] = id
+
+>     classifyOverflow ((FakeCounter c, Incr i, _resp, _model') : hist') =
+>        classify (isOverflow c i) "overflow" . classifyOverflow hist'
+>     classifyOverflow (_ : hist') = classifyOverflow hist'
+
+>     isOverflow i j = toInteger i + toInteger j > toInteger (maxBound :: Int)
+
 
 > runProgram :: MonadIO m => Counter -> Model -> Program -> m (Bool, [(Model, Command, Response, Model)])
 > runProgram c0 m0 (Program cmds0) = go c0 m0 [] cmds0
@@ -210,7 +216,7 @@ Discussion
     this lecture, tries to approximate proof by structural induction on the
     sequence of inputs. Or inductive invariant method?!
 
-  + Executable (as the REPL exercise shows, but also more on this later)
+  + Executable (as the REPL exercise below shows, but also more on this later)
 
   + Same state machine specification can be used for concurrent testing (Lec 2)
   + Mental model
