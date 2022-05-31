@@ -26,15 +26,20 @@ type VR s o r a = SMM (VRState s o r) (VRMessage o) (VRResponse r) a
 tODO :: HasCallStack => a
 tODO = error "Not implemented yet"
 
-isPrimary :: VR s o r Bool
-isPrimary = do
-  ViewNumber cVn <- use currentViewNumber
+isPrimaryAt :: ViewNumber -> VR s o r Bool
+isPrimaryAt (ViewNumber cVn) = do
   nodes <- use (configuration.to length)
   rn <- use replicaNumber
   return (rn == cVn `mod` nodes)
 
+isPrimary :: VR s o r Bool
+isPrimary = use currentViewNumber >>= isPrimaryAt
+
 checkIsPrimary :: VR s o r ()
 checkIsPrimary = guardM isPrimary
+
+checkIsNewPrimary :: ViewNumber -> VR s o r ()
+checkIsNewPrimary v = guardM (isPrimaryAt v)
 
 checkIsBackup :: ViewNumber -> VR s o r ()
 checkIsBackup msgVN = do
@@ -139,17 +144,27 @@ executeUpToOrBeginStateTransfer k = do
         return ()
   commitNumber .= k
 
-{- 4.1 Normal Operation -- TODO: When we add ticks --
-6. Normally the primary informs backups about the
-commit when it sends the next PREPARE message;
-this is the purpose of the commit-number in the
-PREPARE message. However, if the primary does
-not receive a new client request in a timely way, it
-instead informs the backups of the latest commit by
-sending them a 〈COMMIT v, k〉 message, where k
-is commit-number (note that in this case commit-
-number = op-number).
+{- 4.1 Normal Operation
+The protocol description assumes all participating
+replicas are in the same view. Every message sent from
+one replica to another contains the sender’s current view-
+number. Replicas only process normal protocol mes-
+sages containing a view-number that matches the view-
+number they know. If the sender is behind, the receiver
+drops the message. If the sender is ahead, the replica
+performs a state transfer: it requests information it is
+missing from the other replicas and uses this information
+to bring itself up to date before processing the message.
+State transfer is discussed further in Section 5.2
 -}
+-- TODO: unclear if this only applies to 4.1 messages or others
+checkViewNumberOfMessage :: ViewNumber -> VR s o r ()
+checkViewNumberOfMessage v = do
+  mVn <- use currentViewNumber
+  guard (mVn <= v)
+  if mVn < v
+    then initStateTransfer
+    else return ()
 
 machine :: Input (VRRequest o) (VRMessage o) -> VR s o r ()
 machine (ClientRequest _time c (VRRequest op s)) = do
@@ -209,6 +224,7 @@ the request, and k is the commit-number.
   resetTimerSeconds =<< use broadCastInterval
 machine (InternalMessage _time from iMsg) = case iMsg of
   Prepare v m n k -> do
+    checkViewNumberOfMessage v
     checkIsBackup v
     {- 4.1 Normal Operation
 4. Backups process PREPARE messages in order: a
@@ -232,6 +248,7 @@ ones have prepared locally.
                                         -- event-loop will add it automatically
   PrepareOk v n -> do
     let i = from
+    checkViewNumberOfMessage v
     checkIsPrimary
     {- 4.1 Normal Operation
 5. The primary waits for f PREPAREOK messages
@@ -267,6 +284,7 @@ entry in the client-table to contain the result.
             respond theClientId (VRReply v theRequestNumber result)
       else ereturn
   Commit v k -> do
+    checkViewNumberOfMessage v
     checkIsBackup v
     {- 4.1 Normal Operation
 7. When a backup learns of a commit, it waits un-
@@ -278,6 +296,66 @@ its commit-number, updates the client’s entry in the
 client-table, but does not send the reply to the client.
     -}
     executeUpToOrBeginStateTransfer k
+  StartViewChange v -> do
+    let _i = from
+    checkViewNumberOfMessage v
+    {- 4.2 View Change
+2. When replica i receives STARTVIEWCHANGE mes-
+sages for its view-number from f other replicas, it
+sends a 〈DOVIEWCHANGE v, l, v’, n, k, i〉 message
+to the node that will be the primary in the new view.
+Here v is its view-number, l is its log, v′ is the view
+number of the latest view in which its status was
+normal, n is the op-number, and k is the commit-
+number.
+-}
+    tODO
+  DoViewChange v _l v' _n _k -> do
+    let _i = from
+    checkViewNumberOfMessage v
+    checkIsNewPrimary v'
+    {- 4.2 View Change
+3. When the new primary receives f + 1
+DOVIEWCHANGE messages from different
+replicas (including itself), it sets its view-number
+to that in the messages and selects as the new log
+the one contained in the message with the largest
+v′; if several messages have the same v′ it selects
+the one among them with the largest n. It sets its
+op-number to that of the topmost entry in the new
+log, sets its commit-number to the largest such
+number it received in the DOVIEWCHANGE mes-
+sages, changes its status to normal, and informs the
+other replicas of the completion of the view change
+by sending 〈STARTVIEW v, l, n, k〉 messages to
+the other replicas, where l is the new log, n is the
+op-number, and k is the commit-number.
+-}
+    {- 4.2 View Change
+4. The new primary starts accepting client requests. It
+also executes (in order) any committed operations
+that it hadn’t executed previously, updates its client
+table, and sends the replies to the clients.
+-}
+    tODO
+  StartView v _l _n _k -> do
+    mVn <- use currentViewNumber
+    guard (mVn <= v)
+    {- 4.2 View Change
+5. When other replicas receive the STARTVIEW mes-
+sage, they replace their log with the one in the mes-
+sage, set their op-number to that of the latest entry
+in the log, set their view-number to the view num-
+ber in the message, change their status to normal,
+and update the information in their client-table. If
+there are non-committed operations in the log, they
+send a 〈PREPAREOK v, n, i〉 message to the primary;
+here n is the op-number. Then they execute all op-
+erations known to be committed that they haven’t
+executed previously, advance their commit-number,
+and update the information in their client-table.
+-}
+    tODO
   Recovery x -> do
     let i = from
     {- 4.3 Recovery
@@ -301,7 +379,8 @@ wise these values are nil.
         <*> {- k -} use commitNumber)
       False -> pure FromReplica
     send i $ RecoveryResponse v x resp j
-  RecoveryResponse _v x resp _j -> do -- TODO should probably check view number?
+  RecoveryResponse v x resp _j -> do
+    checkViewNumberOfMessage v -- TODO: unclear if this should be done
     {- 4.3 Recovery
 3. The recovering replica waits to receive at least f +
 1 RECOVERYRESPONSE messages from different
@@ -337,6 +416,17 @@ machineInit :: VR s o r ()
 machineInit = do
   registerTimerSeconds =<< use broadCastInterval
 
+{- 4.1 Normal Operation -- TODO: When we add ticks --
+6. Normally the primary informs backups about the
+commit when it sends the next PREPARE message;
+this is the purpose of the commit-number in the
+PREPARE message. However, if the primary does
+not receive a new client request in a timely way, it
+instead informs the backups of the latest commit by
+sending them a 〈COMMIT v, k〉 message, where k
+is commit-number (note that in this case commit-
+number = op-number).
+-}
 machineTime :: Time -> VR s o r ()
 machineTime _t = do
   guardM $ isPrimary -- TODO different logic for backups

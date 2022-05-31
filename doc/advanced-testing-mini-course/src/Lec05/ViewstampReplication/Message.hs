@@ -59,6 +59,10 @@ data VRMessage op
   = Prepare ViewNumber (InternalClientMessage op) OpNumber CommitNumber
   | PrepareOk ViewNumber OpNumber {- i which is node-id -}
   | Commit ViewNumber CommitNumber
+  -- 4.2 View Change
+  | StartViewChange ViewNumber {- i which is node-id -}
+  | DoViewChange ViewNumber (Log op) ViewNumber OpNumber CommitNumber {- i which is node-id -}
+  | StartView ViewNumber (Log op) OpNumber CommitNumber
   -- 4.3 Recovery
   | Recovery Nonce {- i which is node-id -}
   | RecoveryResponse ViewNumber Nonce (FromPrimary (PrimaryRecoveryResponse op)) Int
