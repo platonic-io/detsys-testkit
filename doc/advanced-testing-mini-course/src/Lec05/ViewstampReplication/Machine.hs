@@ -103,6 +103,23 @@ findClientInfoForOp :: OpNumber -> VR s o r (ClientId, RequestNumber)
 findClientInfoForOp on = use $
   clientTable.to (Map.filter (\cs -> copNumber cs == on)).to Map.findMin.to (fmap requestNumber)
 
+initViewChange :: VR s o r ()
+initViewChange = do
+  {- 4.2 View Change
+1. A replica i that notices the need for a view change
+advances its view-number, sets its status to view-
+change, and sends a 〈STARTVIEWCHANGE v, i〉
+message to the all other replicas, where v iden-
+tifies the new view. A replica notices the need
+for a view change either based on its own timer,
+or because it receives a STARTVIEWCHANGE or
+DOVIEWCHANGE message for a view with a larger
+number than its own view-number.
+-}
+  v <- currentViewNumber <%= (+1)
+  currentStatus .= ViewChange
+  broadCastOtherReplicas $ StartViewChange v
+
 generateNonce :: VR s o r Nonce
 generateNonce = Nonce <$> random
 
@@ -226,6 +243,7 @@ machine (InternalMessage _time from iMsg) = case iMsg of
   Prepare v m n k -> do
     checkViewNumberOfMessage v
     checkIsBackup v
+    resetTimerSeconds =<< use broadCastInterval
     {- 4.1 Normal Operation
 4. Backups process PREPARE messages in order: a
 backup won’t accept a prepare with op-number n
@@ -286,6 +304,7 @@ entry in the client-table to contain the result.
   Commit v k -> do
     checkViewNumberOfMessage v
     checkIsBackup v
+    resetTimerSeconds =<< use broadCastInterval
     {- 4.1 Normal Operation
 7. When a backup learns of a commit, it waits un-
 til it has the request in its log (which may require
@@ -309,7 +328,8 @@ number of the latest view in which its status was
 normal, n is the op-number, and k is the commit-
 number.
 -}
-    tODO
+    --tODO
+    return () -- TODO
   DoViewChange v _l v' _n _k -> do
     let _i = from
     checkViewNumberOfMessage v
@@ -416,6 +436,24 @@ machineInit :: VR s o r ()
 machineInit = do
   registerTimerSeconds =<< use broadCastInterval
 
+primaryTock :: Time -> VR s o r ()
+primaryTock _t = do
+  v <- use currentViewNumber
+  OpNumber o <- use opNumber
+  k <- use commitNumber
+  -- we should only broadcast `Commit` if we haven't seen new client request
+  -- see 4.1 Normal Operation, 6)
+  guard $ CommitNumber o == k
+  broadCastReplicas $ Commit v k
+  registerTimerSeconds =<< use broadCastInterval
+
+replicaTock :: Time -> VR s o r ()
+replicaTock _t = do
+  -- we should arrive here if we haven't gotten `Prepare` or `Commit` in
+  -- a while
+  guardM $ use (currentStatus.to (== Normal))
+  initViewChange
+
 {- 4.1 Normal Operation -- TODO: When we add ticks --
 6. Normally the primary informs backups about the
 commit when it sends the next PREPARE message;
@@ -428,16 +466,11 @@ is commit-number (note that in this case commit-
 number = op-number).
 -}
 machineTime :: Time -> VR s o r ()
-machineTime _t = do
-  guardM $ isPrimary -- TODO different logic for backups
-  v <- use currentViewNumber
-  OpNumber o <- use opNumber
-  k <- use commitNumber
-  -- we should only broadcast `Commit` if we haven't seen new client request
-  -- see 4.1 Normal Operation, 6)
-  guard $ CommitNumber o == k
-  broadCastReplicas $ Commit v k
-  registerTimerSeconds =<< use broadCastInterval
+machineTime currentTime = do
+  isP <- isPrimary
+  if isP
+    then primaryTock currentTime
+    else replicaTock currentTime
 
 vrSM :: [NodeId] -> NodeId -> Pico
   -> s -> ReplicatedStateMachine s o r
