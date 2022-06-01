@@ -44,7 +44,7 @@ data RandomDist
   | Exponential Double
 
 defaultRandomDist :: RandomDist
-defaultRandomDist = Uniform 1 20
+defaultRandomDist = Exponential 0.5
 
 randomFromDist :: Random -> RandomDist -> IO Double
 randomFromDist random (Uniform minV maxV) = do
