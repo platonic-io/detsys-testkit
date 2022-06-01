@@ -23,7 +23,7 @@ newtype CommitNumber = CommitNumber Int
 newtype Nonce = Nonce Int
   deriving newtype (Eq, Ord, Read, Show, ToExpr)
 newtype Log op = Log (Seq op)
-  deriving newtype (ToExpr, Monoid, Read, Semigroup, Show)
+  deriving newtype (Foldable, ToExpr, Monoid, Read, Semigroup, Show)
 
 data VRRequest op
   = VRRequest op RequestNumber -- ClientId in `ClientRequest`

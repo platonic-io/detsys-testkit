@@ -71,6 +71,9 @@ data VRState state op result = VRState
   -- so the actual state machine is not listed
   , _currentState :: state
   , _stateMachine :: ReplicatedStateMachine state op result
+  -- view change not listed
+  , _startViewChangeResponses :: Map ViewNumber (Set NodeId)
+  , _doViewChangeResponses :: Map ViewNumber (Set NodeId, Log op, ViewNumber, OpNumber, CommitNumber)
   -- state transfer not listed
   , _broadCastInterval :: Pico
   , _recoveryResponses :: Map Nonce (Set NodeId)
@@ -98,6 +101,9 @@ initState config me theBroadCastInterval state stateInterface = VRState
   , _primaryPrepareOk = mempty
   , _currentState = state
   , _stateMachine = stateInterface
+  -- not in paper view change
+  , _startViewChangeResponses = mempty
+  , _doViewChangeResponses = mempty
   -- not in paper state transfer
   , _broadCastInterval = theBroadCastInterval
   , _recoveryResponses = mempty

@@ -26,6 +26,11 @@ type VR s o r a = SMM (VRState s o r) (VRMessage o) (VRResponse r) a
 tODO :: HasCallStack => a
 tODO = error "Not implemented yet"
 
+primaryAt :: ViewNumber -> VR s o r NodeId
+primaryAt (ViewNumber cVn) = do
+  nodes <- use configuration
+  return $ nodes !! (cVn `mod` length nodes)
+
 isPrimaryAt :: ViewNumber -> VR s o r Bool
 isPrimaryAt (ViewNumber cVn) = do
   nodes <- use (configuration.to length)
@@ -88,6 +93,36 @@ isQuorum x = do
   -- `f` is the largest number s.t 2f+1<=n
   let f = (n - 1) `div` 2
   return (f <= x)
+
+addStartViewChange :: ViewNumber -> NodeId -> VR s o r Int
+addStartViewChange v from = do
+  s <- startViewChangeResponses.at v <%= Just . maybe (Set.singleton from) (Set.insert from)
+  return (maybe 0 Set.size s)
+
+{- 4.2 View Change
+3.  it sets its view-number
+to that in the messages and selects as the new log
+the one contained in the message with the largest
+v′; if several messages have the same v′ it selects
+the one among them with the largest n.
+-}
+addDoViewChange :: ViewNumber -> NodeId -> Log o -> ViewNumber -> OpNumber -> CommitNumber
+  -> VR s o r (Int, Log o, OpNumber, CommitNumber)
+addDoViewChange v from l v' n k = do
+  let
+    first = (Set.singleton from, l, v', n, k)
+    upd (nodes, cl, cv', cn, ck) =
+      let
+        keepOld = (Set.insert from nodes, cl, cv', cn, ck)
+        keepNew = (Set.insert from nodes, l, v', n, k)
+      in if
+        | cv' <  v' -> keepNew
+        | cv' == v' && n > cn -> keepNew
+        | otherwise -> keepOld
+  m <- doViewChangeResponses.at v <%= Just . maybe first upd
+  case m of
+    Nothing -> error "IMPOSSIBLE"
+    Just (s, hl, _, hn, hk) -> return (Set.size s, hl, hn, hk)
 
 addRecoveryResponse :: Nonce -> NodeId -> VR s o r Int
 addRecoveryResponse x from = do
@@ -316,8 +351,7 @@ client-table, but does not send the reply to the client.
     -}
     executeUpToOrBeginStateTransfer k
   StartViewChange v -> do
-    let _i = from
-    checkViewNumberOfMessage v
+    let i = from
     {- 4.2 View Change
 2. When replica i receives STARTVIEWCHANGE mes-
 sages for its view-number from f other replicas, it
@@ -328,12 +362,27 @@ number of the latest view in which its status was
 normal, n is the op-number, and k is the commit-
 number.
 -}
-    --tODO
-    return () -- TODO
-  DoViewChange v _l v' _n _k -> do
-    let _i = from
-    checkViewNumberOfMessage v
-    checkIsNewPrimary v'
+    howMany <- addStartViewChange v i
+    isQ <- isQuorum howMany -- use same quorum or different?
+    if isQ
+      then do
+        replica <- primaryAt v -- this could be ourself, and that is intentional
+        l <- use theLog
+        let v' = v -- TODO this should be the viewnumber for last normal..
+        n <- use opNumber
+        k <- use commitNumber
+        send replica $ DoViewChange v l v' n k
+      else do
+        -- maybe we haven't changed status yet?
+        st <- use currentStatus
+        if st == Normal
+          then initViewChange
+          else ereturn
+  DoViewChange v l v' n k -> do
+    let i = from
+    checkViewNumberOfMessage v'
+    checkIsNewPrimary v
+    guardM $ use (currentStatus.to (== ViewChange))
     {- 4.2 View Change
 3. When the new primary receives f + 1
 DOVIEWCHANGE messages from different
@@ -357,8 +406,18 @@ also executes (in order) any committed operations
 that it hadn’t executed previously, updates its client
 table, and sends the replies to the clients.
 -}
-    tODO
-  StartView v _l _n _k -> do
+    (howMany, highestLog, highestN, highestCommit) <- addDoViewChange v i l v' n k
+    isQ <- isQuorum howMany
+    if isQ
+      then do
+        currentStatus .= Normal
+        currentViewNumber .= v
+        theLog .= highestLog
+        opNumber .= highestN
+        broadCastReplicas $ StartView v highestLog highestN highestCommit
+        executeUpToOrBeginStateTransfer highestCommit
+      else ereturn
+  StartView v l n k -> do
     mVn <- use currentViewNumber
     guard (mVn <= v)
     {- 4.2 View Change
@@ -375,7 +434,16 @@ erations known to be committed that they haven’t
 executed previously, advance their commit-number,
 and update the information in their client-table.
 -}
-    tODO
+    oldLog <- use theLog
+
+    theLog .= l
+    opNumber .= n
+    currentStatus .= Normal
+    executeUpToOrBeginStateTransfer k
+
+    if length oldLog > length l
+      then error "We had non-commited entries in log"
+      else ereturn
   Recovery x -> do
     let i = from
     {- 4.3 Recovery
@@ -443,6 +511,7 @@ primaryTock _t = do
   k <- use commitNumber
   -- we should only broadcast `Commit` if we haven't seen new client request
   -- see 4.1 Normal Operation, 6)
+  -- actually we should resend `Prepare` see 4.1 Normal Operation before algorithm
   guard $ CommitNumber o == k
   broadCastReplicas $ Commit v k
   registerTimerSeconds =<< use broadCastInterval
