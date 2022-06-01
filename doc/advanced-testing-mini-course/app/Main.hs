@@ -91,7 +91,7 @@ main = do
       h <- newHistory
       let
         nodes = map NodeId [0..4]
-        delta = 10 -- time for primary to do re-broadcast
+        delta = 15 -- time for primary to do re-broadcast
         vrSM me = VR.vrSM (filter (/= me) nodes) me delta [] smI
         printItem label prefix thing =
           putStrLn $ "\x1b[33m" <> label <> ":\x1b[0m " <> prefix <> show thing
@@ -123,7 +123,7 @@ main = do
         h <- newHistory
         let
           nodes = map NodeId [0..4]
-          delta = 10 -- time for primary to do re-broadcast
+          delta = 15 -- time for primary to do re-broadcast
           vrSM me = VR.vrSM (filter (/= me) nodes) me delta [] smI
           fs = FailureSpec (NetworkFaults 0.15)
           endTime = addTimeSeconds 3600 epoch
@@ -137,5 +137,5 @@ main = do
         let bbHistory = markFailure (blackboxFailHistory (fmap heEvent history))
             isValid = Lec4.linearise step initModel bbHistory
         print bbHistory
-        return isValid
+        return (null reportedErrors && isValid)
     _otherwise       -> eventLoopProduction [SomeCodecSM idCodec echoSM]
