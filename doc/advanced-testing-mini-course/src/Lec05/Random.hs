@@ -38,3 +38,14 @@ randomInterval random range = do
 
 generateSeeds :: Int -> IO [Seed]
 generateSeeds nr = mapM (\_ -> fmap Seed randomIO) [1..nr]
+
+data RandomDist
+  = Uniform Double Double
+-- XXX: Exponential distribution?
+
+defaultRandomDist :: RandomDist
+defaultRandomDist = Uniform 1 20
+
+randomFromDist :: Random -> RandomDist -> IO Double
+randomFromDist random (Uniform minV maxV) = do
+  randomInterval random (minV, maxV)
