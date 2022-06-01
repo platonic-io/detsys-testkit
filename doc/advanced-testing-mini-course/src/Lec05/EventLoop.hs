@@ -32,7 +32,7 @@ eventLoopSimulation :: Seed -> Agenda -> History -> [SomeCodecSM] -> IO Collecto
 eventLoopSimulation seed agenda history nodes = do
   config <- makeConfiguration nodes
   collector <- newCollector
-  eventLoop (Options (Simulation seed agenda history Nothing collector Nothing)) config
+  eventLoop (Options (Simulation seed agenda history Nothing collector Nothing defaultRandomDist)) config
   return collector
 
 eventLoopFaultySimulation :: Seed -> Agenda -> History -> FailureSpec -> [SomeCodecSM]
@@ -40,7 +40,7 @@ eventLoopFaultySimulation :: Seed -> Agenda -> History -> FailureSpec -> [SomeCo
 eventLoopFaultySimulation seed agenda history failureSpec nodes mClientGenerator = do
   config <- makeConfiguration nodes
   collector <- newCollector
-  eventLoop (Options (Simulation seed agenda history (Just failureSpec) collector mClientGenerator)) config
+  eventLoop (Options (Simulation seed agenda history (Just failureSpec) collector mClientGenerator defaultRandomDist)) config
   return collector
 
 echoAgenda :: Agenda

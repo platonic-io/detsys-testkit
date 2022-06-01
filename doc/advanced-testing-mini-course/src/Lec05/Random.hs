@@ -38,3 +38,18 @@ randomInterval random range = do
 
 generateSeeds :: Int -> IO [Seed]
 generateSeeds nr = mapM (\_ -> fmap Seed randomIO) [1..nr]
+
+data RandomDist
+  = Uniform Double Double
+  | Exponential Double
+
+defaultRandomDist :: RandomDist
+defaultRandomDist = Exponential 0.5
+
+randomFromDist :: Random -> RandomDist -> IO Double
+randomFromDist random (Uniform minV maxV) = do
+  randomInterval random (minV, maxV)
+randomFromDist random (Exponential lambda) = do
+  -- https://en.wikipedia.org/wiki/Inverse_transform_sampling#Examples
+  y <- randomInterval random (0.0, 1.0 :: Double)
+  return $ -1/lambda*log (1 - y)

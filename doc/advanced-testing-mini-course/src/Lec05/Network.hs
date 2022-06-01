@@ -126,8 +126,10 @@ data NetworkFaults = NetworkFaults
   { nfChanceOfDrop :: Double }
 
 faultyNetwork :: EventQueue -> Clock -> Random -> Configuration
-  -> History -> Maybe NetworkFaults -> ClientGenerator -> IO Network
-faultyNetwork evQ clock random config history mnf cg = do
+  -> History -> Maybe NetworkFaults -> ClientGenerator
+  -> RandomDist
+  -> IO Network
+faultyNetwork evQ clock random config history mnf cg rdist = do
   return Network
     { nSend    = send
     , nRespond = respond
@@ -154,8 +156,7 @@ faultyNetwork evQ clock random config history mnf cg = do
                he = HistEvent to st (InternalMessage now from msg :: Input () ByteString) st ([] :: [Output () ByteString])
              appendHistory history DidDrop he
         else do
-          -- XXX: Exponential distribution?
-          d <- randomInterval random (1.0, 20.0) :: IO Double
+          d <- randomFromDist random rdist
           let arrivalTime = addTimeSeconds (fromRational (toRational d)) now
           eqEnqueue evQ
             (NetworkEventE (NetworkEvent to (InternalMessage arrivalTime from msg)))

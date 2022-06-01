@@ -19,6 +19,7 @@ data DeploymentMode
   = Production
   | Simulation Seed Agenda History (Maybe FailureSpec) Collector
       (Maybe (SingleStateGenerator, NominalDiffTime))
+      RandomDist
 
 displayDeploymentMode :: DeploymentMode -> String
 displayDeploymentMode Production    = "production"
@@ -63,14 +64,14 @@ newDeployment mode config = case mode of
       , dAppendHistory = \_ -> return ()
       , dReportError   = putStrLn
       }
-  Simulation seed agenda history mf errorCollector mSingleStateGenerator-> do
+  Simulation seed agenda history mf errorCollector mSingleStateGenerator randomDist -> do
     clock      <- fakeClockEpoch
     clientGenerator <- case mSingleStateGenerator of
       Nothing -> return emptyGenerator
       Just (ssg, delay) -> singleStateGenerator ssg clock delay
     eventQueue <- fakeEventQueue agenda clock clientGenerator
     random     <- fakeRandom seed
-    network    <- faultyNetwork eventQueue clock random config history (fmap fsNetworkFailure mf) clientGenerator
+    network    <- faultyNetwork eventQueue clock random config history (fmap fsNetworkFailure mf) clientGenerator randomDist
     timerWheel <- newTimerWheel
     return Deployment
       { dMode          = mode
