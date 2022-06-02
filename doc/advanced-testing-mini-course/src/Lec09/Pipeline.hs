@@ -1,4 +1,5 @@
 {-# LANGUAGE Arrows #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -40,7 +41,7 @@ data Pipeline m a b where
   -- Split    :: (a -> Bool) -> Pipeline m a (Either a a)
   Or       :: Pipeline m a c -> Pipeline m b d -> Pipeline m (a :+ b) (c :+ d)
   -- Combine  :: Pipeline m a b -> Pipeline m a b -> Pipeline m a b
-  Eq :: Pipeline m (a :* a) (K Bool)
+  Eq :: Eq (Element a) => Pipeline m (a :* a) (K Bool)
 
 instance Monad m => Category (Pipeline m) where
   id    = undefined -- ArrM return
@@ -99,6 +100,7 @@ runPipeline (Lift (SM ld st f)) i         = do
   let (o, s') = interpret f (i, s)
   st s'
   return o
+runPipeline Eq                  (x, y)    = return (x == y)
 
 data Deployment a = Deployment
   { dQueue  :: TBQueue a
