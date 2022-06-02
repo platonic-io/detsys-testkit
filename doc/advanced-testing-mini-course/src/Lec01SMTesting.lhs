@@ -1,11 +1,3 @@
-> module Lec01SMTesting where
-
-> import Control.Monad.IO.Class
-> import Data.IORef
-> import Test.QuickCheck
-> import Test.QuickCheck.Monadic
-> import Test.HUnit
-
 State machine testing
 =====================
 
@@ -44,15 +36,15 @@ Plan
 How it works
 ------------
 
-* Test case generation:
+* Test case generation
 
 ![](./images/generator.svg){ width=400px }
 
-* State machine testing:
+* State machine testing
 
 ![](./images/sm-testing.svg){ width=500px }
 
-* Shrinking, when assertions fail:
+* Shrinking, when assertions fail
 
 ![](./images/shrinking.svg){ width=400px }
 
@@ -70,6 +62,17 @@ How it works
 
 SUT
 ---
+
+> module Lec01SMTesting where
+
+> import Control.Monad.IO.Class
+> import Data.IORef
+> import Test.QuickCheck
+> import Test.QuickCheck.Monadic
+> import Test.HUnit
+
+The software under test (SUT) of the day is a counter that can be incremented
+and read from. It's implemented using a mutable reference (`IORef`) to an `Int`.
 
 > newtype Counter = Counter (IORef Int)
 
@@ -89,15 +92,15 @@ SUT
 State machine model/specification/fake
 --------------------------------------
 
+The specification of our SUT is state machine model that uses a plain `Int`
+(unlike the real implementation it uses no mutable reference).
+
 > newtype FakeCounter = FakeCounter Int
 >   deriving Show
 
-> fakeIncr :: FakeCounter -> Int -> (FakeCounter, ())
-> fakeIncr (FakeCounter i) j = (FakeCounter (i + j), ())
-
-> fakeGet :: FakeCounter -> (FakeCounter, Int)
-> fakeGet (FakeCounter i) = (FakeCounter i, i)
-
+A state machine is a function from the current state and some input to the
+updated state and some output. We introduce two new types for the input and
+outputs:
 
 > data Command = Incr Int | Get
 >   deriving (Eq, Show)
@@ -105,7 +108,9 @@ State machine model/specification/fake
 > data Response = Unit () | Int Int
 >   deriving (Eq, Show)
 
-> type Model = FakeCounter
+Next we define the initial state and the state machine function.
+
+> type Model = FakeCounter -- A.k.a. state
 
 > initModel :: Model
 > initModel = FakeCounter 0
@@ -114,11 +119,20 @@ State machine model/specification/fake
 > step m cmd = case cmd of
 >   Incr i -> Unit <$> fakeIncr m i
 >   Get    -> Int  <$> fakeGet m
+>   where
+>     fakeIncr :: FakeCounter -> Int -> (FakeCounter, ())
+>     fakeIncr (FakeCounter i) j = (FakeCounter (i + j), ())
 
-> exec :: Counter -> Command -> IO Response
-> exec c cmd = case cmd of
->   Incr i -> Unit <$> incr c i
->   Get    -> Int  <$> get c
+>     fakeGet :: FakeCounter -> (FakeCounter, Int)
+>     fakeGet (FakeCounter i) = (FakeCounter i, i)
+
+Testing library
+---------------
+
+Recall that we want generate a random program and then run it against the SUT
+and the state machine model and assert that the outputs match.
+
+We want to generate random programs, so lets first define what a program is.
 
 > newtype Program = Program [Command]
 >   deriving Show
@@ -156,7 +170,7 @@ State machine model/specification/fake
 >   monitor (coverage hist)
 >   return b
 
-> coverage :: [(Model, Command, Response, Model)] -> Property -> Property
+> coverage :: Trace -> Property -> Property
 > coverage hist = classifyLength hist . classifyOverflow hist
 >   where
 >     classifyLength xs = classify (length xs == 0)                    "0 length"
@@ -164,14 +178,22 @@ State machine model/specification/fake
 >                       . classify (10 < length xs && length xs <= 50) "10-50 length"
 >     classifyOverflow [] = id
 
->     classifyOverflow ((FakeCounter c, Incr i, _resp, _model') : hist') =
+>     classifyOverflow (Step (FakeCounter c) (Incr i) _resp _model' : hist') =
 >        classify (isOverflow c i) "overflow" . classifyOverflow hist'
 >     classifyOverflow (_ : hist') = classifyOverflow hist'
 
 >     isOverflow i j = toInteger i + toInteger j > toInteger (maxBound :: Int)
 
+> data Step = Step
+>   { sModelBefore :: Model
+>   , sCommand     :: Command
+>   , sResponse    :: Response
+>   , sModelAfter  :: Model
+>   }
 
-> runProgram :: MonadIO m => Counter -> Model -> Program -> m (Bool, [(Model, Command, Response, Model)])
+> type Trace = [Step]
+
+> runProgram :: MonadIO m => Counter -> Model -> Program -> m (Bool, Trace)
 > runProgram c0 m0 (Program cmds0) = go c0 m0 [] cmds0
 >   where
 >      go _c _m hist []           = return (True, reverse hist)
@@ -179,8 +201,13 @@ State machine model/specification/fake
 >        resp <- liftIO (exec c cmd)
 >        let (m', resp') = step m cmd
 >        if resp == resp'
->        then go c m' ((m, cmd, resp, m') : hist) cmds
+>        then go c m' (Step m cmd resp m' : hist) cmds
 >        else return (False, reverse hist)
+
+> exec :: Counter -> Command -> IO Response
+> exec c cmd = case cmd of
+>   Incr i -> Unit <$> incr c i
+>   Get    -> Int  <$> get c
 
 Regression tests
 ----------------
@@ -246,6 +273,17 @@ Excerises
    UI before even starting to implement the real thing.)
 
 4. Add a coverage check ensures that we do a `Get` after an overflow has happened.
+
+5. Write a display function for `Trace` which shows how the system evolved over
+   time, the output could for example look like this:
+
+  ```
+     state0
+       == command0 ==> response0
+     state1
+       == command1 ==> response1
+     ...
+  ```
 
 5. Collect timing information about how long each command takes to execute on
    average.
