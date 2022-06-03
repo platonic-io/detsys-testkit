@@ -29,7 +29,7 @@ emptyGenerator = ClientGenerator
 data SingleStateGenerator = forall s. SingleStateGenerator
   { ssgInit :: s
   , ssgNext :: s -> s
-  , ssgGen  :: s -> (NodeId, ByteString)
+  , ssgGen  :: ClientId -> s -> (NodeId, ByteString)
   }
 
 data SingleStateGeneratorState s
@@ -56,7 +56,7 @@ singleStateGenerator (SingleStateGenerator initgs next gen) clock delay clientId
           SGSActive{} -> return CurrentlyNoRequests
           SGSWaiting t gs -> do
             let
-              (node, msg) = gen gs
+              (node, msg) = gen clientId gs
               ev = NetworkEventE (NetworkEvent node (ClientRequest t clientId msg))
               action = do
                 writeIORef ref (SGSActive gs)

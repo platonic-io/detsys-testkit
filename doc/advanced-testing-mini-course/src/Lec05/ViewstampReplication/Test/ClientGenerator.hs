@@ -11,8 +11,8 @@ vrClientGenerator :: SingleStateGenerator
 vrClientGenerator = SingleStateGenerator
   0
   (+1)
-  (\ curRequestNumber ->
-     let msg = "msg" ++ show curRequestNumber
+  (\ (ClientId c) curRequestNumber ->
+     let msg = "msg" ++ show c ++ "-" ++ show curRequestNumber
      in (NodeId 0, encShow $ VRRequest msg curRequestNumber))
 
 vrClientDelay :: NominalDiffTime
