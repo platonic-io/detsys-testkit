@@ -122,7 +122,7 @@ runWorker d = initialize >> go
                   rSetStdGen (dRandom d) gen'
                   mapM_ (handleOutput codec nodeId) outputs
 
-    handleEvent (TimerEventE (TimerEvent nodeId time)) = do
+    handleEvent (TimerEventE (TimerEvent nodeId timerId time)) = do
       r <- lookupReceiver nodeId (dConfiguration d)
       case r of
         Nothing -> dReportError d ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
@@ -145,7 +145,7 @@ runWorker d = initialize >> go
       nRespond (dNetwork d) clientId (cEncodeResponse codec response)
     handleOutput codec fromNodeId (InternalMessageOut toNodeId msg) =
       nSend (dNetwork d) fromNodeId toNodeId (cEncodeMessage codec msg)
-    handleOutput _codec fromNodeId (RegisterTimerSeconds secs) =
-      registerTimer (dTimerWheel d) (dClock d) fromNodeId secs
-    handleOutput _codec fromNodeId (ResetTimerSeconds secs) =
-      resetTimer (dTimerWheel d) (dClock d) fromNodeId secs
+    handleOutput _codec fromNodeId (RegisterTimerSeconds timerId secs) =
+      registerTimer (dTimerWheel d) (dClock d) fromNodeId timerId secs
+    handleOutput _codec fromNodeId (ResetTimerSeconds timerId secs) =
+      resetTimer (dTimerWheel d) (dClock d) fromNodeId timerId secs

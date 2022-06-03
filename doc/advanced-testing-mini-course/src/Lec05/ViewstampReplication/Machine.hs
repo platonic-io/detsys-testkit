@@ -275,12 +275,12 @@ the request, and k is the commit-number.
   v <- use currentViewNumber
   k <- use commitNumber
   broadCastReplicas $ Prepare v (InternalClientMessage op c s) cOp k
-  resetTimerSeconds =<< use broadCastInterval
+  resetTimerSeconds 0 =<< use broadCastInterval
 machine (InternalMessage _time from iMsg) = case iMsg of
   Prepare v m n k -> do
     checkViewNumberOfMessage v
     checkIsBackup v
-    resetTimerSeconds =<< use broadCastInterval
+    resetTimerSeconds 0 =<< use broadCastInterval
     {- 4.1 Normal Operation
 4. Backups process PREPARE messages in order: a
 backup won’t accept a prepare with op-number n
@@ -342,7 +342,7 @@ entry in the client-table to contain the result.
   Commit v k -> do
     checkViewNumberOfMessage v
     checkIsBackup v
-    resetTimerSeconds =<< use broadCastInterval
+    resetTimerSeconds 0 =<< use broadCastInterval
     {- 4.1 Normal Operation
 7. When a backup learns of a commit, it waits un-
 til it has the request in its log (which may require
@@ -505,7 +505,7 @@ recovery protocol is complete.
 
 machineInit :: VR s o r ()
 machineInit = do
-  registerTimerSeconds =<< use broadCastInterval
+  registerTimerSeconds 0 =<< use broadCastInterval
 
 primaryTock :: Time -> VR s o r ()
 primaryTock _t = do
@@ -517,7 +517,7 @@ primaryTock _t = do
   -- actually we should resend `Prepare` see 4.1 Normal Operation before algorithm
   guard $ CommitNumber o == k
   broadCastReplicas $ Commit v k
-  registerTimerSeconds =<< use broadCastInterval
+  registerTimerSeconds 0 =<< use broadCastInterval
 
 replicaTock :: Time -> VR s o r ()
 replicaTock _t = do
