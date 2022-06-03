@@ -35,8 +35,8 @@ data SingleStateGeneratorState s
   | SGSWaiting Time s
 
 singleStateGenerator :: SingleStateGenerator -> Clock -> NominalDiffTime
-  -> IO ClientGenerator
-singleStateGenerator (SingleStateGenerator initgs next gen) clock delay = do
+  -> ClientId -> IO ClientGenerator
+singleStateGenerator (SingleStateGenerator initgs next gen) clock delay clientId = do
   startingTime <- cGetCurrentTime clock
   ref <- newIORef (SGSWaiting startingTime initgs)
   return $ ClientGenerator
@@ -55,7 +55,7 @@ singleStateGenerator (SingleStateGenerator initgs next gen) clock delay = do
           SGSWaiting t gs -> do
             let
               (node, msg) = gen gs
-              ev = NetworkEventE (NetworkEvent node (ClientRequest t (ClientId 0) msg))
+              ev = NetworkEventE (NetworkEvent node (ClientRequest t clientId msg))
               action = do
                 writeIORef ref (SGSActive gs)
                 return ev
@@ -68,4 +68,4 @@ data GeneratorSchema
 
 makeGenerator :: GeneratorSchema -> Clock -> IO ClientGenerator
 makeGenerator NoGenerator _clock = return emptyGenerator
-makeGenerator (SingleState ssg delay) clock = singleStateGenerator ssg clock delay
+makeGenerator (SingleState ssg delay) clock = singleStateGenerator ssg clock delay (ClientId 0)
