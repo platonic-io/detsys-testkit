@@ -136,7 +136,10 @@ pickLatest p@(PrimaryRecoveryResponse _l _o k) p'@(PrimaryRecoveryResponse _l' _
 
 findClientInfoForOp :: OpNumber -> VR s o r (ClientId, RequestNumber)
 findClientInfoForOp on = use $
-  clientTable.to (Map.filter (\cs -> copNumber cs == on)).to Map.findMin.to (fmap requestNumber)
+  clientTable
+  .to (Map.filter (\cs -> copNumber cs == on))
+  .to Map.findMin
+  .to (fmap requestNumber)
 
 initViewChange :: VR s o r ()
 initViewChange = do
@@ -179,21 +182,22 @@ executeReplicatedMachine op = do
   currentState .= cs'
   return result
 
-executeUpToOrBeginStateTransfer :: CommitNumber -> VR s o r ()
-executeUpToOrBeginStateTransfer (-1) = do
+executeUpToOrBeginStateTransfer :: ViewNumber -> CommitNumber -> VR s o r ()
+executeUpToOrBeginStateTransfer _ (-1) = do
   -- -1 means nothing has been comitted yet!
   return ()
-executeUpToOrBeginStateTransfer k = do
+executeUpToOrBeginStateTransfer v k = do
   myK <- use commitNumber
   guard $ myK <= k
-  forM_ [succ myK .. k] $ \(CommitNumber v) -> do
-    l <- use theLog
-    case logLookup (OpNumber v) l of
+  l <- use theLog
+  forM_ [succ myK .. k] $ \(CommitNumber x) -> do
+    let o = OpNumber x
+    case logLookup o l of
       Nothing -> initStateTransfer
       Just op -> do
-        _r <- executeReplicatedMachine op
-        -- update clientTable?
-        return ()
+        result <- executeReplicatedMachine op
+        (theClientId, theRequestNumber) <- findClientInfoForOp o
+        clientTable.at theClientId .= Just (Completed theRequestNumber o result v)
   commitNumber .= k
 
 executePrimary :: ViewNumber -> OpNumber -> VR s o r ()
@@ -288,8 +292,8 @@ current view-number, m is the message it received
 from the client, n is the op-number it assigned to
 the request, and k is the commit-number.
   -}
-  opNumber += 1
   cOp <- use opNumber
+  opNumber += 1
   theLog %= (|> op)
   clientTable.at c .= Just (InFlight s cOp)
   v <- use currentViewNumber
@@ -317,7 +321,7 @@ ones have prepared locally.
     -}
     myOp <- use opNumber
     when (succ myOp /= n) ereturn -- we only process messages in order
-    executeUpToOrBeginStateTransfer k
+    executeUpToOrBeginStateTransfer v k
     opNumber .= n
     theLog %= (|> (m^.operation))
     clientTable.at (m^.clientId) .= Just (InFlight (m^.clientRequestNumber) n)
@@ -360,7 +364,7 @@ forming the up-call to the service code, increments
 its commit-number, updates the client’s entry in the
 client-table, but does not send the reply to the client.
     -}
-    executeUpToOrBeginStateTransfer k
+    executeUpToOrBeginStateTransfer v k
   StartViewChange v -> do
     let i = from
     {- 4.2 View Change
@@ -426,7 +430,7 @@ table, and sends the replies to the clients.
         theLog .= highestLog
         opNumber .= highestN
         broadCastReplicas $ StartView v highestLog highestN highestCommit
-        executeUpToOrBeginStateTransfer highestCommit
+        executePrimary v $ let CommitNumber x = highestCommit in OpNumber x
       else ereturn
   StartView v l n k -> do
     mVn <- use currentViewNumber
@@ -447,8 +451,9 @@ and update the information in their client-table.
 -}
     theLog .= l
     opNumber .= n
+    currentViewNumber .= v
     currentStatus .= Normal
-    executeUpToOrBeginStateTransfer k
+    executeUpToOrBeginStateTransfer v k
   Recovery x -> do
     let i = from
     {- 4.3 Recovery
@@ -486,6 +491,7 @@ recovery protocol is complete.
 -}
     guardM $ use (currentStatus.to (== Recovering))
     guardM $ use (currentNonce .to (== Just x))
+    -- TODO: We are not checking viewnumber here! Probably should do that
     howMany <- addRecoveryResponse x from
     case resp of
       FromReplica -> return ()
@@ -503,7 +509,7 @@ recovery protocol is complete.
           recoveryResponses .= mempty
           currentNonce .= Nothing
           primaryResponse .= Nothing
-          executeUpToOrBeginStateTransfer k
+          executeUpToOrBeginStateTransfer v k
 
 machineInit :: VR s o r ()
 machineInit = do
