@@ -5,7 +5,6 @@ import Control.Monad (unless)
 import System.Environment
 import System.Exit (die)
 
-import Lec05.ClientGenerator
 import Lec05.ErrorReporter
 import Lec05.EventLoop
 import Lec05.StateMachine
@@ -20,9 +19,9 @@ import Lec05.Time
 
 import qualified Lec04.LineariseWithFault as Lec4
 
-import Lec05.ViewstampReplication.State (ReplicatedStateMachine(..))
 import qualified Lec05.ViewstampReplication.Machine as VR
-import Lec05.ViewstampReplication.Message
+import Lec05.ViewstampReplication.Test.ClientGenerator (vrClientGenerator)
+import Lec05.ViewstampReplication.Test.Model (smI, step, initModel, markFailure)
 
 ------------------------------------------------------------------------
 
@@ -37,43 +36,6 @@ runMany origxs f = go (1 :: Int) origxs
       then go (succ i) xs
       else do
         die $ "Failed iteration: " ++ show i ++ " : Seed " ++ show (unSeed x)
-
-smI :: ReplicatedStateMachine [String] String [String]
-smI = ReplicatedStateMachine $ \ s o -> (o:s, o:s)
-
-type Model = [String]
-type Command = VRRequest String
-type Response = VRResponse [String]
-
-step :: Model -> Command -> (Model, Response)
-step xs (VRRequest op rn) = (op:xs, VRReply 0 rn (op:xs))
-
-initModel :: [String]
-initModel = []
-
-markFailure :: Lec4.History' Command Response -> Lec4.History' Command Response
-markFailure (Lec4.History ops) = Lec4.History (finishClients [] $ map go ops)
-  where
-    go i@Lec4.Invoke{} = i
-    go f@Lec4.Fail{} = f
-    go (Lec4.Ok p VROnlyOneInflightAllowed{}) = Lec4.Fail p Lec4.FAIL
-    go o@Lec4.Ok{} = o
-
-    remove x = filter (/= x)
-
-    finishClients ps [] = [ Lec4.Fail p Lec4.FAIL | p <- ps]
-    finishClients ps (op:h) = case op of
-      Lec4.Invoke p _ -> op : finishClients (p:ps) h
-      Lec4.Ok p _ -> op : finishClients (remove p ps) h
-      Lec4.Fail p _ -> op : finishClients (remove p ps) h
-
-vrClientGenerator :: SingleStateGenerator
-vrClientGenerator = SingleStateGenerator
-  0
-  (+1)
-  (\ curRequestNumber ->
-     let msg = "msg" ++ show curRequestNumber
-     in (NodeId 0, encShow $ VRRequest msg curRequestNumber))
 
 vrClientDelay :: NominalDiffTime
 vrClientDelay = 2

@@ -244,8 +244,10 @@ has already been executed.
       case cs of
         Completed s' _v r vn
           | s' == s -> do
-              -- should check that it has been executed?
               respond c (VRReply vn s r)
+              ereturn
+          | s < s' -> do
+              respond c (VRRequestNumberTooLow s s')
               ereturn
           | otherwise -> return ()
         InFlight _s' _ -> do
@@ -329,6 +331,7 @@ entry in the client-table to contain the result.
             -- shouldn't happen, we get a confirmation but don't remember the op
             ereturn
           Just op -> do
+            -- TODO: maybe we can't execute this one yet, or we can execute more
             result <- executeReplicatedMachine op
             commitNumber .= cn
             (theClientId, theRequestNumber) <- findClientInfoForOp n
