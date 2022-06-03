@@ -19,4 +19,4 @@ vrClientDelay :: NominalDiffTime
 vrClientDelay = 2
 
 vrGeneratorSchema :: GeneratorSchema
-vrGeneratorSchema = SingleState vrClientGenerator vrClientDelay
+vrGeneratorSchema = Multiple vrClientGenerator vrClientDelay 2
