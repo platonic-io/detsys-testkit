@@ -20,6 +20,10 @@ newtype ClientId = ClientId { unClientId :: Int }
   deriving stock (Eq, Ord)
   deriving newtype (Read, Show, ToExpr)
 
+newtype TimerId = TimerId Int
+  deriving stock (Eq, Ord, Show)
+  deriving newtype Num
+
 type SMStep state message response
   = state -> StdGen -> ([Output response message], state, StdGen)
 
@@ -40,8 +44,8 @@ data Input request message
 data Output response message
   = ClientResponse ClientId response
   | InternalMessageOut NodeId message
-  | RegisterTimerSeconds Pico
-  | ResetTimerSeconds Pico
+  | RegisterTimerSeconds TimerId Pico
+  | ResetTimerSeconds TimerId Pico
   deriving (Eq, Show)
 
 noInit :: SMStep state message response

@@ -16,12 +16,12 @@ data Event
 data NetworkEvent = NetworkEvent NodeId (Input ByteString ByteString)
   deriving Show
 
-data TimerEvent = TimerEvent NodeId Time
+data TimerEvent = TimerEvent NodeId TimerId Time
   deriving Show
 
 getEventTime :: Event -> Time
-getEventTime (TimerEventE   (TimerEvent   _nodeId time))  = time
-getEventTime (NetworkEventE (NetworkEvent _nodeId input)) = getInputTime input
+getEventTime (TimerEventE   (TimerEvent   _nodeId _timerId time)) = time
+getEventTime (NetworkEventE (NetworkEvent _nodeId input))         = getInputTime input
   where
     getInputTime :: Input request message -> Time
     getInputTime (ClientRequest   time _cid _req) = time

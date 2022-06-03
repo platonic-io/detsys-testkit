@@ -37,11 +37,11 @@ send nid msg = lift (lift (lift (tell [InternalMessageOut nid msg])))
 respond :: ClientId -> resp -> SMM s msg resp ()
 respond cid resp = lift (lift (lift (tell [ClientResponse cid resp])))
 
-registerTimerSeconds :: Pico -> SMM s msg resp ()
-registerTimerSeconds secs = lift (lift (lift (tell [RegisterTimerSeconds secs])))
+registerTimerSeconds :: TimerId -> Pico -> SMM s msg resp ()
+registerTimerSeconds timerId secs = lift (lift (lift (tell [RegisterTimerSeconds timerId secs])))
 
-resetTimerSeconds :: Pico -> SMM s msg resp ()
-resetTimerSeconds secs = lift (lift (lift (tell [ResetTimerSeconds secs])))
+resetTimerSeconds :: TimerId -> Pico -> SMM s msg resp ()
+resetTimerSeconds timerId secs = lift (lift (lift (tell [ResetTimerSeconds timerId secs])))
 
 ereturn :: SMM s msg resp a
 ereturn = ContT (const (return Keep))
