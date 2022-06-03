@@ -5,7 +5,6 @@ import Control.Monad (unless)
 import System.Environment
 import System.Exit (die)
 
-import Lec05.ClientGenerator
 import Lec05.ErrorReporter
 import Lec05.EventLoop
 import Lec05.StateMachine
@@ -20,6 +19,7 @@ import Lec05.Time
 
 import qualified Lec04.LineariseWithFault as Lec4
 
+import Lec05.ViewstampReplication.Test.ClientGenerator (vrClientGenerator)
 import Lec05.ViewstampReplication.State (ReplicatedStateMachine(..))
 import qualified Lec05.ViewstampReplication.Machine as VR
 import Lec05.ViewstampReplication.Message
@@ -66,14 +66,6 @@ markFailure (Lec4.History ops) = Lec4.History (finishClients [] $ map go ops)
       Lec4.Invoke p _ -> op : finishClients (p:ps) h
       Lec4.Ok p _ -> op : finishClients (remove p ps) h
       Lec4.Fail p _ -> op : finishClients (remove p ps) h
-
-vrClientGenerator :: SingleStateGenerator
-vrClientGenerator = SingleStateGenerator
-  0
-  (+1)
-  (\ curRequestNumber ->
-     let msg = "msg" ++ show curRequestNumber
-     in (NodeId 0, encShow $ VRRequest msg curRequestNumber))
 
 vrClientDelay :: NominalDiffTime
 vrClientDelay = 2
