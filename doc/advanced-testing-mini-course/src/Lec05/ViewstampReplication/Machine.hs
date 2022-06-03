@@ -136,7 +136,10 @@ pickLatest p@(PrimaryRecoveryResponse _l _o k) p'@(PrimaryRecoveryResponse _l' _
 
 findClientInfoForOp :: OpNumber -> VR s o r (ClientId, RequestNumber)
 findClientInfoForOp on = use $
-  clientTable.to (Map.filter (\cs -> copNumber cs == on)).to Map.findMin.to (fmap requestNumber)
+  clientTable
+  .to (Map.filter (\cs -> copNumber cs == on))
+  .to Map.findMin
+  .to (fmap requestNumber)
 
 initViewChange :: VR s o r ()
 initViewChange = do
@@ -179,22 +182,43 @@ executeReplicatedMachine op = do
   currentState .= cs'
   return result
 
-executeUpToOrBeginStateTransfer :: CommitNumber -> VR s o r ()
-executeUpToOrBeginStateTransfer (-1) = do
+executeUpToOrBeginStateTransfer :: ViewNumber -> CommitNumber -> VR s o r ()
+executeUpToOrBeginStateTransfer _ (-1) = do
   -- -1 means nothing has been comitted yet!
   return ()
-executeUpToOrBeginStateTransfer k = do
+executeUpToOrBeginStateTransfer v k = do
   myK <- use commitNumber
   guard $ myK <= k
-  forM_ [succ myK .. k] $ \(CommitNumber v) -> do
-    l <- use theLog
-    case logLookup (OpNumber v) l of
+  l <- use theLog
+  forM_ [succ myK .. k] $ \(CommitNumber x) -> do
+    let o = OpNumber x
+    case logLookup o l of
       Nothing -> initStateTransfer
       Just op -> do
-        _r <- executeReplicatedMachine op
-        -- update clientTable?
-        return ()
+        result <- executeReplicatedMachine op
+        (theClientId, theRequestNumber) <- findClientInfoForOp o
+        clientTable.at theClientId .= Just (Completed theRequestNumber o result v)
   commitNumber .= k
+
+executePrimary :: ViewNumber -> OpNumber -> VR s o r ()
+executePrimary v (OpNumber commitTo) = do
+  CommitNumber myK <- use commitNumber
+  guard $ myK <= commitTo
+  l <- use theLog
+  forM_ [succ myK .. commitTo] $ \k -> do
+    let o = OpNumber k
+    case logLookup o l of
+      Nothing -> do
+        -- shouldn't happen, we get a confirmation but don't remember the op
+        error "Trying to commit operation not in log"
+      Just op -> do
+        -- TODO: maybe we can't execute this one yet, or we can execute more
+        result <- executeReplicatedMachine op
+        (theClientId, theRequestNumber) <- findClientInfoForOp o
+        clientTable.at theClientId .= Just (Completed theRequestNumber o result v)
+        -- TODO: should we gc primaryPrepareOk?
+        respond theClientId (VRReply v theRequestNumber result)
+  commitNumber .= CommitNumber commitTo
 
 {- 4.1 Normal Operation
 The protocol description assumes all participating
@@ -295,8 +319,10 @@ sends a 〈PREPAREOK v, n, i〉 message to the pri-
 mary to indicate that this operation and all earlier
 ones have prepared locally.
     -}
-    executeUpToOrBeginStateTransfer k
-    opNumber += 1 -- or save n?
+    myOp <- use opNumber
+    when (succ myOp /= n) ereturn -- we only process messages in order
+    executeUpToOrBeginStateTransfer v k
+    opNumber .= n
     theLog %= (|> (m^.operation))
     clientTable.at (m^.clientId) .= Just (InFlight (m^.clientRequestNumber) n)
     sendPrimary $ PrepareOk v n {- i -} -- we don't need to add i since
@@ -319,25 +345,11 @@ the client provided in the request, and x is the result
 of the up-call. The primary also updates the client’s
 entry in the client-table to contain the result.
     -}
-    let cn = let OpNumber x = n in CommitNumber x
-    guardM $ use (commitNumber.to (== pred cn))
     howMany <- addPrepareOk n i
     isQ <- isQuorum howMany
     if isQ
       then do
-        l <- use theLog
-        case logLookup n l of
-          Nothing -> do
-            -- shouldn't happen, we get a confirmation but don't remember the op
-            ereturn
-          Just op -> do
-            -- TODO: maybe we can't execute this one yet, or we can execute more
-            result <- executeReplicatedMachine op
-            commitNumber .= cn
-            (theClientId, theRequestNumber) <- findClientInfoForOp n
-            clientTable.at theClientId .= Just (Completed theRequestNumber n result v)
-            -- TODO: should we gc primaryPrepareOk?
-            respond theClientId (VRReply v theRequestNumber result)
+        executePrimary v n
       else ereturn
   Commit v k -> do
     checkViewNumberOfMessage v
@@ -352,7 +364,7 @@ forming the up-call to the service code, increments
 its commit-number, updates the client’s entry in the
 client-table, but does not send the reply to the client.
     -}
-    executeUpToOrBeginStateTransfer k
+    executeUpToOrBeginStateTransfer v k
   StartViewChange v -> do
     let i = from
     {- 4.2 View Change
@@ -418,7 +430,7 @@ table, and sends the replies to the clients.
         theLog .= highestLog
         opNumber .= highestN
         broadCastReplicas $ StartView v highestLog highestN highestCommit
-        executeUpToOrBeginStateTransfer highestCommit
+        executePrimary v $ let CommitNumber x = highestCommit in OpNumber x
       else ereturn
   StartView v l n k -> do
     mVn <- use currentViewNumber
@@ -437,16 +449,11 @@ erations known to be committed that they haven’t
 executed previously, advance their commit-number,
 and update the information in their client-table.
 -}
-    oldLog <- use theLog
-
     theLog .= l
     opNumber .= n
+    currentViewNumber .= v
     currentStatus .= Normal
-    executeUpToOrBeginStateTransfer k
-
-    if length oldLog > length l
-      then error "We had non-commited entries in log"
-      else ereturn
+    executeUpToOrBeginStateTransfer v k
   Recovery x -> do
     let i = from
     {- 4.3 Recovery
@@ -484,6 +491,7 @@ recovery protocol is complete.
 -}
     guardM $ use (currentStatus.to (== Recovering))
     guardM $ use (currentNonce .to (== Just x))
+    -- TODO: We are not checking viewnumber here! Probably should do that
     howMany <- addRecoveryResponse x from
     case resp of
       FromReplica -> return ()
@@ -501,7 +509,7 @@ recovery protocol is complete.
           recoveryResponses .= mempty
           currentNonce .= Nothing
           primaryResponse .= Nothing
-          executeUpToOrBeginStateTransfer k
+          executeUpToOrBeginStateTransfer v k
 
 machineInit :: VR s o r ()
 machineInit = do
