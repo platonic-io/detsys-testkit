@@ -8,7 +8,7 @@ import Control.Concurrent.Async
 import Control.Exception
 
 import Lec05.Agenda
-import Lec05.ClientGenerator (SingleStateGenerator)
+import Lec05.ClientGenerator (GeneratorSchema)
 import Lec05.Codec
 import Lec05.History
 import Lec05.ErrorReporter
@@ -28,19 +28,19 @@ import Lec05.Deployment
 eventLoopProduction :: [SomeCodecSM] -> IO ()
 eventLoopProduction = eventLoop (Options Production) <=< makeConfiguration
 
-eventLoopSimulation :: Seed -> Agenda -> History -> [SomeCodecSM] -> IO Collector
-eventLoopSimulation seed agenda history nodes = do
+eventLoopSimulation :: Seed -> Agenda -> History -> [SomeCodecSM] -> GeneratorSchema -> IO Collector
+eventLoopSimulation seed agenda history nodes generatorSchema = do
   config <- makeConfiguration nodes
   collector <- newCollector
-  eventLoop (Options (Simulation seed agenda history Nothing collector Nothing defaultRandomDist)) config
+  eventLoop (Options (Simulation seed agenda history Nothing collector generatorSchema defaultRandomDist)) config
   return collector
 
 eventLoopFaultySimulation :: Seed -> Agenda -> History -> FailureSpec -> [SomeCodecSM]
-  -> Maybe (SingleStateGenerator, NominalDiffTime) -> IO Collector
-eventLoopFaultySimulation seed agenda history failureSpec nodes mClientGenerator = do
+  -> GeneratorSchema -> IO Collector
+eventLoopFaultySimulation seed agenda history failureSpec nodes generatorSchema = do
   config <- makeConfiguration nodes
   collector <- newCollector
-  eventLoop (Options (Simulation seed agenda history (Just failureSpec) collector mClientGenerator defaultRandomDist)) config
+  eventLoop (Options (Simulation seed agenda history (Just failureSpec) collector generatorSchema defaultRandomDist)) config
   return collector
 
 echoAgenda :: Agenda

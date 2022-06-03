@@ -5,6 +5,7 @@ import Control.Monad (unless)
 import System.Environment
 import System.Exit (die)
 
+import Lec05.ClientGenerator
 import Lec05.ErrorReporter
 import Lec05.EventLoop
 import Lec05.StateMachine
@@ -20,7 +21,7 @@ import Lec05.Time
 import qualified Lec04.LineariseWithFault as Lec4
 
 import qualified Lec05.ViewstampReplication.Machine as VR
-import Lec05.ViewstampReplication.Test.ClientGenerator (vrClientGenerator)
+import Lec05.ViewstampReplication.Test.ClientGenerator (vrGeneratorSchema)
 import Lec05.ViewstampReplication.Test.Model (smI, step, initModel, markFailure)
 
 ------------------------------------------------------------------------
@@ -37,16 +38,13 @@ runMany origxs f = go (1 :: Int) origxs
       else do
         die $ "Failed iteration: " ++ show i ++ " : Seed " ++ show (unSeed x)
 
-vrClientDelay :: NominalDiffTime
-vrClientDelay = 2
-
 main :: IO ()
 main = do
   args <- getArgs
   case args of
     ["--simulation"] -> do
       h <- newHistory
-      _collector <- eventLoopSimulation (Seed 0) echoAgenda h [SomeCodecSM idCodec echoSM]
+      _collector <- eventLoopSimulation (Seed 0) echoAgenda h [SomeCodecSM idCodec echoSM] NoGenerator
       _history <- readHistory h
       putStrLn "Can't print history yet, need Show/Pretty constraints for parameters..."
     ["vr", "--simulation", seed, fp] -> do
@@ -69,7 +67,7 @@ main = do
         seed' = read seed
         endTime = addTimeSeconds 3600 epoch
       collector <- eventLoopFaultySimulation (Seed seed') (VR.agenda endTime) h fs
-        [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes] (Just (vrClientGenerator, vrClientDelay))
+        [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes] vrGeneratorSchema
       history <- readHistory h
       mapM_ printE history
       -- let's print the errors again so they are easier to see.
@@ -90,7 +88,7 @@ main = do
           fs = FailureSpec (NetworkFaults 0.15)
           endTime = addTimeSeconds 3600 epoch
         collector <- eventLoopFaultySimulation seed (VR.agenda endTime) h fs
-          [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes] (Just (vrClientGenerator, vrClientDelay))
+          [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes] vrGeneratorSchema
         history <- readHistory h
         -- let's print the errors again so they are easier to see.
         reportedErrors <- readFromCollector collector
