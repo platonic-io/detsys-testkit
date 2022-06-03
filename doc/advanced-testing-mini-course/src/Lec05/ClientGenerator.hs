@@ -1,8 +1,10 @@
 {-# LANGUAGE ExistentialQuantification #-}
 module Lec05.ClientGenerator where
 
+import Control.Monad (forM_)
 import Data.ByteString.Lazy (ByteString)
 import Data.IORef
+import qualified Data.Map as Map
 
 import Lec05.Event
 import Lec05.StateMachine
@@ -62,10 +64,51 @@ singleStateGenerator (SingleStateGenerator initgs next gen) clock delay clientId
             return (Later t action)
     }
 
+runManyIndependent :: (ClientId -> IO ClientGenerator) -> [ClientId] -> IO ClientGenerator
+runManyIndependent _constructor [] = return emptyGenerator
+runManyIndependent  constructor cs = do
+  ref <- newIORef mempty
+  forM_ cs $ \c -> do
+    g <- constructor c
+    modifyIORef' ref $ Map.insert c g
+  return $ ClientGenerator
+    { cgRespond = \ c b -> do
+        gens <- readIORef ref
+        case Map.lookup c gens of
+          Nothing -> error "Client response from unknown client"
+          Just g  -> do
+            cgRespond g c b
+    , cgNextClientRequest = do
+        gens <- readIORef ref
+        go (Map.elems gens) -- this is deterministic and fine
+    }
+  where
+    go [] = return CurrentlyNoRequests
+    go (g:gs) = do
+      a <- cgNextClientRequest g
+      case a of
+        CurrentlyNoRequests -> go gs
+        Now{} -> return a
+        Later t e -> go' t e gs
+
+    go' t e [] = return $ Later t e
+    go' t e (g:gs) = do
+      a <- cgNextClientRequest g
+      case a of
+        CurrentlyNoRequests -> go gs
+        Now{} -> return a
+        Later t' e'
+          | t <= t'   -> go' t  e  gs
+          | otherwise -> go' t' e' gs
+
+
 data GeneratorSchema
   = NoGenerator
   | SingleState SingleStateGenerator NominalDiffTime
+  | Multiple SingleStateGenerator NominalDiffTime Int
 
 makeGenerator :: GeneratorSchema -> Clock -> IO ClientGenerator
 makeGenerator NoGenerator _clock = return emptyGenerator
 makeGenerator (SingleState ssg delay) clock = singleStateGenerator ssg clock delay (ClientId 0)
+makeGenerator (Multiple ssg delay n) clock
+  = runManyIndependent (singleStateGenerator ssg clock delay) [ClientId i | i <- [0..pred n]]
