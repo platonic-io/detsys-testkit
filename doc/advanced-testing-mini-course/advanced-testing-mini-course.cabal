@@ -86,6 +86,7 @@ library
     Lec05.ViewstampReplication.Message
     Lec05.ViewstampReplication.State
     Lec05.ViewstampReplication.Test.ClientGenerator
+    Lec05.ViewstampReplication.Test.Model
     Lec05SimulationTesting
     Lec06WhiteboxCheckers
     Lec07EfficientEventLoop
