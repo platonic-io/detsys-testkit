@@ -196,6 +196,26 @@ executeUpToOrBeginStateTransfer k = do
         return ()
   commitNumber .= k
 
+executePrimary :: ViewNumber -> OpNumber -> VR s o r ()
+executePrimary v (OpNumber commitTo) = do
+  CommitNumber myK <- use commitNumber
+  guard $ myK <= commitTo
+  l <- use theLog
+  forM_ [succ myK .. commitTo] $ \k -> do
+    let o = OpNumber k
+    case logLookup o l of
+      Nothing -> do
+        -- shouldn't happen, we get a confirmation but don't remember the op
+        error "Trying to commit operation not in log"
+      Just op -> do
+        -- TODO: maybe we can't execute this one yet, or we can execute more
+        result <- executeReplicatedMachine op
+        (theClientId, theRequestNumber) <- findClientInfoForOp o
+        clientTable.at theClientId .= Just (Completed theRequestNumber o result v)
+        -- TODO: should we gc primaryPrepareOk?
+        respond theClientId (VRReply v theRequestNumber result)
+  commitNumber .= CommitNumber commitTo
+
 {- 4.1 Normal Operation
 The protocol description assumes all participating
 replicas are in the same view. Every message sent from
@@ -268,8 +288,8 @@ current view-number, m is the message it received
 from the client, n is the op-number it assigned to
 the request, and k is the commit-number.
   -}
-  cOp <- use opNumber
   opNumber += 1
+  cOp <- use opNumber
   theLog %= (|> op)
   clientTable.at c .= Just (InFlight s cOp)
   v <- use currentViewNumber
@@ -295,8 +315,10 @@ sends a 〈PREPAREOK v, n, i〉 message to the pri-
 mary to indicate that this operation and all earlier
 ones have prepared locally.
     -}
+    myOp <- use opNumber
+    when (succ myOp /= n) ereturn -- we only process messages in order
     executeUpToOrBeginStateTransfer k
-    opNumber += 1 -- or save n?
+    opNumber .= n
     theLog %= (|> (m^.operation))
     clientTable.at (m^.clientId) .= Just (InFlight (m^.clientRequestNumber) n)
     sendPrimary $ PrepareOk v n {- i -} -- we don't need to add i since
@@ -319,25 +341,11 @@ the client provided in the request, and x is the result
 of the up-call. The primary also updates the client’s
 entry in the client-table to contain the result.
     -}
-    let cn = let OpNumber x = n in CommitNumber x
-    guardM $ use (commitNumber.to (== pred cn))
     howMany <- addPrepareOk n i
     isQ <- isQuorum howMany
     if isQ
       then do
-        l <- use theLog
-        case logLookup n l of
-          Nothing -> do
-            -- shouldn't happen, we get a confirmation but don't remember the op
-            ereturn
-          Just op -> do
-            -- TODO: maybe we can't execute this one yet, or we can execute more
-            result <- executeReplicatedMachine op
-            commitNumber .= cn
-            (theClientId, theRequestNumber) <- findClientInfoForOp n
-            clientTable.at theClientId .= Just (Completed theRequestNumber n result v)
-            -- TODO: should we gc primaryPrepareOk?
-            respond theClientId (VRReply v theRequestNumber result)
+        executePrimary v n
       else ereturn
   Commit v k -> do
     checkViewNumberOfMessage v
@@ -437,16 +445,10 @@ erations known to be committed that they haven’t
 executed previously, advance their commit-number,
 and update the information in their client-table.
 -}
-    oldLog <- use theLog
-
     theLog .= l
     opNumber .= n
     currentStatus .= Normal
     executeUpToOrBeginStateTransfer k
-
-    if length oldLog > length l
-      then error "We had non-commited entries in log"
-      else ereturn
   Recovery x -> do
     let i = from
     {- 4.3 Recovery
