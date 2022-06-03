@@ -61,3 +61,11 @@ singleStateGenerator (SingleStateGenerator initgs next gen) clock delay = do
                 return ev
             return (Later t action)
     }
+
+data GeneratorSchema
+  = NoGenerator
+  | SingleState SingleStateGenerator NominalDiffTime
+
+makeGenerator :: GeneratorSchema -> Clock -> IO ClientGenerator
+makeGenerator NoGenerator _clock = return emptyGenerator
+makeGenerator (SingleState ssg delay) clock = singleStateGenerator ssg clock delay
