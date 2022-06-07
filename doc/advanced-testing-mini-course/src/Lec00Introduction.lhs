@@ -1,6 +1,16 @@
 Advanced property-based testing mini-course
 ===========================================
 
++ XXX: PBT in a nutshell?
+
++ Background
+  - Introduced to property-based testing (PBT) in 2006 and 2007
+  - Testing stateful programs for race conditions using PBT
+  - Testing distributed database with Jepsen
+  - Simulation testing
+
+  - XXX: Ask to write something up (paper / blog post), apply it to other components, share the knowledge better...
+
 + Goals:
   - Show how to test stateful (i.e. impure/monadic) programs using
     property-based testing in general;
@@ -28,7 +38,7 @@ Advanced property-based testing mini-course
 Structure
 ---------
 
-Each lecture has the following structure:
+There are five lectures (so far), and each lecture has the following structure:
 
 - Motiviation: explains why we are doing what we are about to do;
 - Plan: how we will do it;
@@ -42,7 +52,7 @@ Each lecture has the following structure:
 
 The lectures build upon each other. We start by modelling and testing a simple
 counter using a state machine in lecture 1, we then reuse the same state machine
-model to test the counter of thread-safety using linearisability in lecture 2.
+model to test the counter for thread-safety using linearisability in lecture 2.
 In lecture 3 we will implement a queue and a web service that uses said queue,
 the state machine model for the queue and the real implementation of the queue
 will be contract tested to ensure that the model is faithful to the

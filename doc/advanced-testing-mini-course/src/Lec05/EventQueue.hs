@@ -6,6 +6,7 @@ import Data.IORef
 import System.Timeout (timeout)
 
 import Lec05.Agenda
+import Lec05.ClientGenerator
 import Lec05.Event
 import Lec05.Time
 
@@ -35,8 +36,8 @@ realEventQueue _clock = do
             Just event -> return event
     }
 
-fakeEventQueue :: Agenda -> Clock -> IO EventQueue
-fakeEventQueue a0 clock = do
+fakeEventQueue :: Agenda -> Clock -> ClientGenerator -> IO EventQueue
+fakeEventQueue a0 clock clientGenerator = do
   agenda <- newIORef a0
   return EventQueue
     { eqEnqueue = enqueue agenda
@@ -49,19 +50,23 @@ fakeEventQueue a0 clock = do
     dequeue :: IORef Agenda -> DequeueTimeout -> IO Event
     dequeue agenda dequeueTimeout = do
       a <- readIORef agenda
-      case pop a of
-        Nothing -> case dequeueTimeout of
-          NoTimeout -> return (CommandEventE Exit)
-          Timeout _micros retry -> retry
-        Just ((time, event), a') -> case dequeueTimeout of
-          NoTimeout -> do
-            writeIORef agenda a'
-            return event
-          Timeout micros retry -> do
-            now <- cGetCurrentTime clock
-            let later = addTimeMicros micros now
-            if time <= later
-            then do
-              writeIORef agenda a'
-              return event
-            else retry
+      now <- cGetCurrentTime clock
+      ncr <- cgNextClientRequest clientGenerator
+      let allEvents = foldr (.) id
+            [ case pop a of
+                Nothing -> id
+                Just ((time, event), a') -> push (time, writeIORef agenda a' >> return event)
+            , case dequeueTimeout of
+                NoTimeout -> id
+                Timeout micros retry -> push (addTimeMicros micros now, retry)
+            , case ncr of
+                CurrentlyNoRequests -> id
+                Now e -> push (now, return e)
+                Later t e -> push (t, e)
+            ]
+            emptyAgenda
+      case pop allEvents of
+        Nothing -> return (CommandEventE Exit)
+        Just ((_time, actionToGenerateEvent),_) ->
+          -- set time?
+          actionToGenerateEvent

@@ -1,7 +1,9 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE NumericUnderscores #-}
 
-module Lec05.Time where
+module Lec05.Time
+  ( module Lec05.Time
+  , NominalDiffTime ) where
 
 import Data.Int (Int64)
 import Data.IORef

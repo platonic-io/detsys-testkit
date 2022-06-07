@@ -23,7 +23,7 @@ newtype CommitNumber = CommitNumber Int
 newtype Nonce = Nonce Int
   deriving newtype (Eq, Ord, Read, Show, ToExpr)
 newtype Log op = Log (Seq op)
-  deriving newtype (ToExpr, Monoid, Read, Semigroup, Show)
+  deriving newtype (Foldable, ToExpr, Monoid, Read, Semigroup, Show)
 
 data VRRequest op
   = VRRequest op RequestNumber -- ClientId in `ClientRequest`
@@ -32,6 +32,7 @@ data VRRequest op
 data VRResponse result
   = VRReply ViewNumber RequestNumber result
   | VROnlyOneInflightAllowed
+  | VRRequestNumberTooLow RequestNumber RequestNumber
   deriving (Eq, Read, Show)
 
 data InternalClientMessage op = InternalClientMessage
@@ -59,6 +60,10 @@ data VRMessage op
   = Prepare ViewNumber (InternalClientMessage op) OpNumber CommitNumber
   | PrepareOk ViewNumber OpNumber {- i which is node-id -}
   | Commit ViewNumber CommitNumber
+  -- 4.2 View Change
+  | StartViewChange ViewNumber {- i which is node-id -}
+  | DoViewChange ViewNumber (Log op) ViewNumber OpNumber CommitNumber {- i which is node-id -}
+  | StartView ViewNumber (Log op) OpNumber CommitNumber
   -- 4.3 Recovery
   | Recovery Nonce {- i which is node-id -}
   | RecoveryResponse ViewNumber Nonce (FromPrimary (PrimaryRecoveryResponse op)) Int

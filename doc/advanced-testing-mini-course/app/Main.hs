@@ -1,9 +1,11 @@
 module Main where
 
-import System.Environment
 import Control.Exception (assert)
 import Control.Monad (unless)
+import System.Environment
+import System.Exit (die)
 
+import Lec05.ClientGenerator
 import Lec05.ErrorReporter
 import Lec05.EventLoop
 import Lec05.StateMachine
@@ -16,13 +18,25 @@ import Lec05.Random
 import Lec05.History
 import Lec05.Time
 
-import Lec02ConcurrentSMTesting
+import qualified Lec04.LineariseWithFault as Lec4
 
-import Lec05.ViewstampReplication.State (ReplicatedStateMachine(..))
 import qualified Lec05.ViewstampReplication.Machine as VR
-import Lec05.ViewstampReplication.Message
+import Lec05.ViewstampReplication.Test.ClientGenerator (vrGeneratorSchema)
+import Lec05.ViewstampReplication.Test.Model (smI, step, initModel, markFailure)
 
 ------------------------------------------------------------------------
+
+runMany :: [Seed] -> (Seed -> IO Bool) -> IO ()
+runMany origxs f = go (1 :: Int) origxs
+  where
+  go _i [] = return ()
+  go i (x:xs) = do
+    putStrLn $ "Running iteration: " ++ show i ++ " Seed " ++ show (unSeed x)
+    res <- f x
+    if res
+      then go (succ i) xs
+      else do
+        die $ "Failed iteration: " ++ show i ++ " : Seed " ++ show (unSeed x)
 
 main :: IO ()
 main = do
@@ -30,16 +44,14 @@ main = do
   case args of
     ["--simulation"] -> do
       h <- newHistory
-      _collector <- eventLoopSimulation (Seed 0) echoAgenda h [SomeCodecSM idCodec echoSM]
+      _collector <- eventLoopSimulation (Seed 0) echoAgenda h [SomeCodecSM idCodec echoSM] NoGenerator
       _history <- readHistory h
       putStrLn "Can't print history yet, need Show/Pretty constraints for parameters..."
-    ["vr", "--simulation", fp] -> do
+    ["vr", "--simulation", seed, fp] -> do
       h <- newHistory
       let
         nodes = map NodeId [0..4]
-        smI :: ReplicatedStateMachine [String] String ()
-        smI = ReplicatedStateMachine $ \ s o -> ((), o:s)
-        delta = 10 -- time for primary to do re-broadcast
+        delta = 15 -- time for primary to do re-broadcast
         vrSM me = VR.vrSM (filter (/= me) nodes) me delta [] smI
         printItem label prefix thing =
           putStrLn $ "\x1b[33m" <> label <> ":\x1b[0m " <> prefix <> show thing
@@ -52,9 +64,10 @@ main = do
           printItem "Sent messages" "" ""
           mapM_ (\x -> putStrLn $ "  " <> show x) msgs
         fs = FailureSpec (NetworkFaults 0.15)
-        endTime = addTime 600 epoch
-      collector <- eventLoopFaultySimulation (Seed 6) (VR.agenda endTime) h fs
-        [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes]
+        seed' = read seed
+        endTime = addTimeSeconds 3600 epoch
+      collector <- eventLoopFaultySimulation (Seed seed') (VR.agenda endTime) h fs
+        [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes] vrGeneratorSchema
       history <- readHistory h
       mapM_ printE history
       -- let's print the errors again so they are easier to see.
@@ -62,9 +75,27 @@ main = do
       unless (null reportedErrors) (putStrLn "")
       mapM_ putStrLn reportedErrors
       writeDebugFile fp history
-      let step :: () -> VRRequest () -> ((), VRResponse ())
-          step = undefined
-          initModel = undefined
-      assert (linearisable step initModel (interleavings (blackboxHistory (fmap heEvent history))))
-             (return ())
+      let bbHistory = markFailure (blackboxFailHistory (fmap heEvent history))
+      assert (Lec4.linearise step initModel bbHistory) (return ())
+    ["vr", "--simulation-explore"] -> do
+      seeds <- generateSeeds 10
+      runMany seeds $ \ seed -> do
+        h <- newHistory
+        let
+          nodes = map NodeId [0..4]
+          delta = 15 -- time for primary to do re-broadcast
+          vrSM me = VR.vrSM (filter (/= me) nodes) me delta [] smI
+          fs = FailureSpec (NetworkFaults 0.15)
+          endTime = addTimeSeconds 3600 epoch
+        collector <- eventLoopFaultySimulation seed (VR.agenda endTime) h fs
+          [ SomeCodecSM VR.vrCodec (vrSM me) | me <- nodes] vrGeneratorSchema
+        history <- readHistory h
+        -- let's print the errors again so they are easier to see.
+        reportedErrors <- readFromCollector collector
+        unless (null reportedErrors) (putStrLn "")
+        mapM_ putStrLn reportedErrors
+        let bbHistory = markFailure (blackboxFailHistory (fmap heEvent history))
+            isValid = Lec4.linearise step initModel bbHistory
+        print bbHistory
+        return (null reportedErrors && isValid)
     _otherwise       -> eventLoopProduction [SomeCodecSM idCodec echoSM]

@@ -8,6 +8,7 @@ import Control.Concurrent.Async
 import Control.Exception
 
 import Lec05.Agenda
+import Lec05.ClientGenerator (GeneratorSchema)
 import Lec05.Codec
 import Lec05.History
 import Lec05.ErrorReporter
@@ -27,18 +28,19 @@ import Lec05.Deployment
 eventLoopProduction :: [SomeCodecSM] -> IO ()
 eventLoopProduction = eventLoop (Options Production) <=< makeConfiguration
 
-eventLoopSimulation :: Seed -> Agenda -> History -> [SomeCodecSM] -> IO Collector
-eventLoopSimulation seed agenda history nodes = do
+eventLoopSimulation :: Seed -> Agenda -> History -> [SomeCodecSM] -> GeneratorSchema -> IO Collector
+eventLoopSimulation seed agenda history nodes generatorSchema = do
   config <- makeConfiguration nodes
   collector <- newCollector
-  eventLoop (Options (Simulation seed agenda history Nothing collector)) config
+  eventLoop (Options (Simulation seed agenda history Nothing collector generatorSchema defaultRandomDist)) config
   return collector
 
-eventLoopFaultySimulation :: Seed -> Agenda -> History -> FailureSpec -> [SomeCodecSM] -> IO Collector
-eventLoopFaultySimulation seed agenda history failureSpec nodes = do
+eventLoopFaultySimulation :: Seed -> Agenda -> History -> FailureSpec -> [SomeCodecSM]
+  -> GeneratorSchema -> IO Collector
+eventLoopFaultySimulation seed agenda history failureSpec nodes generatorSchema = do
   config <- makeConfiguration nodes
   collector <- newCollector
-  eventLoop (Options (Simulation seed agenda history (Just failureSpec) collector)) config
+  eventLoop (Options (Simulation seed agenda history (Just failureSpec) collector generatorSchema defaultRandomDist)) config
   return collector
 
 echoAgenda :: Agenda
@@ -120,7 +122,7 @@ runWorker d = initialize >> go
                   rSetStdGen (dRandom d) gen'
                   mapM_ (handleOutput codec nodeId) outputs
 
-    handleEvent (TimerEventE (TimerEvent nodeId time)) = do
+    handleEvent (TimerEventE (TimerEvent nodeId timerId time)) = do
       r <- lookupReceiver nodeId (dConfiguration d)
       case r of
         Nothing -> dReportError d ("Lookup of receiver failed, node id: " ++ show (unNodeId nodeId))
@@ -143,7 +145,7 @@ runWorker d = initialize >> go
       nRespond (dNetwork d) clientId (cEncodeResponse codec response)
     handleOutput codec fromNodeId (InternalMessageOut toNodeId msg) =
       nSend (dNetwork d) fromNodeId toNodeId (cEncodeMessage codec msg)
-    handleOutput _codec fromNodeId (RegisterTimerSeconds secs) =
-      registerTimer (dTimerWheel d) (dClock d) fromNodeId secs
-    handleOutput _codec fromNodeId (ResetTimerSeconds secs) =
-      resetTimer (dTimerWheel d) (dClock d) fromNodeId secs
+    handleOutput _codec fromNodeId (RegisterTimerSeconds timerId secs) =
+      registerTimer (dTimerWheel d) (dClock d) fromNodeId timerId secs
+    handleOutput _codec fromNodeId (ResetTimerSeconds timerId secs) =
+      resetTimer (dTimerWheel d) (dClock d) fromNodeId timerId secs

@@ -2,19 +2,24 @@ module Lec05.Deployment where
 
 import Control.Concurrent.Async
 
-import Lec05.History
 import Lec05.Agenda
+import Lec05.ClientGenerator
+import Lec05.Configuration
 import Lec05.ErrorReporter
 import Lec05.EventQueue
-import Lec05.Configuration
+import Lec05.History
+import Lec05.Network
 import Lec05.Random
 import Lec05.Time
 import Lec05.TimerWheel
-import Lec05.Network
 
 ------------------------------------------------------------------------
 
-data DeploymentMode = Production | Simulation Seed Agenda History (Maybe FailureSpec) Collector
+data DeploymentMode
+  = Production
+  | Simulation Seed Agenda History (Maybe FailureSpec) Collector
+      GeneratorSchema
+      RandomDist
 
 displayDeploymentMode :: DeploymentMode -> String
 displayDeploymentMode Production    = "production"
@@ -59,11 +64,12 @@ newDeployment mode config = case mode of
       , dAppendHistory = \_ -> return ()
       , dReportError   = putStrLn
       }
-  Simulation seed agenda history mf errorCollector -> do
+  Simulation seed agenda history mf errorCollector generatorSchema randomDist -> do
     clock      <- fakeClockEpoch
-    eventQueue <- fakeEventQueue agenda clock
+    clientGenerator <- makeGenerator generatorSchema clock
+    eventQueue <- fakeEventQueue agenda clock clientGenerator
     random     <- fakeRandom seed
-    network    <- faultyNetwork eventQueue clock random config history (fmap fsNetworkFailure mf)
+    network    <- faultyNetwork eventQueue clock random config history (fmap fsNetworkFailure mf) clientGenerator randomDist
     timerWheel <- newTimerWheel
     return Deployment
       { dMode          = mode
