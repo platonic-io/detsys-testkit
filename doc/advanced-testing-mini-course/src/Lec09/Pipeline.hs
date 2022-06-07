@@ -26,7 +26,7 @@ import Lec09.FreeFunc (FreeFunc, interpret)
 
 ------------------------------------------------------------------------
 
-data Universe = Universe :* Universe | Universe :+ Universe | K Type
+data Universe = Universe :+ Universe | Universe :* Universe | K Type | Type :& Type
 
 data Pipeline m a b where
   -- ArrM     :: (Element a -> m (Element b)) -> Pipeline m a b
@@ -37,9 +37,11 @@ data Pipeline m a b where
   Shard    :: Pipeline m (K a) (K b) -> Pipeline m (K a) (K b)
   -- Tee ?
   Fork     :: Pipeline m a (a :* a)
+  Join     :: Pipeline m (K a :* K b) (K (a, b))
   Fst      :: Pipeline m (a :* b) a
   Snd      :: Pipeline m (a :* b) b
   Par      :: Pipeline m a c -> Pipeline m b d -> Pipeline m (a :* b) (c :* d)
+  First    :: Pipeline m (K a) (K b) -> Pipeline m (a :& x) (b :& x)
   -- Split    :: (a -> Bool) -> Pipeline m a (Either a a)
   Or       :: Pipeline m a c -> Pipeline m b d -> Pipeline m (a :+ b) (c :+ d)
   Eq :: Eq (Element a) => Pipeline m (a :* a) (K Bool)
@@ -75,6 +77,7 @@ instance Monad m => Category (Pipeline m) where
 
 type family Element a where
   Element (a :* b)  = (Element a, Element b)
+  Element (a :& b)  = (a, b)
   Element (a :+ b)  = Either (Element a) (Element b)
   Element (K a)     = a
 
@@ -92,8 +95,10 @@ runPipeline ConsumeP            _x        = return ()
 runPipeline (Or f _g)           (Left l)  = Left  <$> runPipeline f l
 runPipeline (Or _f g)           (Right r) = Right <$> runPipeline g r
 runPipeline Fork                x         = return (x, x)
+runPipeline Join                (x, y)    = return (x, y)
 runPipeline Fst                 (x, _y)   = return x
 runPipeline Snd                 (_x, y)   = return y
+runPipeline (First f)           (x, y)    = runPipeline f x >>= \x' -> return (x', y)
 runPipeline (Lift (SM ld st f)) i         = do
   s <- ld
   let (o, s') = interpret f (i, s)
@@ -120,10 +125,17 @@ newDeployment = Deployment <$> newTBQueueIO 65536 <*> pure []
 
 type family Queue u where
   Queue (l ':* r)  = (Queue l, Queue r)
+  Queue (l ':& r)  = TBQueue (l, r)
   Queue (l ':+ r)  = (Queue l, Queue r)
   Queue ('K a)     = TBQueue a
 
-asyncP :: Pipeline IO a b -> Queue a -> IO (Queue b)
+type family Q q a where
+  Q q (a :* b)  = (Q q a, Q q b)
+  Q q (a :& b)  = q (a, b)
+  Q q (a :+ b)  = (Q q a, Q q b)
+  Q q (K a)     = q a
+
+asyncP :: Pipeline IO a b -> Q TBQueue a -> IO (Q TBQueue b)
 asyncP Id             q = return q
 asyncP (Sequence f g) q = do
   q' <- asyncP f q
@@ -139,6 +151,24 @@ asyncP (Par f g) (q1, q2) = do
   q''  <- asyncP g q2
   return (q', q'')
 asyncP (Or f g) q = undefined
+asyncP (First f) q = do
+  q' <- newQueue
+  q'' <- asyncP f q'
+  qp <- newQueue
+  _a <- async $ forever $ atomically $ do
+    (x, y) <- readTBQueue q
+    writeTBQueue q' x
+    x' <- readTBQueue q''
+    writeTBQueue qp (x', y)
+  return qp
+asyncP Fork q = do
+  q1 <- newQueue
+  q2 <- newQueue
+  _ <- async $ forever $ atomically $ do
+    x <- _
+    writeTBQueue q1 x
+    writeTBQueue q2 x
+  undefined -- return (q1, q2)
 asyncP (Shard f) q = do
   q1 <- newQueue
   q2 <- newQueue
@@ -158,22 +188,19 @@ f &&& g = Fork >>> f `Par` g
 swap :: Monad m => Pipeline m (a :* b) (b :* a)
 swap = Snd &&& Fst
 
-testJoin :: Pipeline IO (a :* b) c -> (Queue a, Queue b) -> IO (Queue c)
-testJoin p = asyncP p
-
-testJoin' :: (TBQueue Int, TBQueue Int) -> IO (TBQueue Bool)
-testJoin' = testJoin p
+testJoin :: (TBQueue Int, TBQueue Int) -> IO (TBQueue Bool)
+testJoin = asyncP p
   where
     p :: Pipeline IO (K Int :* K Int) (K Bool)
     p = Eq
 
 data Producer a b = Producer
-  { rProduce      :: IO a -- (a, MVar b)
+  { rProduce      :: IO (a, MVar b)
   , rBackpressure :: IO ()
   }
 
 data Consumer b = Consumer
-  { rConsume :: b -> IO () -- (b, MVar b) -> IO ()
+  { rConsume :: (b, MVar b) -> IO ()
   }
 
 data Service = forall a b. Service (Producer a b) (Pipeline IO (K a) (K b)) (Consumer b)
@@ -181,13 +208,9 @@ data Service = forall a b. Service (Producer a b) (Pipeline IO (K a) (K b)) (Con
 deploy :: Service -> IO ()
 deploy (Service producer pipeline consumer) = do
   qa <- newQueue
-  -- qb <- asyncP (first pipeline) qa
-  qb <- asyncP pipeline qa
+  qb <- asyncP (First pipeline) qa -- Doesn't work because it splits up the queue into two...
   withAsync (forever (rProduce producer >>= atomically . writeTBQueue qa)) $ \_a ->
     forever (atomically (readTBQueue qb) >>= rConsume consumer)
-
-first :: Monad m => Pipeline m a b -> Pipeline m (a :* x) (b :* x)
-first f = f `Par` Id
 
 -- deploy :: Pipeline IO () () -> IO ()
 -- deploy p = do
