@@ -150,24 +150,27 @@ We want to generate random programs, so lets first define what a program is.
 > newtype Program = Program [Command]
 >   deriving Show
 
+A program generator can now be defined using combinators provided by the
+property-based testing library.
+
+> genProgram :: Model -> Gen Program
+> genProgram _m = Program <$> listOf genCommand
+
 > genCommand :: Gen Command
 > genCommand = oneof [Incr <$> genInt, return Get]
 
 > genInt :: Gen Int
 > genInt = oneof [arbitrary] -- , elements [0, 1, maxBound, -1, minBound]] -- TODO: Fix coverage by uncommenting.
 
-> genProgram :: Model -> Gen Program
-> genProgram _m = Program <$> listOf genCommand
+We can sample our program generator to get a feel for what kind of programs it
+generates.
 
 > samplePrograms :: IO [Program]
 > samplePrograms = sample' (genProgram initModel)
 
-> validProgram :: Model -> [Command] -> Bool
-> validProgram _model _cmds = True
-
-> shrinkCommand :: Command -> [Command]
-> shrinkCommand (Incr i) = [ Incr i' | i' <- shrink i ]
-> shrinkCommand Get      = []
+In case we generate a program for which the state machine model and SUT disagree
+we'd like to shrink the program before presenting it to the user in order to
+make it easier to see what went wrong.
 
 > shrinkProgram :: Program -> [Program]
 > shrinkProgram (Program cmds) = [ Program (merge cmds') | cmds' <- shrinkList shrinkCommand cmds ]
@@ -176,9 +179,13 @@ We want to generate random programs, so lets first define what a program is.
 >     merge (Incr i : Incr j : cmds') = Incr (i + j) : merge cmds'
 >     merge (cmd : cmds')             = cmd : merge cmds'
 
-> forallPrograms :: (Program -> Property) -> Property
-> forallPrograms p =
->   forAllShrink (genProgram initModel) shrinkProgram p
+> shrinkCommand :: Command -> [Command]
+> shrinkCommand (Incr i) = [ Incr i' | i' <- shrink i ]
+> shrinkCommand Get      = []
+
+Finally we have all the pieces necessary to write our property that generates
+programs, runs them against the SUT and the model, and asserts that the outputs
+are the same.
 
 > prop_counter :: Property
 > prop_counter = forallPrograms $ \prog -> monadicIO $ do
@@ -187,6 +194,41 @@ We want to generate random programs, so lets first define what a program is.
 >   (b, hist) <- runProgram c m prog
 >   monitor (coverage hist)
 >   return b
+
+> forallPrograms :: (Program -> Property) -> Property
+> forallPrograms p =
+>   forAllShrink (genProgram initModel) shrinkProgram p
+
+> runProgram :: MonadIO m => Counter -> Model -> Program -> m (Bool, Trace)
+> runProgram c0 m0 (Program cmds0) = go c0 m0 [] cmds0
+>   where
+>      go _c _m hist []           = return (True, reverse hist)
+>      go  c  m hist (cmd : cmds) = do
+>        resp <- liftIO (exec c cmd)
+>        let (m', resp') = step m cmd
+>        if resp == resp'
+>        then go c m' (Step m cmd resp m' : hist) cmds
+>        else return (False, reverse hist)
+
+> exec :: Counter -> Command -> IO Response
+> exec c cmd = case cmd of
+>   Incr i -> Unit <$> incr c i
+>   Get    -> Int  <$> get c
+
+As a biproduct of running our generated program we also produce a trace of which
+commands gave what responses and what the state as before and after said command
+was executed.
+
+> type Trace = [Step]
+
+> data Step = Step
+>   { sModelBefore :: Model
+>   , sCommand     :: Command
+>   , sResponse    :: Response
+>   , sModelAfter  :: Model
+>   }
+
+Such traces are useful for many things, for example ensuring that we got good coverage.
 
 > coverage :: Trace -> Property -> Property
 > coverage hist = classifyLength hist . classifyOverflow hist
@@ -205,33 +247,13 @@ We want to generate random programs, so lets first define what a program is.
 
 >     isOverflow i j = toInteger i + toInteger j > toInteger (maxBound :: Int)
 
-> data Step = Step
->   { sModelBefore :: Model
->   , sCommand     :: Command
->   , sResponse    :: Response
->   , sModelAfter  :: Model
->   }
-
-> type Trace = [Step]
-
-> runProgram :: MonadIO m => Counter -> Model -> Program -> m (Bool, Trace)
-> runProgram c0 m0 (Program cmds0) = go c0 m0 [] cmds0
->   where
->      go _c _m hist []           = return (True, reverse hist)
->      go  c  m hist (cmd : cmds) = do
->        resp <- liftIO (exec c cmd)
->        let (m', resp') = step m cmd
->        if resp == resp'
->        then go c m' (Step m cmd resp m' : hist) cmds
->        else return (False, reverse hist)
-
-> exec :: Counter -> Command -> IO Response
-> exec c cmd = case cmd of
->   Incr i -> Unit <$> incr c i
->   Get    -> Int  <$> get c
-
 Regression tests
 ----------------
+
+When we find a counterexample that breaks our property we can add a regression
+test for it by merely copy-pasting the generated program into our test suite and
+using the following function, which does the same thing as our propery, but
+skips the generation step.
 
 > assertProgram :: String -> Program -> Assertion
 > assertProgram msg prog = do

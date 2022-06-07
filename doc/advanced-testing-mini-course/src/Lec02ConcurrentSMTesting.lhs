@@ -57,6 +57,9 @@ Motivation
 > concSafe :: Model -> [Command] -> Bool
 > concSafe m = all (validProgram m) . permutations
 
+> validProgram :: Model -> [Command] -> Bool
+> validProgram _model _cmds = True
+
 > validConcProgram :: Model -> ConcProgram -> Bool
 > validConcProgram m0 (ConcProgram cmdss0) = go m0 True cmdss0
 >   where
