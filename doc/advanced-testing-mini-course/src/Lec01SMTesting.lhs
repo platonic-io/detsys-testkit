@@ -1,17 +1,21 @@
 State machine testing
 =====================
 
+Recap: property-based testing
+-----------------------------------
+
+- `forall (xs: List Int). reverse (reverse xs) == xs`
+- `forall (i : Input). serialise (deserialise i) == i`
+- `forall (i j k : Int). (i + j) + k == i + (j + k)`
+
 Motivation
 ----------
 
-- The combinatorics of testing:
+- The combinatorics of testing stateful systems:
   + $n$ features and 3-4 tests per feature         $\Longrightarrow O(n)$   test cases
   + $n$ features and testing pairs of features     $\Longrightarrow O(n^2)$ test cases
   + $n$ features and testing triples of features   $\Longrightarrow O(n^3)$ test cases
   + Race conditions? (at least two features, non-deterministic)
-
-- A lot of work. Solution? Let the computer generate test cases, instead of
-  writing them manually.
 
 Plan
 ----
@@ -36,26 +40,33 @@ Plan
 How it works
 ------------
 
-* Test case generation
+Test case generation
+--------------------
 
 ![](./images/generator.svg){ width=400px }
 
-* State machine testing
 
-![](./images/sm-testing.svg){ width=500px }
+State machine testing
+---------------------
 
-* Shrinking, when assertions fail
+![](./images/sm-testing-small.jpg){ width=500px }
 
-![](./images/shrinking.svg){ width=400px }
+Shrinking, when assertions fail
+-------------------------------
 
-* Regression testing
+![](./images/shrinking-small.jpg){ width=400px }
+
+Regression testing
+------------------
 
 ![](./images/regression.svg){ width=400px }
 
-* Coverage
-  - Risk when generating random test cases: are we generating interesting test cases?
-  - How to measure coverage
-  - Corner case thinking and unit tests as basis, e.g. try 0, -1, maxInt, etc
+Coverage
+--------
+
+- Risk when generating random test cases: are we generating interesting test cases?
+- How to measure coverage
+- Corner case thinking and unit tests as basis, e.g. try 0, -1, maxInt, etc
 
 ![](./images/coverage.svg){ width=400px }
 
@@ -84,7 +95,9 @@ and read from. It's implemented using a mutable reference (`IORef`) to an `Int`.
 > incr :: Counter -> Int -> IO ()
 > incr (Counter ref) i = do
 >   j <- readIORef ref
->   writeIORef ref (i + j)
+>   if j > 1000
+>   then writeIORef ref (i + j + 1) -- NOTE: this is a bug!
+>   else writeIORef ref (i + j)
 
 > get :: Counter -> IO Int
 > get (Counter ref) = readIORef ref
@@ -153,10 +166,15 @@ We want to generate random programs, so lets first define what a program is.
 > validProgram _model _cmds = True
 
 > shrinkCommand :: Command -> [Command]
-> shrinkCommand _cmd = []
+> shrinkCommand (Incr i) = [ Incr i' | i' <- shrink i ]
+> shrinkCommand Get      = []
 
 > shrinkProgram :: Program -> [Program]
-> shrinkProgram _prog = [] -- Exercises.
+> shrinkProgram (Program cmds) = [ Program (merge cmds') | cmds' <- shrinkList shrinkCommand cmds ]
+>   where
+>     merge []                        = []
+>     merge (Incr i : Incr j : cmds') = Incr (i + j) : merge cmds'
+>     merge (cmd : cmds')             = cmd : merge cmds'
 
 > forallPrograms :: (Program -> Property) -> Property
 > forallPrograms p =
@@ -173,9 +191,12 @@ We want to generate random programs, so lets first define what a program is.
 > coverage :: Trace -> Property -> Property
 > coverage hist = classifyLength hist . classifyOverflow hist
 >   where
->     classifyLength xs = classify (length xs == 0)                    "0 length"
->                       . classify (0  < length xs && length xs <= 10) "1-10 length"
->                       . classify (10 < length xs && length xs <= 50) "10-50 length"
+>     classifyLength xs = classify (length xs == 0)                      "0 length"
+>                       . classify (0   < length xs && length xs <= 10)  "1-10 length"
+>                       . classify (10  < length xs && length xs <= 50)  "11-50 length"
+>                       . classify (50  < length xs && length xs <= 100) "51-100 length"
+>                       . classify (100 < length xs && length xs <= 300) "101-300 length"
+>                       . classify (300 < length xs && length xs <= 500) "301-500 length"
 >     classifyOverflow [] = id
 
 >     classifyOverflow (Step (FakeCounter c) (Incr i) _resp _model' : hist') =
@@ -222,36 +243,12 @@ Regression tests
 Discussion
 ----------
 
-- The specification is longer than the SUT!? For something as simple as a
-  counter, this is true, but for any "real world" system that e.g. persists to
-  disk the model will likely be smaller by an order of magnitude or more.
+- Q: The specification is longer than the SUT!?
 
-- Why state machines over other forms of specifications? E.g. unit test-suite.
-
-  + First of all, a bunch of unit tests are not a specification in the same way
-    that a bunch of examples in math are not a proposition/theorem.
-
-  + Stateless (or pure) property-based testing tries to *approximate* proof by
-    induction in math. For example the following is the proposition that
-    addition is associative for integers, *forall i j k. (i + j) + k == i + (j +
-    k)*. It looks almost exactly like the property you'd write in a
-    property-based test, but of course this test passing isn't a proof of the
-    proposition, still a step in the right direction if we want to be serious
-    about program correctness.
-
-  + XXX: Stateful property-based testing using state machines, like we seen in
-    this lecture, tries to approximate proof by structural induction on the
-    sequence of inputs. Or inductive invariant method?!
-
-  + Executable (as the REPL exercise below shows, but also more on this later)
-
-  + Same state machine specification can be used for concurrent testing (Lec 2)
-  + Mental model
-
-  + Already heavily used in distributed systems (later we'll see how the model
-    becomes the implementation)
-
-- Coverage?
+  A: For something as simple as a counter, this is true, but for any "real
+     world" system that e.g. persists to disk the model will likely be smaller
+     by an order of magnitude or more. Also the model can also be used for race
+     condition testing (lecture 2) and as a fake (lecture 3).
 
 Excerises
 ---------
