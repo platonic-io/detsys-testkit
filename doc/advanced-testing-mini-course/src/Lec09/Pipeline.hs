@@ -1,6 +1,6 @@
 {-# LANGUAGE Arrows #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -12,12 +12,15 @@ import Control.Applicative
 import qualified Control.Arrow as Arrow
 import Control.Category (Category, id, (.), (>>>))
 import Control.Concurrent
-import Data.Functor.Identity
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Monad
 import Data.ByteString.Lazy (ByteString)
+import Data.Functor.Identity
+import Network.HTTP.Types.Status
 import Data.Kind (Type)
+import Network.Wai
+import Network.Wai.Handler.Warp
 import Numeric.Natural
 import Prelude hiding (id, (.))
 import System.Random
@@ -165,7 +168,7 @@ asyncP Fork q = do
   q1 <- newQueue
   q2 <- newQueue
   _ <- async $ forever $ atomically $ do
-    x <- _
+    x <- undefined
     writeTBQueue q1 x
     writeTBQueue q2 x
   undefined -- return (q1, q2)
@@ -197,20 +200,56 @@ testJoin = asyncP p
 data Producer a b = Producer
   { rProduce      :: IO (a, MVar b)
   , rBackpressure :: IO ()
+  , rRunProducer  :: IO ()
   }
+
+warpProducer :: IO (Producer ByteString ByteString)
+warpProducer = do
+  queue <- newQueue
+  return Producer
+    { rProduce      = atomically (readTBQueue queue)
+    , rBackpressure = undefined
+    , rRunProducer  = run 8050 (app queue)
+    }
+  where
+    app queue req respond = do
+      -- XXX: if backpressure then respond 503 for a while...
+      body <- consumeRequestBodyLazy req
+      mvar <- newEmptyMVar
+      atomically (writeTBQueue queue (body, mvar))
+      resp <- takeMVar mvar
+      respond (responseLBS status200 [] resp)
 
 data Consumer b = Consumer
   { rConsume :: (b, MVar b) -> IO ()
   }
 
+warpConsumer :: Consumer ByteString
+warpConsumer = Consumer
+  { rConsume = (\(y, mvar) -> putMVar mvar y) }
+
 data Service = forall a b. Service (Producer a b) (Pipeline IO (K a) (K b)) (Consumer b)
+
+echoPipeline :: Pipeline IO (K ByteString) (K ByteString)
+echoPipeline = Id
+
+warpService :: IO Service
+warpService = do
+  producer <- warpProducer
+  return (Service producer echoPipeline warpConsumer)
 
 deploy :: Service -> IO ()
 deploy (Service producer pipeline consumer) = do
   qa <- newQueue
-  qb <- asyncP (First pipeline) qa -- Doesn't work because it splits up the queue into two...
-  withAsync (forever (rProduce producer >>= atomically . writeTBQueue qa)) $ \_a ->
-    forever (atomically (readTBQueue qb) >>= rConsume consumer)
+  withAsync (rRunProducer producer) $ \_a -> do
+    qb <- asyncP (First pipeline) qa -- Doesn't work because it splits up the queue into two...
+    withAsync (forever (rProduce producer >>= atomically . writeTBQueue qa)) $ \_a ->
+      forever (atomically (readTBQueue qb) >>= rConsume consumer)
+
+main :: IO ()
+main = do
+  service <- warpService
+  deploy service
 
 -- deploy :: Pipeline IO () () -> IO ()
 -- deploy p = do
