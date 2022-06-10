@@ -5,13 +5,13 @@ Recap: property-based testing
 -----------------------------------
 
 - `forall (xs: List Int). reverse (reverse xs) == xs`
-- `forall (i : Input). serialise (deserialise i) == i`
+- `forall (i : Input). deserialise (serialise i) == i`
 - `forall (i j k : Int). (i + j) + k == i + (j + k)`
 
 Motivation
 ----------
 
-- The combinatorics of testing stateful systems:
+- The combinatorics of testing feature interaction of stateful systems:
   + $n$ features and 3-4 tests per feature         $\Longrightarrow O(n)$   test cases
   + $n$ features and testing pairs of features     $\Longrightarrow O(n^2)$ test cases
   + $n$ features and testing triples of features   $\Longrightarrow O(n^3)$ test cases
@@ -96,7 +96,7 @@ and read from. It's implemented using a mutable reference (`IORef`) to an `Int`.
 > incr (Counter ref) i = do
 >   j <- readIORef ref
 >   if j > 1000
->   then writeIORef ref (i + j + 1) -- NOTE: this is a bug!
+>   then writeIORef ref (i + j + 1) -- NOTE: this is a BUG!
 >   else writeIORef ref (i + j)
 
 > get :: Counter -> IO Int
@@ -242,7 +242,7 @@ Such traces are useful for many things, for example ensuring that we got good co
 >     classifyOverflow [] = id
 
 >     classifyOverflow (Step (FakeCounter c) (Incr i) _resp _model' : hist') =
->        classify (isOverflow c i) "overflow" . classifyOverflow hist'
+>        cover 2 (isOverflow c i) "overflow" . classifyOverflow hist'
 >     classifyOverflow (_ : hist') = classifyOverflow hist'
 
 >     isOverflow i j = toInteger i + toInteger j > toInteger (maxBound :: Int)
@@ -269,8 +269,14 @@ Discussion
 
   A: For something as simple as a counter, this is true, but for any "real
      world" system that e.g. persists to disk the model will likely be smaller
-     by an order of magnitude or more. Also the model can also be used for race
-     condition testing (lecture 2) and as a fake (lecture 3).
+     by an order of magnitude or more.
+
+     The model can also be used for:
+
+       - PoC / demo, before real implementation starts
+       - documentation / on-boarding
+       - race condition testing (lecture 2)
+       - as a fake (lecture 3).
 
 Excerises
 ---------
