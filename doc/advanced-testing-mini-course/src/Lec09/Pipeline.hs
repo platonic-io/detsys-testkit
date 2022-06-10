@@ -15,6 +15,7 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Monad
+import Control.Monad.Trans.State
 import Data.ByteString.Lazy (ByteString)
 import Data.Functor.Identity
 import Network.HTTP.Types.Status
@@ -230,8 +231,12 @@ warpConsumer = Consumer
 
 data Service = forall a b. Service (Producer a b) (Pipeline IO (K a) (K b)) (Consumer b)
 
+smCounter :: SM IO ByteString ByteString
+smCounter = SM undefined undefined undefined
+
+
 echoPipeline :: Pipeline IO (K ByteString) (K ByteString)
-echoPipeline = Id
+echoPipeline = Lift smCounter
 
 warpService :: IO Service
 warpService = do
