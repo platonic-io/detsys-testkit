@@ -76,11 +76,12 @@ SUT
 
 > module Lec01SMTesting where
 
-> import Control.Monad.IO.Class
-> import Data.IORef
-> import Test.QuickCheck
-> import Test.QuickCheck.Monadic
-> import Test.HUnit
+> import Control.Monad.IO.Class (MonadIO, liftIO)
+> import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+> import Test.QuickCheck (Property, Gen, sample, quickCheck, withMaxSuccess, cover, classify,
+>                         forAllShrink, shrink, shrinkList, arbitrary, oneof, listOf)
+> import Test.QuickCheck.Monadic (run, monitor, monadicIO)
+> import Test.HUnit (Assertion, assertBool)
 
 The software under test (SUT) of the day is a counter that can be incremented
 and read from. It's implemented using a mutable reference (`IORef`) to an `Int`.
@@ -165,8 +166,8 @@ property-based testing library.
 We can sample our program generator to get a feel for what kind of programs it
 generates.
 
-> samplePrograms :: IO [Program]
-> samplePrograms = sample' (genProgram initModel)
+> samplePrograms :: IO ()
+> samplePrograms = sample (genProgram initModel)
 
 In case we generate a program for which the state machine model and SUT disagree
 we'd like to shrink the program before presenting it to the user in order to
