@@ -31,7 +31,24 @@ Plan
 How it works
 ------------
 
-XXX:
+Concurrent history
+------------------
+
+![](./images/concurrent_counter.svg){ width=400px }
+
+Possible interleaving 1
+-----------------------
+
+![](./images/concurrent_counter_get_1_3.svg){ width=400px }
+
+- incr 1, get, incr 2, get
+
+Possible interleaving 2
+-----------------------
+
+![](./images/concurrent_counter_get_3_3.svg){ width=400px }
+
+- incr 1, incr 2, get, get
 
 Code
 ----
