@@ -1,3 +1,41 @@
+Concurrent state machine testing with linearisability
+=====================================================
+
+Motivation
+----------
+
+- In the previous chapter we saw how to test if a sequential (single-threaded)
+  program respects some state machine specification
+
+- Next we show how the *same* specification can be used to check if a
+  concurrent execution is correct using linearisability
+
+- E.g. counters are often shared among different threads, how can we test that
+  the counter implementation is thread-safe?
+
+Plan
+----
+
+- Reuse the counter SUT and model from previous lecture;
+
+- Generate concurrent programs by instead of generating list of commands
+  generate lists of lists of commands where the outer list represents commands
+  that should be executed concurrently;
+
+- Collect a concurrent history of when each command started and finished
+  executing on each thread;
+
+- Try to find a sequential path through the concurrent history that respects our
+  sequential model, if we do we know that the concurrent execution is correct.
+
+How it works
+------------
+
+XXX:
+
+Code
+----
+
 > {-# LANGUAGE DeriveFunctor #-}
 > {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE DeriveFoldable #-}
@@ -16,21 +54,6 @@
 > import Test.HUnit hiding (assert)
 
 > import Lec01SMTesting
-
-Concurrent state machine testing with linearisability
-=====================================================
-
-Motivation
-----------
-
-  - In the previous chapter we saw how to test if a sequential (single-threaded)
-    program respects some state machine specification
-
-  - Next we show how the *same* specification can be used to check if a
-    concurrent execution is correct using linearisability
-
-  - E.g. counters are often shared among different threads, how can we test that
-    the counter implementation is thread-safe?
 
 > newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
 >   deriving Show
@@ -224,13 +247,14 @@ See also
 
 - [*Finding Race Conditions in Erlang with QuickCheck and
   PULSE*](http://www.cse.chalmers.se/~nicsma/papers/finding-race-conditions.pdf)
-  ([video](https://vimeo.com/6638041)) -- this is the first paper to describe
-  how Erlang's (closed source) QuickCheck works (including the parallel
-  testing);
+  (2009) ([video](https://vimeo.com/6638041)) -- this paper describes how
+  Erlang's (closed source) version QuickCheck does concurrent testing (it was
+  the first library to do so);
 
 - [*Linearizability: a correctness condition for concurrent
-  objects*](https://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf)], this is a
-  classic paper that describes the main technique of the parallel property;
+  objects*](https://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf)] (1990), this
+  is a classic paper that describes the main technique of the concurrent
+  property;
 
 - Kyle "aphyr" Kingsbury's blogposts about Jepsen, which also uses
   linearisability, and has found [bugs](http://jepsen.io/analyses) in many
