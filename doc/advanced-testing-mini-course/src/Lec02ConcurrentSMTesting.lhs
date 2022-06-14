@@ -63,18 +63,20 @@ Code
 > import Control.Concurrent.Async (mapConcurrently)
 > import Control.Concurrent.STM (TQueue, flushTQueue, atomically, newTQueueIO, writeTQueue)
 > import Control.Monad (replicateM_, unless)
+> import Data.IORef (atomicModifyIORef')
 > import Data.List (permutations)
-> import Data.Tree (Forest, Tree(Node))
+> import Data.Tree (Forest, Tree(Node), drawForest)
 > import System.Random (randomRIO)
 > import Test.QuickCheck (Property, Gen, classify, shrinkList, tabulate, counterexample,
->                         mapSize, sized, forAllShrinkShow, suchThat, vectorOf, chooseInt)
+>                         mapSize, sized, forAllShrinkShow, suchThat, vectorOf, chooseInt,
+>                         sample, quickCheck)
 > import Test.QuickCheck.Monadic (PropertyM, run, assert, monitor, monadicIO)
 > import Test.HUnit (Assertion, assertBool)
 
 We will reuse the counter SUT and model from the previous lecture.
 
-> import Lec01SMTesting (Counter, Model, Command(Get, Incr), Response,
->                        initModel, step, newCounter, exec, shrinkCommand, genCommand)
+> import Lec01SMTesting (Counter(Counter), Model, Command(Get, Incr), Response(Int, Unit),
+>                        initModel, get,  step, newCounter, exec, shrinkCommand, genCommand)
 
 In order to do concurrent testing we need to generate concurrent programs
 though. In the sequential case a program was merely a list of commands, in the
@@ -186,8 +188,15 @@ queue we get our concurrent history.
 >   -- Adds some entropy to the possible interleavings.
 >   sleep <- randomRIO (0, 5)
 >   threadDelay sleep
->   resp <- exec counter cmd
+>   resp <- exec counter cmd -- threadSafeExec counter cmd -- NOTE: Fix the race condition by uncommenting.
 >   atomically (writeTQueue queue (Ok pid resp))
+
+> threadSafeExec :: Counter -> Command -> IO Response
+> threadSafeExec c cmd = case cmd of
+>   Incr i -> Unit <$> threadSafeIncr c i
+>   Get    -> Int  <$> get c
+>   where
+>     threadSafeIncr (Counter ref) i = atomicModifyIORef' ref (\j -> (i + j, ()))
 
 With a concurrent history we can generate all possible single-threaded
 executions.
@@ -282,6 +291,9 @@ actually execute the same generated test case ten times.
 > prettyHistory :: (Show cmd, Show resp) => History' cmd resp -> String
 > prettyHistory = show
 
+> displayInterleavings :: (Show cmd, Show resp) => History' cmd resp -> IO ()
+> displayInterleavings = putStrLn . drawForest . fmap (fmap show) . interleavings
+
 Regression testing
 ------------------
 
@@ -289,6 +301,81 @@ Regression testing
 > assertHistory _msg hist =
 >   assertBool (prettyHistory hist) (linearisable step initModel (interleavings hist))
 
+Demo script
+-----------
+
+```
+  > sample (genConcProgram initModel)
+  ConcProgram []
+  ConcProgram [[Incr 2,Incr 2,Get,Incr 0,Get]]
+  ConcProgram [[Incr 3,Get,Incr 1,Incr 0]]
+  ConcProgram [[Incr (-1),Get],[Get,Get],[Get,Get]]
+  ConcProgram [[Get,Get,Incr 2,Get],[Get,Get,Incr (-5),Incr 8,Get]]
+  ConcProgram [[Incr (-5),Incr (-1),Incr 7,Get],[Incr 3,Get,Get],[Get,Incr 5,Incr 0,Get,Incr 6]]
+  ConcProgram [[Get,Get,Get,Get,Get],[Get,Get,Incr (-3),Incr 5],[Incr (-11),Incr (-6),Incr (-2)]]
+  ConcProgram [[Incr 13,Get,Incr (-9)],[Incr (-13),Incr (-5),Incr (-4),Get],[Get,Incr 12,Incr 1,Incr 2,Get],[Incr (-10),Incr 10,Incr 11]]
+  ConcProgram [[Get,Get,Get,Incr 4],[Get,Incr (-16),Get,Incr (-5)],[Incr (-9),Get,Incr (-10),Get,Incr 13],[Incr 11,Get,Get,Get]]
+  ...
+
+  > quickCheck prop_concurrent
+  ConcProgram {unConcProgram = [[Incr 0,Incr 14],[Get,Get,Get]]}
+
+  Failed: History [Invoke (Pid 296705) (Incr 0),Invoke (Pid 296707) (Incr 14),Ok (Pid 296707) (Unit ()),Ok (Pid 296705) (Unit ()),Invoke (Pid 296709) Get,Invoke (Pid 296711) Get,Ok (Pid 296709) (Int 0),Invoke (Pid 296713) Get,Ok (Pid 296711) (Int 0),Ok (Pid 296713) (Int 0)]
+
+  Pid 296705: |---- Incr 0 -------|
+  Pid 296707:   |--- Incr 14 ---|
+  Pid 296709:                       |--- Get => 0 ---|
+  Pid 296711:                         |---- Get => 0----------|
+  Pid 296713:                                          |---- Get => 0 ---|
+
+  > displayInterleavings (History [Invoke (Pid 296705) (Incr 0),Invoke (Pid 296707) (Incr 14),Ok (Pid 296707) (Unit ()),Ok (Pid 296705) (Unit ()),Invoke (Pid 296709) Get,Invoke (Pid 296711) Get,Ok (Pid 296709) (Int 0),Invoke (Pid 296713) Get,Ok (Pid 296711) (Int 0),Ok (Pid 296713) (Int 0)])
+
+(Incr 0,Unit ())
+|
+`- (Incr 14,Unit ())
+   |
+   +- (Get,Int 0)
+   |  |
+   |  +- (Get,Int 0)
+   |  |  |
+   |  |  `- (Get,Int 0)
+   |  |
+   |  `- (Get,Int 0)
+   |     |
+   |     `- (Get,Int 0)
+   |
+   `- (Get,Int 0)
+      |
+      `- (Get,Int 0)
+         |
+         `- (Get,Int 0)
+
+(Incr 14,Unit ())
+|
+`- (Incr 0,Unit ())
+   |
+   +- (Get,Int 0)
+   |  |
+   |  +- (Get,Int 0)
+   |  |  |
+   |  |  `- (Get,Int 0)
+   |  |
+   |  `- (Get,Int 0)
+   |     |
+   |     `- (Get,Int 0)
+   |
+   `- (Get,Int 0)
+      |
+      `- (Get,Int 0)
+         |
+         `- (Get,Int 0)
+```
+
+Discussion
+----------
+
+- Linearisability is by no means an intuitive concept, it will take a while
+  before it sinks in. Meanwhile, feel free to ask questions.
 
 Exercises
 ---------
@@ -315,7 +402,7 @@ See also
   PULSE*](http://www.cse.chalmers.se/~nicsma/papers/finding-race-conditions.pdf)
   (2009) ([video](https://vimeo.com/6638041)) -- this paper describes how
   Erlang's (closed source) version QuickCheck does concurrent testing (it was
-  the first library to do so);
+  the first property-based testing library to do so);
 
 - [*Linearizability: a correctness condition for concurrent
   objects*](https://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf)] (1990), this
