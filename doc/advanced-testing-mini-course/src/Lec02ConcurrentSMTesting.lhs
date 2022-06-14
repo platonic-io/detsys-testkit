@@ -231,7 +231,7 @@ executions.
 >                        | otherwise = xs
 
 If any one of the single-threaded executions respects the state machine model,
-then the concurrent execution is correct. This correctess criteria is the main
+then the concurrent execution is correct. This correctness criteria is the main
 result from the "linearizability" paper linked to below.
 
 > linearisable :: forall model cmd resp. Eq resp
@@ -318,7 +318,7 @@ Demo script
   ...
 
   > quickCheck prop_concurrent
-  ConcProgram {unConcProgram = [[Incr 0,Incr 14],[Get,Get,Get]]}
+  ConcProgram [[Incr 0,Incr 14],[Get,Get,Get]]
 
   Failed: History [Invoke (Pid 296705) (Incr 0),Invoke (Pid 296707) (Incr 14),Ok (Pid 296707) (Unit ()),Ok (Pid 296705) (Unit ()),Invoke (Pid 296709) Get,Invoke (Pid 296711) Get,Ok (Pid 296709) (Int 0),Invoke (Pid 296713) Get,Ok (Pid 296711) (Int 0),Ok (Pid 296713) (Int 0)]
 
@@ -373,6 +373,15 @@ Demo script
 
 Discussion
 ----------
+
+- Black- vs white-box testing: if you think of the SUT as a box, then checking
+  for race conditions using linearisability requires no insight or changes to
+  what is going on in the box, i.e. it's a black-box technique. On the other
+  hand, if one is ready to give access to or make changes to the box to
+  facilitate testing then we may apply so called white-box techniques. An
+  example of a white-box technique is Go's [race
+  detector](https://go.dev/blog/race-detector) or the Haskell library
+  [dejafu](https://hackage.haskell.org/package/dejafu).
 
 - Linearisability is by no means an intuitive concept, it will take a while
   before it sinks in. Meanwhile, feel free to ask questions.
