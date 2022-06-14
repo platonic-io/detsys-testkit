@@ -41,14 +41,14 @@ Possible interleaving 1
 
 ![](./images/concurrent_counter_get_1_3.svg){ width=400px }
 
-- incr 1, get, incr 2, get
+- `< incr 1, get, incr 2, get >`
 
 Possible interleaving 2
 -----------------------
 
 ![](./images/concurrent_counter_get_3_3.svg){ width=400px }
 
-- incr 1, incr 2, get, get
+- `< incr 1, incr 2, get, get >`
 
 Code
 ----
@@ -59,18 +59,27 @@ Code
 
 > module Lec02ConcurrentSMTesting where
 
-> import Control.Concurrent
-> import Control.Concurrent.Async
-> import Control.Concurrent.STM
-> import Control.Monad
+> import Control.Concurrent (ThreadId, threadDelay, myThreadId)
+> import Control.Concurrent.Async (mapConcurrently)
+> import Control.Concurrent.STM (TQueue, flushTQueue, atomically, newTQueueIO, writeTQueue)
+> import Control.Monad (replicateM_, unless)
 > import Data.List (permutations)
 > import Data.Tree (Forest, Tree(Node))
-> import System.Random
-> import Test.QuickCheck
-> import Test.QuickCheck.Monadic
-> import Test.HUnit hiding (assert)
+> import System.Random (randomRIO)
+> import Test.QuickCheck (Property, Gen, classify, shrinkList, tabulate, counterexample,
+>                         mapSize, sized, forAllShrinkShow, suchThat, vectorOf, chooseInt)
+> import Test.QuickCheck.Monadic (PropertyM, run, assert, monitor, monadicIO)
+> import Test.HUnit (Assertion, assertBool)
 
-> import Lec01SMTesting
+We will reuse the counter SUT and model from the previous lecture.
+
+> import Lec01SMTesting (Counter, Model, Command(Get, Incr), Response,
+>                        initModel, step, newCounter, exec, shrinkCommand, genCommand)
+
+In order to do concurrent testing we need to generate concurrent programs
+though. In the sequential case a program was merely a list of commands, in the
+concurrent case a program is a list of lists of commands, where the inner list
+is what is supposed to be done concurrently.
 
 > newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
 >   deriving Show
@@ -80,6 +89,19 @@ Code
 >   forAllShrinkShow (genConcProgram m) (shrinkConcProgram m) prettyConcProgram k
 >   where
 >     m = initModel
+
+When generating concurrent programs we proceed in concurrent "chunks", each
+chunk is between 2 and 5 commands and each command will be executed concurrently
+in a separate thread. In order for a command to be valid in a chunk it needs to
+be safe to execute said command independent of the order in which the rest of
+the commands are executed.
+
+For a simple counter all commands are trivially safe, but imagine if we were
+working with for example filesystem commands then it might be unsafe to remove
+and rename a file in the same chunk.
+
+When we are done generating a chunk, we advance the model by all commands in
+that chunk before we continue generating the next one.
 
 > genConcProgram :: Model -> Gen ConcProgram
 > genConcProgram m0 = sized (go m0 [])
@@ -108,6 +130,10 @@ Code
 >     go _m acc   []             = acc
 >     go m _acc   (cmds : cmdss) = go (advanceModel m cmds) (concSafe m cmds) cmdss
 
+Shrinking concurrent programs is a bit more involved then below if we want to
+get nice minimal counterexamples, we'll get back to this in one of the
+exercises.
+
 > shrinkConcProgram :: Model -> ConcProgram -> [ConcProgram]
 > shrinkConcProgram m
 >   = filter (validConcProgram m)
@@ -118,6 +144,15 @@ Code
 
 > prettyConcProgram :: ConcProgram -> String
 > prettyConcProgram = show
+
+We cannot (easily) check for correctness while we are executing a concurrent
+program, instead we merely collect a concurrent history while executing and
+check this history after execution is done.
+
+A history contains a chronologically ordered sequence of events of when a
+command was invoked and on what thread or process id, and when the command
+finished again together with which thread or process id. A single thread or
+process id may only be invoking a single command at the time.
 
 > newtype History' cmd resp = History [Operation' cmd resp]
 >   deriving (Show, Functor, Foldable)
@@ -140,6 +175,10 @@ Code
 > appendHistory :: TQueue (Operation' cmd resp) -> Operation' cmd resp -> IO ()
 > appendHistory hist op = atomically (writeTQueue hist op)
 
+When executing, the threads involved in the execution have a shared/concurrent
+queue which they append their invocation and completions to. From the concurrent
+queue we get our concurrent history.
+
 > concExec :: TQueue Operation -> Counter -> Command -> IO ()
 > concExec queue counter cmd = do
 >   pid <- toPid <$> myThreadId
@@ -150,7 +189,8 @@ Code
 >   resp <- exec counter cmd
 >   atomically (writeTQueue queue (Ok pid resp))
 
-Generate all possible single-threaded executions from the concurrent history.
+With a concurrent history we can generate all possible single-threaded
+executions.
 
 > interleavings :: History' cmd resp -> Forest (cmd, resp)
 > interleavings (History [])  = []
@@ -182,7 +222,8 @@ Generate all possible single-threaded executions from the concurrent history.
 >                        | otherwise = xs
 
 If any one of the single-threaded executions respects the state machine model,
-then the concurrent execution is correct.
+then the concurrent execution is correct. This correctess criteria is the main
+result from the "linearizability" paper linked to below.
 
 > linearisable :: forall model cmd resp. Eq resp
 >              => (model -> cmd -> (model, resp)) -> model -> Forest (cmd, resp) -> Bool
@@ -198,6 +239,11 @@ then the concurrent execution is correct.
 >     any' :: (a -> Bool) -> [a] -> Bool
 >     any' _p [] = True
 >     any'  p xs = any p xs
+
+We now have all the pieces necessary to implement our concurrent property.
+
+Note that in order to avoid being unlucky with the execution interleavings we
+actually execute the same generated test case ten times.
 
 > prop_concurrent :: Property
 > prop_concurrent = mapSize (min 20) $
@@ -258,6 +304,9 @@ Exercises
    create effective property-based
    tests*](https://www.youtube.com/watch?v=NcJOiQlzlXQ) talk by John Hughes)
 
+2. Display counterexample in a way that makes it easier to see what went wrong.
+   (Hint: perhaps taking inspiration from the diagrams in the beginning of this
+   lecture.)
 
 See also
 --------
@@ -288,3 +337,9 @@ See also
 
     + [Serializability, linearizability, and
       locality](https://aphyr.com/posts/333-serializability-linearizability-and-locality).
+
+Summary
+-------
+
+When you got a state machine model of a program, you can get race conditions
+testing for free.
