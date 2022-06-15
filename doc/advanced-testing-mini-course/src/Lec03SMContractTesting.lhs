@@ -221,3 +221,6 @@ Summary
 
 - Contract tests justify the use of fakes, inplace of the real dependencies,
   when testing a SUT.
+
+- State machine testing a component using a model gives us a faithful fake for
+  that component for free.
