@@ -16,6 +16,9 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.Trans.State
+import Data.IORef
+import Data.Vector.Mutable (IOVector)
+import qualified Data.Vector.Mutable as Vector
 import Data.ByteString.Lazy (ByteString)
 import Data.Functor.Identity
 import Network.HTTP.Types.Status
@@ -308,3 +311,97 @@ main = do
 --   queue <- newTBQueueIO 65536
 --   withAsync (undefined queue) $ \_a -> do
 --     undefined
+
+------------------------------------------------------------------------
+
+data P a b where
+  Arr   :: (a -> b) -> P a b
+  Seq   :: P a b -> P b c -> P a c
+  Fork' :: P a b -> P a c -> P a (Either b c)
+  Join' :: P (Either a a) a
+
+data RB a = RB
+  { rbVec   :: IOVector a
+  , rbSeqNr :: IORef Int
+  , rbGates :: IORef [IORef Int]
+  }
+
+newRB :: IORef Int -> IO (RB a)
+newRB seqNr = RB <$> Vector.new 16 <*> pure seqNr <*> newIORef []
+
+addGate :: RB a -> IORef Int -> IO ()
+addGate rb gate = modifyIORef (rbGates rb) (gate :)
+
+rbRead :: RB a -> Int -> IO a
+rbRead rb ix = Vector.read (rbVec rb) ix
+
+rbWrite :: RB a -> Int -> a -> IO ()
+rbWrite rb ix x = do
+  Vector.write (rbVec rb) ix x
+  modifyIORef (rbSeqNr rb) (+1)
+
+rbModify :: RB a -> (a -> a) -> Int -> IO ()
+rbModify rb f ix = Vector.modify (rbVec rb) f ix
+
+
+d :: P a b -> RB a -> IO (RB b)
+d (Arr f) rb = do
+  consumedSeqNr <- newIORef 0
+  rb' <- newRB consumedSeqNr
+  _ <- async $ forever $ do
+    consumed <- readIORef consumedSeqNr
+    produced <- readIORef (rbSeqNr rb)
+    go rb' consumed (produced - 1)
+    writeIORef consumedSeqNr produced
+    threadDelay 1000
+  addGate rb consumedSeqNr
+  return rb'
+  where
+    go rb' lo hi | lo > hi   = return ()
+                 | otherwise = do
+                     x <- rbRead rb lo
+                     rbWrite rb' lo (f x)
+                     go rb' (lo + 1) hi
+d (Seq f g) rb = d f rb >>= d g
+
+data S a b = S (Source a) (P a b) (Sink b)
+
+data Source a = Source (IO a)
+
+data Sink a = Sink (a -> IO ())
+
+listSource :: [a] -> IO (Source a)
+listSource xs = do
+  ref <- newIORef xs
+  return (Source (threadDelay 1000000 >> atomicModifyIORef' ref (\xs -> (tail xs, head xs))))
+
+printSink :: Show a => Sink a
+printSink = Sink print
+
+ds :: S a b -> IO ()
+ds (S (Source source) pipeline (Sink sink)) = do
+  sourceSeqNr <- newIORef 0
+  rb <- newRB sourceSeqNr
+  _ <- async $ forever $ do
+    x <- source
+    ix <- readIORef sourceSeqNr
+    rbWrite rb ix x
+  rb' <- d pipeline rb
+  sinkSeqNr <- newIORef 0
+  forever $ do
+    produced <- readIORef (rbSeqNr rb')
+    sinked <- readIORef sinkSeqNr
+    go rb' sinked (produced - 1)
+    writeIORef sinkSeqNr produced
+    threadDelay 10000
+  where
+    go rb lo hi | lo > hi   = return ()
+                | otherwise = do
+                    x <- rbRead rb lo
+                    sink x
+                    go rb (lo + 1) hi
+
+t :: IO ()
+t = do
+  source <- listSource [1..10]
+  ds (S source (Arr (+ 1) `Seq` Arr (* 2)) printSink)
