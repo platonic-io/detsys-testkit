@@ -80,11 +80,14 @@ testing. We ensure that the state machine model is faithful to the SUT.
 SM model fake
 -------------
 
-So here's a question: can we turn the state machine model into a fake? Yes! It's
-quite simple, merely create a wrapper around the state machine model which has a
-variable with the current state. Initialise this current state with the initial
-model, and every time we get an input, read the state, apply the state machine
-function, update the state variable.
+Assuming we have a state machine model of the queue which we know is faithful to
+the real queue, is there a way to turn this model into a fake and hence solve
+our problem?
+
+Yes! It's quite simple, merely create a wrapper around the state machine model
+which has a variable with the current state. Initialise this current state with
+the initial model, and every time we get an input, read the state, apply the
+state machine function, update the state variable.
 
 ![](./images/lec3-sm-model-fake-small.jpg)
 
