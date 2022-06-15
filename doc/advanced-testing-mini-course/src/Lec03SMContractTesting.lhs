@@ -1,34 +1,32 @@
-> module Lec03SMContractTesting where
-
 Consumer-driven contract testing using state machines
 =====================================================
 
 Motivation
 ----------
 
-  - Components rarely exist in isolation, they almost always depend on some
-    other component;
+- Components rarely exist in isolation, they almost always depend on some other
+  component;
 
-  - When we test we often want to test as if the component existed in isolation
-    though, e.g. if component A depends on component B, we'd like to test B
-    first and then *assume* that B is working when testing A;
+- When we test we often want to test as if the component existed in isolation
+  though, e.g. if component A depends on component B, we'd like to test B first
+  and then *assume* that B is working when testing A;
 
-  - Assumptions like these can be justified using so called *contract tests*.
+- Assumptions like these can be justified using so called *contract tests*.
 
 Plan
 ----
 
-  - Following the pattern from lecture 1: make a SM based fake for B, use the
-    fake as model to SM test the real implementation of B;
+- Following the pattern from lecture 1: make a SM based fake for B, use the fake
+  as model to SM test the real implementation of B;
 
-  - Use the fake of B in place of the real implementation of B inside the real
-    implementation of A;
+- Use the fake of B in place of the real implementation of B inside the real
+  implementation of A;
 
-  - Make a SM model for A which contains the model of B and test the real
-    implementaiton of A.
+- Make a SM model for A which contains the model of B and test the real
+  implementaiton of A.
 
-Picture
--------
+How it works
+------------
 
 ```
                Interface
@@ -42,8 +40,61 @@ Picture
 
 ```
 
+SUT with real queue
+-------------------
+
+The SUT of the day is a web service which queues up client requests and has a
+worker that processes the queue and replies to the clients.
+
+![](./images/lec3-web-service-with-queue-small.jpg)
+
+Imagine if this queue is a separate process. This makes it a bit annoying to
+test because we need to deploy the queue first, make sure it's ready for work
+before we start testing the web service.
+
+SUT with interface
+------------------
+
+One way around the above problem is to implement the web service against an
+*interface* of the queue rather than the queue itself. We can then implement
+this interface using the real queue but also a fake queue which lives in the
+same process as the web service hence avoiding deploying the queue before
+testing. Depending if we deploy the web service in "production" or for "testing"
+we choose the between the two implementations of the interface.
+
+![](./images/lec3-web-service-with-interface-small.jpg)
+
+The problem of this approach is: how do we know that the fake queue is faithful
+to the real queue implementation? We would need to test this somehow! (These
+tests are usually called contract tests.)
+
+Recall: SM testing
+------------------
+
+Let's take a step back and recall what we are doing when we are state machine
+testing. We ensure that the state machine model is faithful to the SUT.
+
+
+![](./images/lec3-sm-model-small.jpg)
+
+SM model fake
+-------------
+
+Assuming we have a state machine model of the queue which we know is faithful to
+the real queue, is there a way to turn this model into a fake and hence solve
+our problem?
+
+Yes! It's quite simple, merely create a wrapper around the state machine model
+which has a variable with the current state. Initialise this current state with
+the initial model, and every time we get an input, read the state, apply the
+state machine function, update the state variable.
+
+![](./images/lec3-sm-model-fake-small.jpg)
+
 SUT B: a queue (producer of the interface)
 ------------------------------------------
+
+> module Lec03SMContractTesting where
 
 > import Lec03.QueueInterface ()
 > import Lec03.Queue ()
@@ -56,7 +107,6 @@ SUT A: web service (consumer of the interface)
 > import Lec03.Service ()
 > import Lec03.ServiceTest ()
 
----
 
 Consumer-driven contract tests
 ------------------------------
