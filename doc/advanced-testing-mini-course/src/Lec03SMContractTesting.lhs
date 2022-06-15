@@ -1,34 +1,32 @@
-> module Lec03SMContractTesting where
-
 Consumer-driven contract testing using state machines
 =====================================================
 
 Motivation
 ----------
 
-  - Components rarely exist in isolation, they almost always depend on some
-    other component;
+- Components rarely exist in isolation, they almost always depend on some other
+  component;
 
-  - When we test we often want to test as if the component existed in isolation
-    though, e.g. if component A depends on component B, we'd like to test B
-    first and then *assume* that B is working when testing A;
+- When we test we often want to test as if the component existed in isolation
+  though, e.g. if component A depends on component B, we'd like to test B first
+  and then *assume* that B is working when testing A;
 
-  - Assumptions like these can be justified using so called *contract tests*.
+- Assumptions like these can be justified using so called *contract tests*.
 
 Plan
 ----
 
-  - Following the pattern from lecture 1: make a SM based fake for B, use the
-    fake as model to SM test the real implementation of B;
+- Following the pattern from lecture 1: make a SM based fake for B, use the fake
+  as model to SM test the real implementation of B;
 
-  - Use the fake of B in place of the real implementation of B inside the real
-    implementation of A;
+- Use the fake of B in place of the real implementation of B inside the real
+  implementation of A;
 
-  - Make a SM model for A which contains the model of B and test the real
-    implementaiton of A.
+- Make a SM model for A which contains the model of B and test the real
+  implementaiton of A.
 
-Picture
--------
+How it works
+------------
 
 ```
                Interface
@@ -45,6 +43,8 @@ Picture
 SUT B: a queue (producer of the interface)
 ------------------------------------------
 
+> module Lec03SMContractTesting where
+
 > import Lec03.QueueInterface ()
 > import Lec03.Queue ()
 > import Lec03.QueueTest ()
@@ -56,7 +56,6 @@ SUT A: web service (consumer of the interface)
 > import Lec03.Service ()
 > import Lec03.ServiceTest ()
 
----
 
 Consumer-driven contract tests
 ------------------------------
