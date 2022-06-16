@@ -28,11 +28,9 @@ in stdenv.mkDerivation rec {
     javac java/src/lockfix/LockFix.java -cp $CLASSPATH -d $builddir
 
     echo "compiling clojure sources"
-    # On Darwin `clj` tries to create some folder in the home directory...
-    ${lib.optionalString stdenv.isDarwin ''
+    # `clj` tries to create some folder in the home directory...
     export HOME=$TMP/home
     mkdir -p $HOME
-    ''}
     clj -Scp src:$CLASSPATH:$builddir \
       -J-Dclojure.compile.path=$builddir \
       -M -e "(compile (quote ${pname}.core))"
