@@ -405,3 +405,88 @@ t :: IO ()
 t = do
   source <- listSource [1..10]
   ds (S source (Arr (+ 1) `Seq` Arr (* 2)) printSink)
+
+------------------------------------------------------------------------
+
+data SP a b where
+  A :: (a -> b) -> SP a b
+  (:>>) :: SP a b -> SP b c -> SP a c
+
+  SFork :: SP a b -> SP a c -> SP a (b, c)
+  SShard :: SP a a -> SP a a -> SP a a
+
+  Src :: IO a -> SP () a
+  Plus :: SP () a -> SP () a -> SP () a
+
+  SSink :: (a -> IO ()) -> SP a ()
+  Tee :: SP a () -> SP a a
+
+list :: [a] -> IO (IO a)
+list xs = do
+  ref <- newIORef xs
+  return (atomicModifyIORef' ref (\xs -> (tail xs, head xs)))
+
+s :: IO (SP () ())
+s = do
+  src <- list [1..10]
+  return $ Src src :>> SFork (A (+ 1)) (A (* 2)) :>> Tee (SSink (\x -> threadDelay 1000000 >> print x)) :>> SSink print
+
+sp :: SP a b -> TBQueue a -> IO (TBQueue b)
+sp (A f)        xs = do
+  ys <- newQueue
+  _ <- async $ forever $ atomically $ do
+    x <- readTBQueue xs
+    writeTBQueue ys (f x)
+  return ys
+sp (f :>> g)    xs = sp f xs >>= sp g
+sp (SFork l r)  xs = do
+  xsl <- newQueue
+  xsr <- newQueue
+  _ <- async $ forever $ atomically $ do
+    x <- readTBQueue xs
+    writeTBQueue xsl x
+    writeTBQueue xsr x
+
+  ysl <- sp l xsl
+  ysr <- sp r xsr
+
+  lrs <- newQueue
+
+  _ <- async $ forever $ atomically $ do
+    yl <- readTBQueue ysl
+    yr <- readTBQueue ysr
+    writeTBQueue lrs (yl, yr)
+
+  return lrs
+
+sp (SShard e o) xs = undefined
+sp (Src io) _xs = do
+  xs <- newQueue
+  _ <- async $ forever $ do
+    x <- io
+    atomically $ writeTBQueue xs x
+  return xs
+sp (SSink k) xs = do
+  ys <- newQueue
+  _ <- async $ forever $ do
+    x <- atomically $ readTBQueue xs
+    k x
+    atomically $ writeTBQueue ys ()
+  return ys
+sp (Tee sink) xs = do
+  xsl <- newQueue
+  xsr <- newQueue
+  _ <- async $ forever $ atomically $ do
+    x <- readTBQueue xs
+    writeTBQueue xsl x
+    writeTBQueue xsr x
+  sp sink xsl
+  return xsr
+
+m :: IO ()
+m = do
+  pipe <- s
+  xs <- newQueue
+  ys <- sp pipe xs
+  replicateM_ 10 (atomically (readTBQueue ys))
+  return ()
