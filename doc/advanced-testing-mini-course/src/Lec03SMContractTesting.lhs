@@ -209,6 +209,10 @@ Exercises
    `QuickCheck` generates, and see if you notice any speed up in the test
    execution time.
 
+4. Think of corner cases for the queue you'd write unit tests for, but instread
+   add those cases to the coverage checker to ensure that the generator
+   generates them.
+
 See also
 --------
 
@@ -229,11 +233,11 @@ See also
 Summary
 -------
 
+- State machine testing a component using a model gives us a faithful fake for
+  that component for free;
+
 - Using fakes enables to fast and determinstic integration tests and, as we
   shall see next, makes it easier to introduce faults when testing;
 
 - Contract tests justify the use of fakes, inplace of the real dependencies,
   when testing a SUT.
-
-- State machine testing a component using a model gives us a faithful fake for
-  that component for free.

@@ -32,6 +32,9 @@ import Network.HTTP.Client
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 
+-- We can reuse most of the concurrent testing machinary from the second
+-- lecture.
+
 import Lec02ConcurrentSMTesting
        ( History'(History)
        , Operation'(Ok)
@@ -172,8 +175,12 @@ forAllConcProgram k =
   where
     m = initModel
 
+-- Finally we can write our integration tests between the queue and the web
+-- service, sometimes these tests are also called "collaboration tests".
+
 -- NOTE: We shouldn't use a model in concurrent tests before we made sure it
 -- passes sequential tests.
+
 -- NOTE: Assumes that the service is running.
 prop_collaborationTests :: Manager -> Property
 prop_collaborationTests mgr = mapSize (min 20) $
