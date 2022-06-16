@@ -6,6 +6,15 @@ import qualified Data.Vector.Mutable as Vec
 
 ------------------------------------------------------------------------
 
+-- In order to make the queue more performant and more tricky for ourselves to
+-- implement, we'll make it array-backed where elements are not removed from the
+-- array when they are dequeued, but rather overwritten by a later enqueue
+-- operation.
+
+-- In order to pull this off we'll keep track of the total capacity of the
+-- queue, the current size and what the "rear" of the queue is, i.e. the index
+-- which we should dequeue next.
+
 data Queue a = Queue
   { qCapacity :: !Int
   , qSize     :: !(IORef Int)
@@ -60,6 +69,8 @@ dequeue q = do
     modifyIORef' (qRear q) (\j' -> (j' + 1) `mod` capacity q)
     return (Just x)
 
+-- We add a display function for debugging.
+
 display :: Show a => Queue a -> IO ()
 display q = do
   putStrLn "Queue"
@@ -81,3 +92,6 @@ display q = do
     unless (ix == sz' - 1) $ do
       putStr ", "
   putStrLn "]"
+
+-- If you read this far, hopefully you will appreciate that getting all this
+-- right without an off-by-one error somewhere can be a bit tricky...
