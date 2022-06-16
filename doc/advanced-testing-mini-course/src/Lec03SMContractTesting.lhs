@@ -28,18 +28,6 @@ Plan
 How it works
 ------------
 
-```
-               Interface
-                   |
-    Consumer       |     Producer
-                   |
-       ----------> x-------->
-                   |
-  "Collaboration   |  Contract tests
-      tests"       |
-
-```
-
 SUT with real queue
 -------------------
 
@@ -91,22 +79,20 @@ state machine function, update the state variable.
 
 ![](./images/lec3-sm-model-fake-small.jpg)
 
-SUT B: a queue (producer of the interface)
-------------------------------------------
+"Collaboration tests" vs contract tests
+---------------------------------------
 
-> module Lec03SMContractTesting where
+```
+               Interface
+                   |
+    Consumer       |     Producer
+                   |
+       ----------> x-------->
+                   |
+  "Collaboration   |  Contract tests
+      tests"       |
 
-> import Lec03.QueueInterface ()
-> import Lec03.Queue ()
-> import Lec03.QueueTest ()
-
-
-SUT A: web service (consumer of the interface)
-----------------------------------------------
-
-> import Lec03.Service ()
-> import Lec03.ServiceTest ()
-
+```
 
 Consumer-driven contract tests
 ------------------------------
@@ -131,6 +117,18 @@ That way:
      real implementation, then the developers of the consumed API will get a
      failing test and thus a warning about the fact that some assumptions of the
      comsumer might have been broken.
+
+Code
+----
+
+> module Lec03SMContractTesting where
+
+> import Lec03.QueueInterface ()
+> import Lec03.Queue ()
+> import Lec03.QueueTest ()
+
+> import Lec03.Service ()
+> import Lec03.ServiceTest ()
 
 Discussion
 ----------
