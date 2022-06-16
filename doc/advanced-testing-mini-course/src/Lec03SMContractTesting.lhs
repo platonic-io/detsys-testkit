@@ -82,6 +82,10 @@ state machine function, update the state variable.
 "Collaboration tests" vs contract tests
 ---------------------------------------
 
+Let's zoom out a bit and contemplate the general picture. Our queue can be
+thought of as a producer of the interface, while the web service is consumer of
+it.
+
 ```
                Interface
                    |
@@ -93,6 +97,17 @@ state machine function, update the state variable.
       tests"       |
 
 ```
+
+When we test our web service against the fake queue we are doing, what is
+sometimes called, "collaboration tests", while when we are ensuring that the
+fake queue is faithful to the real queue we are doing contract tests.
+
+The above relations between consumers and producers of interfaces can be
+generalised from one-to-one relations, as in the web service and queue example,
+to many-to-many relations and we can also nest them, i.e. a producer can in turn
+be a consumer. The kind of testing we've talked about generalised to these
+contexts as well and done in "layers", starting with the bottom layer and going
+up.
 
 Consumer-driven contract tests
 ------------------------------
@@ -116,7 +131,7 @@ That way:
      contract test that ensures that the fake is faithfully with regards to the
      real implementation, then the developers of the consumed API will get a
      failing test and thus a warning about the fact that some assumptions of the
-     comsumer might have been broken.
+     consumer might have been broken.
 
 Code
 ----
