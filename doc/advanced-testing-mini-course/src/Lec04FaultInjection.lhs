@@ -1,3 +1,58 @@
+Fault-injection
+===============
+
+Motivation
+----------
+
+- "almost all (92%) of the catastrophic system failures are the result of
+  incorrect handling of non-fatal errors explicitly signaled in software. [...]
+  in 58% of the catastrophic failures, the underlying faults could easily have
+  been detected through simple testing of error handling code." -- [Simple
+  Testing Can Prevent Most Critical Failures: An Analysis of Production Failures
+  in Distributed Data-intensive
+  Systems](http://www.eecg.toronto.edu/~yuan/papers/failure_analysis_osdi14.pdf)
+  (2014) Yuan et al.
+
+- "[Jepsen](https://jepsen.io/analyses) has analyzed over two dozen databases,
+  coordination services, and queues -- and we've found replica divergence, data
+  loss, stale reads, read skew, lock conflicts, and much more."
+
+Plan
+----
+
+- Create a wrapper around our fake queue implementation which allows us to
+  inject faults
+
+- Possible faults to inject for the queue
+   + write fails, e.g. queue is full
+   + read fails, e.g. queue is empty
+   + read crashes, e.g. bug in queue causes exception to be thrown
+   + read returns a malformed write which no longer deserialises, or has an
+     invalid client request id to send the response to
+
+- Use the same web service model that we wrote in the previous lecture and do
+  integration/"collaboration" tests with the fake queue with faults to ensure
+  that our web service, that uses the queue, doesn't crash even if the presence
+  of faults in the queue
+
+- Notice that we don't have to make any changes to the model to account of the
+  possible faults, the linearisability checker does this for us behind the
+  scenes
+
+How it works
+------------
+
+XXX:
+
+- How faults get injected
+- How linearisability checker deals with fails and infos
+- How we generate faults
+
+XXX:
+
+Code
+----
+
 > {-# LANGUAGE OverloadedStrings #-}
 > {-# LANGUAGE NumericUnderscores #-}
 > {-# LANGUAGE ScopedTypeVariables #-}
@@ -37,44 +92,6 @@
 > import Lec04.LineariseWithFault (History'(History), Operation'(..), FailureMode(..), interleavings,
 >                                  linearisable, prettyHistory, appendHistory)
 
-Fault-injection
-===============
-
-Motivation
-----------
-
-  - "almost all (92%) of the catastrophic system failures are the result of
-    incorrect handling of non-fatal errors explicitly signaled in software.
-    [...] in 58% of the catastrophic failures, the underlying faults could
-    easily have been detected through simple testing of error handling code." --
-    [Simple Testing Can Prevent Most Critical Failures: An Analysis of
-    Production Failures in Distributed Data-intensive
-    Systems](http://www.eecg.toronto.edu/~yuan/papers/failure_analysis_osdi14.pdf)
-    (2014) Yuan et al.
-
-Plan
-----
-
-- Create a wrapper around our fake queue implementation which allows us to
-  inject faults
-
-- Possible faults to inject for the queue
-   + write fails, e.g. queue is full
-   + read fails, e.g. queue is empty
-   + read crashes, e.g. bug in queue causes exception to be thrown
-   + read returns a malformed write which no longer deserialises, or has a valid
-     client request id to send the response to
-
-- Use the same web service model that we write in the previous lecture and do
-  "collaboration tests" with the fake queue with faults to ensure that our
-  service that uses the queue doesn't crash even if the presence of faults
-
-- Notice that we don't have to make any changes to the model to account of the
-  possible faults, the linearisability checker does this for us behind the
-  scenes
-
-Faulty queue
-------------
 
 > data FaultyFakeQueue a = FaultyFakeQueue
 >   { ffqQueue :: QueueI a
@@ -145,8 +162,8 @@ Faulty queue
 >   res2 <- qiEnqueue (ffqQueue ffq) "test2"
 >   assert (res2 == False) (return ())
 
-Sequential "collaboration" testing
-----------------------------------
+Sequential integration/"collaboration" testing
+----------------------------------------------
 
 > data Command
 >   = ClientRequest ClientRequest
@@ -340,8 +357,8 @@ Sequential "collaboration" testing
 >     isRight Left  {} = False
 
 
-Concurrent "collaboration" testing
-----------------------------------
+Concurrent integration/"collaboration" testing
+----------------------------------------------
 
 > newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
 >   deriving Show
@@ -514,7 +531,11 @@ Problems
    [`ldfi`](https://github.com/symbiont-io/detsys-testkit/tree/main/src/ldfi)
    directory in the `detsys-testkit` repo)
 
-1. What's better at finding bugs: i) a small fixed agenda and try many faults
+1. Faults in the real world are often correlated with each other, i.e. if one
+   thing fails it's likely it will overload some other thing making it more
+   likely to fail and so on, how can we simulate this in a good way?
+
+2. What's better at finding bugs: i) a small fixed agenda and try many faults
    and interleavings, or ii) a big random agenda and fewer interleavings?
 
 See also
@@ -524,7 +545,18 @@ See also
   Bugs?*(https://dl.acm.org/doi/pdf/10.1145/3158134) by Majumdar and Niksic
   (2018)
 
+- The [`failpoint`](https://github.com/pingcap/failpoint) Go library allows us
+  to insert failures at any point in our code, in some way this is a
+  cheap-and-dirty way of achiving the same thing as we've done in this lecture.
+  Cheap because it's less work, dirty because it litters the (production) code
+  with fail points.
+
 Summary
 -------
 
-XXX
+- Most catastrophic system failures are related to error handling,
+  fault-injection allows us to trigger error handling code and therefore
+  increase our coverage to catch these failures before they happen in
+  production;
+
+- Fault-injection is much easier to do determinstically when using fakes.
