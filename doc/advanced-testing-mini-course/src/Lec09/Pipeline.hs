@@ -410,9 +410,9 @@ t = do
 
 data SP a b where
   A :: (a -> b) -> SP a b
-  (:>>) :: SP a b -> SP b c -> SP a c
+  (:>>>) :: SP a b -> SP b c -> SP a c
 
-  SFork :: SP a b -> SP a c -> SP a (b, c)
+  (:&&&) :: SP a b -> SP a c -> SP a (b, c)
   SShard :: SP a a -> SP a a -> SP a a
 
   Src :: IO a -> SP () a
@@ -420,6 +420,9 @@ data SP a b where
 
   SSink :: (a -> IO ()) -> SP a ()
   Tee :: SP a () -> SP a a
+
+infixr 1 :>>>
+infixr 3 :&&&
 
 list :: [a] -> IO (IO a)
 list xs = do
@@ -429,7 +432,7 @@ list xs = do
 s :: IO (SP () ())
 s = do
   src <- list [1..10]
-  return $ Src src :>> SFork (A (+ 1)) (A (* 2)) :>> Tee (SSink (\x -> threadDelay 1000000 >> print x)) :>> SSink print
+  return $ Src src :>>> A (+ 1) :&&& A (* 2) :>>> Tee (SSink (\x -> threadDelay 1000000 >> print x)) :>>> SSink print
 
 sp :: SP a b -> TBQueue a -> IO (TBQueue b)
 sp (A f)        xs = do
@@ -438,8 +441,8 @@ sp (A f)        xs = do
     x <- readTBQueue xs
     writeTBQueue ys (f x)
   return ys
-sp (f :>> g)    xs = sp f xs >>= sp g
-sp (SFork l r)  xs = do
+sp (f :>>> g)  xs = sp f xs >>= sp g
+sp (l :&&& r)  xs = do
   xsl <- newQueue
   xsr <- newQueue
   _ <- async $ forever $ atomically $ do
@@ -466,6 +469,7 @@ sp (Src io) _xs = do
     x <- io
     atomically $ writeTBQueue xs x
   return xs
+sp (Plus _s _t) _xs = undefined
 sp (SSink k) xs = do
   ys <- newQueue
   _ <- async $ forever $ do
@@ -480,7 +484,7 @@ sp (Tee sink) xs = do
     x <- readTBQueue xs
     writeTBQueue xsl x
     writeTBQueue xsr x
-  sp sink xsl
+  _ <- sp sink xsl
   return xsr
 
 m :: IO ()
