@@ -8,6 +8,9 @@ import Lec03.Queue
 
 ------------------------------------------------------------------------
 
+-- The model of our queue will use a simple immutable linked list rather than
+-- the complicated mutable array.
+
 data Model a = Model
   { mCapacity :: Int
   , mQueue    :: [a]
@@ -39,10 +42,14 @@ data Response a
   | Bool Bool
   deriving (Show, Eq)
 
+-- Enqueuing merely appends to the back of the list.
+
 fakeEnqueue :: a -> Model a -> (Model a, Bool)
 fakeEnqueue x m
   | length (mQueue m) >= mCapacity m = (m, False)
   | otherwise = (m { mQueue = mQueue m ++ [x]}, True)
+
+-- While dequeuing merely returns the head of the list.
 
 fakeDequeue :: Model a -> (Model a, Maybe a)
 fakeDequeue m = case mQueue m of
@@ -93,6 +100,10 @@ newtype Capacity = Capacity Int
 
 instance Arbitrary Capacity where
   arbitrary = Capacity <$> choose (0, 5)
+
+-- The tests that ensure that the model is faithful to the real queue
+-- implementation also doubles as contract tests once we turn or model into a
+-- fake.
 
 prop_contractTests :: Capacity -> Property
 prop_contractTests (Capacity cap) =

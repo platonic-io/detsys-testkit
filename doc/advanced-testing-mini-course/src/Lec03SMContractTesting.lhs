@@ -1,34 +1,97 @@
-> module Lec03SMContractTesting where
-
 Consumer-driven contract testing using state machines
 =====================================================
 
 Motivation
 ----------
 
-  - Components rarely exist in isolation, they almost always depend on some
-    other component;
+- Components rarely exist in isolation, they almost always depend on some other
+  component;
 
-  - When we test we often want to test as if the component existed in isolation
-    though, e.g. if component A depends on component B, we'd like to test B
-    first and then *assume* that B is working when testing A;
+- When we test we often want to test as if the component existed in isolation
+  though, e.g. if component A depends on component B, we'd like to test B first
+  and then *assume* that B is working when testing A;
 
-  - Assumptions like these can be justified using so called *contract tests*.
+- Assumptions like these can be justified using so called *contract tests*,
+  which is what we will be looking at next.
 
 Plan
 ----
 
-  - Following the pattern from lecture 1: make a SM based fake for B, use the
-    fake as model to SM test the real implementation of B;
+1. Following the pattern from lecture 1: make a state machine (SM) model of the
+   dependency B, use SM testing to ensure that the model is faithful to the real
+   implementation of B (these tests are our contract tests);
 
-  - Use the fake of B in place of the real implementation of B inside the real
-    implementation of A;
+2. Turn the SM model of B into a fake and use it in-place of the real
+   implementation of B inside the real implementation of A;
 
-  - Make a SM model for A which contains the model of B and test the real
-    implementaiton of A.
+3. Repeat the first step for for component A. Note that while testing A we will
+   not be using the real component B but rather a fake of it, this gives us
+   possibly faster and more deterministic integration tests.
 
-Picture
--------
+How it works
+------------
+
+SUT with real queue
+-------------------
+
+The SUT of the day is a web service which queues up client requests and has a
+worker that processes the queue and replies to the clients.
+
+![](./images/lec3-web-service-with-queue-small.jpg)
+
+Imagine if this queue is a separate process. This makes it a bit annoying to
+test because we need to deploy the queue first, make sure it's ready for work
+before we start testing the web service.
+
+SUT with interface
+------------------
+
+One way around the above problem is to implement the web service against an
+*interface* of the queue rather than the queue itself. We can then implement
+this interface using the real queue but also a fake queue which lives in the
+same process as the web service hence avoiding deploying the queue before
+testing. Depending if we deploy the web service in "production" or for "testing"
+we choose the between the two implementations of the interface.
+
+![](./images/lec3-web-service-with-interface-small.jpg)
+
+The problem of this approach is: how do we know that the fake queue is faithful
+to the real queue implementation? We would need to test this somehow! (These
+tests are usually called contract tests.)
+
+Recall: SM testing
+------------------
+
+Let's take a step back and recall what we are doing when we are state machine
+testing. We ensure that the state machine model is faithful to the SUT.
+
+
+![](./images/lec3-sm-model-small.jpg)
+
+SM model fake
+-------------
+
+Assuming we have a state machine model of the queue which we know is faithful to
+the real queue, is there a way to turn this model into a fake and hence solve
+our problem?
+
+Yes! It's quite simple, merely create a wrapper around the state machine model
+which has a variable with the current state. Initialise this current state with
+the initial model, and every time we get an input, read the state, apply the
+state machine function, update the state variable.
+
+(Note that the model isn't a fake because it doesn't have the same in- and
+outputs -- that's what the wrapper fixes.)
+
+
+![](./images/lec3-sm-model-fake-small.jpg)
+
+"Collaboration tests" vs contract tests
+---------------------------------------
+
+Let's zoom out a bit and contemplate the general picture. Our queue can be
+thought of as a producer of the interface, while the web service is consumer of
+it.
 
 ```
                Interface
@@ -42,30 +105,25 @@ Picture
 
 ```
 
-SUT B: a queue (producer of the interface)
-------------------------------------------
+When we integration test our web service against the fake queue we are doing,
+what is sometimes called, "collaboration tests", while when we are ensuring that
+the fake queue is faithful to the real queue we are doing contract tests.
 
-> import Lec03.QueueInterface ()
-> import Lec03.Queue ()
-> import Lec03.QueueTest ()
-
-
-SUT A: web service (consumer of the interface)
-----------------------------------------------
-
-> import Lec03.Service ()
-> import Lec03.ServiceTest ()
-
----
+The above relations between consumers and producers of interfaces can be
+generalised from one-to-one relations, as in the web service and queue example,
+to many-to-many relations and we can also nest them, i.e. a producer can in turn
+be a consumer. The kind of testing we've talked about generalised to these
+contexts as well and done in "layers", starting with the bottom layer and going
+up.
 
 Consumer-driven contract tests
 ------------------------------
 
-The job of contract tests are to ensure the accuracy of the mocks/test doubles
-you use of other components in your fast and deterministic integration tests.
+The job of contract tests are to ensure the accuracy of the fakes you use of
+other components in your fast and deterministic integration tests.
 
-Consumer-driven contract tests just means that the consumer of the mocked API
-writes the contract test inside the testsuite of the producer.
+*Consumer-driven* contract tests just means that the consumer of the faked API
+writes the contract test inside the test-suite of the producer.
 
 If component A and B are developed in different repos or by different teams,
 then the consumer of the API (in our case A consumes B's API) should write the
@@ -80,7 +138,24 @@ That way:
      contract test that ensures that the fake is faithfully with regards to the
      real implementation, then the developers of the consumed API will get a
      failing test and thus a warning about the fact that some assumptions of the
-     comsumer might have been broken.
+     consumer might have been broken.
+
+So with other words, consumer-driven is just a policy about who writes which
+contract tests and where those tests are supposed to live, and by following this
+policy we are more likely to catch if a producer of an API makes a change that
+will break the interaction between the consumer and the producer.
+
+Code
+----
+
+> module Lec03SMContractTesting where
+
+> import Lec03.QueueInterface ()
+> import Lec03.Queue ()
+> import Lec03.QueueTest ()
+
+> import Lec03.Service ()
+> import Lec03.ServiceTest ()
 
 Discussion
 ----------
@@ -141,10 +216,14 @@ Exercises
    the real one.
 
 3. Once the contract tests pass, switch out the real database for the fake one
-   in the collabortation tests (the testsuite of the web service). Enable timing
+   in the collaboration tests (the test-suite of the web service). Enable timing
    output in `ghci` with `:set +s`, crank up the number of tests that
    `QuickCheck` generates, and see if you notice any speed up in the test
    execution time.
+
+4. Think of corner cases for the queue you'd write unit tests for, but instead
+   add those cases to the coverage checker to ensure that the generator
+   generates them.
 
 See also
 --------
@@ -156,7 +235,7 @@ See also
 - For more on contract testing see this
   [article](https://martinfowler.com/bliki/ContractTest.html) and for more on
   their consumer-driven variant see the following
-  [artcile](https://martinfowler.com/articles/consumerDrivenContracts.html);
+  [article](https://martinfowler.com/articles/consumerDrivenContracts.html);
 
 - [*Integrated Tests Are A Scam*](https://www.youtube.com/watch?v=fhFa4tkFUFw)
   talk by J.B. Rainsberger (2022), this a less ranty version of a talk with the
@@ -166,8 +245,11 @@ See also
 Summary
 -------
 
-- Using fakes enables to fast and determinstic integration tests and, as we
+- State machine testing a component using a model gives us a faithful fake for
+  that component for free;
+
+- Using fakes enables to fast and deterministic integration tests and, as we
   shall see next, makes it easier to introduce faults when testing;
 
-- Contract tests justify the use of fakes, inplace of the real dependencies,
+- Contract tests justify the use of fakes, in-place of the real dependencies,
   when testing a SUT.

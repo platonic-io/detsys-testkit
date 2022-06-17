@@ -5,13 +5,13 @@ Recap: property-based testing
 -----------------------------------
 
 - `forall (xs: List Int). reverse (reverse xs) == xs`
-- `forall (i : Input). serialise (deserialise i) == i`
+- `forall (i : Input). deserialise (serialise i) == i`
 - `forall (i j k : Int). (i + j) + k == i + (j + k)`
 
 Motivation
 ----------
 
-- The combinatorics of testing stateful systems:
+- The combinatorics of testing feature interaction of stateful systems:
   + $n$ features and 3-4 tests per feature         $\Longrightarrow O(n)$   test cases
   + $n$ features and testing pairs of features     $\Longrightarrow O(n^2)$ test cases
   + $n$ features and testing triples of features   $\Longrightarrow O(n^3)$ test cases
@@ -76,11 +76,12 @@ SUT
 
 > module Lec01SMTesting where
 
-> import Control.Monad.IO.Class
-> import Data.IORef
-> import Test.QuickCheck
-> import Test.QuickCheck.Monadic
-> import Test.HUnit
+> import Control.Monad.IO.Class (MonadIO, liftIO)
+> import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+> import Test.QuickCheck (Property, Gen, sample, quickCheck, withMaxSuccess, cover, classify,
+>                         forAllShrink, shrink, shrinkList, arbitrary, oneof, listOf)
+> import Test.QuickCheck.Monadic (run, monitor, monadicIO)
+> import Test.HUnit (Assertion, assertBool)
 
 The software under test (SUT) of the day is a counter that can be incremented
 and read from. It's implemented using a mutable reference (`IORef`) to an `Int`.
@@ -96,7 +97,7 @@ and read from. It's implemented using a mutable reference (`IORef`) to an `Int`.
 > incr (Counter ref) i = do
 >   j <- readIORef ref
 >   if j > 1000
->   then writeIORef ref (i + j + 1) -- NOTE: this is a bug!
+>   then writeIORef ref (i + j + 1) -- NOTE: this is a BUG!
 >   else writeIORef ref (i + j)
 
 > get :: Counter -> IO Int
@@ -165,8 +166,8 @@ property-based testing library.
 We can sample our program generator to get a feel for what kind of programs it
 generates.
 
-> samplePrograms :: IO [Program]
-> samplePrograms = sample' (genProgram initModel)
+> samplePrograms :: IO ()
+> samplePrograms = sample (genProgram initModel)
 
 In case we generate a program for which the state machine model and SUT disagree
 we'd like to shrink the program before presenting it to the user in order to
@@ -242,7 +243,7 @@ Such traces are useful for many things, for example ensuring that we got good co
 >     classifyOverflow [] = id
 
 >     classifyOverflow (Step (FakeCounter c) (Incr i) _resp _model' : hist') =
->        classify (isOverflow c i) "overflow" . classifyOverflow hist'
+>        cover 2 (isOverflow c i) "overflow" . classifyOverflow hist'
 >     classifyOverflow (_ : hist') = classifyOverflow hist'
 
 >     isOverflow i j = toInteger i + toInteger j > toInteger (maxBound :: Int)
@@ -262,6 +263,75 @@ skips the generation step.
 >   (b, _hist) <- runProgram c m prog
 >   assertBool msg b
 
+Demo script
+-----------
+
+For the record, here are the steps we did interactively in the REPL during the
+lecture.
+
+```
+  > c <- newCounter
+  > get c
+  0
+  > incr c 4
+  > get c
+  4
+
+  > :t step
+  step :: Model -> Command -> (Model, Response)
+  > :i Command
+  data Command = Incr Int | Get
+  > let m = initModel
+  > step m Get
+  (FakeCounter 0, Int 0)
+  > step m (Incr 4)
+  (FakeCounter 4, Unit ())
+
+  > sample genCommand
+  Incr 0
+  Incr (-1)
+  Get
+  Incr 2
+  Get
+  Get
+  Incr (-9)
+  Incr (-5)
+  Incr (-3)
+  Incr (-15)
+  Get
+
+  > sample (resize 400 genCommand)
+  Incr 385
+  Incr (-276)
+  Incr 232
+  Incr (-246)
+  Get
+  Get
+  Incr (-392)
+  Incr (-96)
+  Incr (-158)
+  Get
+  Get
+
+  > quickCheck prop_counter
+  +++ OK, passed 100 tests:
+  51% 11-50 length
+  29% 1-10 length
+  18% 51-100 length
+   2% 0 length
+
+  Only 0% overflow, but expected 2%
+
+  > quickCheck (withMaxSuccess 10000 (noShrinking prop_counter))
+  *** Failed! Falsified (after 498 tests):
+  Program [Incr 95,Incr 51,Incr (-6),Get,Get,Get,Get,Incr (-69),Incr (-31),Get,Incr 68,Get,Get,Get,Incr 85,Get,Incr (-51),Get,Incr 77,Get,Get,Incr (-15),Get,Incr 65,Incr (-69),Get,Get,Get,Incr 54,Incr 95,Get,Incr 63,Incr 77,Get,Get,Incr 71,Incr 62,Incr (-57),Incr (-9),Get,Get,Incr (-84),Get,Incr 87,Incr (-30),Get,Get,Incr (-54),Incr 36,Get,Incr (-27),Incr 88,Get,Incr 78,Incr 62,Incr 95,Get,Incr 75,Incr 7,Incr (-24),Incr 32,Get,Incr 39,Incr 86,Incr 9,Incr (-12),Incr 97,Get,Get,Incr (-34),Incr 80,Incr 68,Get,Incr 83,Get,Get,Incr 82,Incr (-35),Incr (-25),Get,Incr 81,Incr (-71),Get,Incr 7]
+
+  > quickCheck (withMaxSuccess 10000 prop_counter)
+  *** Failed! Falsified (after 1199 tests and 22 shrinks):
+  Program [Incr 1001,Get,Incr 0,Get]
+
+```
+
 Discussion
 ----------
 
@@ -269,8 +339,14 @@ Discussion
 
   A: For something as simple as a counter, this is true, but for any "real
      world" system that e.g. persists to disk the model will likely be smaller
-     by an order of magnitude or more. Also the model can also be used for race
-     condition testing (lecture 2) and as a fake (lecture 3).
+     by an order of magnitude or more.
+
+     The model can also be used for:
+
+       - PoC / demo, before real implementation starts
+       - documentation / on-boarding
+       - race condition testing (lecture 2)
+       - as a fake (lecture 3).
 
 Excerises
 ---------
@@ -326,10 +402,14 @@ See also
   top of Haskell's QuickCheck;
 
 - John Hughes' *Testing the Hard Stuff and Staying Sane*
-  [talk](https://www.youtube.com/watch?v=zi0rHwfiX1Q) (2013-2014);
+  [talk](https://www.youtube.com/watch?v=zi0rHwfiX1Q) (2013-2014) stresses the
+  importance of thinking about unit-test edge caseses and ensuring they are
+  covered by the generators when doing property-based testing;
 
 - Lamport's [Computation and State
-  Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/) (2008)
+  Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
+  (2008) is an argument from a mathematical point of view why state machines are
+  central in program correctness;
 
 - "Can one generalize Turing machines so that any algorithm, never mind how ab-
   stract, can be modeled by a generalized machine very closely and faithfully?"

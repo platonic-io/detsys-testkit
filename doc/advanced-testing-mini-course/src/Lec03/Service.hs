@@ -43,6 +43,9 @@ pORT = 8050
 
 ------------------------------------------------------------------------
 
+-- We start by implementing our queue interface using the real mutable
+-- array-backed queue and the fake immutable linked list based one.
+
 realQueue :: Int -> IO (QueueI a)
 realQueue sz = do
   q <- newQueue sz
@@ -59,7 +62,14 @@ fakeQueue sz = do
     , qiDequeue =       atomicModifyIORef' ref fakeDequeue
     }
 
+-- ^ Notice how the fake queue uses the model together with a mutable variable
+-- (`IORef`) to keep track of the current state (starting with the inital
+-- model).
+
 ------------------------------------------------------------------------
+
+-- The main function chooses between the two implementations of the interfaces
+-- depending on a command-line flag.
 
 main :: IO ()
 main = do
@@ -68,6 +78,9 @@ main = do
              ["--testing"] -> fakeQueue mAX_QUEUE_SIZE
              _otherwise    -> realQueue mAX_QUEUE_SIZE
   service queue
+
+-- The web service is written against the queue interface, it doesn't care which
+-- implementation of it we pass it.
 
 service :: QueueI Command -> IO ()
 service queue = do
@@ -93,7 +106,7 @@ worker queue conn = go
     go :: IO ()
     go = do
       mCmd <- qiDequeue queue
-                -- This fixes the problem inject read error exposes:
+                -- This fixes the problem inject read error exposes.
                 `catch` (\(_err :: IOException) -> return Nothing)
       case mCmd of
         Nothing -> do

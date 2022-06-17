@@ -50,6 +50,8 @@ messages off the priority queue, then we can switch between a "real" deployment
 and simulation by merely switching between different implementations of the
 event loops interface (`send` and `deliver`).
 
+- Inspiration for faults: https://en.wikipedia.org/wiki/Fallacies_of_distributed_computing
+
 
 Exercises
 ---------
