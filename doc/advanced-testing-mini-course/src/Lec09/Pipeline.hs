@@ -28,6 +28,7 @@ import Network.Wai.Handler.Warp
 import Numeric.Natural
 import Prelude hiding (id, (.))
 import System.Random
+import System.Process (callProcess)
 
 import Lec09.FreeFunc (FreeFunc, interpret)
 
@@ -413,10 +414,10 @@ data SP a b where
   (:>>>) :: SP a b -> SP b c -> SP a c
 
   (:&&&) :: SP a b -> SP a c -> SP a (b, c)
-  SShard :: SP a a -> SP a a -> SP a a
+  SShard :: SP a b -> SP a b
 
   Src :: IO a -> SP () a
-  Plus :: SP () a -> SP () a -> SP () a
+  Plus :: SP a b -> SP a b -> SP a b
 
   SSink :: (a -> IO ()) -> SP a ()
   Tee :: SP a () -> SP a a
@@ -432,7 +433,8 @@ list xs = do
 s :: IO (SP () ())
 s = do
   src <- list [1..10]
-  return $ Src src :>>> A (+ 1) :&&& A (* 2) :>>> Tee (SSink (\x -> threadDelay 1000000 >> print x)) :>>> SSink print
+  src' <- list [11..20]
+  return $ (Plus (Src src) (Src src')) :>>> A (+ 1) :&&& A (* 2) :>>> Tee (SSink (\x -> threadDelay 1000000 >> print x)) :>>> SSink print
 
 sp :: SP a b -> TBQueue a -> IO (TBQueue b)
 sp (A f)        xs = do
@@ -461,15 +463,36 @@ sp (l :&&& r)  xs = do
     writeTBQueue lrs (yl, yr)
 
   return lrs
-
-sp (SShard e o) xs = undefined
+sp (SShard f) xs = do
+  q1 <- newQueue
+  q2 <- newQueue
+  qr1 <- sp f q1
+  qr2 <- sp f q2
+  qr <- newQueue
+  _ <- async $ shardQIn xs q1 q2
+  _ <- async $ shardQOut qr1 qr2 qr
+  return qr
+  where
+    shardQIn  from to extra = atomically (readTBQueue from >>= writeTBQueue to) >> shardQIn from extra to
+    shardQOut from extra to = atomically (readTBQueue from >>= writeTBQueue to) >> shardQOut extra from to
 sp (Src io) _xs = do
   xs <- newQueue
   _ <- async $ forever $ do
     x <- io
     atomically $ writeTBQueue xs x
   return xs
-sp (Plus _s _t) _xs = undefined
+sp (Plus f g) xs = do
+  ys1 <- sp f xs
+  ys2 <- sp g xs
+  ys <- newQueue
+  _ <- async $ alternate ys1 ys2 ys
+  return ys
+  where
+    alternate ys1 ys2 ys = do
+      atomically $ do
+        y <- readTBQueue ys1 <|> readTBQueue ys2
+        writeTBQueue ys y
+      alternate ys2 ys1 ys
 sp (SSink k) xs = do
   ys <- newQueue
   _ <- async $ forever $ do
@@ -494,3 +517,24 @@ m = do
   ys <- sp pipe xs
   replicateM_ 10 (atomically (readTBQueue ys))
   return ()
+
+dot :: SP a b -> String
+dot = concat . reverse . go ["digraph { rankdir=LR;"]
+  where
+    go :: [String] -> SP a b -> [String]
+    go acc (A _f)     = "f" : acc
+    go acc (f :>>> g) = go [] g ++ " -> " : go acc f
+    go acc (_f :&&& _g) = undefined
+    go acc (SShard _f)  = undefined
+    go acc (Src _io)  = "src" : acc
+    go acc (Plus f g) = undefined
+    go acc (SSink _k) = "sink ; }" : acc
+    go acc (Tee _k) = undefined
+
+dm :: SP a b -> IO ()
+dm p = do
+  let ifp = "/tmp/sp.dot"
+      ofp = "/tmp/sp.ps"
+  writeFile ifp (dot p)
+  callProcess "dot" ["-Tps", ifp, "-o", ofp ]
+  callProcess "gv" [ofp]

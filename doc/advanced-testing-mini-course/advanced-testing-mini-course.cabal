@@ -40,6 +40,7 @@ library
     , HUnit
     , microlens-platform
     , overloaded
+    , process
     , QuickCheck
     , random
     , sqlite-simple
