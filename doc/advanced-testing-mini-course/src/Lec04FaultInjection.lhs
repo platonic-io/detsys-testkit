@@ -85,6 +85,9 @@ Code
 >                             defaultManagerSettings, newManager, responseStatus,
 >                             managerResponseTimeout, responseTimeoutMicro)
 
+We have to generalise the notion of histories and linearisability from the
+second lecture to deal with faults, but otherwise the idea is the same.
+
 > import Lec02ConcurrentSMTesting (assertWithFail, classifyCommandsLength, toPid)
 > import Lec03.Service (withService, mAX_QUEUE_SIZE, fakeQueue, realQueue)
 > import Lec03.QueueInterface
@@ -92,14 +95,24 @@ Code
 > import Lec04.LineariseWithFault (History'(History), Operation'(..), FailureMode(..), interleavings,
 >                                  linearisable, prettyHistory, appendHistory)
 
+A queue which supports fault-injection is merely a queue and a mutable variable
+that might contain a fault.
 
 > data FaultyFakeQueue a = FaultyFakeQueue
 >   { ffqQueue :: QueueI a
 >   , ffqFault :: IORef (Maybe Fault)
 >   }
 
+The possible faults that we support are that the queue is full (write fails),
+that its empty (read fails), read throwing an exception (due to some
+implementation bug perhaps), and slow read (simulating a GC or I/O pause).
+
 > data Fault = Full | Empty | ReadFail IOException | ReadSlow
 >   deriving Show
+
+We can now create a wrapper around our fake queue which inserts the right
+failure points depending which fault is injected. Note that a fault is only
+active in until it's triggered.
 
 > faultyFakeQueue :: Int -> IO (FaultyFakeQueue a)
 > faultyFakeQueue size = do
@@ -138,6 +151,9 @@ Code
 >           qiDequeue fake
 >         _otherwise -> qiDequeue fake
 
+To make it a bit easier to work with fault-injection we introduce the following
+helper functions.
+
 > injectFullFault :: IORef (Maybe Fault) -> IO ()
 > injectFullFault ref = writeIORef ref (Just Full)
 
@@ -153,6 +169,9 @@ Code
 > removeFault :: IORef (Maybe Fault) -> IO ()
 > removeFault ref = writeIORef ref Nothing
 
+The following unit test should give an idea of how the fake queue with support
+for fault-injection works.
+
 > test_injectFullFault :: IO ()
 > test_injectFullFault = do
 >   ffq <- faultyFakeQueue 4
@@ -164,6 +183,9 @@ Code
 
 Sequential integration/"collaboration" testing
 ----------------------------------------------
+
+The notion of program needs to be generalised to include fault-injection, but
+otherwise it should look familiar.
 
 > data Command
 >   = ClientRequest ClientRequest
@@ -456,6 +478,8 @@ Concurrent integration/"collaboration" testing
 Discussion
 ----------
 
+- Faults baked into `Command` or separate?
+
 - Modelling the faults, i.e. move some non-determinism out from linearisability
   checker into the model, is possible but not recommended as it complicated the
   model.
@@ -549,7 +573,7 @@ See also
   to insert failures at any point in our code, in some way this is a
   cheap-and-dirty way of achiving the same thing as we've done in this lecture.
   Cheap because it's less work, dirty because it litters the (production) code
-  with fail points.
+  with fail points (our fail points are hidden in the fake).
 
 Summary
 -------
