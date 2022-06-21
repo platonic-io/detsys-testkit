@@ -172,7 +172,7 @@ helper functions.
 The following unit test should give an idea of how the fake queue with support
 for fault-injection works.
 
-> test_injectFullFault :: IO ()
+> test_injectFullFault :: Assertion
 > test_injectFullFault = do
 >   ffq <- faultyFakeQueue 4
 >   res1 <- qiEnqueue (ffqQueue ffq) ("test1" :: String)
@@ -187,6 +187,9 @@ Sequential integration/"collaboration" testing
 The notion of program needs to be generalised to include fault-injection, but
 otherwise it should look familiar.
 
+> newtype Program = Program { unProgram :: [Command] }
+>   deriving Show
+
 > data Command
 >   = ClientRequest ClientRequest
 >   | InjectFault Fault
@@ -199,8 +202,12 @@ otherwise it should look familiar.
 > data ClientResponse = WriteResp Index | ReadResp ByteString
 >   deriving (Eq, Show)
 
-> newtype Program = Program { unProgram :: [Command] }
->   deriving Show
+The model is the same as for the web service from last lecture.
+
+> type Model = Vector ByteString
+
+> initModel :: Model
+> initModel = Vector.empty
 
 > genProgram :: Model -> Gen Program
 > genProgram m0 = sized (go m0 [])
@@ -208,18 +215,13 @@ otherwise it should look familiar.
 >     go _m cmds 0 = return (Program (reverse cmds))
 >     go  m cmds n = do
 >       cmd <- genCommand m
->       case mMaybeFault m of
->         Nothing -> do
->           let m' = fst (step m cmd)
->           go m' (cmd : cmds) (n - 1)
->         Just _fault -> go m (cmd : cmds) (n - 1)
+>       let m' = fst (step m cmd)
+>       go m' (cmd : cmds) (n - 1)
 
 > genCommand :: Model -> Gen Command
-> genCommand m0 = case mMaybeFault m0 of
->   Nothing -> frequency [ (1, InjectFault <$> genFault)
->                        , (9, ClientRequest <$> genRequest m0)
->                        ]
->   Just _fault -> ClientRequest <$> genRequest m0
+> genCommand m0 = frequency [ (1, InjectFault <$> genFault)
+>                           , (9, ClientRequest <$> genRequest m0)
+>                           ]
 >   where
 >     genRequest :: Model -> Gen ClientRequest
 >     genRequest m | len == 0  = WriteReq <$> (LBS.pack <$> arbitrary)
@@ -228,7 +230,7 @@ otherwise it should look familiar.
 >                      , (8, ReadReq  <$> (Index <$> elements [0 .. len - 1]))
 >                      ]
 >       where
->         len = Vector.length (mModel m)
+>         len = Vector.length m
 
 >     genFault :: Gen Fault
 >     genFault = frequency [ (1, pure Full)
@@ -237,26 +239,19 @@ otherwise it should look familiar.
 >                          , (1, pure ReadSlow)
 >                          ]
 
-> data Model = Model
->   { mModel      :: Vector ByteString
->   , mMaybeFault :: Maybe Fault
->   }
-
-> initModel :: Model
-> initModel = Model Vector.empty Nothing
 
 > step :: Model -> Command -> (Model, Maybe ClientResponse)
 > step m cmd = case cmd of
 >   ClientRequest (WriteReq bs) ->
->     ( m { mModel = Vector.snoc (mModel m) bs, mMaybeFault = Nothing }
->     , Just (WriteResp (Index (Vector.length (mModel m))))
+>     ( Vector.snoc m bs
+>     , Just (WriteResp (Index (Vector.length m)))
 >     )
 >   ClientRequest (ReadReq (Index ix)) ->
->     ( m { mMaybeFault = Nothing }
->     , ReadResp <$> mModel m Vector.!? ix
+>     ( m
+>     , ReadResp <$> m Vector.!? ix
 >     )
->   InjectFault fault -> (m { mMaybeFault = Just fault}, Nothing)
->   Reset             -> (m, Nothing)
+>   InjectFault _fault -> (m, Nothing)
+>   Reset              -> (initModel, Nothing)
 
 > data Result a = ROk a | RFail | RInfo | RNemesis
 >   deriving Show
@@ -267,6 +262,7 @@ otherwise it should look familiar.
 >     WriteReq bs -> do
 >       res <- try (httpWrite mgr bs)
 >       case res of
+>         -- NOTE: 503 means the worker queue is full, so the request gets dropped, so we can treat it as a failure.
 >         Left (err :: HttpException) | is503 err -> return RFail
 >                                     | otherwise -> return RInfo
 >         Right ix -> return (ROk (WriteResp ix))
@@ -301,19 +297,18 @@ otherwise it should look familiar.
 >   where
 >     go _m [] = True
 >     go  m (ClientRequest (ReadReq (Index ix)) : cmds)
->       | ix < Vector.length (mModel m) = go m cmds
->       | otherwise                     = False
->     go  m (cmd@(ClientRequest (WriteReq _bs)) : cmds) = case mMaybeFault m of
->       Nothing     -> let m' = fst (step m cmd) in go m' cmds
->       Just _fault -> go m cmds
+>       | ix < Vector.length m = go m cmds
+>       | otherwise            = False
+>     go  m (cmd@(ClientRequest (WriteReq _bs)) : cmds) =
+>       let m' = fst (step m cmd) in go m' cmds
 >     go  m (cmd : cmds) = let m' = fst (step m cmd) in go m' cmds
 
 > forallPrograms :: (Program -> Property) -> Property
 > forallPrograms p =
 >   forAllShrink (genProgram initModel) shrinkProgram p
 
-> prop_sequentialWithFaults :: IORef (Maybe Fault) -> Manager -> Property
-> prop_sequentialWithFaults ref mgr = forallPrograms $ \prog -> monadicIO $ do
+> prop_seqIntegrationTests :: IORef (Maybe Fault) -> Manager -> Property
+> prop_seqIntegrationTests ref mgr = forallPrograms $ \prog -> monadicIO $ do
 >   r <- runProgram ref mgr initModel prog
 >   run (removeFault ref)
 >   run (httpReset mgr)
@@ -364,9 +359,9 @@ otherwise it should look familiar.
 >   mgr   <- newManager defaultManagerSettings
 >   withService queue (io mgr)
 
-> unit_faultTest :: IO ()
-> unit_faultTest =
->   withFaultyQueueService (\mgr ref -> quickCheck (prop_sequentialWithFaults ref mgr))
+> unit_seqIntegrationTests :: IO ()
+> unit_seqIntegrationTests =
+>   withFaultyQueueService (\mgr ref -> quickCheck (prop_seqIntegrationTests ref mgr))
 
 > assertProgram :: String -> Program -> Assertion
 > assertProgram msg prog =
@@ -442,8 +437,8 @@ Concurrent integration/"collaboration" testing
 >     RNemesis -> appendHistory hist (Ok pid Nothing)
 
 > -- NOTE: Assumes that the service is running.
-> prop_faultyCollaborationTests :: IORef (Maybe Fault) -> Manager -> Property
-> prop_faultyCollaborationTests ref mgr = mapSize (min 20) $
+> prop_concIntegrationTests :: IORef (Maybe Fault) -> Manager -> Property
+> prop_concIntegrationTests ref mgr = mapSize (min 20) $
 >   forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
 >     monitor (classifyCommandsLength (concat cmdss))
 >     monitor (tabulate "Client requests" (map constructorString (concat cmdss)))
@@ -466,13 +461,22 @@ Concurrent integration/"collaboration" testing
 >     constructorString (InjectFault ReadSlow {})   = "ReadSlow"
 >     constructorString Reset                       = "Reset"
 
-> test :: IO ()
-> test = do
+> unit_concIntegrationTests :: IO ()
+> unit_concIntegrationTests = do
 >   -- NOTE: fake queue is used here, justified by previous contract testing.
 >   ffq <- faultyFakeQueue mAX_QUEUE_SIZE
 >   mgr <- newManager defaultManagerSettings
->   withService (ffqQueue ffq) (quickCheck (prop_faultyCollaborationTests (ffqFault ffq) mgr))
+>   withService (ffqQueue ffq) (quickCheck (prop_concIntegrationTests (ffqFault ffq) mgr))
 
+Demo script
+-----------
+
+```
+  > test_injectFullFault
+  > unit_seqIntegrationTests
+  > -- Uncomment BUGs in `Service` module and show how the seq property catches them.
+  > unit_concIntegrationTests
+```
 
 Discussion
 ----------

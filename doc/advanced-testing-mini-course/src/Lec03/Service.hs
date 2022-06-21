@@ -106,7 +106,7 @@ worker queue conn = go
     go :: IO ()
     go = do
       mCmd <- qiDequeue queue
-                -- This fixes the problem inject read error exposes.
+                -- BUG: Without this catch the read error fault will cause a crash.
                 `catch` (\(_err :: IOException) -> return Nothing)
       case mCmd of
         Nothing -> do
@@ -139,6 +139,8 @@ exec (Reset response) conn = do
 
 wORKER_TIMEOUT_MICROS :: Int
 wORKER_TIMEOUT_MICROS = 30_000_000 -- 30s
+  -- BUG: Having a shorter worker timeout will cause the slow read fault to crash the system.
+  -- 100_000 -- 0.1s
 
 httpFrontend :: QueueI Command -> Application
 httpFrontend queue req respond =
@@ -162,6 +164,8 @@ httpFrontend queue req respond =
       bs <- consumeRequestBodyStrict req
       response <- newEmptyMVar
       success <- qiEnqueue queue (Write bs response)
+      -- BUG: Ignoring whether the enqueuing operation was successful or not will cause a crash.
+      -- let success = True
       if success
       then do
         mIx <- timeout wORKER_TIMEOUT_MICROS (takeMVar response)
