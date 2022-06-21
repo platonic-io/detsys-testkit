@@ -138,7 +138,8 @@ exec (Reset response) conn = do
   putMVar response ()
 
 wORKER_TIMEOUT_MICROS :: Int
-wORKER_TIMEOUT_MICROS = 30_000_000 -- 30s
+wORKER_TIMEOUT_MICROS =
+  30_000_000 -- 30s
   -- BUG: Having a shorter worker timeout will cause the slow read fault to crash the system.
   -- 100_000 -- 0.1s
 
