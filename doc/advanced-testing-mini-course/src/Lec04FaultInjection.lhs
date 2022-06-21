@@ -249,15 +249,7 @@ Generating and shrinking programs is the same as well, modulo fault-injection.
 >     shrinkCommand _cmd = []
 
 > isValidProgram :: Model -> Program -> Bool
-> isValidProgram m0 (Program cmds0) = go m0 cmds0
->   where
->     go _m [] = True
->     go  m (ClientRequest (ReadReq (Index ix)) : cmds)
->       | ix < Vector.length m = go m cmds
->       | otherwise            = False
->     go  m (cmd@(ClientRequest (WriteReq _bs)) : cmds) =
->       let m' = fst (step m cmd) in go m' cmds
->     go  m (cmd : cmds) = let m' = fst (step m cmd) in go m' cmds
+> isValidProgram _m (Program _cmds) = True
 
 Stepping the model is slightly different in that the injecting faults command
 don't give a client response.
