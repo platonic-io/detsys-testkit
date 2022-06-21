@@ -503,12 +503,6 @@ Demo script
 Discussion
 ----------
 
-- Faults baked into `Command` or separate?
-
-- Modelling the faults, i.e. move some non-determinism out from linearisability
-  checker into the model, is possible but not recommended as it complicated the
-  model.
-
 - Can we not just inject real faults like Jepsen does?
   [`iptables`](https://linux.die.net/man/8/iptables) for dropping messages and
   network partitions, [`tc`](https://man7.org/linux/man-pages/man8/tc.8.html) for
@@ -522,26 +516,24 @@ Discussion
   databases using these techniques. However keep in mind exactly how Jepsen is
   used: typically companies hire Kyle Kingsbury for a couple of weeks/months, he
   writes the tests and runs them, analyses the results and writes a report.
+  Presumably while he is writing this report he runs the tests many times,
+  getting many false positivies and flaky test runs, but since doing this
+  analysis is his main focus he can filter out the signal from the noise. If you
+  wanna run these tests in CI however all this noise will cause a lot of context
+  switches and pretty fast get annoying.
 
-  XXX:
+  Other downsides include:
 
-  * requires root, needs to be done in containers or vm which slows down and
-    complicates start up
-  * imprecise (e.g. `iptables` can't drop exactly the 42nd message and only if it's a read)
-  * non-deterministic
-  * slow (we need to wait for timeouts to happend, ~30-90 secs)
-  * ci flakiness (e.g. `docker pull` failing)
-  * blackbox
-
-- Can we contract test the fault injection? I.e. how do we know that the faults
-  we inject correspond to real faults that can happen? How can we be sure to
-  have covered all possible real faults?
-
-  To answer questions of this kind it helps to specify fault models, for an
-  example of this see `tigerbeetle`'s
-  [documentation](https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models),
-  one then manually needs to convince oneself of the fact that the fault models
-  are covered by the fault injection.
+    + many of the above fault-injections requires root access, or they need to
+      be done in containers or a VM which slows things down and complicates
+      start up;
+    + imprecise (e.g. `iptables` can't drop exactly the 42nd message and only if
+      it's a read);
+    + non-deterministic (failing test cases cannot always be reproduced
+      reliably);
+    + no shrinking (i.e. no minimal counterexamples);
+    + slow (we need to wait for timeouts to happend, say, ~30-90 secs)
+    + ci flakiness (e.g. `docker pull` failing)
 
 - What about [Chaos engineering](https://en.wikipedia.org/wiki/Chaos_engineering)?
 
@@ -565,11 +557,18 @@ Discussion
     underlying faults could easily have been detected through simple testing of
     error handling code."
 
+- It can be tempting to modelling the faults, this moves some non-determinism
+  out from linearisability checker into the model. This is possible, but based
+  from our experience not recommended as it complicated the model.
+
 Exercises
 ---------
 
 0. Try to imagine how much more difficult it would be to write these tests
    without injecting the faults in the fake, but rather the real dependency.
+
+1. All our faults are in the dependency, i.e. the queue, what if we wanted to
+   inject a fault at the web service level?
 
 Problems
 --------
@@ -584,8 +583,25 @@ Problems
    thing fails it's likely it will overload some other thing making it more
    likely to fail and so on, how can we simulate this in a good way?
 
-2. What's better at finding bugs: i) a small fixed agenda and try many faults
+2. There're multiple other design decisions around faults that can be explored,
+   e.g. should faults be baked into `Command` like we did above or should they
+   be separate from the commands, i.e. something like this `Program = Program
+   [Fault] [Command]`? Should faults be one-shots like we did above, or should
+   they have a "fault off" command? Or should they be time based, i.e. "this
+   fault is active between t0 and t1"?
+
+3. What's better at finding bugs: i) a small fixed agenda and try many faults
    and interleavings, or ii) a big random agenda and fewer interleavings?
+
+4. Can we contract test the fault injection? I.e. how do we know that the faults
+   we inject correspond to real faults that can happen? How can we be sure to
+   have covered all possible real faults?
+
+   To answer questions of this kind it helps to specify fault models, for an
+   example of this see `tigerbeetle`'s
+   [documentation](https://github.com/coilhq/tigerbeetle/blob/main/docs/DESIGN.md#fault-models),
+   one then manually needs to convince oneself of the fact that the fault models
+   are covered by the fault injection.
 
 See also
 --------
