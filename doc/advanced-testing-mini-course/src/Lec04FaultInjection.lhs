@@ -48,8 +48,6 @@ XXX:
 - How linearisability checker deals with fails and infos
 - How we generate faults
 
-XXX:
-
 Code
 ----
 
@@ -85,6 +83,9 @@ Code
 >                             defaultManagerSettings, newManager, responseStatus,
 >                             managerResponseTimeout, responseTimeoutMicro)
 
+We have to generalise the notion of histories and linearisability from the
+second lecture to deal with faults, but otherwise the idea is the same.
+
 > import Lec02ConcurrentSMTesting (assertWithFail, classifyCommandsLength, toPid)
 > import Lec03.Service (withService, mAX_QUEUE_SIZE, fakeQueue, realQueue)
 > import Lec03.QueueInterface
@@ -92,14 +93,24 @@ Code
 > import Lec04.LineariseWithFault (History'(History), Operation'(..), FailureMode(..), interleavings,
 >                                  linearisable, prettyHistory, appendHistory)
 
+A queue which supports fault-injection is merely a queue and a mutable variable
+that might contain a fault.
 
 > data FaultyFakeQueue a = FaultyFakeQueue
 >   { ffqQueue :: QueueI a
 >   , ffqFault :: IORef (Maybe Fault)
 >   }
 
+The possible faults that we support are that the queue is full (write fails),
+that its empty (read fails), read throwing an exception (due to some
+implementation bug perhaps), and slow read (simulating a GC or I/O pause).
+
 > data Fault = Full | Empty | ReadFail IOException | ReadSlow
 >   deriving Show
+
+We can now create a wrapper around our fake queue which inserts the right
+failure points depending which fault is injected. Note that a fault is only
+active in until it's triggered.
 
 > faultyFakeQueue :: Int -> IO (FaultyFakeQueue a)
 > faultyFakeQueue size = do
@@ -138,6 +149,9 @@ Code
 >           qiDequeue fake
 >         _otherwise -> qiDequeue fake
 
+To make it a bit easier to work with fault-injection we introduce the following
+helper functions.
+
 > injectFullFault :: IORef (Maybe Fault) -> IO ()
 > injectFullFault ref = writeIORef ref (Just Full)
 
@@ -153,7 +167,10 @@ Code
 > removeFault :: IORef (Maybe Fault) -> IO ()
 > removeFault ref = writeIORef ref Nothing
 
-> test_injectFullFault :: IO ()
+The following unit test should give an idea of how the fake queue with support
+for fault-injection works.
+
+> test_injectFullFault :: Assertion
 > test_injectFullFault = do
 >   ffq <- faultyFakeQueue 4
 >   res1 <- qiEnqueue (ffqQueue ffq) ("test1" :: String)
@@ -164,6 +181,12 @@ Code
 
 Sequential integration/"collaboration" testing
 ----------------------------------------------
+
+The notion of program needs to be generalised to include fault-injection, but
+otherwise it should look familiar.
+
+> newtype Program = Program { unProgram :: [Command] }
+>   deriving Show
 
 > data Command
 >   = ClientRequest ClientRequest
@@ -177,8 +200,18 @@ Sequential integration/"collaboration" testing
 > data ClientResponse = WriteResp Index | ReadResp ByteString
 >   deriving (Eq, Show)
 
-> newtype Program = Program { unProgram :: [Command] }
->   deriving Show
+The model is the same as for the web service from last lecture.
+
+> type Model = Vector ByteString
+
+> initModel :: Model
+> initModel = Vector.empty
+
+Generating and shrinking programs is the same as well, modulo fault-injection.
+
+> forallPrograms :: (Program -> Property) -> Property
+> forallPrograms p =
+>   forAllShrink (genProgram initModel) shrinkProgram p
 
 > genProgram :: Model -> Gen Program
 > genProgram m0 = sized (go m0 [])
@@ -186,18 +219,13 @@ Sequential integration/"collaboration" testing
 >     go _m cmds 0 = return (Program (reverse cmds))
 >     go  m cmds n = do
 >       cmd <- genCommand m
->       case mMaybeFault m of
->         Nothing -> do
->           let m' = fst (step m cmd)
->           go m' (cmd : cmds) (n - 1)
->         Just _fault -> go m (cmd : cmds) (n - 1)
+>       let m' = fst (step m cmd)
+>       go m' (cmd : cmds) (n - 1)
 
 > genCommand :: Model -> Gen Command
-> genCommand m0 = case mMaybeFault m0 of
->   Nothing -> frequency [ (1, InjectFault <$> genFault)
->                        , (9, ClientRequest <$> genRequest m0)
->                        ]
->   Just _fault -> ClientRequest <$> genRequest m0
+> genCommand m0 = frequency [ (1, InjectFault <$> genFault)
+>                           , (9, ClientRequest <$> genRequest m0)
+>                           ]
 >   where
 >     genRequest :: Model -> Gen ClientRequest
 >     genRequest m | len == 0  = WriteReq <$> (LBS.pack <$> arbitrary)
@@ -206,7 +234,7 @@ Sequential integration/"collaboration" testing
 >                      , (8, ReadReq  <$> (Index <$> elements [0 .. len - 1]))
 >                      ]
 >       where
->         len = Vector.length (mModel m)
+>         len = Vector.length m
 
 >     genFault :: Gen Fault
 >     genFault = frequency [ (1, pure Full)
@@ -214,60 +242,6 @@ Sequential integration/"collaboration" testing
 >                          , (1, pure (ReadFail (userError "bug")))
 >                          , (1, pure ReadSlow)
 >                          ]
-
-> data Model = Model
->   { mModel      :: Vector ByteString
->   , mMaybeFault :: Maybe Fault
->   }
-
-> initModel :: Model
-> initModel = Model Vector.empty Nothing
-
-> step :: Model -> Command -> (Model, Maybe ClientResponse)
-> step m cmd = case cmd of
->   ClientRequest (WriteReq bs) ->
->     ( m { mModel = Vector.snoc (mModel m) bs, mMaybeFault = Nothing }
->     , Just (WriteResp (Index (Vector.length (mModel m))))
->     )
->   ClientRequest (ReadReq (Index ix)) ->
->     ( m { mMaybeFault = Nothing }
->     , ReadResp <$> mModel m Vector.!? ix
->     )
->   InjectFault fault -> (m { mMaybeFault = Just fault}, Nothing)
->   Reset             -> (m, Nothing)
-
-> data Result a = ROk a | RFail | RInfo | RNemesis
->   deriving Show
-
-> exec :: Command -> IORef (Maybe Fault) -> Manager -> IO (Result ClientResponse)
-> exec (ClientRequest req) _ref mgr =
->   case req of
->     WriteReq bs -> do
->       res <- try (httpWrite mgr bs)
->       case res of
->         Left (err :: HttpException) | is503 err -> return RFail
->                                     | otherwise -> return RInfo
->         Right ix -> return (ROk (WriteResp ix))
->     ReadReq ix  -> do
->       res <- try (httpRead mgr ix)
->       case res of
->         -- NOTE: since read doesn't change the state we can always treat is a failure.
->         Left (_err :: HttpException) -> return RFail
->         Right bs -> return (ROk (ReadResp bs))
-> exec (InjectFault fault)  ref _mgr = do
->   case fault of
->     Full         -> injectFullFault ref
->     Empty        -> injectEmptyFault ref
->     ReadFail err -> injectReadFailFault ref err
->     ReadSlow     -> injectReadSlowFault ref
->   return RNemesis
-> exec Reset _ref mgr = do
->   httpReset mgr
->   return RNemesis
-
-> is503 :: HttpException -> Bool
-> is503 (HttpExceptionRequest _req (StatusCodeException resp _bs)) = responseStatus resp == status503
-> is503 _otherwise = False
 
 > shrinkProgram :: Program -> [Program]
 > shrinkProgram (Program cmds) = filter (isValidProgram initModel) ((map Program (shrinkList shrinkCommand cmds)))
@@ -279,19 +253,70 @@ Sequential integration/"collaboration" testing
 >   where
 >     go _m [] = True
 >     go  m (ClientRequest (ReadReq (Index ix)) : cmds)
->       | ix < Vector.length (mModel m) = go m cmds
->       | otherwise                     = False
->     go  m (cmd@(ClientRequest (WriteReq _bs)) : cmds) = case mMaybeFault m of
->       Nothing     -> let m' = fst (step m cmd) in go m' cmds
->       Just _fault -> go m cmds
+>       | ix < Vector.length m = go m cmds
+>       | otherwise            = False
+>     go  m (cmd@(ClientRequest (WriteReq _bs)) : cmds) =
+>       let m' = fst (step m cmd) in go m' cmds
 >     go  m (cmd : cmds) = let m' = fst (step m cmd) in go m' cmds
 
-> forallPrograms :: (Program -> Property) -> Property
-> forallPrograms p =
->   forAllShrink (genProgram initModel) shrinkProgram p
+Stepping the model is slightly different in that the injecting faults command
+don't give a client response.
 
-> prop_sequentialWithFaults :: IORef (Maybe Fault) -> Manager -> Property
-> prop_sequentialWithFaults ref mgr = forallPrograms $ \prog -> monadicIO $ do
+> step :: Model -> Command -> (Model, Maybe ClientResponse)
+> step m cmd = case cmd of
+>   ClientRequest (WriteReq bs) ->
+>     ( Vector.snoc m bs
+>     , Just (WriteResp (Index (Vector.length m)))
+>     )
+>   ClientRequest (ReadReq (Index ix)) ->
+>     ( m
+>     , ReadResp <$> m Vector.!? ix
+>     )
+>   InjectFault _fault -> (m, Nothing)
+>   Reset              -> (initModel, Nothing)
+
+Likewise executing commands against the real SUT is different in the same way,
+but also because we need to deal with the different failure modes that result
+from the possilbe faults being injected.
+
+> data Result a = ROk a | RFail | RInfo | RNemesis
+>   deriving Show
+
+> exec :: Command -> IORef (Maybe Fault) -> Manager -> IO (Result ClientResponse)
+> exec (ClientRequest req) _ref mgr =
+>   case req of
+>     WriteReq bs -> do
+>       res <- try (httpWrite mgr bs)
+>       case res of
+>         -- NOTE: 503 means the worker queue is full, so the request gets dropped, so we can treat it as a failure.
+>         Left (err :: HttpException) | is503 err -> return RFail
+>                                     | otherwise -> return RInfo
+>         Right ix -> return (ROk (WriteResp ix))
+>     ReadReq ix  -> do
+>       res <- try (httpRead mgr ix)
+>       case res of
+>         -- NOTE: since read doesn't change the state we can always treat is a failure.
+>         Left (_err :: HttpException) -> return RFail
+>         Right bs -> return (ROk (ReadResp bs))
+>     where
+>       is503 :: HttpException -> Bool
+>       is503 (HttpExceptionRequest _req (StatusCodeException resp _bs)) = responseStatus resp == status503
+>       is503 _otherwise = False
+> exec (InjectFault fault)  ref _mgr = do
+>   case fault of
+>     Full         -> injectFullFault ref
+>     Empty        -> injectEmptyFault ref
+>     ReadFail err -> injectReadFailFault ref err
+>     ReadSlow     -> injectReadSlowFault ref
+>   return RNemesis
+> exec Reset _ref mgr = do
+>   httpReset mgr
+>   return RNemesis
+
+But otherwise the sequential property should look familiar.
+
+> prop_seqIntegrationTests :: IORef (Maybe Fault) -> Manager -> Property
+> prop_seqIntegrationTests ref mgr = forallPrograms $ \prog -> monadicIO $ do
 >   r <- runProgram ref mgr initModel prog
 >   run (removeFault ref)
 >   run (httpReset mgr)
@@ -300,6 +325,9 @@ Sequential integration/"collaboration" testing
 >       monitor (counterexample err)
 >       return False
 >     Right () -> return True
+
+The only difference is in the run program function which needs to take the
+failure modes into account.
 
 > runProgram :: MonadIO m => IORef (Maybe Fault) -> Manager -> Model -> Program -> m (Either String ())
 > runProgram ref mgr m0 (Program cmds0) = go m0 cmds0
@@ -323,6 +351,10 @@ Sequential integration/"collaboration" testing
 >             Nothing     -> go m' cmds
 >             Just _resp' -> return (Left (concat [show res, " /= ", show mResp']))
 
+Like in the previous lecture, the sequential and concurrent properties assume
+that the web service is up and running, so we will define a couple of helpers
+for getting the web service up and running with different queues.
+
 > withFaultyQueueService :: (Manager -> IORef (Maybe Fault) -> IO ()) -> IO ()
 > withFaultyQueueService io = do
 >   queue <- faultyFakeQueue mAX_QUEUE_SIZE
@@ -342,9 +374,14 @@ Sequential integration/"collaboration" testing
 >   mgr   <- newManager defaultManagerSettings
 >   withService queue (io mgr)
 
-> unit_faultTest :: IO ()
-> unit_faultTest =
->   withFaultyQueueService (\mgr ref -> quickCheck (prop_sequentialWithFaults ref mgr))
+Finally we can write our sequential integratin tests with a fake and possibly
+faulty queue.
+
+> unit_seqIntegrationTests :: IO ()
+> unit_seqIntegrationTests =
+>   withFaultyQueueService (\mgr ref -> quickCheck (prop_seqIntegrationTests ref mgr))
+
+Regression tests can be added similarly to before.
 
 > assertProgram :: String -> Program -> Assertion
 > assertProgram msg prog =
@@ -359,6 +396,8 @@ Sequential integration/"collaboration" testing
 
 Concurrent integration/"collaboration" testing
 ----------------------------------------------
+
+Generating and shrinking concurrent programs is same as before.
 
 > newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
 >   deriving Show
@@ -406,6 +445,8 @@ Concurrent integration/"collaboration" testing
 >     prettyConcProgram :: ConcProgram -> String
 >     prettyConcProgram = show
 
+Executing commands concurrent is also same as before, except histories are not
+richer as they need to contain the failure modes.
 
 > type Operation = Operation' Command (Maybe ClientResponse)
 
@@ -420,9 +461,11 @@ Concurrent integration/"collaboration" testing
 >     RInfo    -> appendHistory hist (Fail pid INFO)
 >     RNemesis -> appendHistory hist (Ok pid Nothing)
 
+The concurrent property should look familiar as well.
+
 > -- NOTE: Assumes that the service is running.
-> prop_faultyCollaborationTests :: IORef (Maybe Fault) -> Manager -> Property
-> prop_faultyCollaborationTests ref mgr = mapSize (min 20) $
+> prop_concIntegrationTests :: IORef (Maybe Fault) -> Manager -> Property
+> prop_concIntegrationTests ref mgr = mapSize (min 20) $
 >   forAllConcProgram $ \(ConcProgram cmdss) -> monadicIO $ do
 >     monitor (classifyCommandsLength (concat cmdss))
 >     monitor (tabulate "Client requests" (map constructorString (concat cmdss)))
@@ -445,16 +488,30 @@ Concurrent integration/"collaboration" testing
 >     constructorString (InjectFault ReadSlow {})   = "ReadSlow"
 >     constructorString Reset                       = "Reset"
 
-> test :: IO ()
-> test = do
+And again, because the property assumes that the web service is running, so we
+stand the service up first.
+
+> unit_concIntegrationTests :: IO ()
+> unit_concIntegrationTests = do
 >   -- NOTE: fake queue is used here, justified by previous contract testing.
 >   ffq <- faultyFakeQueue mAX_QUEUE_SIZE
 >   mgr <- newManager defaultManagerSettings
->   withService (ffqQueue ffq) (quickCheck (prop_faultyCollaborationTests (ffqFault ffq) mgr))
+>   withService (ffqQueue ffq) (quickCheck (prop_concIntegrationTests (ffqFault ffq) mgr))
 
+Demo script
+-----------
+
+```
+  > test_injectFullFault
+  > unit_seqIntegrationTests
+  > -- Uncomment BUGs in `Service` module and show how the seq property catches them.
+  > unit_concIntegrationTests
+```
 
 Discussion
 ----------
+
+- Faults baked into `Command` or separate?
 
 - Modelling the faults, i.e. move some non-determinism out from linearisability
   checker into the model, is possible but not recommended as it complicated the
@@ -549,7 +606,7 @@ See also
   to insert failures at any point in our code, in some way this is a
   cheap-and-dirty way of achiving the same thing as we've done in this lecture.
   Cheap because it's less work, dirty because it litters the (production) code
-  with fail points.
+  with fail points (our fail points are hidden in the fake).
 
 Summary
 -------
