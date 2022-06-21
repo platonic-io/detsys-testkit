@@ -48,8 +48,6 @@ XXX:
 - How linearisability checker deals with fails and infos
 - How we generate faults
 
-XXX:
-
 Code
 ----
 
@@ -209,6 +207,12 @@ The model is the same as for the web service from last lecture.
 > initModel :: Model
 > initModel = Vector.empty
 
+Generating and shrinking programs is the same as well, modulo fault-injection.
+
+> forallPrograms :: (Program -> Property) -> Property
+> forallPrograms p =
+>   forAllShrink (genProgram initModel) shrinkProgram p
+
 > genProgram :: Model -> Gen Program
 > genProgram m0 = sized (go m0 [])
 >   where
@@ -239,6 +243,24 @@ The model is the same as for the web service from last lecture.
 >                          , (1, pure ReadSlow)
 >                          ]
 
+> shrinkProgram :: Program -> [Program]
+> shrinkProgram (Program cmds) = filter (isValidProgram initModel) ((map Program (shrinkList shrinkCommand cmds)))
+>   where
+>     shrinkCommand _cmd = []
+
+> isValidProgram :: Model -> Program -> Bool
+> isValidProgram m0 (Program cmds0) = go m0 cmds0
+>   where
+>     go _m [] = True
+>     go  m (ClientRequest (ReadReq (Index ix)) : cmds)
+>       | ix < Vector.length m = go m cmds
+>       | otherwise            = False
+>     go  m (cmd@(ClientRequest (WriteReq _bs)) : cmds) =
+>       let m' = fst (step m cmd) in go m' cmds
+>     go  m (cmd : cmds) = let m' = fst (step m cmd) in go m' cmds
+
+Stepping the model is slightly different in that the injecting faults command
+don't give a client response.
 
 > step :: Model -> Command -> (Model, Maybe ClientResponse)
 > step m cmd = case cmd of
@@ -252,6 +274,10 @@ The model is the same as for the web service from last lecture.
 >     )
 >   InjectFault _fault -> (m, Nothing)
 >   Reset              -> (initModel, Nothing)
+
+Likewise executing commands against the real SUT is different in the same way,
+but also because we need to deal with the different failure modes that result
+from the possilbe faults being injected.
 
 > data Result a = ROk a | RFail | RInfo | RNemesis
 >   deriving Show
@@ -287,25 +313,7 @@ The model is the same as for the web service from last lecture.
 >   httpReset mgr
 >   return RNemesis
 
-> shrinkProgram :: Program -> [Program]
-> shrinkProgram (Program cmds) = filter (isValidProgram initModel) ((map Program (shrinkList shrinkCommand cmds)))
->   where
->     shrinkCommand _cmd = []
-
-> isValidProgram :: Model -> Program -> Bool
-> isValidProgram m0 (Program cmds0) = go m0 cmds0
->   where
->     go _m [] = True
->     go  m (ClientRequest (ReadReq (Index ix)) : cmds)
->       | ix < Vector.length m = go m cmds
->       | otherwise            = False
->     go  m (cmd@(ClientRequest (WriteReq _bs)) : cmds) =
->       let m' = fst (step m cmd) in go m' cmds
->     go  m (cmd : cmds) = let m' = fst (step m cmd) in go m' cmds
-
-> forallPrograms :: (Program -> Property) -> Property
-> forallPrograms p =
->   forAllShrink (genProgram initModel) shrinkProgram p
+But otherwise the sequential property should look familiar.
 
 > prop_seqIntegrationTests :: IORef (Maybe Fault) -> Manager -> Property
 > prop_seqIntegrationTests ref mgr = forallPrograms $ \prog -> monadicIO $ do
@@ -317,6 +325,9 @@ The model is the same as for the web service from last lecture.
 >       monitor (counterexample err)
 >       return False
 >     Right () -> return True
+
+The only difference is in the run program function which needs to take the
+failure modes into account.
 
 > runProgram :: MonadIO m => IORef (Maybe Fault) -> Manager -> Model -> Program -> m (Either String ())
 > runProgram ref mgr m0 (Program cmds0) = go m0 cmds0
@@ -340,6 +351,10 @@ The model is the same as for the web service from last lecture.
 >             Nothing     -> go m' cmds
 >             Just _resp' -> return (Left (concat [show res, " /= ", show mResp']))
 
+Like in the previous lecture, the sequential and concurrent properties assume
+that the web service is up and running, so we will define a couple of helpers
+for getting the web service up and running with different queues.
+
 > withFaultyQueueService :: (Manager -> IORef (Maybe Fault) -> IO ()) -> IO ()
 > withFaultyQueueService io = do
 >   queue <- faultyFakeQueue mAX_QUEUE_SIZE
@@ -359,9 +374,14 @@ The model is the same as for the web service from last lecture.
 >   mgr   <- newManager defaultManagerSettings
 >   withService queue (io mgr)
 
+Finally we can write our sequential integratin tests with a fake and possibly
+faulty queue.
+
 > unit_seqIntegrationTests :: IO ()
 > unit_seqIntegrationTests =
 >   withFaultyQueueService (\mgr ref -> quickCheck (prop_seqIntegrationTests ref mgr))
+
+Regression tests can be added similarly to before.
 
 > assertProgram :: String -> Program -> Assertion
 > assertProgram msg prog =
@@ -376,6 +396,8 @@ The model is the same as for the web service from last lecture.
 
 Concurrent integration/"collaboration" testing
 ----------------------------------------------
+
+Generating and shrinking concurrent programs is same as before.
 
 > newtype ConcProgram = ConcProgram { unConcProgram :: [[Command]] }
 >   deriving Show
@@ -423,6 +445,9 @@ Concurrent integration/"collaboration" testing
 >     prettyConcProgram :: ConcProgram -> String
 >     prettyConcProgram = show
 
+Executing commands concurrent is also same as before, except histories are not
+richer as they need to contain the failure modes.
+
 > type Operation = Operation' Command (Maybe ClientResponse)
 
 > concExec :: IORef (Maybe Fault) -> Manager -> TQueue Operation -> Command -> IO ()
@@ -435,6 +460,8 @@ Concurrent integration/"collaboration" testing
 >     RFail    -> appendHistory hist (Fail pid FAIL)
 >     RInfo    -> appendHistory hist (Fail pid INFO)
 >     RNemesis -> appendHistory hist (Ok pid Nothing)
+
+The concurrent property should look familiar as well.
 
 > -- NOTE: Assumes that the service is running.
 > prop_concIntegrationTests :: IORef (Maybe Fault) -> Manager -> Property
@@ -460,6 +487,9 @@ Concurrent integration/"collaboration" testing
 >     constructorString (InjectFault ReadFail {})   = "ReadFail"
 >     constructorString (InjectFault ReadSlow {})   = "ReadSlow"
 >     constructorString Reset                       = "Reset"
+
+And again, because the property assumes that the web service is running, so we
+stand the service up first.
 
 > unit_concIntegrationTests :: IO ()
 > unit_concIntegrationTests = do
