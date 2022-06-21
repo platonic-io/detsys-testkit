@@ -276,6 +276,10 @@ otherwise it should look familiar.
 >         -- NOTE: since read doesn't change the state we can always treat is a failure.
 >         Left (_err :: HttpException) -> return RFail
 >         Right bs -> return (ROk (ReadResp bs))
+>     where
+>       is503 :: HttpException -> Bool
+>       is503 (HttpExceptionRequest _req (StatusCodeException resp _bs)) = responseStatus resp == status503
+>       is503 _otherwise = False
 > exec (InjectFault fault)  ref _mgr = do
 >   case fault of
 >     Full         -> injectFullFault ref
@@ -286,10 +290,6 @@ otherwise it should look familiar.
 > exec Reset _ref mgr = do
 >   httpReset mgr
 >   return RNemesis
-
-> is503 :: HttpException -> Bool
-> is503 (HttpExceptionRequest _req (StatusCodeException resp _bs)) = responseStatus resp == status503
-> is503 _otherwise = False
 
 > shrinkProgram :: Program -> [Program]
 > shrinkProgram (Program cmds) = filter (isValidProgram initModel) ((map Program (shrinkList shrinkCommand cmds)))
@@ -427,7 +427,6 @@ Concurrent integration/"collaboration" testing
 
 >     prettyConcProgram :: ConcProgram -> String
 >     prettyConcProgram = show
-
 
 > type Operation = Operation' Command (Maybe ClientResponse)
 
