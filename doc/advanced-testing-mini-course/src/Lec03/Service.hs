@@ -107,7 +107,7 @@ worker queue conn = go
     go = do
       mCmd <- qiDequeue queue
                 -- BUG: Without this catch the read error fault will cause a crash.
-                `catch` (\(_err :: IOException) -> return Nothing)
+                `catch` (\(_err :: IOException) -> return Nothing) -- error "TODO: catch")
       case mCmd of
         Nothing -> do
           threadDelay 1000 -- 1 ms
