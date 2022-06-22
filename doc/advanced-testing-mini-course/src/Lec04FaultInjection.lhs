@@ -590,6 +590,11 @@ Exercises
 
 2. If our faults are completely deterministic, can we avoid `info`s altogether?
 
+3. The concurrent property doesn't reveal any bugs that the sequential property
+   already doesn't catch, can you think of a way of introducing a bug in the SUT
+   which only the concurrent tests can catch? If not, can you think of a way of
+   extending the SUT to enable this?
+
 Problems
 --------
 
