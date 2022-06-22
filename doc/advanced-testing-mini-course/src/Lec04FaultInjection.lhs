@@ -42,11 +42,24 @@ Plan
 How it works
 ------------
 
-XXX:
+How faults get injected
+-----------------------
 
-- How faults get injected
-- How linearisability checker deals with fails and infos
-- How we generate faults
+![](./images/lec4-sm-model-with-fi.svg)
+
+Different types of faults
+-------------------------
+
+![](./images/lec4-seq-diagram.svg)
+
+
+How linearisability checker deals with faults
+---------------------------------------------
+
+![](./images/lec4-invoke-ok-fail-info.svg)
+
+
+- XXX: How we generate faults?
 
 Code
 ----
@@ -347,6 +360,11 @@ Like in the previous lecture, the sequential and concurrent properties assume
 that the web service is up and running, so we will define a couple of helpers
 for getting the web service up and running with different queues.
 
+Recall from the last lecture that in the main function of the web service we can
+branch on, say, a command-line flag in order to determine which queue
+implementation to use, e.g. the real queue for "production" deployment and the
+fake one with faults for a "testing" deployment.
+
 > withFaultyQueueService :: (Manager -> IORef (Maybe Fault) -> IO ()) -> IO ()
 > withFaultyQueueService io = do
 >   queue <- faultyFakeQueue mAX_QUEUE_SIZE
@@ -569,6 +587,8 @@ Exercises
 
 1. All our faults are in the dependency, i.e. the queue, what if we wanted to
    inject a fault at the web service level?
+
+2. If our faults are completely deterministic, can we avoid `info`s altogether?
 
 Problems
 --------
