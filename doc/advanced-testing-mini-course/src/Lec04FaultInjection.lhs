@@ -59,8 +59,6 @@ How linearisability checker deals with faults
 ![](./images/lec4-invoke-ok-fail-info.svg)
 
 
-- XXX: How we generate faults?
-
 Code
 ----
 
@@ -593,7 +591,8 @@ Exercises
 3. The concurrent property doesn't reveal any bugs that the sequential property
    already doesn't catch, can you think of a way of introducing a bug in the SUT
    which only the concurrent tests can catch? If not, can you think of a way of
-   extending the SUT to enable this?
+   extending/writing a different the SUT to enable this? (Hint: think about what
+   kind of SUT Jepsen is pointed at.)
 
 Problems
 --------
