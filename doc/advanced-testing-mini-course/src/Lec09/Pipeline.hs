@@ -410,7 +410,7 @@ t = do
 ------------------------------------------------------------------------
 
 data SP a b where
-  A :: (a -> b) -> SP a b
+  A :: String -> (a -> b) -> SP a b
   (:>>>) :: SP a b -> SP b c -> SP a c
 
   (:&&&) :: SP a b -> SP a c -> SP a (b, c)
@@ -434,10 +434,10 @@ s :: IO (SP () ())
 s = do
   src <- list [1..10]
   src' <- list [11..20]
-  return $ (Plus (Src src) (Src src')) :>>> A (+ 1) :&&& A (* 2) :>>> Tee (SSink (\x -> threadDelay 1000000 >> print x)) :>>> SSink print
+  return $ (Plus (Src src) (Src src')) :>>> A "f" (+ 1) :&&& A "g" (* 2) :>>> Tee (SSink (\x -> threadDelay 1000000 >> print x)) :>>> SSink print
 
 sp :: SP a b -> TBQueue a -> IO (TBQueue b)
-sp (A f)        xs = do
+sp (A _name f) xs = do
   ys <- newQueue
   _ <- async $ forever $ atomically $ do
     x <- readTBQueue xs
@@ -519,22 +519,45 @@ m = do
   return ()
 
 dot :: SP a b -> String
-dot = concat . reverse . go ["digraph { rankdir=LR;"]
+dot p = "digraph { rankdir=LR; " ++ go p ++ " }"
   where
-    go :: [String] -> SP a b -> [String]
-    go acc (A _f)     = "f" : acc
-    go acc (f :>>> g) = go [] g ++ " -> " : go acc f
-    go acc (_f :&&& _g) = undefined
-    go acc (SShard _f)  = undefined
-    go acc (Src _io)  = "src" : acc
-    go acc (Plus f g) = undefined
-    go acc (SSink _k) = "sink ; }" : acc
-    go acc (Tee _k) = undefined
+    go :: SP a b -> String
+    go (A n _f)   = n
+    go (f :>>> g) = go f ++ " -> " ++ go g
+    go (f :&&& g) = "{ " ++ go f ++ " " ++ go g ++ " }"
+    go (SShard f) = undefined
+    go (Src _io)  = "src"
+    go (Plus f g) = undefined
+    go (SSink _k) = "sink"
+    go (Tee _k) = undefined
 
 dm :: SP a b -> IO ()
 dm p = do
   let ifp = "/tmp/sp.dot"
       ofp = "/tmp/sp.ps"
   writeFile ifp (dot p)
+  callProcess "dot" ["-Tps", ifp, "-o", ofp ]
+  callProcess "gv" [ofp]
+
+td :: IO ()
+td = dm (Src undefined :>>> (A "f" undefined :&&& A "g" undefined) :>>> SSink undefined)
+
+dd :: IO ()
+dd = putStrLn $ dot (Src undefined :>>> (A "f" undefined :&&& A "g" undefined) :>>> SSink undefined)
+
+gt :: IO ()
+gt = do
+  let ifp = "/tmp/gt.dot"
+      ofp = "/tmp/gt.ps"
+  writeFile ifp
+    "digraph { \
+    \  { \
+    \    shard [shape=box3d]; \
+    \  } \
+    \  rankdir=LR; \
+    \  src -> {f g} \
+    \  {f g} -> shard \
+    \  shard -> sink \
+    \}"
   callProcess "dot" ["-Tps", ifp, "-o", ofp ]
   callProcess "gv" [ofp]
