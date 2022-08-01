@@ -46,6 +46,7 @@ library
     , time
     , transformers
     , tree-diff           ==0.0.2.1
+    , unix
     , vector
     , wai
     , warp
@@ -61,6 +62,8 @@ library
     Lec03.Service
     Lec03.ServiceTest
     Lec03SMContractTesting
+    Lec04.CRC32
+    Lec04.FSFI
     Lec04.LineariseWithFault
     Lec04FaultInjection
     Lec05.Agenda
@@ -127,7 +130,7 @@ test-suite test
     , tasty
     , tasty-hunit
 
-  build-tool-depends: tasty-discover:tasty-discover -any
+  build-tool-depends: tasty-discover:tasty-discover
   type:               exitcode-stdio-1.0
   ghc-options:
     -Wall -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
