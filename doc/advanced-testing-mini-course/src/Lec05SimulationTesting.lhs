@@ -118,6 +118,12 @@ See also
 
 - Other users of simulation testing include.
 
+    + John Carmack
+      ([1998](https://raw.githubusercontent.com/ESWAT/john-carmack-plan-archive/master/by_day/johnc_plan_19981014.txt)
+      and other
+      [players](http://ithare.com/testing-my-personal-take-on-testing-including-unit-testing-and-atddbdd/)
+      in the the game industry;
+
     + AWS
 
 Here's a quote from the recently published paper [Millions of Tiny
