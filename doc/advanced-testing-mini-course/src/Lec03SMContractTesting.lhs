@@ -240,7 +240,11 @@ See also
 - [*Integrated Tests Are A Scam*](https://www.youtube.com/watch?v=fhFa4tkFUFw)
   talk by J.B. Rainsberger (2022), this a less ranty version of a talk with the
   same title that he [gave](https://www.youtube.com/watch?v=VDfX44fZoMc) at
-  DevConFu in 2013.
+  DevConFu in 2013;
+
+- [*Consumer-Driven Contracts Done
+  Right*](https://github.com/aleryo/homomorphic-event-sourcing/) talk by Arnaud
+  Bailly and Nicole Rauch (2018).
 
 Summary
 -------

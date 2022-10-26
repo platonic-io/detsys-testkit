@@ -167,6 +167,7 @@ written by three AWS engineers:
 
       * https://dropbox.tech/infrastructure/rewriting-the-heart-of-our-sync-engine
       * https://lobste.rs/s/ob6a8z/rewriting_heart_our_sync_engine
+      * https://dropbox.tech/infrastructure/-testing-our-new-sync-engine
 
     + Basho
 

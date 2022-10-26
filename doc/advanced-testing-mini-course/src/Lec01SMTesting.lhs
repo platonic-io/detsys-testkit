@@ -363,7 +363,7 @@ Excerises
    display the response as well as the new state, rinse and repeat.
 
    (For a SUT as simple as a counter this doesn't make much sense, but when the
-   SUT get more complicated it might make sense to develope the state machine
+   SUT get more complicated it might make sense to develop the state machine
    specification first, demo it using something like a REPL or some other simple
    UI before even starting to implement the real thing.)
 
