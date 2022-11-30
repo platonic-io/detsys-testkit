@@ -2759,4 +2759,11 @@ constraints: abstract-deque ==0.3,
              ztail ==1.2.0.2,
              zydiskell ==0.2.0.0,
              rts installed,
-             ghc-boot-th installed
+             ghc-boot-th installed,
+             overloaded ==0.3.1,
+             symbols ==0.3.0.0,
+             ghc installed,
+             hpc installed,
+             ghc-heap installed,
+             ghc-boot installed,
+             ghci installed

@@ -33,11 +33,14 @@ library
     , bytestring
     , containers
     , directory
+    , filepath
     , heaps
     , http-client
     , http-types
     , HUnit
     , microlens-platform
+    , overloaded
+    , process
     , QuickCheck
     , random
     , sqlite-simple
@@ -94,6 +97,8 @@ library
     Lec06WhiteboxCheckers
     Lec07EfficientEventLoop
     Lec08AsyncFileSystemIO
+    Lec09.FreeFunc
+    Lec09.Pipeline
     Lec09SMUpgrades
     Lec10LibraryOrFramework
 
